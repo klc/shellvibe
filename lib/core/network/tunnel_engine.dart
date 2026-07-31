@@ -90,6 +90,8 @@ class TunnelEngine {
   final Map<String, Socks5ProxyServer> _socksServers = {};
   final Map<String, SSHRemoteForward?> _remoteListeners = {};
   final Map<String, List<StreamSubscription>> _subscriptions = {};
+  final Map<String, Set<Socket>> _activeSockets = {};
+  final Map<String, Set<SSHForwardChannel>> _activeChannels = {};
 
   final StreamController<List<ActiveTunnel>> _tunnelsController =
       StreamController<List<ActiveTunnel>>.broadcast();
@@ -128,6 +130,8 @@ class TunnelEngine {
       final serverSocket = await ServerSocket.bind('127.0.0.1', localPort);
       _localServers[ruleId] = serverSocket;
       _subscriptions[ruleId] = [];
+      _activeSockets[ruleId] = {};
+      _activeChannels[ruleId] = {};
 
       final active = ActiveTunnel(
         ruleId: ruleId,
@@ -143,8 +147,16 @@ class TunnelEngine {
       _notify();
 
       serverSocket.listen((clientSocket) async {
+        _activeSockets[ruleId]?.add(clientSocket);
+        SSHForwardChannel? sshChannel;
         try {
-          final sshChannel = await sshClient.forwardLocal(remoteHost, remotePort);
+          sshChannel = await sshClient.forwardLocal(remoteHost, remotePort);
+          if (!isTunnelActive(ruleId)) {
+            clientSocket.destroy();
+            sshChannel.close();
+            return;
+          }
+          _activeChannels[ruleId]?.add(sshChannel);
 
           StreamSubscription? sub1;
           StreamSubscription? sub2;
@@ -161,21 +173,26 @@ class TunnelEngine {
             if (sub2 != null) {
               _subscriptions[ruleId]?.remove(sub2);
             }
+            _activeSockets[ruleId]?.remove(clientSocket);
+            if (sshChannel != null) {
+              _activeChannels[ruleId]?.remove(sshChannel);
+            }
           }
 
           sub1 = clientSocket.listen(
             (data) {
-              sshChannel.sink.add(data);
+              sshChannel?.sink.add(data);
               _addBytes(ruleId, data.length);
             },
             onError: (_) {
               cleanupSubscriptions();
               clientSocket.destroy();
-              sshChannel.close();
+              sshChannel?.close();
             },
             onDone: () {
               cleanupSubscriptions();
-              sshChannel.close();
+              clientSocket.destroy();
+              sshChannel?.close();
             },
           );
           _subscriptions[ruleId]?.add(sub1);
@@ -188,11 +205,12 @@ class TunnelEngine {
             onError: (_) {
               cleanupSubscriptions();
               clientSocket.destroy();
-              sshChannel.close();
+              sshChannel?.close();
             },
             onDone: () {
               cleanupSubscriptions();
               clientSocket.destroy();
+              sshChannel?.close();
             },
           );
           _subscriptions[ruleId]?.add(sub2);
@@ -202,7 +220,9 @@ class TunnelEngine {
             _subscriptions[ruleId]?.remove(sub2);
           }
         } catch (_) {
+          _activeSockets[ruleId]?.remove(clientSocket);
           clientSocket.destroy();
+          sshChannel?.close();
         }
       });
     } catch (e) {
@@ -238,6 +258,8 @@ class TunnelEngine {
       );
       _remoteListeners[ruleId] = listener;
       _subscriptions[ruleId] = [];
+      _activeSockets[ruleId] = {};
+      _activeChannels[ruleId] = {};
 
       final active = ActiveTunnel(
         ruleId: ruleId,
@@ -254,8 +276,16 @@ class TunnelEngine {
 
       if (listener != null) {
         final sub = listener.connections.listen((connection) async {
+          _activeChannels[ruleId]?.add(connection);
+          Socket? localSocket;
           try {
-            final localSocket = await Socket.connect(localHost, localPort);
+            localSocket = await Socket.connect(localHost, localPort);
+            if (!isTunnelActive(ruleId)) {
+              localSocket.destroy();
+              connection.close();
+              return;
+            }
+            _activeSockets[ruleId]?.add(localSocket);
 
             StreamSubscription? sub1;
             StreamSubscription? sub2;
@@ -272,6 +302,10 @@ class TunnelEngine {
               if (sub2 != null) {
                 _subscriptions[ruleId]?.remove(sub2);
               }
+              if (localSocket != null) {
+                _activeSockets[ruleId]?.remove(localSocket);
+              }
+              _activeChannels[ruleId]?.remove(connection);
             }
 
             sub1 = localSocket.listen(
@@ -281,11 +315,12 @@ class TunnelEngine {
               },
               onError: (_) {
                 cleanupSubscriptions();
-                localSocket.destroy();
+                localSocket?.destroy();
                 connection.close();
               },
               onDone: () {
                 cleanupSubscriptions();
+                localSocket?.destroy();
                 connection.close();
               },
             );
@@ -293,17 +328,18 @@ class TunnelEngine {
 
             sub2 = connection.stream.listen(
               (data) {
-                localSocket.add(data);
+                localSocket?.add(data);
                 _addBytes(ruleId, data.length);
               },
               onError: (_) {
                 cleanupSubscriptions();
-                localSocket.destroy();
+                localSocket?.destroy();
                 connection.close();
               },
               onDone: () {
                 cleanupSubscriptions();
-                localSocket.destroy();
+                localSocket?.destroy();
+                connection.close();
               },
             );
             _subscriptions[ruleId]?.add(sub2);
@@ -313,6 +349,11 @@ class TunnelEngine {
               _subscriptions[ruleId]?.remove(sub2);
             }
           } catch (_) {
+            _activeChannels[ruleId]?.remove(connection);
+            if (localSocket != null) {
+              _activeSockets[ruleId]?.remove(localSocket);
+              localSocket.destroy();
+            }
             connection.close();
           }
         });
@@ -396,7 +437,26 @@ class TunnelEngine {
       _socksServers.remove(ruleId);
     }
 
-    _remoteListeners.remove(ruleId);
+    if (_remoteListeners.containsKey(ruleId)) {
+      final listener = _remoteListeners.remove(ruleId);
+      listener?.close();
+    }
+
+    if (_activeSockets.containsKey(ruleId)) {
+      final sockets = List<Socket>.from(_activeSockets[ruleId]!);
+      _activeSockets.remove(ruleId);
+      for (final socket in sockets) {
+        socket.destroy();
+      }
+    }
+
+    if (_activeChannels.containsKey(ruleId)) {
+      final channels = List<SSHForwardChannel>.from(_activeChannels[ruleId]!);
+      _activeChannels.remove(ruleId);
+      for (final channel in channels) {
+        channel.close();
+      }
+    }
 
     _lastBytesSample.remove(ruleId);
     _lastSampleTime.remove(ruleId);
@@ -409,7 +469,15 @@ class TunnelEngine {
 
   /// Stop all active tunnels
   Future<void> stopAllTunnels() async {
-    final keys = _activeTunnels.keys.toList();
+    final keys = {
+      ..._activeTunnels.keys,
+      ..._localServers.keys,
+      ..._socksServers.keys,
+      ..._remoteListeners.keys,
+      ..._subscriptions.keys,
+      ..._activeSockets.keys,
+      ..._activeChannels.keys,
+    }.toList();
     for (final ruleId in keys) {
       await stopTunnel(ruleId);
     }

@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:terly2/core/network/tunnel_engine.dart';
 
@@ -39,5 +42,91 @@ void main() {
       await tunnelEngine.stopTunnel('non-existent');
       expect(tunnelEngine.activeTunnelsList, isEmpty);
     });
+
+    test('stopTunnel closes SSHRemoteForward listener and clears active tunnel', () async {
+      final fakeListener = FakeSSHRemoteForward();
+      final fakeSshClient = FakeSSHClient(remoteForwardResult: fakeListener);
+
+      await tunnelEngine.startRemoteForward(
+        ruleId: 'r_remote',
+        hostId: 'h1',
+        sshClient: fakeSshClient,
+        remotePort: 9000,
+        localHost: '127.0.0.1',
+        localPort: 8000,
+      );
+
+      expect(tunnelEngine.isTunnelActive('r_remote'), isTrue);
+      expect(fakeListener.isClosed, isFalse);
+
+      await tunnelEngine.stopTunnel('r_remote');
+
+      expect(tunnelEngine.isTunnelActive('r_remote'), isFalse);
+      expect(fakeListener.isClosed, isTrue);
+    });
+
+    test('stopAllTunnels stops all active remote forward listeners and tunnels', () async {
+      final fakeListener1 = FakeSSHRemoteForward();
+      final fakeListener2 = FakeSSHRemoteForward();
+
+      final fakeSshClient1 = FakeSSHClient(remoteForwardResult: fakeListener1);
+      final fakeSshClient2 = FakeSSHClient(remoteForwardResult: fakeListener2);
+
+      await tunnelEngine.startRemoteForward(
+        ruleId: 'r1',
+        hostId: 'h1',
+        sshClient: fakeSshClient1,
+        remotePort: 9001,
+        localHost: '127.0.0.1',
+        localPort: 8001,
+      );
+
+      await tunnelEngine.startRemoteForward(
+        ruleId: 'r2',
+        hostId: 'h1',
+        sshClient: fakeSshClient2,
+        remotePort: 9002,
+        localHost: '127.0.0.1',
+        localPort: 8002,
+      );
+
+      expect(tunnelEngine.activeTunnelsList.length, 2);
+
+      await tunnelEngine.stopAllTunnels();
+
+      expect(tunnelEngine.activeTunnelsList, isEmpty);
+      expect(fakeListener1.isClosed, isTrue);
+      expect(fakeListener2.isClosed, isTrue);
+    });
   });
 }
+
+class FakeSSHRemoteForward extends Fake implements SSHRemoteForward {
+  bool isClosed = false;
+  final _controller = StreamController<SSHForwardChannel>.broadcast();
+
+  @override
+  Stream<SSHForwardChannel> get connections => _controller.stream;
+
+  @override
+  void close() {
+    isClosed = true;
+    _controller.close();
+  }
+}
+
+class FakeSSHClient extends Fake implements SSHClient {
+  final SSHRemoteForward? remoteForwardResult;
+
+  FakeSSHClient({this.remoteForwardResult});
+
+  @override
+  Future<SSHRemoteForward?> forwardRemote({
+    dynamic filter,
+    String? host,
+    int? port,
+  }) async {
+    return remoteForwardResult;
+  }
+}
+

@@ -15,6 +15,8 @@ class Socks5ProxyServer {
 
   ServerSocket? _serverSocket;
   final List<StreamSubscription> _activeSubscriptions = [];
+  final Set<Socket> _activeSockets = {};
+  final Set<SSHForwardChannel> _activeChannels = {};
   bool _isListening = false;
 
   Socks5ProxyServer({
@@ -41,12 +43,14 @@ class Socks5ProxyServer {
   }
 
   Future<void> _handleClient(Socket clientSocket) async {
+    _activeSockets.add(clientSocket);
     final reader = _BufferedSocketReader(clientSocket);
     try {
       // Step 1: Handshake
       final handshakeData = await reader.readExact(2);
       if (handshakeData.length < 2 || handshakeData[0] != 0x05) {
         await reader.detach();
+        _activeSockets.remove(clientSocket);
         clientSocket.destroy();
         return;
       }
@@ -55,6 +59,7 @@ class Socks5ProxyServer {
       final methods = await reader.readExact(nmethods);
       if (methods.length < nmethods) {
         await reader.detach();
+        _activeSockets.remove(clientSocket);
         clientSocket.destroy();
         return;
       }
@@ -70,6 +75,7 @@ class Socks5ProxyServer {
         clientSocket.add([0x05, 0x07, 0x00, 0x01, 0, 0, 0, 0, 0, 0]); // Command not supported
         await clientSocket.flush();
         await reader.detach();
+        _activeSockets.remove(clientSocket);
         clientSocket.destroy();
         return;
       }
@@ -82,6 +88,7 @@ class Socks5ProxyServer {
         final ipv4Bytes = await reader.readExact(4);
         if (ipv4Bytes.length < 4) {
           await reader.detach();
+          _activeSockets.remove(clientSocket);
           clientSocket.destroy();
           return;
         }
@@ -91,6 +98,7 @@ class Socks5ProxyServer {
         final lenBytes = await reader.readExact(1);
         if (lenBytes.isEmpty) {
           await reader.detach();
+          _activeSockets.remove(clientSocket);
           clientSocket.destroy();
           return;
         }
@@ -98,6 +106,7 @@ class Socks5ProxyServer {
         final domainBytes = await reader.readExact(domainLen);
         if (domainBytes.length < domainLen) {
           await reader.detach();
+          _activeSockets.remove(clientSocket);
           clientSocket.destroy();
           return;
         }
@@ -107,6 +116,7 @@ class Socks5ProxyServer {
         final ipv6Bytes = await reader.readExact(16);
         if (ipv6Bytes.length < 16) {
           await reader.detach();
+          _activeSockets.remove(clientSocket);
           clientSocket.destroy();
           return;
         }
@@ -118,6 +128,7 @@ class Socks5ProxyServer {
         targetHost = segments.join(':');
       } else {
         await reader.detach();
+        _activeSockets.remove(clientSocket);
         clientSocket.destroy();
         return;
       }
@@ -125,6 +136,7 @@ class Socks5ProxyServer {
       final portBytes = await reader.readExact(2);
       if (portBytes.length < 2) {
         await reader.detach();
+        _activeSockets.remove(clientSocket);
         clientSocket.destroy();
         return;
       }
@@ -132,6 +144,7 @@ class Socks5ProxyServer {
 
       // Step 3: Open SSH channel to destination target
       final sshChannel = await sshClient.forwardLocal(targetHost, targetPort);
+      _activeChannels.add(sshChannel);
 
       // Detach reader before piping directly from clientSocket
       final unconsumed = await reader.detach();
@@ -164,6 +177,8 @@ class Socks5ProxyServer {
         if (sub2 != null) {
           _activeSubscriptions.remove(sub2);
         }
+        _activeSockets.remove(clientSocket);
+        _activeChannels.remove(sshChannel);
       }
 
       sub1 = clientSocket.listen(
@@ -180,6 +195,7 @@ class Socks5ProxyServer {
         },
         onDone: () {
           cleanupSubscriptions();
+          clientSocket.destroy();
           sshChannel.close();
         },
       );
@@ -200,6 +216,7 @@ class Socks5ProxyServer {
         onDone: () {
           cleanupSubscriptions();
           clientSocket.destroy();
+          sshChannel.close();
         },
       );
       _activeSubscriptions.add(sub2);
@@ -210,6 +227,7 @@ class Socks5ProxyServer {
       }
     } catch (_) {
       await reader.detach();
+      _activeSockets.remove(clientSocket);
       clientSocket.destroy();
     }
   }
@@ -221,6 +239,17 @@ class Socks5ProxyServer {
       await sub.cancel();
     }
     _activeSubscriptions.clear();
+
+    for (final socket in List<Socket>.from(_activeSockets)) {
+      socket.destroy();
+    }
+    _activeSockets.clear();
+
+    for (final channel in List<SSHForwardChannel>.from(_activeChannels)) {
+      channel.close();
+    }
+    _activeChannels.clear();
+
     await _serverSocket?.close();
     _serverSocket = null;
   }
