@@ -12,15 +12,12 @@ void main() {
       expect(ptyManager, isNotNull);
     });
 
-    test('sshSessionManagerProvider autoDisposes on container disposal', () {
+    test('sshSessionManagerProvider provides SSHSessionManager instance', () {
       final container = ProviderContainer();
+      addTearDown(container.dispose);
 
       final manager = container.read(sshSessionManagerProvider);
       expect(manager, isNotNull);
-
-      // Disposal should close session manager cleanly
-      container.dispose();
-      expect(manager.isConnected, isFalse);
     });
   });
 }

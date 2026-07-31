@@ -10,18 +10,12 @@ import '../terminal_ssh_bridge.dart';
 
 part 'network_providers.g.dart';
 
-/// Auto-disposing provider for [SSHSessionManager].
-/// Automatically closes SSH client connection and timers on disposal.
+/// Provider for [SSHSessionManager].
+/// [TerminalTabSession] manages session disposal upon tab closure.
 @riverpod
 SSHSessionManager sshSessionManager(SshSessionManagerRef ref) {
   final dao = ref.watch(knownHostsDaoProvider);
-  final manager = SSHSessionManager(knownHostsDao: dao);
-
-  ref.onDispose(() {
-    manager.close();
-  });
-
-  return manager;
+  return SSHSessionManager(knownHostsDao: dao);
 }
 
 /// Auto-disposing provider for [LocalPtyManager].
