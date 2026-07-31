@@ -70,13 +70,14 @@ void main() {
       expect(groups, isEmpty);
     });
 
-    test('addHost, updateHost and deleteHost CRUD', () async {
+    test('addHost, updateHost and deleteHost CRUD with username', () async {
       final hostsNotifier = container.read(hostsNotifierProvider.notifier);
 
       await hostsNotifier.addHost(
         workspaceId: 'default',
         label: 'AWS EC2 Web',
         hostname: '10.0.0.5',
+        username: 'admin',
         port: 22,
         protocol: 'ssh',
       );
@@ -85,6 +86,7 @@ void main() {
       expect(hosts.length, equals(1));
       expect(hosts.first.label, equals('AWS EC2 Web'));
       expect(hosts.first.hostname, equals('10.0.0.5'));
+      expect(hosts.first.username, equals('admin'));
 
       final id = hosts.first.id;
       await hostsNotifier.updateHost(
@@ -92,6 +94,7 @@ void main() {
         workspaceId: 'default',
         label: 'AWS EC2 Web Primary',
         hostname: '10.0.0.6',
+        username: 'root',
         port: 2222,
         protocol: 'ssh',
       );
@@ -99,6 +102,7 @@ void main() {
       hosts = await container.read(hostsNotifierProvider.future);
       expect(hosts.first.label, equals('AWS EC2 Web Primary'));
       expect(hosts.first.hostname, equals('10.0.0.6'));
+      expect(hosts.first.username, equals('root'));
       expect(hosts.first.port, equals(2222));
 
       await hostsNotifier.deleteHost(id);

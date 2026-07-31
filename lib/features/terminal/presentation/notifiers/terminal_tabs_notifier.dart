@@ -84,10 +84,28 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       );
       newTab.sshSessionManager = sessionManager;
 
+      String cleanHostname = host.hostname.trim();
+      String? parsedUser;
+      if (cleanHostname.contains('@')) {
+        final atIndex = cleanHostname.indexOf('@');
+        parsedUser = cleanHostname.substring(0, atIndex).trim();
+        cleanHostname = cleanHostname.substring(atIndex + 1).trim();
+      }
+
+      final hostUser = host.username?.trim();
+      final identityUser = identity?.username.trim();
+      final effectiveUsername = (hostUser != null && hostUser.isNotEmpty)
+          ? hostUser
+          : ((parsedUser != null && parsedUser.isNotEmpty)
+              ? parsedUser
+              : ((identityUser != null && identityUser.isNotEmpty)
+                  ? identityUser
+                  : 'root'));
+
       final config = SSHConnectConfig(
-        hostname: host.hostname,
+        hostname: cleanHostname,
         port: host.port,
-        username: identity?.username ?? 'root',
+        username: effectiveUsername,
         password: identity?.password,
         privateKeyPem: identity?.privateKey,
         passphrase: identity?.passphrase,

@@ -24,7 +24,12 @@ class HostsDao extends DatabaseAccessor<AppDatabase> with _$HostsDaoMixin {
     return (select(hosts)..where((tbl) => tbl.id.equals(id))).getSingleOrNull();
   }
 
-  Future<int> insertHost(HostsCompanion host) => into(hosts).insert(host);
+  Future<int> insertHost(HostsCompanion host) async {
+    if (host.workspaceId.present) {
+      await db.workspacesDao.ensureWorkspaceExists(host.workspaceId.value);
+    }
+    return into(hosts).insert(host);
+  }
 
   Future<bool> updateHost(Insertable<Host> host) => update(hosts).replace(host);
 
@@ -50,7 +55,12 @@ class HostsDao extends DatabaseAccessor<AppDatabase> with _$HostsDaoMixin {
     return (select(hostGroups)..where((tbl) => tbl.id.equals(id))).getSingleOrNull();
   }
 
-  Future<int> insertHostGroup(HostGroupsCompanion group) => into(hostGroups).insert(group);
+  Future<int> insertHostGroup(HostGroupsCompanion group) async {
+    if (group.workspaceId.present) {
+      await db.workspacesDao.ensureWorkspaceExists(group.workspaceId.value);
+    }
+    return into(hostGroups).insert(group);
+  }
 
   Future<bool> updateHostGroup(Insertable<HostGroup> group) => update(hostGroups).replace(group);
 

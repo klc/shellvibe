@@ -47,6 +47,7 @@ class Hosts extends Table {
   TextColumn get identityId => text().nullable().references(Identities, #id, onDelete: KeyAction.setNull)();
   TextColumn get label => text()();
   TextColumn get hostname => text()();
+  TextColumn get username => text().nullable()();
   IntColumn get port => integer().withDefault(const Constant(22))();
   TextColumn get protocol => text().withDefault(const Constant('ssh'))(); // 'ssh', 'mosh', 'local', 'serial'
   TextColumn get colorTag => text().nullable()();

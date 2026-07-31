@@ -1362,6 +1362,17 @@ class $HostsTable extends Hosts with TableInfo<$HostsTable, Host> {
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _usernameMeta = const VerificationMeta(
+    'username',
+  );
+  @override
+  late final GeneratedColumn<String> username = GeneratedColumn<String>(
+    'username',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _portMeta = const VerificationMeta('port');
   @override
   late final GeneratedColumn<int> port = GeneratedColumn<int>(
@@ -1428,6 +1439,7 @@ class $HostsTable extends Hosts with TableInfo<$HostsTable, Host> {
     identityId,
     label,
     hostname,
+    username,
     port,
     protocol,
     colorTag,
@@ -1489,6 +1501,12 @@ class $HostsTable extends Hosts with TableInfo<$HostsTable, Host> {
       );
     } else if (isInserting) {
       context.missing(_hostnameMeta);
+    }
+    if (data.containsKey('username')) {
+      context.handle(
+        _usernameMeta,
+        username.isAcceptableOrUnknown(data['username']!, _usernameMeta),
+      );
     }
     if (data.containsKey('port')) {
       context.handle(
@@ -1558,6 +1576,10 @@ class $HostsTable extends Hosts with TableInfo<$HostsTable, Host> {
         DriftSqlType.string,
         data['${effectivePrefix}hostname'],
       )!,
+      username: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}username'],
+      ),
       port: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}port'],
@@ -1594,6 +1616,7 @@ class Host extends DataClass implements Insertable<Host> {
   final String? identityId;
   final String label;
   final String hostname;
+  final String? username;
   final int port;
   final String protocol;
   final String? colorTag;
@@ -1606,6 +1629,7 @@ class Host extends DataClass implements Insertable<Host> {
     this.identityId,
     required this.label,
     required this.hostname,
+    this.username,
     required this.port,
     required this.protocol,
     this.colorTag,
@@ -1625,6 +1649,9 @@ class Host extends DataClass implements Insertable<Host> {
     }
     map['label'] = Variable<String>(label);
     map['hostname'] = Variable<String>(hostname);
+    if (!nullToAbsent || username != null) {
+      map['username'] = Variable<String>(username);
+    }
     map['port'] = Variable<int>(port);
     map['protocol'] = Variable<String>(protocol);
     if (!nullToAbsent || colorTag != null) {
@@ -1649,6 +1676,9 @@ class Host extends DataClass implements Insertable<Host> {
           : Value(identityId),
       label: Value(label),
       hostname: Value(hostname),
+      username: username == null && nullToAbsent
+          ? const Value.absent()
+          : Value(username),
       port: Value(port),
       protocol: Value(protocol),
       colorTag: colorTag == null && nullToAbsent
@@ -1673,6 +1703,7 @@ class Host extends DataClass implements Insertable<Host> {
       identityId: serializer.fromJson<String?>(json['identityId']),
       label: serializer.fromJson<String>(json['label']),
       hostname: serializer.fromJson<String>(json['hostname']),
+      username: serializer.fromJson<String?>(json['username']),
       port: serializer.fromJson<int>(json['port']),
       protocol: serializer.fromJson<String>(json['protocol']),
       colorTag: serializer.fromJson<String?>(json['colorTag']),
@@ -1690,6 +1721,7 @@ class Host extends DataClass implements Insertable<Host> {
       'identityId': serializer.toJson<String?>(identityId),
       'label': serializer.toJson<String>(label),
       'hostname': serializer.toJson<String>(hostname),
+      'username': serializer.toJson<String?>(username),
       'port': serializer.toJson<int>(port),
       'protocol': serializer.toJson<String>(protocol),
       'colorTag': serializer.toJson<String?>(colorTag),
@@ -1705,6 +1737,7 @@ class Host extends DataClass implements Insertable<Host> {
     Value<String?> identityId = const Value.absent(),
     String? label,
     String? hostname,
+    Value<String?> username = const Value.absent(),
     int? port,
     String? protocol,
     Value<String?> colorTag = const Value.absent(),
@@ -1717,6 +1750,7 @@ class Host extends DataClass implements Insertable<Host> {
     identityId: identityId.present ? identityId.value : this.identityId,
     label: label ?? this.label,
     hostname: hostname ?? this.hostname,
+    username: username.present ? username.value : this.username,
     port: port ?? this.port,
     protocol: protocol ?? this.protocol,
     colorTag: colorTag.present ? colorTag.value : this.colorTag,
@@ -1735,6 +1769,7 @@ class Host extends DataClass implements Insertable<Host> {
           : this.identityId,
       label: data.label.present ? data.label.value : this.label,
       hostname: data.hostname.present ? data.hostname.value : this.hostname,
+      username: data.username.present ? data.username.value : this.username,
       port: data.port.present ? data.port.value : this.port,
       protocol: data.protocol.present ? data.protocol.value : this.protocol,
       colorTag: data.colorTag.present ? data.colorTag.value : this.colorTag,
@@ -1754,6 +1789,7 @@ class Host extends DataClass implements Insertable<Host> {
           ..write('identityId: $identityId, ')
           ..write('label: $label, ')
           ..write('hostname: $hostname, ')
+          ..write('username: $username, ')
           ..write('port: $port, ')
           ..write('protocol: $protocol, ')
           ..write('colorTag: $colorTag, ')
@@ -1771,6 +1807,7 @@ class Host extends DataClass implements Insertable<Host> {
     identityId,
     label,
     hostname,
+    username,
     port,
     protocol,
     colorTag,
@@ -1787,6 +1824,7 @@ class Host extends DataClass implements Insertable<Host> {
           other.identityId == this.identityId &&
           other.label == this.label &&
           other.hostname == this.hostname &&
+          other.username == this.username &&
           other.port == this.port &&
           other.protocol == this.protocol &&
           other.colorTag == this.colorTag &&
@@ -1801,6 +1839,7 @@ class HostsCompanion extends UpdateCompanion<Host> {
   final Value<String?> identityId;
   final Value<String> label;
   final Value<String> hostname;
+  final Value<String?> username;
   final Value<int> port;
   final Value<String> protocol;
   final Value<String?> colorTag;
@@ -1814,6 +1853,7 @@ class HostsCompanion extends UpdateCompanion<Host> {
     this.identityId = const Value.absent(),
     this.label = const Value.absent(),
     this.hostname = const Value.absent(),
+    this.username = const Value.absent(),
     this.port = const Value.absent(),
     this.protocol = const Value.absent(),
     this.colorTag = const Value.absent(),
@@ -1828,6 +1868,7 @@ class HostsCompanion extends UpdateCompanion<Host> {
     this.identityId = const Value.absent(),
     required String label,
     required String hostname,
+    this.username = const Value.absent(),
     this.port = const Value.absent(),
     this.protocol = const Value.absent(),
     this.colorTag = const Value.absent(),
@@ -1846,6 +1887,7 @@ class HostsCompanion extends UpdateCompanion<Host> {
     Expression<String>? identityId,
     Expression<String>? label,
     Expression<String>? hostname,
+    Expression<String>? username,
     Expression<int>? port,
     Expression<String>? protocol,
     Expression<String>? colorTag,
@@ -1860,6 +1902,7 @@ class HostsCompanion extends UpdateCompanion<Host> {
       if (identityId != null) 'identity_id': identityId,
       if (label != null) 'label': label,
       if (hostname != null) 'hostname': hostname,
+      if (username != null) 'username': username,
       if (port != null) 'port': port,
       if (protocol != null) 'protocol': protocol,
       if (colorTag != null) 'color_tag': colorTag,
@@ -1876,6 +1919,7 @@ class HostsCompanion extends UpdateCompanion<Host> {
     Value<String?>? identityId,
     Value<String>? label,
     Value<String>? hostname,
+    Value<String?>? username,
     Value<int>? port,
     Value<String>? protocol,
     Value<String?>? colorTag,
@@ -1890,6 +1934,7 @@ class HostsCompanion extends UpdateCompanion<Host> {
       identityId: identityId ?? this.identityId,
       label: label ?? this.label,
       hostname: hostname ?? this.hostname,
+      username: username ?? this.username,
       port: port ?? this.port,
       protocol: protocol ?? this.protocol,
       colorTag: colorTag ?? this.colorTag,
@@ -1919,6 +1964,9 @@ class HostsCompanion extends UpdateCompanion<Host> {
     }
     if (hostname.present) {
       map['hostname'] = Variable<String>(hostname.value);
+    }
+    if (username.present) {
+      map['username'] = Variable<String>(username.value);
     }
     if (port.present) {
       map['port'] = Variable<int>(port.value);
@@ -1950,6 +1998,7 @@ class HostsCompanion extends UpdateCompanion<Host> {
           ..write('identityId: $identityId, ')
           ..write('label: $label, ')
           ..write('hostname: $hostname, ')
+          ..write('username: $username, ')
           ..write('port: $port, ')
           ..write('protocol: $protocol, ')
           ..write('colorTag: $colorTag, ')
@@ -5856,6 +5905,7 @@ typedef $$HostsTableCreateCompanionBuilder =
       Value<String?> identityId,
       required String label,
       required String hostname,
+      Value<String?> username,
       Value<int> port,
       Value<String> protocol,
       Value<String?> colorTag,
@@ -5871,6 +5921,7 @@ typedef $$HostsTableUpdateCompanionBuilder =
       Value<String?> identityId,
       Value<String> label,
       Value<String> hostname,
+      Value<String?> username,
       Value<int> port,
       Value<String> protocol,
       Value<String?> colorTag,
@@ -5995,6 +6046,11 @@ class $$HostsTableFilterComposer extends Composer<_$AppDatabase, $HostsTable> {
 
   ColumnFilters<String> get hostname => $composableBuilder(
     column: $table.hostname,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get username => $composableBuilder(
+    column: $table.username,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -6160,6 +6216,11 @@ class $$HostsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get username => $composableBuilder(
+    column: $table.username,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get port => $composableBuilder(
     column: $table.port,
     builder: (column) => ColumnOrderings(column),
@@ -6290,6 +6351,9 @@ class $$HostsTableAnnotationComposer
 
   GeneratedColumn<String> get hostname =>
       $composableBuilder(column: $table.hostname, builder: (column) => column);
+
+  GeneratedColumn<String> get username =>
+      $composableBuilder(column: $table.username, builder: (column) => column);
 
   GeneratedColumn<int> get port =>
       $composableBuilder(column: $table.port, builder: (column) => column);
@@ -6461,6 +6525,7 @@ class $$HostsTableTableManager
                 Value<String?> identityId = const Value.absent(),
                 Value<String> label = const Value.absent(),
                 Value<String> hostname = const Value.absent(),
+                Value<String?> username = const Value.absent(),
                 Value<int> port = const Value.absent(),
                 Value<String> protocol = const Value.absent(),
                 Value<String?> colorTag = const Value.absent(),
@@ -6474,6 +6539,7 @@ class $$HostsTableTableManager
                 identityId: identityId,
                 label: label,
                 hostname: hostname,
+                username: username,
                 port: port,
                 protocol: protocol,
                 colorTag: colorTag,
@@ -6489,6 +6555,7 @@ class $$HostsTableTableManager
                 Value<String?> identityId = const Value.absent(),
                 required String label,
                 required String hostname,
+                Value<String?> username = const Value.absent(),
                 Value<int> port = const Value.absent(),
                 Value<String> protocol = const Value.absent(),
                 Value<String?> colorTag = const Value.absent(),
@@ -6502,6 +6569,7 @@ class $$HostsTableTableManager
                 identityId: identityId,
                 label: label,
                 hostname: hostname,
+                username: username,
                 port: port,
                 protocol: protocol,
                 colorTag: colorTag,

@@ -63,7 +63,7 @@ void main() {
       expect(find.byKey(const Key('group_name_input')), findsOneWidget);
     });
 
-    testWidgets('Opens HostFormDialog when add_host_button is tapped', (tester) async {
+    testWidgets('Opens HostFormDialog and displays username field', (tester) async {
       await tester.pumpWidget(createWidgetUnderTest());
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
@@ -75,6 +75,28 @@ void main() {
       expect(find.text('Add Server Host'), findsOneWidget);
       expect(find.byKey(const Key('host_label_input')), findsOneWidget);
       expect(find.byKey(const Key('host_hostname_input')), findsOneWidget);
+      expect(find.byKey(const Key('host_username_input')), findsOneWidget);
+    });
+
+    testWidgets('HostFormDialog auto-parses user@host into username and hostname on save', (tester) async {
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      await tester.tap(find.byKey(const Key('add_host_button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      await tester.enterText(find.byKey(const Key('host_label_input')), 'Test Host');
+      await tester.enterText(find.byKey(const Key('host_hostname_input')), 'root@192.168.1.1');
+
+      await tester.tap(find.byKey(const Key('host_save_button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // Host should be created with label "Test Host" and hostname "192.168.1.1" and username "root"
+      expect(find.text('Test Host'), findsOneWidget);
+      expect(find.text('root@192.168.1.1:22'), findsOneWidget);
     });
   });
 }

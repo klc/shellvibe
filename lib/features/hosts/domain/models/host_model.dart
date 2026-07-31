@@ -6,6 +6,7 @@ class HostModel {
   final String? identityId;
   final String label;
   final String hostname;
+  final String? username;
   final int port;
   final String protocol; // 'ssh', 'mosh', 'local', 'serial'
   final String? colorTag;
@@ -19,6 +20,7 @@ class HostModel {
     this.identityId,
     required this.label,
     required this.hostname,
+    this.username,
     this.port = 22,
     this.protocol = 'ssh',
     this.colorTag,
@@ -33,6 +35,7 @@ class HostModel {
     String? identityId,
     String? label,
     String? hostname,
+    String? username,
     int? port,
     String? protocol,
     String? colorTag,
@@ -46,6 +49,7 @@ class HostModel {
       identityId: identityId ?? this.identityId,
       label: label ?? this.label,
       hostname: hostname ?? this.hostname,
+      username: username ?? this.username,
       port: port ?? this.port,
       protocol: protocol ?? this.protocol,
       colorTag: colorTag ?? this.colorTag,
@@ -65,6 +69,7 @@ class HostModel {
           identityId == other.identityId &&
           label == other.label &&
           hostname == other.hostname &&
+          username == other.username &&
           port == other.port &&
           protocol == other.protocol &&
           colorTag == other.colorTag &&
@@ -79,6 +84,7 @@ class HostModel {
       identityId.hashCode ^
       label.hashCode ^
       hostname.hashCode ^
+      username.hashCode ^
       port.hashCode ^
       protocol.hashCode ^
       colorTag.hashCode ^

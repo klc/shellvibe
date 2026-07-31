@@ -25,8 +25,10 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
 
   late TextEditingController _labelController;
   late TextEditingController _hostnameController;
+  late TextEditingController _usernameController;
   late TextEditingController _portController;
   late TextEditingController _colorTagController;
+  late FocusNode _hostnameFocusNode;
 
   late String _protocol;
   String? _selectedGroupId;
@@ -40,8 +42,16 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
     final init = widget.initialHost;
     _labelController = TextEditingController(text: init?.label ?? '');
     _hostnameController = TextEditingController(text: init?.hostname ?? '');
+    _usernameController = TextEditingController(text: init?.username ?? '');
     _portController = TextEditingController(text: (init?.port ?? 22).toString());
     _colorTagController = TextEditingController(text: init?.colorTag ?? '');
+    _hostnameFocusNode = FocusNode();
+
+    _hostnameFocusNode.addListener(() {
+      if (!_hostnameFocusNode.hasFocus) {
+        _parseHostnameInput();
+      }
+    });
 
     _protocol = init?.protocol ?? 'ssh';
     _selectedGroupId = init?.groupId;
@@ -53,12 +63,28 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
   void dispose() {
     _labelController.dispose();
     _hostnameController.dispose();
+    _usernameController.dispose();
     _portController.dispose();
     _colorTagController.dispose();
+    _hostnameFocusNode.dispose();
     super.dispose();
   }
 
+  void _parseHostnameInput() {
+    final text = _hostnameController.text.trim();
+    if (text.contains('@')) {
+      final atIndex = text.indexOf('@');
+      final user = text.substring(0, atIndex).trim();
+      final host = text.substring(atIndex + 1).trim();
+      if (user.isNotEmpty) {
+        _usernameController.text = user;
+      }
+      _hostnameController.text = host;
+    }
+  }
+
   Future<void> _save() async {
+    _parseHostnameInput();
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
 
@@ -66,6 +92,7 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
       final notifier = ref.read(hostsNotifierProvider.notifier);
       final isEditing = widget.initialHost != null;
       final portVal = int.tryParse(_portController.text.trim()) ?? 22;
+      final usernameVal = _usernameController.text.trim().isEmpty ? null : _usernameController.text.trim();
 
       if (isEditing) {
         await notifier.updateHost(
@@ -75,6 +102,7 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
           identityId: _selectedIdentityId,
           label: _labelController.text.trim(),
           hostname: _hostnameController.text.trim(),
+          username: usernameVal,
           port: portVal,
           protocol: _protocol,
           colorTag: _colorTagController.text.trim().isEmpty ? null : _colorTagController.text.trim(),
@@ -87,6 +115,7 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
           identityId: _selectedIdentityId,
           label: _labelController.text.trim(),
           hostname: _hostnameController.text.trim(),
+          username: usernameVal,
           port: portVal,
           protocol: _protocol,
           colorTag: _colorTagController.text.trim().isEmpty ? null : _colorTagController.text.trim(),
@@ -134,13 +163,24 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
               const SizedBox(height: 12),
               TextFormField(
                 key: const Key('host_hostname_input'),
+                focusNode: _hostnameFocusNode,
                 controller: _hostnameController,
                 decoration: const InputDecoration(
                   labelText: 'Hostname / IP Address',
-                  hintText: 'e.g. 192.168.1.10 or ssh.example.com',
+                  hintText: 'e.g. 192.168.1.10 or root@192.168.1.10',
                   border: OutlineInputBorder(),
                 ),
                 validator: (v) => v == null || v.trim().isEmpty ? 'Hostname is required' : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                key: const Key('host_username_input'),
+                controller: _usernameController,
+                decoration: const InputDecoration(
+                  labelText: 'Username',
+                  hintText: 'e.g. root or admin',
+                  border: OutlineInputBorder(),
+                ),
               ),
               const SizedBox(height: 12),
               Row(

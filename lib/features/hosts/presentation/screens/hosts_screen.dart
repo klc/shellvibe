@@ -71,9 +71,11 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
                     final filteredHosts = hosts.where((h) {
                       final label = h.label.toLowerCase();
                       final host = h.hostname.toLowerCase();
+                      final username = (h.username ?? '').toLowerCase();
                       final proto = h.protocol.toLowerCase();
                       return label.contains(_searchQuery) ||
                           host.contains(_searchQuery) ||
+                          username.contains(_searchQuery) ||
                           proto.contains(_searchQuery);
                     }).toList();
 
@@ -335,7 +337,7 @@ class _HostTile extends StatelessWidget {
             ),
           ],
         ),
-        subtitle: Text('${host.hostname}:${host.port}'),
+        subtitle: Text('${host.username != null && host.username!.isNotEmpty ? '${host.username}@' : ''}${host.hostname}:${host.port}'),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [

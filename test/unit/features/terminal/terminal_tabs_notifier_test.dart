@@ -115,5 +115,24 @@ void main() {
       // Await futures to prevent unhandled background errors in test tearDown
       await Future.wait([future1, future2]);
     });
+
+    test('openTabForHost parses user@hostname and resolves effective username correctly', () async {
+      final notifier = container.read(terminalTabsNotifierProvider.notifier);
+
+      final hostWithUserInName = HostModel(
+        id: 'host-user',
+        workspaceId: 'ws-1',
+        label: 'Parsed Host',
+        hostname: 'admin@192.168.1.100',
+        port: 1,
+        createdAt: DateTime.now(),
+      );
+
+      final future = notifier.openTabForHost(hostWithUserInName);
+      final tab = container.read(terminalTabsNotifierProvider).tabs.last;
+      expect(tab.host?.hostname, equals('admin@192.168.1.100'));
+
+      await future;
+    });
   });
 }
