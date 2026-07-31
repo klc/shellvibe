@@ -209,37 +209,40 @@ class SftpTransferQueueWorker {
     final item = _queue[id]!;
     final remoteFile = await client.open(item.sourcePath, mode: SftpFileOpenMode.read);
 
-    final localFile = File(item.destinationPath);
-    await localFile.parent.create(recursive: true);
-    final sink = localFile.openWrite(mode: FileMode.write);
-
-    int transferred = 0;
-    int lastTimeMs = stopwatch.elapsedMilliseconds;
-    int lastTransferred = 0;
-
     try {
-      final stream = remoteFile.read();
-      await for (final chunk in stream) {
-        if (_cancelFlags[id] == true || _pauseFlags[id] == true) {
-          break;
-        }
-        sink.add(chunk);
-        transferred += chunk.length;
+      final localFile = File(item.destinationPath);
+      await localFile.parent.create(recursive: true);
+      final sink = localFile.openWrite(mode: FileMode.write);
 
-        final nowMs = stopwatch.elapsedMilliseconds;
-        final deltaMs = nowMs - lastTimeMs;
-        int speed = item.speedBytesPerSec;
-        if (deltaMs >= 500) {
-          speed = (((transferred - lastTransferred) * 1000) / deltaMs).round();
-          lastTimeMs = nowMs;
-          lastTransferred = transferred;
-        }
+      int transferred = 0;
+      int lastTimeMs = stopwatch.elapsedMilliseconds;
+      int lastTransferred = 0;
 
-        onProgress(transferred, speed);
+      try {
+        final stream = remoteFile.read();
+        await for (final chunk in stream) {
+          if (_cancelFlags[id] == true || _pauseFlags[id] == true) {
+            break;
+          }
+          sink.add(chunk);
+          transferred += chunk.length;
+
+          final nowMs = stopwatch.elapsedMilliseconds;
+          final deltaMs = nowMs - lastTimeMs;
+          int speed = item.speedBytesPerSec;
+          if (deltaMs >= 500) {
+            speed = (((transferred - lastTransferred) * 1000) / deltaMs).round();
+            lastTimeMs = nowMs;
+            lastTransferred = transferred;
+          }
+
+          onProgress(transferred, speed);
+        }
+      } finally {
+        await sink.flush();
+        await sink.close();
       }
     } finally {
-      await sink.flush();
-      await sink.close();
       await remoteFile.close();
     }
   }
@@ -261,39 +264,42 @@ class SftpTransferQueueWorker {
       mode: SftpFileOpenMode.create | SftpFileOpenMode.write | SftpFileOpenMode.truncate,
     );
 
-    int transferred = 0;
-    int lastTimeMs = stopwatch.elapsedMilliseconds;
-    int lastTransferred = 0;
-
-    const chunkSize = 32 * 1024;
-    final randomAccess = await localFile.open();
-
     try {
-      final length = await randomAccess.length();
-      while (transferred < length) {
-        if (_cancelFlags[id] == true || _pauseFlags[id] == true) {
-          break;
+      int transferred = 0;
+      int lastTimeMs = stopwatch.elapsedMilliseconds;
+      int lastTransferred = 0;
+
+      const chunkSize = 32 * 1024;
+      final randomAccess = await localFile.open();
+
+      try {
+        final length = await randomAccess.length();
+        while (transferred < length) {
+          if (_cancelFlags[id] == true || _pauseFlags[id] == true) {
+            break;
+          }
+
+          final readBytes = await randomAccess.read(chunkSize);
+          if (readBytes.isEmpty) break;
+
+          await remoteFile.write(Stream.value(readBytes), offset: transferred);
+          transferred += readBytes.length;
+
+          final nowMs = stopwatch.elapsedMilliseconds;
+          final deltaMs = nowMs - lastTimeMs;
+          int speed = item.speedBytesPerSec;
+          if (deltaMs >= 500) {
+            speed = (((transferred - lastTransferred) * 1000) / deltaMs).round();
+            lastTimeMs = nowMs;
+            lastTransferred = transferred;
+          }
+
+          onProgress(transferred, speed);
         }
-
-        final readBytes = await randomAccess.read(chunkSize);
-        if (readBytes.isEmpty) break;
-
-        await remoteFile.write(Stream.value(readBytes), offset: transferred);
-        transferred += readBytes.length;
-
-        final nowMs = stopwatch.elapsedMilliseconds;
-        final deltaMs = nowMs - lastTimeMs;
-        int speed = item.speedBytesPerSec;
-        if (deltaMs >= 500) {
-          speed = (((transferred - lastTransferred) * 1000) / deltaMs).round();
-          lastTimeMs = nowMs;
-          lastTransferred = transferred;
-        }
-
-        onProgress(transferred, speed);
+      } finally {
+        await randomAccess.close();
       }
     } finally {
-      await randomAccess.close();
       await remoteFile.close();
     }
   }

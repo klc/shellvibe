@@ -112,6 +112,9 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
         onHostKeyPrompt: onHostKeyPrompt,
       );
 
+      terminal.write(
+          '\x1b[1;34m[SSH]\x1b[0m Connecting to \x1b[1;36m$effectiveUsername@$cleanHostname:${host.port}\x1b[0m...\r\n');
+
       await sessionManager.connect(config);
       final sshSession = await sessionManager.openShell();
 
