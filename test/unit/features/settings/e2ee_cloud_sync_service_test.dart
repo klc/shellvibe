@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:terly2/core/crypto/encryption_engine.dart';
@@ -20,6 +21,28 @@ void main() {
         id: 'ws_test',
         name: 'Production Workspace',
         createdAt: DateTime.now(),
+      ),
+    );
+
+    await db1.hostsDao.insertHost(
+      HostsCompanion.insert(
+        id: 'host_sync',
+        workspaceId: 'ws_test',
+        label: 'Sync Host',
+        hostname: 'sync.local',
+        createdAt: DateTime.now(),
+      ),
+    );
+
+    await db1.tunnelsDao.insertRule(
+      PortForwardRulesCompanion.insert(
+        id: 'rule_sync',
+        hostId: 'host_sync',
+        type: 'local',
+        localPort: 8080,
+        remoteHost: const Value('127.0.0.1'),
+        remotePort: const Value(80),
+        autoStart: const Value(true),
       ),
     );
 
@@ -85,6 +108,14 @@ void main() {
       expect(db2Workspaces.length, equals(1));
       expect(db2Workspaces.first.name, equals('Production Workspace'));
 
+      final db2Rules = await db2.tunnelsDao.getRulesForHost('host_sync');
+      expect(db2Rules.length, equals(1));
+      expect(db2Rules.first.id, equals('rule_sync'));
+      expect(db2Rules.first.localPort, equals(8080));
+      expect(db2Rules.first.remoteHost, equals('127.0.0.1'));
+      expect(db2Rules.first.remotePort, equals(80));
+      expect(db2Rules.first.autoStart, equals(true));
+
       final db2Snippets = await db2.snippetsDao.getAllSnippets();
       expect(db2Snippets.length, equals(1));
       expect(db2Snippets.first.title, equals('Sync Test Snippet'));
@@ -110,3 +141,4 @@ void main() {
     });
   });
 }
+

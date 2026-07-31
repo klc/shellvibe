@@ -257,7 +257,24 @@ class E2EECloudSyncService {
         }
       }
 
-      // 6. Snippets
+      // 6. Port Forward Rules
+      if (data['port_forward_rules'] is List) {
+        for (final item in data['port_forward_rules'] as List) {
+          await db.into(db.portForwardRules).insertOnConflictUpdate(
+                PortForwardRulesCompanion.insert(
+                  id: item['id'] as String,
+                  hostId: item['hostId'] as String,
+                  type: item['type'] as String,
+                  localPort: item['localPort'] as int,
+                  remoteHost: Value(item['remoteHost'] as String?),
+                  remotePort: Value(item['remotePort'] as int?),
+                  autoStart: Value(item['autoStart'] as bool? ?? false),
+                ),
+              );
+        }
+      }
+
+      // 7. Snippets
       if (data['snippets'] is List) {
         for (final item in data['snippets'] as List) {
           await db.into(db.snippets).insertOnConflictUpdate(
@@ -272,7 +289,7 @@ class E2EECloudSyncService {
         }
       }
 
-      // 7. Runbooks
+      // 8. Runbooks
       if (data['runbooks'] is List) {
         for (final item in data['runbooks'] as List) {
           await db.into(db.runbooks).insertOnConflictUpdate(
@@ -287,7 +304,7 @@ class E2EECloudSyncService {
         }
       }
 
-      // 8. Runbook Steps
+      // 9. Runbook Steps
       if (data['runbook_steps'] is List) {
         for (final item in data['runbook_steps'] as List) {
           await db.into(db.runbookSteps).insertOnConflictUpdate(
