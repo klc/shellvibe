@@ -41,17 +41,20 @@ class Socks5ProxyServer {
   }
 
   Future<void> _handleClient(Socket clientSocket) async {
+    final reader = _BufferedSocketReader(clientSocket);
     try {
       // Step 1: Handshake
-      final handshakeData = await _readExactBytes(clientSocket, 2);
+      final handshakeData = await reader.readExact(2);
       if (handshakeData.length < 2 || handshakeData[0] != 0x05) {
+        await reader.detach();
         clientSocket.destroy();
         return;
       }
 
       final nmethods = handshakeData[1];
-      final methods = await _readExactBytes(clientSocket, nmethods);
+      final methods = await reader.readExact(nmethods);
       if (methods.length < nmethods) {
+        await reader.detach();
         clientSocket.destroy();
         return;
       }
@@ -61,11 +64,12 @@ class Socks5ProxyServer {
       await clientSocket.flush();
 
       // Step 2: Request Parsing
-      final reqHeader = await _readExactBytes(clientSocket, 4);
+      final reqHeader = await reader.readExact(4);
       if (reqHeader.length < 4 || reqHeader[0] != 0x05 || reqHeader[1] != 0x01) {
         // Only CMD 0x01 (CONNECT) is supported
         clientSocket.add([0x05, 0x07, 0x00, 0x01, 0, 0, 0, 0, 0, 0]); // Command not supported
         await clientSocket.flush();
+        await reader.detach();
         clientSocket.destroy();
         return;
       }
@@ -75,21 +79,37 @@ class Socks5ProxyServer {
 
       if (atyp == 0x01) {
         // IPv4 (4 bytes)
-        final ipv4Bytes = await _readExactBytes(clientSocket, 4);
+        final ipv4Bytes = await reader.readExact(4);
+        if (ipv4Bytes.length < 4) {
+          await reader.detach();
+          clientSocket.destroy();
+          return;
+        }
         targetHost = ipv4Bytes.join('.');
       } else if (atyp == 0x03) {
         // Domain Name (1 byte length + domain string)
-        final lenBytes = await _readExactBytes(clientSocket, 1);
+        final lenBytes = await reader.readExact(1);
         if (lenBytes.isEmpty) {
+          await reader.detach();
           clientSocket.destroy();
           return;
         }
         final domainLen = lenBytes[0];
-        final domainBytes = await _readExactBytes(clientSocket, domainLen);
+        final domainBytes = await reader.readExact(domainLen);
+        if (domainBytes.length < domainLen) {
+          await reader.detach();
+          clientSocket.destroy();
+          return;
+        }
         targetHost = String.fromCharCodes(domainBytes);
       } else if (atyp == 0x04) {
         // IPv6 (16 bytes)
-        final ipv6Bytes = await _readExactBytes(clientSocket, 16);
+        final ipv6Bytes = await reader.readExact(16);
+        if (ipv6Bytes.length < 16) {
+          await reader.detach();
+          clientSocket.destroy();
+          return;
+        }
         final segments = <String>[];
         for (int i = 0; i < 16; i += 2) {
           final val = (ipv6Bytes[i] << 8) | ipv6Bytes[i + 1];
@@ -97,12 +117,14 @@ class Socks5ProxyServer {
         }
         targetHost = segments.join(':');
       } else {
+        await reader.detach();
         clientSocket.destroy();
         return;
       }
 
-      final portBytes = await _readExactBytes(clientSocket, 2);
+      final portBytes = await reader.readExact(2);
       if (portBytes.length < 2) {
+        await reader.detach();
         clientSocket.destroy();
         return;
       }
@@ -111,9 +133,20 @@ class Socks5ProxyServer {
       // Step 3: Open SSH channel to destination target
       final sshChannel = await sshClient.forwardLocal(targetHost, targetPort);
 
+      // Detach reader before piping directly from clientSocket
+      final unconsumed = await reader.detach();
+
       // Send SOCKS5 Success Response
       clientSocket.add([0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0]);
       await clientSocket.flush();
+
+      // Forward any unconsumed bytes received during handshake/request parsing
+      if (unconsumed.isNotEmpty) {
+        sshChannel.sink.add(unconsumed);
+        if (onBytesTransferred != null) {
+          onBytesTransferred!(unconsumed.length);
+        }
+      }
 
       // Step 4: Pipe data bidirectionally
       StreamSubscription? sub1;
@@ -176,34 +209,9 @@ class Socks5ProxyServer {
         _activeSubscriptions.remove(sub2);
       }
     } catch (_) {
+      await reader.detach();
       clientSocket.destroy();
     }
-  }
-
-  Future<Uint8List> _readExactBytes(Socket socket, int count) async {
-    final completer = Completer<Uint8List>();
-    final builder = BytesBuilder();
-
-    late StreamSubscription sub;
-    sub = socket.listen(
-      (chunk) {
-        builder.add(chunk);
-        if (builder.length >= count) {
-          sub.cancel();
-          completer.complete(builder.takeBytes());
-        }
-      },
-      onError: (_) {
-        sub.cancel();
-        if (!completer.isCompleted) completer.complete(Uint8List(0));
-      },
-      onDone: () {
-        sub.cancel();
-        if (!completer.isCompleted) completer.complete(builder.takeBytes());
-      },
-    );
-
-    return completer.future;
   }
 
   /// Stops the SOCKS5 proxy server.
@@ -215,5 +223,63 @@ class Socks5ProxyServer {
     _activeSubscriptions.clear();
     await _serverSocket?.close();
     _serverSocket = null;
+  }
+}
+
+class _BufferedSocketReader {
+  final Socket _socket;
+  final BytesBuilder _builder = BytesBuilder();
+  StreamSubscription<Uint8List>? _subscription;
+  Completer<void>? _dataCompleter;
+  bool _isDone = false;
+  bool _hasError = false;
+
+  _BufferedSocketReader(this._socket) {
+    _subscription = _socket.listen(
+      (chunk) {
+        _builder.add(chunk);
+        if (_dataCompleter != null && !_dataCompleter!.isCompleted) {
+          _dataCompleter!.complete();
+        }
+      },
+      onError: (_) {
+        _hasError = true;
+        if (_dataCompleter != null && !_dataCompleter!.isCompleted) {
+          _dataCompleter!.complete();
+        }
+      },
+      onDone: () {
+        _isDone = true;
+        if (_dataCompleter != null && !_dataCompleter!.isCompleted) {
+          _dataCompleter!.complete();
+        }
+      },
+    );
+  }
+
+  Future<Uint8List> readExact(int count) async {
+    while (_builder.length < count && !_isDone && !_hasError) {
+      _dataCompleter = Completer<void>();
+      await _dataCompleter!.future;
+    }
+
+    final bytes = _builder.takeBytes();
+    if (bytes.length < count) {
+      return bytes;
+    }
+
+    if (bytes.length > count) {
+      final result = bytes.sublist(0, count);
+      _builder.add(Uint8List.sublistView(bytes, count));
+      return result;
+    }
+
+    return bytes;
+  }
+
+  Future<Uint8List> detach() async {
+    await _subscription?.cancel();
+    _subscription = null;
+    return _builder.takeBytes();
   }
 }
