@@ -1,0 +1,350 @@
+import 'package:dartssh2/dartssh2.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../../core/network/tunnel_engine.dart';
+import '../../../../shared/database/app_database.dart';
+import '../../../../shared/providers/database_providers.dart';
+import '../providers/tunnels_providers.dart';
+import '../widgets/tunnel_form_dialog.dart';
+
+class TunnelsScreen extends ConsumerStatefulWidget {
+  final SSHClient? activeSshClient;
+  final String? filterHostId;
+
+  const TunnelsScreen({
+    super.key,
+    this.activeSshClient,
+    this.filterHostId,
+  });
+
+  @override
+  ConsumerState<TunnelsScreen> createState() => _TunnelsScreenState();
+}
+
+class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
+  final Map<String, Host> _hostsMap = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHostsMap();
+  }
+
+  Future<void> _loadHostsMap() async {
+    try {
+      final hosts = await ref.read(hostsDaoProvider).getAllHosts();
+      if (mounted) {
+        setState(() {
+          for (final h in hosts) {
+            _hostsMap[h.id] = h;
+          }
+        });
+      }
+    } catch (_) {}
+  }
+
+  void _openCreateRuleDialog() async {
+    final companion = await showDialog<PortForwardRulesCompanion>(
+      context: context,
+      builder: (_) => TunnelFormDialog(defaultHostId: widget.filterHostId),
+    );
+
+    if (companion != null) {
+      await ref.read(tunnelsNotifierProvider.notifier).addRule(companion);
+    }
+  }
+
+  void _openEditRuleDialog(PortForwardRule rule) async {
+    final companion = await showDialog<PortForwardRulesCompanion>(
+      context: context,
+      builder: (_) => TunnelFormDialog(
+        rule: rule,
+        defaultHostId: rule.hostId,
+      ),
+    );
+
+    if (companion != null) {
+      final updated = PortForwardRule(
+        id: rule.id,
+        hostId: companion.hostId.value,
+        type: companion.type.value,
+        localPort: companion.localPort.value,
+        remoteHost: companion.remoteHost.value,
+        remotePort: companion.remotePort.value,
+        autoStart: companion.autoStart.value,
+      );
+      await ref.read(tunnelsNotifierProvider.notifier).updateRule(updated);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = ref.watch(tunnelsNotifierProvider);
+    final activeTunnelsAsync = ref.watch(activeTunnelsStreamProvider);
+
+    final filteredRules = widget.filterHostId != null
+        ? state.rules.where((r) => r.hostId == widget.filterHostId).toList()
+        : state.rules;
+
+    return Scaffold(
+      backgroundColor: const Color(0xFF181825),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF1E1E2E),
+        elevation: 0,
+        title: const Row(
+          children: [
+            Icon(Icons.hub, color: Colors.cyanAccent),
+            SizedBox(width: 10),
+            Flexible(
+              child: Text(
+                'Port Forwarding & Tunnels Matrix',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () => ref.read(tunnelsNotifierProvider.notifier).loadRules(widget.filterHostId),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: Colors.cyanAccent,
+        foregroundColor: Colors.black,
+        icon: const Icon(Icons.add),
+        label: const Text('Add Tunnel Rule'),
+        onPressed: _openCreateRuleDialog,
+      ),
+      body: activeTunnelsAsync.when(
+        data: (activeTunnels) {
+          final activeMap = {for (var t in activeTunnels) t.ruleId: t};
+
+          if (state.isLoading) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (filteredRules.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.hub_outlined, size: 64, color: Colors.white24),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'No Port Forwarding Rules configured.',
+                    style: TextStyle(color: Colors.white54, fontSize: 16),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.add),
+                    label: const Text('Create Your First Rule'),
+                    onPressed: _openCreateRuleDialog,
+                  ),
+                ],
+              ),
+            );
+          }
+
+          return ListView.separated(
+            padding: const EdgeInsets.all(16),
+            itemCount: filteredRules.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 12),
+            itemBuilder: (context, index) {
+              final rule = filteredRules[index];
+              final activeTunnel = activeMap[rule.id];
+              final host = _hostsMap[rule.hostId];
+
+              return _buildRuleCard(
+                rule: rule,
+                activeTunnel: activeTunnel,
+                host: host,
+              );
+            },
+          );
+        },
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (err, stack) => Center(child: Text('Error loading tunnels: $err')),
+      ),
+    );
+  }
+
+  Widget _buildRuleCard({
+    required PortForwardRule rule,
+    ActiveTunnel? activeTunnel,
+    Host? host,
+  }) {
+    final isActive = activeTunnel?.isActive ?? false;
+
+    Color badgeColor;
+    String badgeText;
+
+    switch (rule.type) {
+      case 'local':
+        badgeColor = Colors.cyan;
+        badgeText = 'LOCAL (-L)';
+        break;
+      case 'remote':
+        badgeColor = Colors.purpleAccent;
+        badgeText = 'REMOTE (-R)';
+        break;
+      case 'dynamic':
+        badgeColor = Colors.orangeAccent;
+        badgeText = 'DYNAMIC SOCKS5 (-D)';
+        break;
+      default:
+        badgeColor = Colors.blueGrey;
+        badgeText = rule.type.toUpperCase();
+    }
+
+    return Card(
+      color: const Color(0xFF1E1E2E),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: isActive ? Colors.greenAccent : Colors.white10,
+          width: isActive ? 1.5 : 1,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: badgeColor.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: badgeColor, width: 1),
+                  ),
+                  child: Text(
+                    badgeText,
+                    style: TextStyle(
+                      color: badgeColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    host != null ? '${host.label} (${host.hostname})' : 'Host ID: ${rule.hostId}',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Switch(
+                  value: isActive,
+                  activeThumbColor: Colors.greenAccent,
+                  onChanged: (value) async {
+                    final notifier = ref.read(tunnelsNotifierProvider.notifier);
+                    if (value) {
+                      if (widget.activeSshClient != null) {
+                        await notifier.startRule(rule, widget.activeSshClient!);
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Active SSH Connection required to start tunnel'),
+                            backgroundColor: Colors.orange,
+                          ),
+                        );
+                      }
+                    } else {
+                      await notifier.stopRule(rule.id);
+                    }
+                  },
+                ),
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert),
+                  onSelected: (val) {
+                    if (val == 'edit') _openEditRuleDialog(rule);
+                    if (val == 'delete') {
+                      ref.read(tunnelsNotifierProvider.notifier).deleteRule(rule.id);
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'edit',
+                      child: Row(children: [Icon(Icons.edit, size: 16), SizedBox(width: 8), Text('Edit')]),
+                    ),
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: Row(children: [Icon(Icons.delete, color: Colors.redAccent, size: 16), SizedBox(width: 8), Text('Delete', style: TextStyle(color: Colors.redAccent))]),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            // Rule Flow Diagram / Route text
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF313244),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.computer, size: 18, color: Colors.white70),
+                  const SizedBox(width: 6),
+                  Text('127.0.0.1:${rule.localPort}',
+                      style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold)),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 8),
+                    child: Icon(Icons.arrow_forward, size: 16, color: Colors.cyanAccent),
+                  ),
+                  if (rule.type == 'dynamic') ...[
+                    const Icon(Icons.shield_outlined, size: 18, color: Colors.orangeAccent),
+                    const SizedBox(width: 6),
+                    const Text('SOCKS5 Dynamic Bridge',
+                        style: TextStyle(fontFamily: 'monospace', color: Colors.orangeAccent)),
+                  ] else ...[
+                    const Icon(Icons.dns_outlined, size: 18, color: Colors.cyanAccent),
+                    const SizedBox(width: 6),
+                    Text('${rule.remoteHost}:${rule.remotePort}',
+                        style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold)),
+                  ],
+                ],
+              ),
+            ),
+            if (isActive && activeTunnel != null) ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  const Icon(Icons.speed, size: 16, color: Colors.greenAccent),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Speed: ${activeTunnel.formattedSpeed}',
+                    style: const TextStyle(color: Colors.greenAccent, fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                  const Spacer(),
+                  const Icon(Icons.data_usage, size: 16, color: Colors.white54),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Total Transferred: ${activeTunnel.formattedBytes}',
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                ],
+              ),
+            ],
+            if (activeTunnel?.error != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  'Error: ${activeTunnel!.error}',
+                  style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}

@@ -1,0 +1,180 @@
+import 'package:flutter/material.dart';
+import 'package:xterm/xterm.dart';
+
+class MobileExtraKeysBar extends StatefulWidget {
+  final Terminal? terminal;
+  final void Function(String data)? onInput;
+
+  const MobileExtraKeysBar({
+    super.key,
+    this.terminal,
+    this.onInput,
+  });
+
+  @override
+  State<MobileExtraKeysBar> createState() => _MobileExtraKeysBarState();
+}
+
+class _MobileExtraKeysBarState extends State<MobileExtraKeysBar> {
+  bool _ctrlActive = false;
+  bool _altActive = false;
+
+  void _sendData(String rawChar, {String? ctrlChar, String? escapeCode}) {
+    String output = escapeCode ?? rawChar;
+
+    if (_ctrlActive) {
+      if (ctrlChar != null) {
+        output = ctrlChar;
+      } else if (rawChar.length == 1) {
+        final code = rawChar.toUpperCase().codeUnitAt(0);
+        if (code >= 65 && code <= 90) {
+          // A-Z -> ASCII 1-26
+          output = String.fromCharCode(code - 64);
+        }
+      }
+    } else if (_altActive) {
+      output = '\x1b$output';
+    }
+
+    if (widget.onInput != null) {
+      widget.onInput!(output);
+    } else if (widget.terminal != null) {
+      widget.terminal!.onOutput?.call(output);
+    }
+
+    // Reset sticky keys after next keypress
+    if (_ctrlActive || _altActive) {
+      setState(() {
+        _ctrlActive = false;
+        _altActive = false;
+      });
+    }
+  }
+
+  Widget _buildKeyButton({
+    required Key key,
+    required String label,
+    required VoidCallback onTap,
+    bool isActive = false,
+    bool isModifier = false,
+  }) {
+    final theme = Theme.of(context);
+    Color backgroundColor = isModifier
+        ? (isActive ? theme.colorScheme.primary : theme.colorScheme.surfaceContainerHighest)
+        : theme.colorScheme.surface;
+    Color textColor = isModifier
+        ? (isActive ? theme.colorScheme.onPrimary : theme.colorScheme.onSurface)
+        : theme.colorScheme.onSurface;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 2),
+      child: Material(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(6),
+        child: InkWell(
+          key: key,
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(6),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            alignment: Alignment.center,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+                color: textColor,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 48,
+      color: Theme.of(context).colorScheme.surfaceContainer,
+      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            // Sticky Modifier: CTRL
+            _buildKeyButton(
+              key: const Key('key_ctrl'),
+              label: 'Ctrl',
+              isModifier: true,
+              isActive: _ctrlActive,
+              onTap: () => setState(() => _ctrlActive = !_ctrlActive),
+            ),
+            // Sticky Modifier: ALT
+            _buildKeyButton(
+              key: const Key('key_alt'),
+              label: 'Alt',
+              isModifier: true,
+              isActive: _altActive,
+              onTap: () => setState(() => _altActive = !_altActive),
+            ),
+            const VerticalDivider(width: 12),
+            // Action & Character Keys
+            _buildKeyButton(
+              key: const Key('key_esc'),
+              label: 'Esc',
+              onTap: () => _sendData('Esc', ctrlChar: '\x1b', escapeCode: '\x1b'),
+            ),
+            _buildKeyButton(
+              key: const Key('key_tab'),
+              label: 'Tab',
+              onTap: () => _sendData('Tab', ctrlChar: '\t', escapeCode: '\t'),
+            ),
+            _buildKeyButton(
+              key: const Key('key_pipe'),
+              label: '|',
+              onTap: () => _sendData('|'),
+            ),
+            _buildKeyButton(
+              key: const Key('key_tilde'),
+              label: '~',
+              onTap: () => _sendData('~'),
+            ),
+            _buildKeyButton(
+              key: const Key('key_slash'),
+              label: '/',
+              onTap: () => _sendData('/'),
+            ),
+            _buildKeyButton(
+              key: const Key('key_dash'),
+              label: '-',
+              onTap: () => _sendData('-'),
+            ),
+            const VerticalDivider(width: 12),
+            // Navigation Arrow Keys
+            _buildKeyButton(
+              key: const Key('key_arrow_left'),
+              label: '←',
+              onTap: () => _sendData('left', escapeCode: '\x1b[D'),
+            ),
+            _buildKeyButton(
+              key: const Key('key_arrow_up'),
+              label: '↑',
+              onTap: () => _sendData('up', escapeCode: '\x1b[A'),
+            ),
+            _buildKeyButton(
+              key: const Key('key_arrow_down'),
+              label: '↓',
+              onTap: () => _sendData('down', escapeCode: '\x1b[B'),
+            ),
+            _buildKeyButton(
+              key: const Key('key_arrow_right'),
+              label: '→',
+              onTap: () => _sendData('right', escapeCode: '\x1b[C'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

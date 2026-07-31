@@ -1,0 +1,87 @@
+/// Domain model representing a server host configuration.
+class HostModel {
+  final String id;
+  final String workspaceId;
+  final String? groupId;
+  final String? identityId;
+  final String label;
+  final String hostname;
+  final int port;
+  final String protocol; // 'ssh', 'mosh', 'local', 'serial'
+  final String? colorTag;
+  final String? jumpHostId;
+  final DateTime createdAt;
+
+  const HostModel({
+    required this.id,
+    required this.workspaceId,
+    this.groupId,
+    this.identityId,
+    required this.label,
+    required this.hostname,
+    this.port = 22,
+    this.protocol = 'ssh',
+    this.colorTag,
+    this.jumpHostId,
+    required this.createdAt,
+  });
+
+  HostModel copyWith({
+    String? id,
+    String? workspaceId,
+    String? groupId,
+    String? identityId,
+    String? label,
+    String? hostname,
+    int? port,
+    String? protocol,
+    String? colorTag,
+    String? jumpHostId,
+    DateTime? createdAt,
+  }) {
+    return HostModel(
+      id: id ?? this.id,
+      workspaceId: workspaceId ?? this.workspaceId,
+      groupId: groupId ?? this.groupId,
+      identityId: identityId ?? this.identityId,
+      label: label ?? this.label,
+      hostname: hostname ?? this.hostname,
+      port: port ?? this.port,
+      protocol: protocol ?? this.protocol,
+      colorTag: colorTag ?? this.colorTag,
+      jumpHostId: jumpHostId ?? this.jumpHostId,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is HostModel &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          workspaceId == other.workspaceId &&
+          groupId == other.groupId &&
+          identityId == other.identityId &&
+          label == other.label &&
+          hostname == other.hostname &&
+          port == other.port &&
+          protocol == other.protocol &&
+          colorTag == other.colorTag &&
+          jumpHostId == other.jumpHostId &&
+          createdAt == other.createdAt;
+
+  @override
+  int get hashCode =>
+      id.hashCode ^
+      workspaceId.hashCode ^
+      groupId.hashCode ^
+      identityId.hashCode ^
+      label.hashCode ^
+      hostname.hashCode ^
+      port.hashCode ^
+      protocol.hashCode ^
+      colorTag.hashCode ^
+      jumpHostId.hashCode ^
+      createdAt.hashCode;
+}

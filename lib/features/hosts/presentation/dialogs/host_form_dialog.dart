@@ -1,0 +1,308 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import 'package:terly2/features/vault/presentation/notifiers/identities_notifier.dart';
+import '../notifiers/host_groups_notifier.dart';
+import '../notifiers/hosts_notifier.dart';
+import '../../domain/models/host_model.dart';
+
+class HostFormDialog extends ConsumerStatefulWidget {
+  final HostModel? initialHost;
+  final String workspaceId;
+
+  const HostFormDialog({
+    super.key,
+    this.initialHost,
+    this.workspaceId = 'default',
+  });
+
+  @override
+  ConsumerState<HostFormDialog> createState() => _HostFormDialogState();
+}
+
+class _HostFormDialogState extends ConsumerState<HostFormDialog> {
+  final _formKey = GlobalKey<FormState>();
+
+  late TextEditingController _labelController;
+  late TextEditingController _hostnameController;
+  late TextEditingController _portController;
+  late TextEditingController _colorTagController;
+
+  late String _protocol;
+  String? _selectedGroupId;
+  String? _selectedIdentityId;
+  String? _selectedJumpHostId;
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final init = widget.initialHost;
+    _labelController = TextEditingController(text: init?.label ?? '');
+    _hostnameController = TextEditingController(text: init?.hostname ?? '');
+    _portController = TextEditingController(text: (init?.port ?? 22).toString());
+    _colorTagController = TextEditingController(text: init?.colorTag ?? '');
+
+    _protocol = init?.protocol ?? 'ssh';
+    _selectedGroupId = init?.groupId;
+    _selectedIdentityId = init?.identityId;
+    _selectedJumpHostId = init?.jumpHostId;
+  }
+
+  @override
+  void dispose() {
+    _labelController.dispose();
+    _hostnameController.dispose();
+    _portController.dispose();
+    _colorTagController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _isLoading = true);
+
+    try {
+      final notifier = ref.read(hostsNotifierProvider.notifier);
+      final isEditing = widget.initialHost != null;
+      final portVal = int.tryParse(_portController.text.trim()) ?? 22;
+
+      if (isEditing) {
+        await notifier.updateHost(
+          id: widget.initialHost!.id,
+          workspaceId: widget.initialHost!.workspaceId,
+          groupId: _selectedGroupId,
+          identityId: _selectedIdentityId,
+          label: _labelController.text.trim(),
+          hostname: _hostnameController.text.trim(),
+          port: portVal,
+          protocol: _protocol,
+          colorTag: _colorTagController.text.trim().isEmpty ? null : _colorTagController.text.trim(),
+          jumpHostId: _selectedJumpHostId,
+        );
+      } else {
+        await notifier.addHost(
+          workspaceId: widget.workspaceId,
+          groupId: _selectedGroupId,
+          identityId: _selectedIdentityId,
+          label: _labelController.text.trim(),
+          hostname: _hostnameController.text.trim(),
+          port: portVal,
+          protocol: _protocol,
+          colorTag: _colorTagController.text.trim().isEmpty ? null : _colorTagController.text.trim(),
+          jumpHostId: _selectedJumpHostId,
+        );
+      }
+
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save host: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isEditing = widget.initialHost != null;
+    final groupsAsync = ref.watch(hostGroupsNotifierProvider);
+    final identitiesAsync = ref.watch(identitiesNotifierProvider);
+    final hostsAsync = ref.watch(hostsNotifierProvider);
+
+    return AlertDialog(
+      title: Text(isEditing ? 'Edit Server Host' : 'Add Server Host'),
+      content: SingleChildScrollView(
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                key: const Key('host_label_input'),
+                controller: _labelController,
+                decoration: const InputDecoration(
+                  labelText: 'Label / Name',
+                  hintText: 'e.g. AWS Production Web',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (v) => v == null || v.trim().isEmpty ? 'Label is required' : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                key: const Key('host_hostname_input'),
+                controller: _hostnameController,
+                decoration: const InputDecoration(
+                  labelText: 'Hostname / IP Address',
+                  hintText: 'e.g. 192.168.1.10 or ssh.example.com',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (v) => v == null || v.trim().isEmpty ? 'Hostname is required' : null,
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: DropdownButtonFormField<String>(
+                      key: const Key('host_protocol_dropdown'),
+                      initialValue: _protocol,
+                      decoration: const InputDecoration(
+                        labelText: 'Protocol',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'ssh', child: Text('SSH')),
+                        DropdownMenuItem(value: 'mosh', child: Text('Mosh')),
+                        DropdownMenuItem(value: 'local', child: Text('Local Shell')),
+                        DropdownMenuItem(value: 'serial', child: Text('Serial')),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) setState(() => _protocol = val);
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 1,
+                    child: TextFormField(
+                      key: const Key('host_port_input'),
+                      controller: _portController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Port',
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (v) {
+                        if (v == null || v.trim().isEmpty) return 'Required';
+                        if (int.tryParse(v) == null) return 'Invalid';
+                        return null;
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              // Group Selection
+              groupsAsync.when(
+                data: (groups) => DropdownButtonFormField<String?>(
+                  key: const Key('host_group_dropdown'),
+                  initialValue: _selectedGroupId,
+                  decoration: const InputDecoration(
+                    labelText: 'Group / Folder',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('(None - Ungrouped)'),
+                    ),
+                    ...groups.map(
+                      (g) => DropdownMenuItem<String?>(
+                        value: g.id,
+                        child: Text(g.name),
+                      ),
+                    ),
+                  ],
+                  onChanged: (val) => setState(() => _selectedGroupId = val),
+                ),
+                loading: () => const LinearProgressIndicator(),
+                error: (e, s) => Text('Error loading groups: $e'),
+              ),
+              const SizedBox(height: 12),
+              // Identity Selection
+              identitiesAsync.when(
+                data: (identities) => DropdownButtonFormField<String?>(
+                  key: const Key('host_identity_dropdown'),
+                  initialValue: _selectedIdentityId,
+                  decoration: const InputDecoration(
+                    labelText: 'Identity / Credentials',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('(None - Prompt on Connect)'),
+                    ),
+                    ...identities.map(
+                      (i) => DropdownMenuItem<String?>(
+                        value: i.id,
+                        child: Text('${i.title} (${i.username})'),
+                      ),
+                    ),
+                  ],
+                  onChanged: (val) => setState(() => _selectedIdentityId = val),
+                ),
+                loading: () => const LinearProgressIndicator(),
+                error: (e, s) => Text('Error loading identities: $e'),
+              ),
+              const SizedBox(height: 12),
+              // Jump Host Selection
+              hostsAsync.when(
+                data: (hosts) {
+                  final candidateJumpHosts = hosts
+                      .where((h) => isEditing ? h.id != widget.initialHost!.id : true)
+                      .toList();
+
+                  return DropdownButtonFormField<String?>(
+                    key: const Key('host_jumphost_dropdown'),
+                    initialValue: _selectedJumpHostId,
+                    decoration: const InputDecoration(
+                      labelText: 'Jump Host (Bastion)',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: [
+                      const DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('(Direct Connection)'),
+                      ),
+                      ...candidateJumpHosts.map(
+                        (h) => DropdownMenuItem<String?>(
+                          value: h.id,
+                          child: Text('${h.label} (${h.hostname})'),
+                        ),
+                      ),
+                    ],
+                    onChanged: (val) => setState(() => _selectedJumpHostId = val),
+                  );
+                },
+                loading: () => const LinearProgressIndicator(),
+                error: (e, s) => Text('Error loading hosts: $e'),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                key: const Key('host_colortag_input'),
+                controller: _colorTagController,
+                decoration: const InputDecoration(
+                  labelText: 'Color Tag (HEX / Name)',
+                  hintText: 'e.g. #4CAF50 or green',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          key: const Key('host_save_button'),
+          onPressed: _isLoading ? null : _save,
+          child: _isLoading
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Text(isEditing ? 'Update' : 'Save'),
+        ),
+      ],
+    );
+  }
+}
