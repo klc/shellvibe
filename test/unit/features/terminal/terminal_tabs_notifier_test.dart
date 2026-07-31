@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:terly2/features/hosts/domain/models/host_model.dart';
 import 'package:terly2/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 
 void main() {
@@ -78,6 +79,41 @@ void main() {
       expect(state.tabs.length, equals(2));
       final splitTab = state.tabs.last;
       expect(splitTab.splitParentId, equals(mainId));
+    });
+
+    test('openTabForHost assigns dedicated SSHSessionManager instance per tab', () async {
+      final notifier = container.read(terminalTabsNotifierProvider.notifier);
+      final host = HostModel(
+        id: 'host-1',
+        workspaceId: 'ws-1',
+        label: 'Test Host',
+        hostname: '127.0.0.1',
+        port: 1,
+        createdAt: DateTime.now(),
+      );
+
+      final future1 = notifier.openTabForHost(host);
+      final tab1 = container.read(terminalTabsNotifierProvider).tabs.last;
+
+      final future2 = notifier.openTabForHost(host);
+      final tab2 = container.read(terminalTabsNotifierProvider).tabs.last;
+
+      expect(tab1.id, isNot(equals(tab2.id)));
+      expect(tab1.sshSessionManager, isNotNull);
+      expect(tab2.sshSessionManager, isNotNull);
+      expect(identical(tab1.sshSessionManager, tab2.sshSessionManager), isFalse);
+
+      final manager1 = tab1.sshSessionManager;
+
+      await notifier.closeTab(tab1.id);
+      final remainingTab = container.read(terminalTabsNotifierProvider).tabs.firstWhere((t) => t.id == tab2.id);
+
+      expect(remainingTab.id, equals(tab2.id));
+      expect(remainingTab.sshSessionManager, isNotNull);
+      expect(identical(remainingTab.sshSessionManager, manager1), isFalse);
+
+      // Await futures to prevent unhandled background errors in test tearDown
+      await Future.wait([future1, future2]);
     });
   });
 }

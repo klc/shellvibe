@@ -6,6 +6,7 @@ import 'package:xterm/xterm.dart';
 import '../../../../core/network/providers/network_providers.dart';
 import '../../../../core/network/ssh_session_manager.dart';
 import '../../../../core/network/terminal_ssh_bridge.dart';
+import '../../../../shared/providers/database_providers.dart';
 import '../../../hosts/domain/models/host_model.dart';
 import '../../../vault/domain/models/identity_model.dart';
 import '../../domain/models/terminal_tab_session.dart';
@@ -78,7 +79,9 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     );
 
     try {
-      final sessionManager = ref.read(sshSessionManagerProvider);
+      final sessionManager = SSHSessionManager(
+        knownHostsDao: ref.read(knownHostsDaoProvider),
+      );
       newTab.sshSessionManager = sessionManager;
 
       final config = SSHConnectConfig(

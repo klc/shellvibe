@@ -11,7 +11,8 @@ import '../terminal_ssh_bridge.dart';
 part 'network_providers.g.dart';
 
 /// Provider for [SSHSessionManager].
-/// [TerminalTabSession] manages session disposal upon tab closure.
+/// Note: [TerminalTabSession] instances instantiate dedicated [SSHSessionManager]
+/// instances per connection to ensure tabs do not share SSH clients/sockets.
 @riverpod
 SSHSessionManager sshSessionManager(SshSessionManagerRef ref) {
   final dao = ref.watch(knownHostsDaoProvider);
