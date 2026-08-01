@@ -108,53 +108,62 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
                 final tab = tabsState.tabs[index];
                 final isActive = tab.id == tabsState.activeTabId;
 
-                return GestureDetector(
-                  onTap: () =>
-                      ref.read(terminalTabsNotifierProvider.notifier).setActiveTab(tab.id),
-                  child: Container(
-                    key: Key('tab_header_${tab.id}'),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: isActive ? colorScheme.muted : Colors.transparent,
-                      border: Border(
-                        bottom: BorderSide(
-                          color: isActive ? colorScheme.primary : Colors.transparent,
-                          width: 2,
+                return Semantics(
+                  label: 'Tab ${tab.title}',
+                  selected: isActive,
+                  button: true,
+                  child: GestureDetector(
+                    onTap: () =>
+                        ref.read(terminalTabsNotifierProvider.notifier).setActiveTab(tab.id),
+                    child: Container(
+                      key: Key('tab_header_${tab.id}'),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: isActive ? colorScheme.muted : Colors.transparent,
+                        border: Border(
+                          bottom: BorderSide(
+                            color: isActive ? colorScheme.primary : Colors.transparent,
+                            width: 2,
+                          ),
                         ),
                       ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          tab.sessionType == TerminalSessionType.ssh
-                              ? Icons.terminal
-                              : Icons.computer,
-                          size: 16,
-                          color: isActive ? colorScheme.primary : colorScheme.mutedForeground,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          tab.title,
-                          style: TextStyle(
-                            color: isActive ? colorScheme.foreground : colorScheme.mutedForeground,
-                            fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-                            fontSize: 13,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            tab.sessionType == TerminalSessionType.ssh
+                                ? Icons.terminal
+                                : Icons.computer,
+                            size: 16,
+                            color: isActive ? colorScheme.primary : colorScheme.mutedForeground,
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        InkWell(
-                          key: Key('close_tab_${tab.id}'),
-                          onTap: () => ref
-                              .read(terminalTabsNotifierProvider.notifier)
-                              .closeTab(tab.id),
-                          child: Icon(
-                            Icons.close,
-                            size: 14,
-                            color: colorScheme.mutedForeground,
+                          const SizedBox(width: 6),
+                          Text(
+                            tab.title,
+                            style: TextStyle(
+                              color: isActive ? colorScheme.foreground : colorScheme.mutedForeground,
+                              fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                              fontSize: 13,
+                            ),
                           ),
-                        ),
-                      ],
+                          const SizedBox(width: 8),
+                          Semantics(
+                            label: 'Close tab ${tab.title}',
+                            button: true,
+                            child: InkWell(
+                              key: Key('close_tab_${tab.id}'),
+                              onTap: () => ref
+                                  .read(terminalTabsNotifierProvider.notifier)
+                                  .closeTab(tab.id),
+                              child: Icon(
+                                Icons.close,
+                                size: 14,
+                                color: colorScheme.mutedForeground,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 );

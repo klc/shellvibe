@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:xterm2/xterm.dart';
 
 import '../../../settings/domain/models/app_settings_model.dart';
@@ -214,15 +215,22 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
         if (session.errorMessage != null)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            color: Colors.red.shade900,
+            color: ShadTheme.of(context).colorScheme.destructive,
             child: Row(
               children: [
-                const Icon(Icons.error_outline, color: Colors.white, size: 18),
+                Icon(
+                  Icons.error_outline,
+                  color: ShadTheme.of(context).colorScheme.destructiveForeground,
+                  size: 18,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     'Connection Error: ${session.errorMessage}',
-                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                    style: TextStyle(
+                      color: ShadTheme.of(context).colorScheme.destructiveForeground,
+                      fontSize: 12,
+                    ),
                   ),
                 ),
               ],

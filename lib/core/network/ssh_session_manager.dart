@@ -386,7 +386,10 @@ class SSHSessionManager {
     _keepAliveTimer?.cancel();
     _keepAliveTimer = null;
     _isConnected = false;
-    _clientChanges.add(null);
+    if (!_clientChanges.isClosed) {
+      _clientChanges.add(null);
+      await _clientChanges.close();
+    }
 
     if (_client != null) {
       try {

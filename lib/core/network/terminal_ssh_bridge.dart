@@ -14,6 +14,8 @@ class TerminalSSHBridge {
   StreamSubscription<String>? _stdoutSubscription;
   StreamSubscription<String>? _stderrSubscription;
   bool _isDisposed = false;
+  bool _stdoutDone = false;
+  bool _stderrDone = false;
 
   /// Returns true if the bridge has been disposed.
   bool get isDisposed => _isDisposed;
@@ -49,7 +51,10 @@ class TerminalSSHBridge {
         if (_isDisposed) return;
         terminal.write('\r\n[SSH stdout error: $error]\r\n');
       },
-      onDone: _onStreamDone,
+      onDone: () {
+        _stdoutDone = true;
+        _checkStreamsDone();
+      },
     );
 
     _stderrSubscription = session.stderr
@@ -64,7 +69,10 @@ class TerminalSSHBridge {
         if (_isDisposed) return;
         terminal.write('\r\n[SSH stderr error: $error]\r\n');
       },
-      onDone: _onStreamDone,
+      onDone: () {
+        _stderrDone = true;
+        _checkStreamsDone();
+      },
     );
 
     // 3. Wire window resize event from xterm Terminal -> SSH session terminal resize
@@ -73,10 +81,12 @@ class TerminalSSHBridge {
     };
   }
 
-  void _onStreamDone() {
+  void _checkStreamsDone() {
     if (_isDisposed) return;
-    terminal.write('\r\n\x1b[1;33m[Session closed / Process exited]\x1b[0m\r\n');
-    dispose();
+    if (_stdoutDone && _stderrDone) {
+      terminal.write('\r\n\x1b[1;33m[Session closed / Process exited]\x1b[0m\r\n');
+      dispose();
+    }
   }
 
   /// Resizes the remote SSH session terminal dimensions to [width] columns and [height] rows.

@@ -58,6 +58,14 @@ class FakeSSHSession implements SSHSession {
     _stderrController.add(Uint8List.fromList(utf8.encode(data)));
   }
 
+  void closeStdout() {
+    _stdoutController.close();
+  }
+
+  void closeStderr() {
+    _stderrController.close();
+  }
+
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
@@ -148,6 +156,35 @@ void main() {
         contains('[Session closed / Process exited]'),
       );
       expect(bridge.isDisposed, isTrue);
+    });
+
+    test('stdout closure does not dispose bridge until stderr also closes', () async {
+      session.emitStdout('stdout message');
+      await Future.delayed(const Duration(milliseconds: 50));
+      expect(terminal.buffer.getText(), contains('stdout message'));
+
+      // Close stdout stream only
+      session.closeStdout();
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      // Bridge should NOT be disposed yet
+      expect(bridge.isDisposed, isFalse);
+
+      // Stderr should still write to terminal after stdout is closed
+      session.emitStderr('stderr message after stdout closed');
+      await Future.delayed(const Duration(milliseconds: 50));
+      expect(terminal.buffer.getText(), contains('stderr message after stdout closed'));
+
+      // Close stderr stream as well
+      session.closeStderr();
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      // Now bridge should be disposed after both streams are closed
+      expect(bridge.isDisposed, isTrue);
+      expect(
+        terminal.buffer.getText(),
+        contains('[Session closed / Process exited]'),
+      );
     });
   });
 }

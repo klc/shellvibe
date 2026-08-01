@@ -138,6 +138,11 @@ class SftpService {
       await temporaryFile.rename(localPath);
       committed = true;
     } finally {
+      if (!committed) {
+        try {
+          await sink.close();
+        } catch (_) {}
+      }
       if (!committed && await temporaryFile.exists()) {
         try {
           await temporaryFile.delete();

@@ -24,6 +24,7 @@ class TunnelRuleModel {
   bool get isLocal => type == 'local';
   bool get isRemote => type == 'remote';
   bool get isDynamic => type == 'dynamic';
+  String? get localHost => remoteHost;
 
   TunnelRuleModel copyWith({
     String? id,

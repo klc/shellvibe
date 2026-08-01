@@ -149,7 +149,7 @@ class TunnelsNotifier extends _$TunnelsNotifier {
           hostId: rule.hostId,
           sshClient: sshClient,
           remotePort: rule.remotePort ?? 8080,
-          localHost: rule.remoteHost ?? '127.0.0.1',
+          localHost: rule.localHost ?? '127.0.0.1',
           localPort: rule.localPort,
         );
       } else if (rule.type == 'dynamic') {

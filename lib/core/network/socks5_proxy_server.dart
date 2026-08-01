@@ -258,9 +258,13 @@ class Socks5ProxyServer {
         _activeChannels.remove(sshChannel);
         sshChannel.close();
       }
-      await reader.detach();
-      _activeSockets.remove(clientSocket);
-      clientSocket.destroy();
+      try {
+        await reader.detach();
+      } catch (_) {
+      } finally {
+        _activeSockets.remove(clientSocket);
+        clientSocket.destroy();
+      }
     }
   }
 
