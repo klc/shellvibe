@@ -143,27 +143,31 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
         const SingleActivator(LogicalKeyboardKey.digit7, control: true): () => _onTabSelected(6),
       },
       child: Scaffold(
-        body: Column(
-          children: [
-            // Top Application Header Bar
-            _buildTopHeader(context),
-            // Main Body Area with Sidebar / BottomNav
-            Expanded(
-              child: isDesktop
-                  ? Row(
-                      children: [
-                        _buildDesktopSidebar(context),
-                        VerticalDivider(width: 1, thickness: 1, color: colorScheme.border),
-                        Expanded(child: widget.navigationShell),
-                      ],
-                    )
-                  : Column(
-                      children: [
-                        Expanded(child: widget.navigationShell),
-                      ],
-                    ),
-            ),
-          ],
+        body: SafeArea(
+          top: true,
+          bottom: false,
+          child: Column(
+            children: [
+              // Top Application Header Bar
+              _buildTopHeader(context),
+              // Main Body Area with Sidebar / BottomNav
+              Expanded(
+                child: isDesktop
+                    ? Row(
+                        children: [
+                          _buildDesktopSidebar(context),
+                          VerticalDivider(width: 1, thickness: 1, color: colorScheme.border),
+                          Expanded(child: widget.navigationShell),
+                        ],
+                      )
+                    : Column(
+                        children: [
+                          Expanded(child: widget.navigationShell),
+                        ],
+                      ),
+              ),
+            ],
+          ),
         ),
         bottomNavigationBar: isDesktop ? null : _buildMobileBottomBar(context),
       ),

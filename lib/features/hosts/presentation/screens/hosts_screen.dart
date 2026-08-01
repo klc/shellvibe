@@ -25,6 +25,7 @@ class HostsScreen extends ConsumerStatefulWidget {
 
 class _HostsScreenState extends ConsumerState<HostsScreen> {
   String _searchQuery = '';
+  final Set<String> _connectingHostIds = {};
 
   @override
   Widget build(BuildContext context) {
@@ -69,88 +70,48 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
           Expanded(
             child: hostsAsync.when(
               data: (hosts) {
+                final filtered = hosts.where((h) {
+                  return h.label.toLowerCase().contains(_searchQuery) ||
+                      h.hostname.toLowerCase().contains(_searchQuery) ||
+                      h.protocol.toLowerCase().contains(_searchQuery);
+                }).toList();
+
                 return groupsAsync.when(
                   data: (groups) {
-                    final filteredHosts = hosts.where((h) {
-                      final label = h.label.toLowerCase();
-                      final host = h.hostname.toLowerCase();
-                      final username = (h.username ?? '').toLowerCase();
-                      final proto = h.protocol.toLowerCase();
-                      return label.contains(_searchQuery) ||
-                          host.contains(_searchQuery) ||
-                          username.contains(_searchQuery) ||
-                          proto.contains(_searchQuery);
-                    }).toList();
-
-                    if (filteredHosts.isEmpty && groups.isEmpty) {
+                    if (filtered.isEmpty) {
                       return const Center(
                         child: Text('No hosts or groups configured.'),
                       );
                     }
 
-                    // Pre-compute host groupings in O(H) to avoid nested iteration (O(G*H))
-                    final Map<String?, List<HostModel>> groupedHosts = {};
-                    for (final host in filteredHosts) {
-                      groupedHosts
-                          .putIfAbsent(host.groupId, () => [])
-                          .add(host);
-                    }
-
-                    final ungroupedHosts = groupedHosts[null] ?? [];
-
-                    // Create a flat list of logical items for lazy building
-                    final List<Object> listItems = [];
-
-                    // 1. Groups
-                    listItems.addAll(groups);
-
-                    // 2. Ungrouped Hosts Header (if necessary)
-                    if (groups.isNotEmpty && ungroupedHosts.isNotEmpty) {
-                      listItems.add('UNGROUPED_HEADER');
-                    }
-
-                    // 3. Ungrouped Hosts
-                    listItems.addAll(ungroupedHosts);
+                    final items = _buildCategorizedItems(filtered, groups);
 
                     return ListView.builder(
-                      itemCount: listItems.length,
+                      itemCount: items.length,
                       itemBuilder: (context, index) {
-                        final item = listItems[index];
+                        final item = items[index];
 
                         if (item is HostGroupModel) {
-                          final groupHosts = groupedHosts[item.id] ?? [];
+                          final groupHosts = filtered
+                              .where((h) => h.groupId == item.id)
+                              .toList();
                           return _GroupExpansionTile(
-                            key: ValueKey('group_${item.id}'),
                             group: item,
                             hosts: groupHosts,
-                            onEditGroup: () =>
-                                _openGroupForm(context, initialGroup: item),
-                            onDeleteGroup: () => _deleteGroup(context, item),
                             onEditHost: (h) =>
                                 _openHostForm(context, initialHost: h),
                             onDeleteHost: (h) => _deleteHost(context, h),
                             onConnectHost: _onConnectHost,
-                          );
-                        } else if (item is String &&
-                            item == 'UNGROUPED_HEADER') {
-                          return const Padding(
-                            key: ValueKey('ungrouped_header'),
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 16.0,
-                              vertical: 8.0,
-                            ),
-                            child: Text(
-                              'Ungrouped Hosts',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.grey,
-                              ),
-                            ),
+                            onEditGroup: (g) =>
+                                _openGroupForm(context, initialGroup: g),
+                            onDeleteGroup: (g) => _deleteGroup(context, g),
+                            connectingHostIds: _connectingHostIds,
                           );
                         } else if (item is HostModel) {
                           return _HostTile(
                             key: ValueKey(item.id),
                             host: item,
+                            isConnecting: _connectingHostIds.contains(item.id),
                             onEdit: () =>
                                 _openHostForm(context, initialHost: item),
                             onDelete: () => _deleteHost(context, item),
@@ -218,11 +179,19 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
     }
   }
 
-  void _onConnectHost(HostModel host) {
-    if (widget.onConnectHost != null) {
-      widget.onConnectHost!(host);
-    } else {
-      _defaultConnectHost(host);
+  Future<void> _onConnectHost(HostModel host) async {
+    if (_connectingHostIds.contains(host.id)) return;
+    setState(() => _connectingHostIds.add(host.id));
+    try {
+      if (widget.onConnectHost != null) {
+        widget.onConnectHost!(host);
+      } else {
+        await _defaultConnectHost(host);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _connectingHostIds.remove(host.id));
+      }
     }
   }
 
@@ -248,18 +217,18 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
         description: Text('Are you sure you want to delete "${host.label}"?'),
         actions: [
           ShadButton.outline(
-            onPressed: () => Navigator.of(ctx).pop(false),
             child: const Text('Cancel'),
+            onPressed: () => Navigator.of(ctx).pop(false),
           ),
           ShadButton.destructive(
-            onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('Delete'),
+            onPressed: () => Navigator.of(ctx).pop(true),
           ),
         ],
       ),
     );
 
-    if (confirm == true && mounted) {
+    if (confirm == true) {
       await ref.read(hostsProvider.notifier).deleteHost(host.id);
     }
   }
@@ -270,73 +239,98 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
       builder: (ctx) => ShadDialog.alert(
         title: const Text('Delete Group'),
         description: Text(
-          'Are you sure you want to delete group "${group.name}"?',
+          'Are you sure you want to delete group "${group.name}"? Hosts inside will be unassigned.',
         ),
         actions: [
           ShadButton.outline(
-            onPressed: () => Navigator.of(ctx).pop(false),
             child: const Text('Cancel'),
+            onPressed: () => Navigator.of(ctx).pop(false),
           ),
           ShadButton.destructive(
-            onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('Delete'),
+            onPressed: () => Navigator.of(ctx).pop(true),
           ),
         ],
       ),
     );
 
-    if (confirm == true && mounted) {
+    if (confirm == true) {
       await ref.read(hostGroupsProvider.notifier).deleteGroup(group.id);
     }
+  }
+
+  List<dynamic> _buildCategorizedItems(
+    List<HostModel> filteredHosts,
+    List<HostGroupModel> groups,
+  ) {
+    final list = <dynamic>[];
+
+    for (final group in groups) {
+      final hasHosts = filteredHosts.any((h) => h.groupId == group.id);
+      if (hasHosts) {
+        list.add(group);
+      }
+    }
+
+    final ungroupped = filteredHosts.where((h) => h.groupId == null).toList();
+    list.addAll(ungroupped);
+
+    return list;
   }
 }
 
 class _GroupExpansionTile extends StatelessWidget {
   final HostGroupModel group;
   final List<HostModel> hosts;
-  final VoidCallback onEditGroup;
-  final VoidCallback onDeleteGroup;
   final void Function(HostModel) onEditHost;
   final void Function(HostModel) onDeleteHost;
-  final void Function(HostModel)? onConnectHost;
+  final void Function(HostModel) onConnectHost;
+  final void Function(HostGroupModel) onEditGroup;
+  final void Function(HostGroupModel) onDeleteGroup;
+  final Set<String> connectingHostIds;
 
   const _GroupExpansionTile({
-    super.key,
     required this.group,
     required this.hosts,
-    required this.onEditGroup,
-    required this.onDeleteGroup,
     required this.onEditHost,
     required this.onDeleteHost,
-    this.onConnectHost,
+    required this.onConnectHost,
+    required this.onEditGroup,
+    required this.onDeleteGroup,
+    required this.connectingHostIds,
   });
 
   @override
   Widget build(BuildContext context) {
+    final theme = ShadTheme.of(context);
+    final primaryColor = theme.colorScheme.primary;
+
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: ShadCard(
+      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+      child: Card(
+        clipBehavior: Clip.antiAlias,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          side: BorderSide(color: theme.colorScheme.border),
+          borderRadius: BorderRadius.circular(8),
+        ),
         child: ExpansionTile(
-          leading: Icon(Icons.folder, color: Colors.amber.shade700),
+          leading: Icon(Icons.folder, color: primaryColor),
           title: Text(
             group.name,
             style: const TextStyle(fontWeight: FontWeight.bold),
           ),
-          subtitle: Text('${hosts.length} hosts'),
+          subtitle: Text('${hosts.length} server(s)'),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               IconButton(
                 icon: const Icon(Icons.edit, size: 18),
-                onPressed: onEditGroup,
+                onPressed: () => onEditGroup(group),
               ),
               IconButton(
-                icon: const Icon(
-                  Icons.delete,
-                  size: 18,
-                  color: Colors.redAccent,
-                ),
-                onPressed: onDeleteGroup,
+                icon: const Icon(Icons.delete, size: 18, color: Colors.redAccent),
+                onPressed: () => onDeleteGroup(group),
               ),
             ],
           ),
@@ -345,9 +339,10 @@ class _GroupExpansionTile extends StatelessWidget {
                 (h) => _HostTile(
                   key: ValueKey(h.id),
                   host: h,
+                  isConnecting: connectingHostIds.contains(h.id),
                   onEdit: () => onEditHost(h),
                   onDelete: () => onDeleteHost(h),
-                  onConnect: () => onConnectHost?.call(h),
+                  onConnect: () => onConnectHost(h),
                 ),
               )
               .toList(),
@@ -359,6 +354,7 @@ class _GroupExpansionTile extends StatelessWidget {
 
 class _HostTile extends StatelessWidget {
   final HostModel host;
+  final bool isConnecting;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
   final VoidCallback? onConnect;
@@ -366,6 +362,7 @@ class _HostTile extends StatelessWidget {
   const _HostTile({
     super.key,
     required this.host,
+    this.isConnecting = false,
     required this.onEdit,
     required this.onDelete,
     this.onConnect,
@@ -393,7 +390,13 @@ class _HostTile extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: ShadCard(
+      child: Card(
+        clipBehavior: Clip.antiAlias,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          side: BorderSide(color: theme.colorScheme.border),
+          borderRadius: BorderRadius.circular(8),
+        ),
         child: ListTile(
           leading: CircleAvatar(
             backgroundColor: primaryColor.withValues(alpha: 0.15),
@@ -432,12 +435,24 @@ class _HostTile extends StatelessWidget {
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              IconButton(
-                key: Key('connect_host_${host.id}'),
-                icon: const Icon(Icons.play_arrow, color: Colors.green),
-                tooltip: 'Connect Terminal',
-                onPressed: onConnect,
-              ),
+              isConnecting
+                  ? const Padding(
+                      padding: EdgeInsets.all(8.0),
+                      child: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.green,
+                        ),
+                      ),
+                    )
+                  : IconButton(
+                      key: Key('connect_host_${host.id}'),
+                      icon: const Icon(Icons.play_arrow, color: Colors.green),
+                      tooltip: 'Connect Terminal',
+                      onPressed: onConnect,
+                    ),
               IconButton(
                 icon: const Icon(Icons.edit, size: 20),
                 tooltip: 'Edit',

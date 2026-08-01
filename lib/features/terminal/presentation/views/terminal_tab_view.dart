@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -225,6 +227,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
 
   Widget _buildEmptyState(BuildContext context, WidgetRef ref) {
     final colorScheme = ShadTheme.of(context).colorScheme;
+    final isMobile = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
 
     return Center(
       child: Column(
@@ -246,7 +249,9 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Open a local shell or select a remote SSH server to connect.',
+            isMobile
+                ? 'Select a remote SSH server to connect.'
+                : 'Open a local shell or select a remote SSH server to connect.',
             style: TextStyle(color: colorScheme.mutedForeground),
           ),
           const SizedBox(height: 24),
@@ -255,13 +260,14 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
             runSpacing: 12,
             alignment: WrapAlignment.center,
             children: [
-              ShadButton(
-                key: const Key('empty_open_local_button'),
-                leading: const Icon(Icons.computer, size: 18),
-                onPressed: () =>
-                    ref.read(terminalTabsProvider.notifier).openLocalTab(),
-                child: const Text('Open Local Shell'),
-              ),
+              if (!isMobile)
+                ShadButton(
+                  key: const Key('empty_open_local_button'),
+                  leading: const Icon(Icons.computer, size: 18),
+                  onPressed: () =>
+                      ref.read(terminalTabsProvider.notifier).openLocalTab(),
+                  child: const Text('Open Local Shell'),
+                ),
               ShadButton.outline(
                 key: const Key('empty_select_host_button'),
                 leading: const Icon(Icons.dns, size: 18),
@@ -276,20 +282,23 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
   }
 
   void _showNewTabMenu(BuildContext context, WidgetRef ref) {
+    final isMobile = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+
     showModalBottomSheet(
       context: context,
       builder: (ctx) => Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          ListTile(
-            key: const Key('new_tab_menu_local'),
-            leading: const Icon(Icons.computer),
-            title: const Text('Local Shell'),
-            onTap: () {
-              Navigator.of(ctx).pop();
-              ref.read(terminalTabsProvider.notifier).openLocalTab();
-            },
-          ),
+          if (!isMobile)
+            ListTile(
+              key: const Key('new_tab_menu_local'),
+              leading: const Icon(Icons.computer),
+              title: const Text('Local Shell'),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                ref.read(terminalTabsProvider.notifier).openLocalTab();
+              },
+            ),
           ListTile(
             key: const Key('new_tab_menu_host'),
             leading: const Icon(Icons.dns),

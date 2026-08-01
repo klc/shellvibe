@@ -6,6 +6,8 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import 'package:path_provider/path_provider.dart';
+
 import '../../data/sftp_service.dart';
 import '../../data/sftp_transfer_queue_worker.dart';
 import '../../domain/models/sftp_file_item.dart';
@@ -244,11 +246,23 @@ class SftpNotifier extends _$SftpNotifier {
 
   Future<void> loadLocalDirectory([String? path]) async {
     if (_disposed) return;
-    final targetPath = path ?? state.localPath;
+    var targetPath = path ?? state.localPath;
     state = state.copyWith(isLoadingLocal: true, localError: null);
 
     try {
-      final dir = Directory(targetPath);
+      var dir = Directory(targetPath);
+
+      // On mobile (Android/iOS) or when root directory '/' fails, resolve accessible app storage
+      if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+        if (targetPath == '/' || !dir.existsSync()) {
+          try {
+            final docsDir = await getApplicationDocumentsDirectory();
+            targetPath = docsDir.path;
+            dir = Directory(targetPath);
+          } catch (_) {}
+        }
+      }
+
       if (!dir.existsSync()) {
         state = state.copyWith(
           localError: 'Directory does not exist: $targetPath',
@@ -257,7 +271,25 @@ class SftpNotifier extends _$SftpNotifier {
         return;
       }
 
-      final entities = await dir.list().toList();
+      List<FileSystemEntity> entities;
+      try {
+        entities = await dir.list().toList();
+      } on FileSystemException catch (_) {
+        // Fallback for Android Permission Denied (errno = 13) or unreadable system path
+        if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+          try {
+            final docsDir = await getApplicationDocumentsDirectory();
+            targetPath = docsDir.path;
+            dir = Directory(targetPath);
+            entities = await dir.list().toList();
+          } catch (_) {
+            rethrow;
+          }
+        } else {
+          rethrow;
+        }
+      }
+
       final items = <SftpFileItem>[];
 
       // Async stat: statSync per entry blocks the UI isolate for seconds on

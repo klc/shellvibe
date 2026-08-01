@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -217,11 +219,12 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                         initialValue: _protocol,
                         label: const Text('Protocol'),
                         selectedOptionBuilder: (context, value) => Text(value.toUpperCase()),
-                        options: const [
-                          ShadOption(value: 'ssh', child: Text('SSH')),
-                          ShadOption(value: 'mosh', child: Text('Mosh')),
-                          ShadOption(value: 'local', child: Text('Local Shell')),
-                          ShadOption(value: 'serial', child: Text('Serial')),
+                        options: [
+                          const ShadOption(value: 'ssh', child: Text('SSH')),
+                          const ShadOption(value: 'mosh', child: Text('Mosh')),
+                          if (kIsWeb || (!Platform.isAndroid && !Platform.isIOS))
+                            const ShadOption(value: 'local', child: Text('Local Shell')),
+                          const ShadOption(value: 'serial', child: Text('Serial')),
                         ],
                         onChanged: (val) {
                           if (val != null) setState(() => _protocol = val);
