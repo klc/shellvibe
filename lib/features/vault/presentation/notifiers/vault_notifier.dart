@@ -64,6 +64,10 @@ const _kMaxAttemptsBeforeLockout = 5;
 /// Manages the vault lifecycle: setup, lock, unlock, brute-force protection.
 @Riverpod(keepAlive: true)
 class VaultNotifier extends _$VaultNotifier {
+  /// Serializes unlock attempts so concurrent Argon2id operations cannot
+  /// observe and persist the same failed-attempt counter.
+  Future<void> _unlockQueue = Future<void>.value();
+
   /// Bumped by [lock]. Async continuations (unlock/setup) capture it up front
   /// and refuse to publish an `unlocked` state if the vault was locked while
   /// they were awaiting — otherwise a background auto-lock during an in-flight
@@ -124,6 +128,15 @@ class VaultNotifier extends _$VaultNotifier {
   /// failed attempts, imposes an exponentially increasing lockout period
   /// (30s → 60s → 120s → 240s, capped at 1 hour).
   Future<bool> unlock(String masterPassword) async {
+    final operation = _unlockQueue.then((_) => _unlockInternal(masterPassword));
+    _unlockQueue = operation.then<void>(
+      (_) {},
+      onError: (Object error, StackTrace stack) {},
+    );
+    return operation;
+  }
+
+  Future<bool> _unlockInternal(String masterPassword) async {
     final generation = _lifecycleGeneration;
     final currentState = state.valueOrNull;
 

@@ -69,6 +69,8 @@ class SSHSessionManager {
   Timer? _keepAliveTimer;
   bool _isConnected = false;
   bool _isPromptingHostKey = false;
+  final StreamController<SSHClient?> _clientChanges =
+      StreamController<SSHClient?>.broadcast();
 
   /// Set by [close] while a connect is in flight. The pending connect aborts
   /// at its next checkpoint instead of leaving a live session behind after the
@@ -79,6 +81,10 @@ class SSHSessionManager {
 
   /// Current active [SSHClient] if connected.
   SSHClient? get client => _client;
+
+  /// Emits the active client whenever the session connects, disconnects, or
+  /// detects a dropped keep-alive connection.
+  Stream<SSHClient?> get clientChanges => _clientChanges.stream;
 
   /// Returns true if an active SSH connection is open and authenticated.
   bool get isConnected => _isConnected && _client != null && !_client!.isClosed;
@@ -163,6 +169,7 @@ class SSHSessionManager {
 
       _client = client;
       _isConnected = true;
+      _clientChanges.add(client);
 
       if (config.keepAliveInterval != null) {
         startKeepAlive(config.keepAliveInterval!);
@@ -356,12 +363,14 @@ class SSHSessionManager {
         _keepAliveTimer?.cancel();
         _keepAliveTimer = null;
         _isConnected = false;
+        _clientChanges.add(null);
         // Ping failed, connection may have been dropped
       }
     } else {
       _keepAliveTimer?.cancel();
       _keepAliveTimer = null;
       _isConnected = false;
+      _clientChanges.add(null);
     }
   }
 
@@ -377,6 +386,7 @@ class SSHSessionManager {
     _keepAliveTimer?.cancel();
     _keepAliveTimer = null;
     _isConnected = false;
+    _clientChanges.add(null);
 
     if (_client != null) {
       try {

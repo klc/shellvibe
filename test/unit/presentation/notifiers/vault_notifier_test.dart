@@ -4,6 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:cryptography/cryptography.dart';
 import 'package:terly2/core/crypto/encryption_engine.dart';
 import 'package:terly2/shared/providers/database_providers.dart';
+import 'package:terly2/shared/storage/secure_storage_service.dart';
 import 'package:terly2/features/vault/presentation/notifiers/identities_notifier.dart';
 import 'package:terly2/features/vault/presentation/notifiers/vault_notifier.dart';
 
@@ -134,6 +135,30 @@ void main() {
           'CorrectMasterPassword123!',
         );
         expect(attemptDuringLockout, isFalse);
+      },
+    );
+
+    test(
+      'serializes concurrent failed unlocks and persists every attempt',
+      () async {
+        final notifier = container.read(vaultNotifierProvider.notifier);
+        await notifier.setup('CorrectMasterPassword123!');
+        notifier.lock();
+
+        final results = await Future.wait(
+          List.generate(5, (_) => notifier.unlock('WrongPassword!')),
+        );
+
+        expect(results.every((result) => result == false), isTrue);
+        final state = container.read(vaultNotifierProvider).value!;
+        expect(state.failedAttempts, equals(5));
+        expect(state.isLockedOut, isTrue);
+
+        final storage = container.read(secureStorageServiceProvider);
+        expect(
+          await storage.read(key: SecureStorageKeys.vaultFailedAttempts),
+          equals('5'),
+        );
       },
     );
 

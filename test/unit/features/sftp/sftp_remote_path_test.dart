@@ -1,5 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dartssh2/dartssh2.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:terly2/features/sftp/presentation/providers/sftp_providers.dart';
+
+class _FakeSftpClient implements SftpClient {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
 
 void main() {
   group('remote SFTP path safety', () {
@@ -32,6 +39,24 @@ void main() {
           reason: name,
         );
       }
+    });
+
+    test('stale session cleanup cannot clear a newer SFTP client', () async {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final notifier = container.read(sftpNotifierProvider.notifier);
+      final client = _FakeSftpClient();
+
+      await notifier.setRemoteClient(client, sessionId: 'tab-2');
+      await notifier.setRemoteClient(null, sessionId: 'tab-1');
+
+      final state = container.read(sftpNotifierProvider);
+      expect(state.remoteClient, same(client));
+      expect(state.remoteSessionId, equals('tab-2'));
+
+      await notifier.setRemoteClient(null, sessionId: 'tab-2');
+      expect(container.read(sftpNotifierProvider).remoteClient, isNull);
+      expect(container.read(sftpNotifierProvider).remoteSessionId, isNull);
     });
   });
 }

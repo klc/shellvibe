@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:dartssh2/dartssh2.dart';
@@ -6,7 +7,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
+import '../../../../core/network/ssh_session_manager.dart';
 import '../../domain/models/sftp_file_item.dart';
+import '../../../terminal/domain/models/terminal_tab_session.dart';
 import '../../../terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import '../providers/sftp_providers.dart';
 import '../widgets/file_permissions_dialog.dart';
@@ -26,10 +29,19 @@ class SftpDualPaneScreen extends ConsumerStatefulWidget {
 class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
   final TextEditingController _searchController = TextEditingController();
   int _selectedMobileTab = 0; // 0: Local Workstation, 1: Remote SFTP
+  // This subscription is explicitly cancelled in _stopWatchingSession and
+  // dispose; the analyzer cannot follow that lifecycle across callbacks.
+  // ignore: cancel_subscriptions
+  StreamSubscription<SSHClient?>? _sessionSubscription;
+  SSHSessionManager? _subscribedSession;
+  String? _subscribedTabId;
+  int _attachmentGeneration = 0;
+  late bool _usesProvidedClient;
 
   @override
   void initState() {
     super.initState();
+    _usesProvidedClient = widget.sftpClient != null;
     if (widget.sftpClient != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         ref
@@ -38,37 +50,116 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
       });
     } else {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _attachToActiveSshSession();
+        if (mounted) _syncActiveSshSession();
       });
     }
   }
 
-  Future<void> _attachToActiveSshSession() async {
-    final sshClient = ref
-        .read(terminalTabsNotifierProvider)
-        .activeTab
-        ?.sshSessionManager
-        ?.client;
-    if (sshClient == null || sshClient.isClosed) {
-      await ref.read(sftpNotifierProvider.notifier).loadRemoteDirectory();
+  Future<void> _syncActiveSshSession() async {
+    if (!mounted || _usesProvidedClient) return;
+
+    final generation = ++_attachmentGeneration;
+    final activeTab = ref.read(terminalTabsNotifierProvider).activeTab;
+    final session = activeTab?.sshSessionManager;
+
+    if (activeTab == null ||
+        activeTab.sessionType != TerminalSessionType.ssh ||
+        session == null) {
+      await _stopWatchingSession();
+      if (!mounted || generation != _attachmentGeneration) return;
+      await ref.read(sftpNotifierProvider.notifier).setRemoteClient(null);
       return;
     }
 
+    await _watchSession(activeTab.id, session);
+
+    final sshClient = session.client;
+    if (!session.isConnected || sshClient == null || sshClient.isClosed) {
+      if (!mounted || generation != _attachmentGeneration) return;
+      await ref
+          .read(sftpNotifierProvider.notifier)
+          .setRemoteClient(null, sessionId: activeTab.id);
+      return;
+    }
+
+    late final SftpClient client;
     try {
-      final client = await sshClient.sftp();
-      if (!mounted) {
+      client = await sshClient.sftp();
+      if (!_isCurrentSession(generation, activeTab.id, session, sshClient)) {
         await client.close();
         return;
       }
-      ref.read(sftpNotifierProvider.notifier).setRemoteClient(client);
+      await ref
+          .read(sftpNotifierProvider.notifier)
+          .setRemoteClient(client, sessionId: activeTab.id);
     } catch (error) {
-      if (!mounted) return;
-      ref.read(sftpNotifierProvider.notifier).setRemoteClient(null);
+      if (!_isCurrentSession(generation, activeTab.id, session, sshClient)) {
+        return;
+      }
+      await ref
+          .read(sftpNotifierProvider.notifier)
+          .setRemoteClient(null, sessionId: activeTab.id);
+    }
+  }
+
+  bool _isCurrentSession(
+    int generation,
+    String tabId,
+    SSHSessionManager session,
+    SSHClient sshClient,
+  ) {
+    final activeTab = ref.read(terminalTabsNotifierProvider).activeTab;
+    return mounted &&
+        generation == _attachmentGeneration &&
+        activeTab?.id == tabId &&
+        identical(activeTab?.sshSessionManager, session) &&
+        identical(session.client, sshClient) &&
+        session.isConnected &&
+        !sshClient.isClosed;
+  }
+
+  Future<void> _watchSession(String tabId, SSHSessionManager session) async {
+    if (identical(_subscribedSession, session) && _subscribedTabId == tabId) {
+      return;
+    }
+    await _stopWatchingSession();
+    if (!mounted) return;
+    _subscribedSession = session;
+    _subscribedTabId = tabId;
+    _sessionSubscription = session.clientChanges.listen((_) {
+      unawaited(_syncActiveSshSession());
+    });
+  }
+
+  Future<void> _stopWatchingSession() async {
+    final subscription = _sessionSubscription;
+    _sessionSubscription = null;
+    _subscribedSession = null;
+    _subscribedTabId = null;
+    await subscription?.cancel();
+  }
+
+  @override
+  void didUpdateWidget(covariant SftpDualPaneScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.sftpClient != widget.sftpClient) {
+      _usesProvidedClient = widget.sftpClient != null;
+      if (_usesProvidedClient) {
+        unawaited(
+          ref
+              .read(sftpNotifierProvider.notifier)
+              .setRemoteClient(widget.sftpClient),
+        );
+      } else {
+        unawaited(_syncActiveSshSession());
+      }
     }
   }
 
   @override
   void dispose() {
+    _attachmentGeneration++;
+    unawaited(_stopWatchingSession());
     _searchController.dispose();
     super.dispose();
   }
@@ -102,6 +193,9 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<TerminalTabsState>(terminalTabsNotifierProvider, (_, _) {
+      if (!_usesProvidedClient) unawaited(_syncActiveSshSession());
+    });
     final state = ref.watch(sftpNotifierProvider);
     final notifier = ref.read(sftpNotifierProvider.notifier);
     final colorScheme = ShadTheme.of(context).colorScheme;

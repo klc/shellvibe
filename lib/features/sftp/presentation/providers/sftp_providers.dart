@@ -72,6 +72,7 @@ Stream<List<TransferItem>> transferQueueStream(Ref ref) {
 
 class SftpState {
   final SftpClient? remoteClient;
+  final String? remoteSessionId;
   final String remotePath;
   final String localPath;
   final List<SftpFileItem> remoteFiles;
@@ -86,6 +87,7 @@ class SftpState {
 
   const SftpState({
     this.remoteClient,
+    this.remoteSessionId,
     this.remotePath = '/',
     this.localPath = '/',
     this.remoteFiles = const [],
@@ -102,6 +104,8 @@ class SftpState {
   SftpState copyWith({
     SftpClient? remoteClient,
     bool clearRemoteClient = false,
+    String? remoteSessionId,
+    bool clearRemoteSessionId = false,
     String? remotePath,
     String? localPath,
     List<SftpFileItem>? remoteFiles,
@@ -118,6 +122,9 @@ class SftpState {
       remoteClient: clearRemoteClient
           ? null
           : (remoteClient ?? this.remoteClient),
+      remoteSessionId: clearRemoteSessionId
+          ? null
+          : (remoteSessionId ?? this.remoteSessionId),
       remotePath: remotePath ?? this.remotePath,
       localPath: localPath ?? this.localPath,
       remoteFiles: remoteFiles ?? this.remoteFiles,
@@ -163,16 +170,28 @@ class SftpNotifier extends _$SftpNotifier {
     }
   }
 
-  Future<void> setRemoteClient(SftpClient? client) async {
+  Future<void> setRemoteClient(SftpClient? client, {String? sessionId}) async {
     final old = state.remoteClient;
-    if (identical(old, client)) return;
+    if (client == null &&
+        sessionId != null &&
+        state.remoteSessionId != sessionId) {
+      return;
+    }
+    if (identical(old, client) && state.remoteSessionId == sessionId) return;
 
     if (client == null) {
-      state = state.copyWith(clearRemoteClient: true);
+      state = state.copyWith(
+        clearRemoteClient: true,
+        clearRemoteSessionId: true,
+      );
       await loadRemoteDirectory();
     } else {
-      state = state.copyWith(remoteClient: client);
-      loadRemoteDirectory(state.remotePath);
+      state = state.copyWith(
+        remoteClient: client,
+        remoteSessionId: sessionId,
+        clearRemoteSessionId: sessionId == null,
+      );
+      await loadRemoteDirectory(state.remotePath);
     }
 
     // A replaced or cleared client must not leak its socket; the notifier
@@ -189,6 +208,7 @@ class SftpNotifier extends _$SftpNotifier {
     // would throw.
     if (_disposed) return;
     final client = state.remoteClient;
+    final sessionId = state.remoteSessionId;
     final targetPath = path ?? state.remotePath;
 
     if (client == null) {
@@ -204,7 +224,11 @@ class SftpNotifier extends _$SftpNotifier {
     try {
       final sftpService = ref.read(sftpServiceProvider);
       final files = await sftpService.listDirectory(client, targetPath);
-      if (_disposed) return;
+      if (_disposed ||
+          !identical(state.remoteClient, client) ||
+          state.remoteSessionId != sessionId) {
+        return;
+      }
       state = state.copyWith(
         remotePath: targetPath,
         remoteFiles: files,
