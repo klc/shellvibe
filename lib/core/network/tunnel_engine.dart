@@ -269,6 +269,22 @@ class TunnelEngine {
       final listener = await sshClient.forwardRemote(
         port: remotePort,
       );
+      if (listener == null) {
+        // dartssh2 reports a refused -R request by returning null. Surface it
+        // as an inactive tunnel with an error instead of a phantom "active".
+        _activeTunnels[ruleId] = ActiveTunnel(
+          ruleId: ruleId,
+          hostId: hostId,
+          type: 'remote',
+          localPort: localPort,
+          remoteHost: localHost,
+          remotePort: remotePort,
+          isActive: false,
+          error: 'Remote forward (port $remotePort) was refused by the server',
+        );
+        _notify();
+        return;
+      }
       _remoteListeners[ruleId] = listener;
       _subscriptions[ruleId] = [];
       _activeSockets[ruleId] = {};
@@ -287,7 +303,7 @@ class TunnelEngine {
       _activeTunnels[ruleId] = active;
       _notify();
 
-      if (listener != null) {
+      {
         final sub = listener.connections.listen((connection) async {
           _activeChannels[ruleId]?.add(connection);
           Socket? localSocket;

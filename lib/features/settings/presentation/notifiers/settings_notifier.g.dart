@@ -45,12 +45,12 @@ final biometricLockServiceProvider =
 // ignore: unused_element
 typedef BiometricLockServiceRef = AutoDisposeProviderRef<BiometricLockService>;
 String _$clipboardAutoClearServiceHash() =>
-    r'47d38148883ef18a4ccbc73a80820ac539c54333';
+    r'5aa799948e4ea7cbd9c358a395de8ea57566ff2d';
 
 /// See also [clipboardAutoClearService].
 @ProviderFor(clipboardAutoClearService)
 final clipboardAutoClearServiceProvider =
-    AutoDisposeProvider<ClipboardAutoClearService>.internal(
+    Provider<ClipboardAutoClearService>.internal(
       clipboardAutoClearService,
       name: r'clipboardAutoClearServiceProvider',
       debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
@@ -62,9 +62,8 @@ final clipboardAutoClearServiceProvider =
 
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
-typedef ClipboardAutoClearServiceRef =
-    AutoDisposeProviderRef<ClipboardAutoClearService>;
-String _$settingsNotifierHash() => r'2259078ad31992554f612d9eef82f72fc2f6b899';
+typedef ClipboardAutoClearServiceRef = ProviderRef<ClipboardAutoClearService>;
+String _$settingsNotifierHash() => r'd1923bb4845d583c300b01e47578b8c87b9aa786';
 
 /// See also [SettingsNotifier].
 @ProviderFor(SettingsNotifier)

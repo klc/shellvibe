@@ -47,6 +47,7 @@ class TransferItem {
     TransferType? type,
     int? speedBytesPerSec,
     String? error,
+    bool clearError = false,
   }) {
     return TransferItem(
       id: id ?? this.id,
@@ -58,7 +59,7 @@ class TransferItem {
       status: status ?? this.status,
       type: type ?? this.type,
       speedBytesPerSec: speedBytesPerSec ?? this.speedBytesPerSec,
-      error: error ?? this.error,
+      error: clearError ? null : (error ?? this.error),
     );
   }
 }

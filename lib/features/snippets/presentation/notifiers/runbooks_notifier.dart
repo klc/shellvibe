@@ -70,7 +70,8 @@ class RunbooksNotifier extends _$RunbooksNotifier {
 
   Future<RunbookExecutionResult> executeRunbook(
     RunbookModel runbook,
-    Future<String> Function(String command, int timeoutSeconds) commandRunner, {
+    Future<(String output, int exitCode)> Function(String command, int timeoutSeconds)
+        commandRunner, {
     Map<String, String> variableValues = const {},
     void Function(RunbookStepModel step, String status)? onProgress,
   }) async {

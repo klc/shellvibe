@@ -40,12 +40,15 @@ class RunbookExecutionResult {
 class RunbookExecutor {
   /// Executes a [runbook] sequentially using [commandRunner].
   ///
-  /// [commandRunner] is a callback receiving the command string and returning the stdout/stderr output.
+  /// [commandRunner] is a callback receiving the command string and returning
+  /// a record of the combined stdout/stderr output and the process exit code,
+  /// so [RunbookStepModel.expectedExitCode] can be enforced for real.
   /// [variableValues] optional map of variable inputs to substitute into command templates.
   /// [onProgress] optional callback invoked before each step starts.
   Future<RunbookExecutionResult> executeRunbook(
     RunbookModel runbook,
-    Future<String> Function(String command, int timeoutSeconds) commandRunner, {
+    Future<(String output, int exitCode)> Function(String command, int timeoutSeconds)
+        commandRunner, {
     Map<String, String> variableValues = const {},
     void Function(RunbookStepModel step, String status)? onProgress,
   }) async {
@@ -64,7 +67,7 @@ class RunbookExecutor {
       final commandToRun = SnippetVariableParser.substituteVariables(step.command, variableValues);
 
       try {
-        final output = await commandRunner(commandToRun, step.timeoutSeconds);
+        final (output, exitCode) = await commandRunner(commandToRun, step.timeoutSeconds);
 
         // Check output verification pattern if specified
         bool patternMatches = true;
@@ -77,15 +80,18 @@ class RunbookExecutor {
           }
         }
 
-        final stepSuccess = patternMatches;
+        final exitCodeMatches = exitCode == step.expectedExitCode;
+        final stepSuccess = patternMatches && exitCodeMatches;
         final stepResult = RunbookStepResult(
           step: step,
           success: stepSuccess,
-          exitCode: stepSuccess ? step.expectedExitCode : 1,
+          exitCode: exitCode,
           output: output,
           errorMessage: stepSuccess
               ? null
-              : 'Output verification failed for pattern: "${step.expectedOutputPattern}"',
+              : (exitCodeMatches
+                  ? 'Output verification failed for pattern: "${step.expectedOutputPattern}"'
+                  : 'Exit code $exitCode does not match expected ${step.expectedExitCode}'),
         );
 
         results.add(stepResult);

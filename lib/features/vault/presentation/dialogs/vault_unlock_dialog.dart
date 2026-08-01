@@ -110,8 +110,7 @@ class _VaultUnlockDialogState extends ConsumerState<VaultUnlockDialog> {
                         _obscure ? Icons.visibility_off : Icons.visibility,
                       ),
                       tooltip: _obscure ? 'Show password' : 'Hide password',
-                      onPressed: () =>
-                          setState(() => _obscure = !_obscure),
+                      onPressed: () => setState(() => _obscure = !_obscure),
                     ),
                     onSubmitted: isLockedOut ? null : (_) => _submit(),
                   ),
@@ -119,15 +118,19 @@ class _VaultUnlockDialogState extends ConsumerState<VaultUnlockDialog> {
                     const SizedBox(height: 6),
                     Text(
                       _error!,
-                      style: TextStyle(color: theme.colorScheme.error, fontSize: 12),
+                      style: TextStyle(
+                        color: theme.colorScheme.error,
+                        fontSize: 12,
+                      ),
                     ),
                   ],
                   const SizedBox(height: 24),
                   SizedBox(
                     width: double.infinity,
                     child: ShadButton(
-                      onPressed:
-                          (isLockedOut || vaultAsync.isLoading) ? null : _submit,
+                      onPressed: (isLockedOut || vaultAsync.isLoading)
+                          ? null
+                          : _submit,
                       child: vaultAsync.isLoading
                           ? const SizedBox(
                               width: 20,
@@ -148,8 +151,12 @@ class _VaultUnlockDialogState extends ConsumerState<VaultUnlockDialog> {
 
   Future<void> _submit() async {
     setState(() => _error = null);
-    final success =
-        await ref.read(vaultNotifierProvider.notifier).unlock(_passwordCtrl.text);
+    final success = await ref
+        .read(vaultNotifierProvider.notifier)
+        .unlock(_passwordCtrl.text);
+    if (success && mounted) {
+      _passwordCtrl.clear();
+    }
     if (!success && mounted) {
       final vaultState = ref.read(vaultNotifierProvider).valueOrNull;
       if (vaultState?.isLockedOut ?? false) {
@@ -161,4 +168,3 @@ class _VaultUnlockDialogState extends ConsumerState<VaultUnlockDialog> {
     }
   }
 }
-

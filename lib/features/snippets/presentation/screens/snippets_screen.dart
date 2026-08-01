@@ -55,7 +55,7 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
       if (mounted) {
         ShadToaster.of(context).show(
           ShadToast(
-            description: Text('Copied snippet to clipboard: "$finalCode"'),
+            description: Text('Copied snippet "${snippet.title}" to clipboard'),
           ),
         );
       }
@@ -64,7 +64,7 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
       if (mounted) {
         ShadToaster.of(context).show(
           ShadToast(
-            description: Text('Executed snippet: "$finalCode"'),
+            description: Text('Executed snippet "${snippet.title}"'),
           ),
         );
       }

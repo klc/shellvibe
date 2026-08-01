@@ -20,9 +20,15 @@ SftpService sftpService(Ref ref) {
   return SftpService();
 }
 
-/// Provider for [SftpTransferQueueWorker]
-@riverpod
-SftpTransferQueueWorker sftpTransferQueueWorker(Ref ref) {
+/// Provider for [SftpTransferQueueWorker].
+///
+/// keepAlive: the transfer queue must survive screen navigation — an
+/// autoDispose worker would be torn down (closing the queue controller) while
+/// transfers are in flight, failing them mid-write and wiping the queue.
+@Riverpod(keepAlive: true)
+SftpTransferQueueWorker sftpTransferQueueWorker(
+  SftpTransferQueueWorkerRef ref,
+) {
   final worker = SftpTransferQueueWorker();
   ref.onDispose(() {
     worker.dispose();
@@ -68,6 +74,7 @@ class SftpState {
 
   SftpState copyWith({
     SftpClient? remoteClient,
+    bool clearRemoteClient = false,
     String? remotePath,
     String? localPath,
     List<SftpFileItem>? remoteFiles,
@@ -81,7 +88,9 @@ class SftpState {
     String? searchQuery,
   }) {
     return SftpState(
-      remoteClient: remoteClient ?? this.remoteClient,
+      remoteClient: clearRemoteClient
+          ? null
+          : (remoteClient ?? this.remoteClient),
       remotePath: remotePath ?? this.remotePath,
       localPath: localPath ?? this.localPath,
       remoteFiles: remoteFiles ?? this.remoteFiles,
@@ -97,11 +106,17 @@ class SftpState {
   }
 }
 
-@riverpod
+@Riverpod(keepAlive: true)
 class SftpNotifier extends _$SftpNotifier {
+  /// Set when the provider is disposed. Riverpod 2.x has no `ref.mounted` for
+  /// notifier refs, and async continuations (deferred loads) must not write
+  /// state after disposal.
+  bool _disposed = false;
+
   @override
   SftpState build() {
     ref.onDispose(() {
+      _disposed = true;
       try {
         state.remoteClient?.close();
       } catch (_) {}
@@ -122,13 +137,29 @@ class SftpNotifier extends _$SftpNotifier {
   }
 
   void setRemoteClient(SftpClient? client) {
-    state = state.copyWith(remoteClient: client);
-    if (client != null) {
+    final old = state.remoteClient;
+    if (identical(old, client)) return;
+
+    if (client == null) {
+      state = state.copyWith(clearRemoteClient: true);
+    } else {
+      state = state.copyWith(remoteClient: client);
       loadRemoteDirectory(state.remotePath);
+    }
+
+    // A replaced or cleared client must not leak its socket; the notifier
+    // dispose hook only closes the client currently referenced by state.
+    if (old != null && !identical(old, client)) {
+      try {
+        old.close();
+      } catch (_) {}
     }
   }
 
   Future<void> loadRemoteDirectory([String? path]) async {
+    // The notifier may have been disposed while awaiting; writing state then
+    // would throw.
+    if (_disposed) return;
     final client = state.remoteClient;
     final targetPath = path ?? state.remotePath;
 
@@ -145,12 +176,14 @@ class SftpNotifier extends _$SftpNotifier {
     try {
       final sftpService = ref.read(sftpServiceProvider);
       final files = await sftpService.listDirectory(client, targetPath);
+      if (_disposed) return;
       state = state.copyWith(
         remotePath: targetPath,
         remoteFiles: files,
         isLoadingRemote: false,
       );
     } catch (e) {
+      if (_disposed) return;
       state = state.copyWith(
         remoteError: 'Failed to list directory $targetPath: $e',
         isLoadingRemote: false,
@@ -159,6 +192,7 @@ class SftpNotifier extends _$SftpNotifier {
   }
 
   Future<void> loadLocalDirectory([String? path]) async {
+    if (_disposed) return;
     final targetPath = path ?? state.localPath;
     state = state.copyWith(isLoadingLocal: true, localError: null);
 
@@ -175,9 +209,11 @@ class SftpNotifier extends _$SftpNotifier {
       final entities = await dir.list().toList();
       final items = <SftpFileItem>[];
 
+      // Async stat: statSync per entry blocks the UI isolate for seconds on
+      // large directories.
       for (final entity in entities) {
         try {
-          final stat = entity.statSync();
+          final stat = await entity.stat();
           items.add(SftpFileItem.fromFileSystemEntity(entity, stat: stat));
         } catch (_) {}
       }
@@ -188,12 +224,15 @@ class SftpNotifier extends _$SftpNotifier {
         return a.name.toLowerCase().compareTo(b.name.toLowerCase());
       });
 
-      state = state.copyWith(
-        localPath: targetPath,
-        localFiles: items,
-        isLoadingLocal: false,
-      );
+      if (!_disposed) {
+        state = state.copyWith(
+          localPath: targetPath,
+          localFiles: items,
+          isLoadingLocal: false,
+        );
+      }
     } catch (e) {
+      if (_disposed) return;
       state = state.copyWith(
         localError: 'Failed to list local directory: $e',
         isLoadingLocal: false,
@@ -221,6 +260,7 @@ class SftpNotifier extends _$SftpNotifier {
       await ref.read(sftpServiceProvider).createDirectory(client, fullPath);
       await loadRemoteDirectory();
     } catch (e) {
+      if (_disposed) return;
       state = state.copyWith(remoteError: 'Failed to create directory: $e');
     }
   }
@@ -233,6 +273,7 @@ class SftpNotifier extends _$SftpNotifier {
       await ref.read(sftpServiceProvider).createFile(client, fullPath);
       await loadRemoteDirectory();
     } catch (e) {
+      if (_disposed) return;
       state = state.copyWith(remoteError: 'Failed to create file: $e');
     }
   }
@@ -241,13 +282,12 @@ class SftpNotifier extends _$SftpNotifier {
     final client = state.remoteClient;
     if (client == null) return;
     try {
-      await ref.read(sftpServiceProvider).deleteItem(
-            client,
-            item.path,
-            isDirectory: item.isDirectory,
-          );
+      await ref
+          .read(sftpServiceProvider)
+          .deleteItem(client, item.path, isDirectory: item.isDirectory);
       await loadRemoteDirectory();
     } catch (e) {
+      if (_disposed) return;
       state = state.copyWith(remoteError: 'Failed to delete item: $e');
     }
   }
@@ -261,6 +301,7 @@ class SftpNotifier extends _$SftpNotifier {
       }
       await loadLocalDirectory();
     } catch (e) {
+      if (_disposed) return;
       state = state.copyWith(localError: 'Failed to delete local item: $e');
     }
   }
@@ -270,31 +311,47 @@ class SftpNotifier extends _$SftpNotifier {
     if (client == null) return;
     final newPath = p.join(p.dirname(item.path), newName);
     try {
-      await ref.read(sftpServiceProvider).renameItem(client, item.path, newPath);
+      await ref
+          .read(sftpServiceProvider)
+          .renameItem(client, item.path, newPath);
       await loadRemoteDirectory();
     } catch (e) {
+      if (_disposed) return;
       state = state.copyWith(remoteError: 'Failed to rename: $e');
     }
   }
 
-  Future<void> changeRemotePermissions(SftpFileItem item, int permissions) async {
+  Future<void> changeRemotePermissions(
+    SftpFileItem item,
+    int permissions,
+  ) async {
     final client = state.remoteClient;
     if (client == null) return;
     try {
-      await ref.read(sftpServiceProvider).changePermissions(client, item.path, permissions);
+      await ref
+          .read(sftpServiceProvider)
+          .changePermissions(client, item.path, permissions);
       await loadRemoteDirectory();
     } catch (e) {
+      if (_disposed) return;
       state = state.copyWith(remoteError: 'Failed to change permissions: $e');
     }
   }
 
-  Future<void> changeRemoteOwner(SftpFileItem item, {int? uid, int? gid}) async {
+  Future<void> changeRemoteOwner(
+    SftpFileItem item, {
+    int? uid,
+    int? gid,
+  }) async {
     final client = state.remoteClient;
     if (client == null) return;
     try {
-      await ref.read(sftpServiceProvider).changeOwner(client, item.path, uid: uid, gid: gid);
+      await ref
+          .read(sftpServiceProvider)
+          .changeOwner(client, item.path, uid: uid, gid: gid);
       await loadRemoteDirectory();
     } catch (e) {
+      if (_disposed) return;
       state = state.copyWith(remoteError: 'Failed to change owner: $e');
     }
   }
@@ -311,6 +368,7 @@ class SftpNotifier extends _$SftpNotifier {
     if (client == null) throw Exception('SFTP client is not connected');
     final bytes = Uint8List.fromList(utf8.encode(content));
     await ref.read(sftpServiceProvider).writeFile(client, path, bytes);
+    if (_disposed) return;
     await loadRemoteDirectory();
   }
 
@@ -319,7 +377,9 @@ class SftpNotifier extends _$SftpNotifier {
     if (client == null) return;
     final localDest = p.join(state.localPath, item.name);
 
-    ref.read(sftpTransferQueueWorkerProvider).enqueueDownload(
+    ref
+        .read(sftpTransferQueueWorkerProvider)
+        .enqueueDownload(
           client: client,
           remotePath: item.path,
           localPath: localDest,
@@ -332,7 +392,9 @@ class SftpNotifier extends _$SftpNotifier {
     if (client == null) return;
     final remoteDest = p.join(state.remotePath, item.name);
 
-    ref.read(sftpTransferQueueWorkerProvider).enqueueUpload(
+    ref
+        .read(sftpTransferQueueWorkerProvider)
+        .enqueueUpload(
           client: client,
           localPath: item.path,
           remotePath: remoteDest,

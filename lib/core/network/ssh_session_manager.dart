@@ -69,6 +69,11 @@ class SSHSessionManager {
   bool _isConnected = false;
   bool _isPromptingHostKey = false;
 
+  /// Set by [close] while a connect is in flight. The pending connect aborts
+  /// at its next checkpoint instead of leaving a live session behind after the
+  /// owning tab was closed.
+  bool _abortRequested = false;
+
   SSHSessionManager({this.knownHostsDao});
 
   /// Current active [SSHClient] if connected.
@@ -80,6 +85,7 @@ class SSHSessionManager {
   /// Establishes an SSH connection and authenticates based on [config].
   Future<SSHClient> connect(SSHConnectConfig config) async {
     await close();
+    _abortRequested = false;
 
     // 1. Parse Private Key if provided
     List<SSHKeyPair>? identities;
@@ -103,6 +109,12 @@ class SSHSessionManager {
       );
     } catch (e) {
       throw Exception('Failed to connect to ${config.hostname}:${config.port}: $e');
+    }
+
+    if (_abortRequested) {
+      _socket?.destroy();
+      _socket = null;
+      throw StateError('SSH connection aborted: session was closed during connect.');
     }
 
     // 3. Create SSH Client with Host Key Verification and Auth handlers
@@ -130,6 +142,15 @@ class SSHSessionManager {
     // 4. Wait for SSH authentication handshake with timeout
     try {
       await _waitForAuthenticated(client, config.timeout);
+
+      if (_abortRequested) {
+        client.close();
+        _client = null;
+        _socket?.destroy();
+        _socket = null;
+        throw StateError('SSH connection aborted: session was closed during connect.');
+      }
+
       _client = client;
       _isConnected = true;
 
@@ -149,6 +170,9 @@ class SSHSessionManager {
     final promptDeadline = DateTime.now().add(_kMaxHostKeyPromptWait);
 
     while (true) {
+      if (_abortRequested) {
+        throw StateError('SSH connection aborted: session was closed during connect.');
+      }
       if (_isPromptingHostKey) {
         if (DateTime.now().isAfter(promptDeadline)) {
           throw TimeoutException(
@@ -208,6 +232,9 @@ class SSHSessionManager {
     required String fingerprint,
     HostKeyPromptCallback? promptCallback,
   }) async {
+    // A closed session must never raise a prompt for a dead tab.
+    if (_abortRequested) return false;
+
     final dao = knownHostsDao;
 
     if (dao != null) {
@@ -358,6 +385,7 @@ class SSHSessionManager {
 
   /// Cancels timers and closes active SSH client session and socket.
   Future<void> close() async {
+    _abortRequested = true;
     _keepAliveTimer?.cancel();
     _keepAliveTimer = null;
     _isConnected = false;

@@ -35,6 +35,7 @@ class VaultKeyService {
   final SecureStorageService secureStorageService;
 
   SecretKey? _unlockedDek;
+  int _lifecycleGeneration = 0;
 
   VaultKeyService({
     required this.encryptionEngine,
@@ -73,6 +74,7 @@ class VaultKeyService {
   /// Preserves the current DEK, so identities encrypted before the master
   /// password was set remain decryptable. Leaves the vault unlocked.
   Future<void> configureMasterPassword(String masterPassword) async {
+    final generation = _lifecycleGeneration;
     if (await isMasterPasswordConfigured()) {
       throw StateError('A master password is already configured.');
     }
@@ -99,14 +101,20 @@ class VaultKeyService {
     // The plaintext copy must go away, otherwise the master password is cosmetic.
     await secureStorageService.deleteMasterKey();
 
-    _unlockedDek = SecretKey(dekBytes);
+    // lock() may have been called while Argon2id was running. Do not restore
+    // a plaintext DEK after that lock has already invalidated this operation.
+    if (generation == _lifecycleGeneration) {
+      _unlockedDek = SecretKey(dekBytes);
+    }
   }
 
   /// Unwraps the DEK with [masterPassword]. Returns false on a wrong password.
   Future<bool> unlock(String masterPassword) async {
+    final generation = _lifecycleGeneration;
     final salt = await secureStorageService.getMasterSalt();
-    final wrapped =
-        await secureStorageService.read(key: SecureStorageKeys.wrappedDek);
+    final wrapped = await secureStorageService.read(
+      key: SecureStorageKeys.wrappedDek,
+    );
     if (salt == null || wrapped == null) return false;
 
     final kek = await encryptionEngine.deriveMasterKeyInBackground(
@@ -119,6 +127,7 @@ class VaultKeyService {
         encryptedBase64: wrapped,
         secretKey: kek,
       );
+      if (generation != _lifecycleGeneration) return false;
       _unlockedDek = SecretKey(Uint8List.fromList(base64.decode(dekBase64)));
       return true;
     } on CryptoException {
@@ -129,6 +138,7 @@ class VaultKeyService {
 
   /// Drops the unwrapped DEK from memory.
   void lock() {
+    _lifecycleGeneration++;
     _unlockedDek = null;
   }
 

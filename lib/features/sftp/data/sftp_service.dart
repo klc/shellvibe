@@ -119,11 +119,12 @@ class SftpService {
       // Stat failed or unsupported; proceed with total = 0
     }
 
-    final localFile = File(localPath);
-    final sink = localFile.openWrite();
+    final temporaryPath =
+        '$localPath.terly-part-${DateTime.now().microsecondsSinceEpoch}';
+    final temporaryFile = File(temporaryPath);
+    final sink = temporaryFile.openWrite();
     int count = 0;
-    bool success = false;
-
+    bool committed = false;
     try {
       await for (final chunk in readFileStream(client, remotePath)) {
         sink.add(chunk);
@@ -133,12 +134,13 @@ class SftpService {
         }
       }
       await sink.flush();
-      success = true;
-    } finally {
       await sink.close();
-      if (!success && await localFile.exists()) {
+      await temporaryFile.rename(localPath);
+      committed = true;
+    } finally {
+      if (!committed && await temporaryFile.exists()) {
         try {
-          await localFile.delete();
+          await temporaryFile.delete();
         } catch (_) {}
       }
     }
@@ -158,14 +160,17 @@ class SftpService {
     }
 
     final total = await localFile.length();
+    final temporaryPath =
+        '$remotePath.terly-part-${DateTime.now().microsecondsSinceEpoch}';
     final remoteFile = await client.open(
-      remotePath,
+      temporaryPath,
       mode:
           SftpFileOpenMode.create |
           SftpFileOpenMode.write |
           SftpFileOpenMode.truncate,
     );
 
+    bool committed = false;
     try {
       int transferred = 0;
       final inputStream = localFile.openRead().map((chunk) {
@@ -180,8 +185,20 @@ class SftpService {
       });
 
       await remoteFile.write(inputStream, offset: 0);
-    } finally {
       await remoteFile.close();
+      await client.rename(temporaryPath, remotePath);
+      committed = true;
+    } finally {
+      // An incomplete upload must only remove its own temporary file; an
+      // existing destination must remain intact.
+      if (!committed) {
+        try {
+          await remoteFile.close();
+        } catch (_) {}
+        try {
+          await client.remove(temporaryPath);
+        } catch (_) {}
+      }
     }
   }
 

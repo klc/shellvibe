@@ -589,14 +589,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     try {
       await ref.read(vaultNotifierProvider.notifier).setup(password);
+      // The controller may already be disposed if the screen left the tree
+      // while the (isolate-backed) setup was running.
+      if (!mounted) return;
       _vaultPasswordController.clear();
-      if (mounted) {
-        ShadToaster.of(context).show(
-          const ShadToast(
-            description: Text('Master password set. The vault now locks on app restart.'),
-          ),
-        );
-      }
+      ShadToaster.of(context).show(
+        const ShadToast(
+          description: Text('Master password set. The vault now locks on app restart.'),
+        ),
+      );
     } catch (e) {
       if (mounted) {
         ShadToaster.of(context).show(

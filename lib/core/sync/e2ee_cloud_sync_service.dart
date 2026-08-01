@@ -199,9 +199,21 @@ class E2EECloudSyncService {
     required String masterPassword,
   }) async {
     final envelope = jsonDecode(backupPackageJson) as Map<String, dynamic>;
+    final schemaVersion = envelope['schema_version'] as int? ?? 1;
+    if (schemaVersion > kBackupSchemaVersion) {
+      throw FormatException(
+        'Unsupported backup schema version $schemaVersion '
+        '(this app supports up to $kBackupSchemaVersion).',
+      );
+    }
     final saltBase64 = envelope['salt'] as String;
     final payloadEncrypted = envelope['payload'] as String;
     final wrappedDek = envelope['dek_wrapped'] as String?;
+    if (schemaVersion >= 2 && wrappedDek == null) {
+      throw FormatException(
+        'v2 backup is missing the wrapped vault key (dek_wrapped).',
+      );
+    }
 
     final salt = Uint8List.fromList(base64.decode(saltBase64));
     final secretKey = await _cryptoEngine.deriveMasterKey(

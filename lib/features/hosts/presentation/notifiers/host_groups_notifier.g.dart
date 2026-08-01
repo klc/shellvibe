@@ -7,7 +7,7 @@ part of 'host_groups_notifier.dart';
 // **************************************************************************
 
 String _$hostGroupsNotifierHash() =>
-    r'1c7883a4af7039c68ded2e3bbed4cb874ae9358e';
+    r'824bc0f281b48003f80523e4b85264357de6f643';
 
 /// See also [HostGroupsNotifier].
 @ProviderFor(HostGroupsNotifier)

@@ -34,10 +34,11 @@ class TerminalTabsState {
   TerminalTabsState copyWith({
     List<TerminalTabSession>? tabs,
     String? activeTabId,
+    bool clearActiveTabId = false,
   }) {
     return TerminalTabsState(
       tabs: tabs ?? this.tabs,
-      activeTabId: activeTabId ?? this.activeTabId,
+      activeTabId: clearActiveTabId ? null : (activeTabId ?? this.activeTabId),
     );
   }
 }
@@ -116,18 +117,26 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
           '\x1b[1;34m[SSH]\x1b[0m Connecting to \x1b[1;36m$effectiveUsername@$cleanHostname:${host.port}\x1b[0m...\r\n');
 
       await sessionManager.connect(config);
-      final sshSession = await sessionManager.openShell();
+      try {
+        final sshSession = await sessionManager.openShell();
 
-      final bridge = TerminalSSHBridge(
-        terminal: terminal,
-        session: sshSession,
-      );
+        final bridge = TerminalSSHBridge(
+          terminal: terminal,
+          session: sshSession,
+        );
 
-      newTab.sshBridge = bridge;
-      newTab.isConnecting = false;
-      newTab.isConnected = true;
+        newTab.sshBridge = bridge;
+        newTab.isConnecting = false;
+        newTab.isConnected = true;
 
-      state = state.copyWith(tabs: [...state.tabs]);
+        state = state.copyWith(tabs: [...state.tabs]);
+      } catch (e) {
+        // A failure after a successful connect (e.g. server refuses a PTY)
+        // must tear the client down; otherwise the socket and keep-alive
+        // timer keep running against a dead tab.
+        await sessionManager.close();
+        rethrow;
+      }
     } catch (e) {
       newTab.isConnecting = false;
       newTab.isConnected = false;
@@ -169,13 +178,31 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     final index = state.tabs.indexWhere((t) => t.id == tabId);
     if (index == -1) return;
 
-    final targetTab = state.tabs[index];
-    final remainingTabs = state.tabs.where((t) => t.id != tabId).toList();
+    // Cascade: split panes are children of the closed tab and must be torn
+    // down with it, otherwise their PTY/SSH sessions keep running orphaned.
+    final closingTabs = <TerminalTabSession>[state.tabs[index]];
+    var foundChild = true;
+    while (foundChild) {
+      foundChild = false;
+      for (final tab in state.tabs) {
+        if (tab.splitParentId != null &&
+            closingTabs.any((c) => c.id == tab.splitParentId) &&
+            !closingTabs.any((c) => c.id == tab.id)) {
+          closingTabs.add(tab);
+          foundChild = true;
+        }
+      }
+    }
+
+    final closingIds = closingTabs.map((t) => t.id).toSet();
+    final remainingTabs =
+        state.tabs.where((t) => !closingIds.contains(t.id)).toList();
     String? newActiveId = state.activeTabId;
 
-    if (state.activeTabId == tabId) {
+    if (closingIds.contains(state.activeTabId)) {
       if (remainingTabs.isNotEmpty) {
-        final newIndex = index >= remainingTabs.length ? remainingTabs.length - 1 : index;
+        final newIndex =
+            index >= remainingTabs.length ? remainingTabs.length - 1 : index;
         newActiveId = remainingTabs[newIndex].id;
       } else {
         newActiveId = null;
@@ -185,9 +212,12 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     state = state.copyWith(
       tabs: remainingTabs,
       activeTabId: newActiveId,
+      clearActiveTabId: newActiveId == null,
     );
 
-    await targetTab.dispose();
+    for (final tab in closingTabs) {
+      await tab.dispose();
+    }
   }
 
   void setActiveTab(String tabId) {

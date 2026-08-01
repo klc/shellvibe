@@ -66,7 +66,7 @@ final activeTunnelsStreamProvider =
 // ignore: unused_element
 typedef ActiveTunnelsStreamRef =
     AutoDisposeStreamProviderRef<List<ActiveTunnel>>;
-String _$tunnelsNotifierHash() => r'd82ab41df7066e851e02c7d8bd66810c5f00f091';
+String _$tunnelsNotifierHash() => r'2f2a26024897cd243ac6d893828d4fc843f55a37';
 
 /// See also [TunnelsNotifier].
 @ProviderFor(TunnelsNotifier)

@@ -73,8 +73,8 @@ void main() {
         label: 'Production DB Primary',
         port: 22,
       );
-      final updateResult = await hostsDao.updateHost(updatedHost);
-      expect(updateResult, isTrue);
+      final updateResult = await hostsDao.updateHostById('host-101', updatedHost);
+      expect(updateResult, greaterThan(0));
 
       final reFetched = await hostsDao.getHostById('host-101');
       expect(reFetched!.label, equals('Production DB Primary'));

@@ -62,6 +62,13 @@ const _kMaxAttemptsBeforeLockout = 5;
 /// Manages the vault lifecycle: setup, lock, unlock, brute-force protection.
 @Riverpod(keepAlive: true)
 class VaultNotifier extends _$VaultNotifier {
+  /// Bumped by [lock]. Async continuations (unlock/setup) capture it up front
+  /// and refuse to publish an `unlocked` state if the vault was locked while
+  /// they were awaiting — otherwise a background auto-lock during an in-flight
+  /// unlock would leave the UI reporting an unlocked vault with no DEK in
+  /// [VaultKeyService].
+  int _lifecycleGeneration = 0;
+
   @override
   Future<VaultState> build() async {
     final keyService = ref.watch(vaultKeyServiceProvider);
@@ -81,12 +88,16 @@ class VaultNotifier extends _$VaultNotifier {
   /// identities saved before setup stay decryptable. The Argon2id derivation
   /// runs in a background isolate to avoid UI jank.
   Future<void> setup(String masterPassword) async {
+    final generation = _lifecycleGeneration;
     final keyService = ref.read(vaultKeyServiceProvider);
 
     state = const AsyncLoading();
 
     state = await AsyncValue.guard(() async {
       await keyService.configureMasterPassword(masterPassword);
+      if (generation != _lifecycleGeneration) {
+        return const VaultState(status: VaultStatus.locked);
+      }
       return const VaultState(status: VaultStatus.unlocked);
     });
   }
@@ -97,6 +108,7 @@ class VaultNotifier extends _$VaultNotifier {
   /// failed attempts, imposes an exponentially increasing lockout period
   /// (30s → 60s → 120s → 240s, capped at 1 hour).
   Future<bool> unlock(String masterPassword) async {
+    final generation = _lifecycleGeneration;
     final currentState = state.valueOrNull;
 
     // Reject if currently in lockout period
@@ -110,11 +122,15 @@ class VaultNotifier extends _$VaultNotifier {
 
     try {
       if (!await keyService.isMasterPasswordConfigured()) {
+        if (generation != _lifecycleGeneration) return false;
         state = const AsyncData(VaultState(status: VaultStatus.unconfigured));
         return false;
       }
 
       if (await keyService.unlock(masterPassword)) {
+        // Locked while the Argon2id derivation was running? The DEK is gone;
+        // publishing `unlocked` here would desync UI from [VaultKeyService].
+        if (generation != _lifecycleGeneration) return false;
         state = const AsyncData(VaultState(status: VaultStatus.unlocked));
         return true;
       }
@@ -144,6 +160,7 @@ class VaultNotifier extends _$VaultNotifier {
 
   /// Locks the vault by dropping the unwrapped DEK from memory.
   void lock() {
+    _lifecycleGeneration++;
     ref.read(vaultKeyServiceProvider).lock();
     state = const AsyncData(VaultState(status: VaultStatus.locked));
   }

@@ -61,58 +61,77 @@ class TunnelsState {
 
 @riverpod
 class TunnelsNotifier extends _$TunnelsNotifier {
+  /// Set when the autoDispose notifier is torn down; the deferred load in
+  /// [build] must not write state after disposal (no `ref.mounted` in 2.x).
+  bool _disposed = false;
+
   @override
   TunnelsState build() {
+    ref.onDispose(() => _disposed = true);
     // Initial fetch of rules
     Future.microtask(() => loadRules());
     return const TunnelsState(isLoading: true);
   }
 
   Future<void> loadRules([String? hostId]) async {
+    if (_disposed) return;
     state = state.copyWith(isLoading: true, error: null);
     try {
       final repository = ref.read(tunnelRepositoryProvider);
       final rules = hostId != null
           ? await repository.getRulesForHost(hostId)
           : await repository.getAllRules();
+      if (_disposed) return;
       state = state.copyWith(rules: rules, isLoading: false);
     } catch (e) {
+      if (_disposed) return;
       state = state.copyWith(error: e.toString(), isLoading: false);
     }
   }
 
   Future<void> addRule(TunnelRuleModel rule) async {
+    if (_disposed) return;
     try {
       final repository = ref.read(tunnelRepositoryProvider);
       await repository.addRule(rule);
       await loadRules();
     } catch (e) {
+      if (_disposed) rethrow;
       state = state.copyWith(error: 'Failed to add rule: $e');
+      // Rethrow so the calling screen can toast the failure instead of
+      // silently closing as if the rule was saved.
+      rethrow;
     }
   }
 
   Future<void> updateRule(TunnelRuleModel rule) async {
+    if (_disposed) return;
     try {
       final repository = ref.read(tunnelRepositoryProvider);
       await repository.updateRule(rule);
       await loadRules();
     } catch (e) {
+      if (_disposed) rethrow;
       state = state.copyWith(error: 'Failed to update rule: $e');
+      rethrow;
     }
   }
 
   Future<void> deleteRule(String id) async {
+    if (_disposed) return;
     try {
       await ref.read(tunnelEngineProvider).stopTunnel(id);
       final repository = ref.read(tunnelRepositoryProvider);
       await repository.deleteRule(id);
       await loadRules();
     } catch (e) {
+      if (_disposed) return;
       state = state.copyWith(error: 'Failed to delete rule: $e');
     }
   }
 
   Future<void> startRule(TunnelRuleModel rule, SSHClient sshClient) async {
+    if (_disposed) return;
     final engine = ref.read(tunnelEngineProvider);
     try {
       if (rule.type == 'local') {
@@ -142,6 +161,7 @@ class TunnelsNotifier extends _$TunnelsNotifier {
         );
       }
     } catch (e) {
+      if (_disposed) return;
       state = state.copyWith(error: 'Failed to start tunnel: $e');
     }
   }

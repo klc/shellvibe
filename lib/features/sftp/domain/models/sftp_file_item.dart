@@ -56,7 +56,10 @@ class SftpFileItem {
   }
 
   /// Factory from local [FileSystemEntity]
-  factory SftpFileItem.fromFileSystemEntity(FileSystemEntity entity, {FileStat? stat}) {
+  factory SftpFileItem.fromFileSystemEntity(
+    FileSystemEntity entity, {
+    FileStat? stat,
+  }) {
     final name = entity.path.split(Platform.pathSeparator).last;
     final isDir = entity is Directory;
     final isLink = entity is Link;
@@ -79,7 +82,9 @@ class SftpFileItem {
     if (isDirectory) return '--';
     if (size < 1024) return '$size B';
     if (size < 1024 * 1024) return '${(size / 1024).toStringAsFixed(1)} KB';
-    if (size < 1024 * 1024 * 1024) return '${(size / (1024 * 1024)).toStringAsFixed(1)} MB';
+    if (size < 1024 * 1024 * 1024) {
+      return '${(size / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
     return '${(size / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
   }
 
@@ -90,24 +95,33 @@ class SftpFileItem {
   }
 
   static String _extractOctalFromPermission(String permStr) {
-    if (permStr.length < 9) return '755';
-    final str = permStr.startsWith('d') || permStr.startsWith('l') || permStr.startsWith('-')
+    if (permStr.length < 9) {
+      return '755';
+    }
+    final str =
+        permStr.startsWith('d') ||
+            permStr.startsWith('l') ||
+            permStr.startsWith('-')
         ? permStr.substring(1)
         : permStr;
-    
+
     int u = 0, g = 0, o = 0;
+    int special = 0;
     if (str.length >= 9) {
       if (str[0] == 'r') u += 4;
       if (str[1] == 'w') u += 2;
-      if (str[2] == 'x') u += 1;
+      if (str[2] == 'x' || str[2] == 's') u += 1;
+      if (str[2] == 's' || str[2] == 'S') special += 4;
       if (str[3] == 'r') g += 4;
       if (str[4] == 'w') g += 2;
-      if (str[5] == 'x') g += 1;
+      if (str[5] == 'x' || str[5] == 's') g += 1;
+      if (str[5] == 's' || str[5] == 'S') special += 2;
       if (str[6] == 'r') o += 4;
       if (str[7] == 'w') o += 2;
-      if (str[8] == 'x') o += 1;
+      if (str[8] == 'x' || str[8] == 't') o += 1;
+      if (str[8] == 't' || str[8] == 'T') special += 1;
     }
-    return '$u$g$o';
+    return special == 0 ? '$u$g$o' : '$special$u$g$o';
   }
 
   static String _formatModeToString(int mode, bool isDir, bool isLink) {
@@ -122,7 +136,13 @@ class SftpFileItem {
     final oW = (mode & 0x0002) != 0 ? 'w' : '-';
     final oX = (mode & 0x0001) != 0 ? 'x' : '-';
 
-    return '$typeChar$uR$uW$uX$gR$gW$gX$oR$oW$oX';
+    // Special bits occupy the execute slots: setuid (0o4000), setgid (0o2000),
+    // sticky (0o1000). Uppercase when the matching execute bit is unset.
+    final uSlot = (mode & 0x800) != 0 ? (uX == 'x' ? 's' : 'S') : uX;
+    final gSlot = (mode & 0x400) != 0 ? (gX == 'x' ? 's' : 'S') : gX;
+    final oSlot = (mode & 0x200) != 0 ? (oX == 'x' ? 't' : 'T') : oX;
+
+    return '$typeChar$uR$uW$uSlot$gR$gW$gSlot$oR$oW$oSlot';
   }
 
   SftpFileItem copyWith({

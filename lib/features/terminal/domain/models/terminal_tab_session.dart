@@ -63,5 +63,8 @@ class TerminalTabSession {
       await sshSessionManager!.close();
       sshSessionManager = null;
     }
+    // xterm2 guards write() against a disposed terminal, so late writes from
+    // an in-flight connect do not crash after disposal.
+    terminal.dispose();
   }
 }

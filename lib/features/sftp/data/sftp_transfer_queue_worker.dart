@@ -13,6 +13,21 @@ class SftpTransferQueueWorker {
   final Map<String, TransferItem> _queue = {};
   final Map<String, bool> _cancelFlags = {};
   final Map<String, bool> _pauseFlags = {};
+
+  /// Ids whose `_processQueue` run has not finished unwinding yet.
+  ///
+  /// Guards pause/resume/retry against starting a second execution of the
+  /// same transfer while the previous run is still tearing down (flushing,
+  /// closing remote file handles, deleting partials). Without it two runs can
+  /// truncate and write the same destination concurrently, or a superseded
+  /// run's completion can mark a deleted partial file as `completed`.
+  final Set<String> _runningIds = {};
+
+  /// Ids for which resume/retry was requested while the old run was still
+  /// unwinding. The old run's completion consumes the latch and restarts the
+  /// transfer exactly once.
+  final Map<String, bool> _restartRequested = {};
+
   int _activeTransferCount = 0;
   final List<_PendingTransfer> _pendingTransfers = [];
 
@@ -85,103 +100,191 @@ class SftpTransferQueueWorker {
   void pauseTransfer(String id) {
     if (_queue.containsKey(id)) {
       _pauseFlags[id] = true;
-      _queue[id] = _queue[id]!.copyWith(status: TransferStatus.paused, speedBytesPerSec: 0);
+      _queue[id] = _queue[id]!.copyWith(
+        status: TransferStatus.paused,
+        speedBytesPerSec: 0,
+      );
       _notifyQueue();
     }
   }
 
   /// Resume a paused transfer
   void resumeTransfer(SftpClient client, String id) {
-    if (_queue.containsKey(id)) {
-      _pauseFlags[id] = false;
-      _queue[id] = _queue[id]!.copyWith(status: TransferStatus.pending);
-      _notifyQueue();
-      _scheduleTransfer(client, id);
+    final item = _queue[id];
+    if (item == null) return;
+
+    if (_runningIds.contains(id)) {
+      // Previous run is still unwinding (a paused loop only breaks on the next
+      // chunk arrival). Latch a restart instead of starting a duplicate run;
+      // the old run's completion consumes the latch exactly once.
+      _restartRequested[id] = true;
+      return;
     }
+
+    _pauseFlags.remove(id);
+    _restartRequested.remove(id);
+    _queue[id] = item.copyWith(status: TransferStatus.pending);
+    _notifyQueue();
+    _scheduleTransfer(client, id);
   }
 
   /// Cancel a transfer
   void cancelTransfer(String id) {
     if (_queue.containsKey(id)) {
       _cancelFlags[id] = true;
-      _queue[id] = _queue[id]!.copyWith(status: TransferStatus.cancelled, speedBytesPerSec: 0);
+      _queue[id] = _queue[id]!.copyWith(
+        status: TransferStatus.cancelled,
+        speedBytesPerSec: 0,
+      );
       _notifyQueue();
     }
   }
 
   /// Retry a failed or cancelled transfer
   void retryTransfer(SftpClient client, String id) {
-    if (_queue.containsKey(id)) {
-      _cancelFlags[id] = false;
-      _pauseFlags[id] = false;
-      _queue[id] = _queue[id]!.copyWith(
-        status: TransferStatus.pending,
-        transferredBytes: 0,
-        error: null,
-      );
-      _notifyQueue();
-      _scheduleTransfer(client, id);
+    final item = _queue[id];
+    if (item == null) return;
+
+    if (_runningIds.contains(id)) {
+      // Keep the cancel latch set so the old run tears down cleanly (including
+      // partial-file cleanup), then restart from the completion path.
+      _cancelFlags[id] = true;
+      _restartRequested[id] = true;
+      return;
     }
+
+    _cancelFlags.remove(id);
+    _pauseFlags.remove(id);
+    _restartRequested.remove(id);
+    _queue[id] = item.copyWith(
+      status: TransferStatus.pending,
+      transferredBytes: 0,
+      speedBytesPerSec: 0,
+      clearError: true,
+    );
+    _notifyQueue();
+    _scheduleTransfer(client, id);
   }
 
   /// Clear completed or cancelled transfers from list
   void clearFinished() {
-    _queue.removeWhere((id, item) =>
-        item.status == TransferStatus.completed || item.status == TransferStatus.cancelled);
+    _queue.removeWhere(
+      (id, item) =>
+          !_runningIds.contains(id) &&
+          (item.status == TransferStatus.completed ||
+              item.status == TransferStatus.cancelled),
+    );
     _notifyQueue();
   }
 
   Future<void> _processQueue(SftpClient client, String targetId) async {
-    final item = _queue[targetId];
-    if (item == null || item.status != TransferStatus.pending) return;
-
-    _queue[targetId] = item.copyWith(status: TransferStatus.inProgress);
-    _notifyQueue();
-
-    final stopwatch = Stopwatch()..start();
-
+    final stopwatch = Stopwatch();
     try {
-      if (item.type == TransferType.download) {
-        await _performDownload(client, targetId, stopwatch, (transferred, speed) {
-          _updateProgress(targetId, transferred, speed);
-        });
-      } else {
-        await _performUpload(client, targetId, stopwatch, (transferred, speed) {
-          _updateProgress(targetId, transferred, speed);
-        });
+      final item = _queue[targetId];
+      if (item == null || item.status != TransferStatus.pending) return;
+
+      _queue[targetId] = item.copyWith(status: TransferStatus.inProgress);
+      _notifyQueue();
+      stopwatch.start();
+
+      try {
+        if (item.type == TransferType.download) {
+          await _performDownload(client, targetId, stopwatch, (
+            transferred,
+            speed,
+          ) {
+            _updateProgress(targetId, transferred, speed);
+          });
+        } else {
+          await _performUpload(client, targetId, stopwatch, (
+            transferred,
+            speed,
+          ) {
+            _updateProgress(targetId, transferred, speed);
+          });
+        }
+      } catch (e) {
+        // A pending restart supersedes the failure report: the user already
+        // asked to retry/resume, so the final status is decided by the restart.
+        final current = _queue[targetId];
+        if (_restartRequested[targetId] != true && current != null) {
+          _queue[targetId] = current.copyWith(
+            status: TransferStatus.failed,
+            error: e.toString(),
+            speedBytesPerSec: 0,
+          );
+        }
+        return;
       }
 
-      if (_cancelFlags[targetId] == true) {
-        _queue[targetId] = _queue[targetId]!
-            .copyWith(status: TransferStatus.cancelled, speedBytesPerSec: 0);
-      } else if (_pauseFlags[targetId] == true) {
-        _queue[targetId] =
-            _queue[targetId]!.copyWith(status: TransferStatus.paused, speedBytesPerSec: 0);
-      } else {
-        _queue[targetId] = _queue[targetId]!.copyWith(
-          status: TransferStatus.completed,
-          transferredBytes: _queue[targetId]!.totalBytes,
-          speedBytesPerSec: 0,
-        );
+      if (_restartRequested[targetId] == true) {
+        // Terminal state is decided by the restart in [finally].
+        return;
       }
-    } catch (e) {
-      _queue[targetId] = _queue[targetId]!.copyWith(
-        status: TransferStatus.failed,
-        error: e.toString(),
-        speedBytesPerSec: 0,
-      );
+      if (_cancelFlags[targetId] == true) {
+        final current = _queue[targetId];
+        if (current != null) {
+          _queue[targetId] = current.copyWith(
+            status: TransferStatus.cancelled,
+            speedBytesPerSec: 0,
+          );
+        }
+      } else if (_pauseFlags[targetId] == true) {
+        final current = _queue[targetId];
+        if (current != null) {
+          _queue[targetId] = current.copyWith(
+            status: TransferStatus.paused,
+            speedBytesPerSec: 0,
+          );
+        }
+      } else {
+        final current = _queue[targetId];
+        if (current != null) {
+          _queue[targetId] = current.copyWith(
+            status: TransferStatus.completed,
+            transferredBytes: current.totalBytes,
+            speedBytesPerSec: 0,
+          );
+        }
+      }
     } finally {
+      // Runs that exit early (item vanished, no longer pending, superseded by
+      // a restart) must still release their slot — otherwise the counter and
+      // `_runningIds` leak and the queue eventually deadlocks.
       stopwatch.stop();
+      _runningIds.remove(targetId);
       _activeTransferCount--;
-      _notifyQueue();
-      _drainPending();
+
+      if (_restartRequested[targetId] == true) {
+        _cancelFlags.remove(targetId);
+        _pauseFlags.remove(targetId);
+        _restartRequested.remove(targetId);
+        final item = _queue[targetId];
+        if (item != null) {
+          _queue[targetId] = item.copyWith(
+            status: TransferStatus.pending,
+            transferredBytes: 0,
+            speedBytesPerSec: 0,
+            clearError: true,
+          );
+          _notifyQueue();
+          _scheduleTransfer(client, targetId);
+        }
+      } else {
+        _notifyQueue();
+        _drainPending();
+      }
     }
   }
 
   /// Schedules a transfer, respecting the concurrency limit.
   void _scheduleTransfer(SftpClient client, String id) {
+    // Never start a second execution for an id whose previous run is still
+    // unwinding. resume/retry during that window latch a restart instead.
+    if (_runningIds.contains(id)) return;
     if (_activeTransferCount < _maxConcurrentTransfers) {
       _activeTransferCount++;
+      _runningIds.add(id);
       _processQueue(client, id);
     } else {
       _pendingTransfers.add(_PendingTransfer(client: client, id: id));
@@ -196,6 +299,7 @@ class SftpTransferQueueWorker {
       final item = _queue[pending.id];
       if (item != null && item.status == TransferStatus.pending) {
         _activeTransferCount++;
+        _runningIds.add(pending.id);
         _processQueue(pending.client, pending.id);
       }
     }
@@ -208,7 +312,10 @@ class SftpTransferQueueWorker {
     void Function(int transferred, int speed) onProgress,
   ) async {
     final item = _queue[id]!;
-    final remoteFile = await client.open(item.sourcePath, mode: SftpFileOpenMode.read);
+    final remoteFile = await client.open(
+      item.sourcePath,
+      mode: SftpFileOpenMode.read,
+    );
     final localFile = File(item.destinationPath);
     bool completedSuccessfully = false;
 
@@ -269,11 +376,21 @@ class SftpTransferQueueWorker {
       throw Exception('Local file does not exist: ${item.sourcePath}');
     }
 
-    final remoteFile = await client.open(
-      item.destinationPath,
-      mode: SftpFileOpenMode.create | SftpFileOpenMode.write | SftpFileOpenMode.truncate,
+    // Never truncate the user's existing destination while a transfer is in
+    // progress. The temporary file is in the same directory so the final
+    // rename remains atomic on servers implementing normal SFTP rename
+    // semantics.
+    final temporaryPath = '${item.destinationPath}.terly-part-$id';
+    SftpFile? remoteFile;
+    remoteFile = await client.open(
+      temporaryPath,
+      mode:
+          SftpFileOpenMode.create |
+          SftpFileOpenMode.write |
+          SftpFileOpenMode.truncate,
     );
 
+    bool committed = false;
     try {
       int transferred = 0;
       int lastTimeMs = stopwatch.elapsedMilliseconds;
@@ -285,7 +402,9 @@ class SftpTransferQueueWorker {
             break;
           }
 
-          final uint8Chunk = chunk is Uint8List ? chunk : Uint8List.fromList(chunk);
+          final uint8Chunk = chunk is Uint8List
+              ? chunk
+              : Uint8List.fromList(chunk);
           transferred += uint8Chunk.length;
 
           final nowMs = stopwatch.elapsedMilliseconds;
@@ -303,8 +422,25 @@ class SftpTransferQueueWorker {
       }
 
       await remoteFile.write(buildStream(), offset: 0);
-    } finally {
       await remoteFile.close();
+      remoteFile = null;
+      if (_cancelFlags[id] != true && _pauseFlags[id] != true) {
+        await client.rename(temporaryPath, item.destinationPath);
+        committed = true;
+      }
+    } finally {
+      if (remoteFile != null) {
+        try {
+          await remoteFile.close();
+        } catch (_) {}
+      }
+      // Only the temporary file belongs to this transfer. On failure or
+      // cancellation, preserve any pre-existing destination file.
+      if (!committed) {
+        try {
+          await client.remove(temporaryPath);
+        } catch (_) {}
+      }
     }
   }
 

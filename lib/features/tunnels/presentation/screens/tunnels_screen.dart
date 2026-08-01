@@ -53,7 +53,18 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
     );
 
     if (rule != null) {
-      await ref.read(tunnelsNotifierProvider.notifier).addRule(rule);
+      try {
+        await ref.read(tunnelsNotifierProvider.notifier).addRule(rule);
+      } catch (e) {
+        if (mounted) {
+          ShadToaster.of(context).show(
+            ShadToast.destructive(
+              title: const Text('Save Tunnel Error'),
+              description: Text('$e'),
+            ),
+          );
+        }
+      }
     }
   }
 
@@ -67,7 +78,18 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
     );
 
     if (updatedRule != null) {
-      await ref.read(tunnelsNotifierProvider.notifier).updateRule(updatedRule);
+      try {
+        await ref.read(tunnelsNotifierProvider.notifier).updateRule(updatedRule);
+      } catch (e) {
+        if (mounted) {
+          ShadToaster.of(context).show(
+            ShadToast.destructive(
+              title: const Text('Save Tunnel Error'),
+              description: Text('$e'),
+            ),
+          );
+        }
+      }
     }
   }
 

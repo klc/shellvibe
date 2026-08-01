@@ -75,7 +75,8 @@ void main() {
       expect(fetchedHost.username, isNull);
 
       // 4. Verify update operation with username column succeeds without SqliteException(1): no such column: username.
-      await appDb.hostsDao.updateHost(
+      await appDb.hostsDao.updateHostById(
+        'host-v1',
         fetchedHost.copyWith(username: Value('admin')),
       );
 

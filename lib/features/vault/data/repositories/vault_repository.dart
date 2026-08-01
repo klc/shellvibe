@@ -49,13 +49,22 @@ class VaultRepository {
     String? encPassphrase;
 
     if (password != null && password.isNotEmpty) {
-      encPassword = await encryptionEngine.encrypt(plaintext: password, secretKey: secretKey);
+      encPassword = await encryptionEngine.encrypt(
+        plaintext: password,
+        secretKey: secretKey,
+      );
     }
     if (privateKey != null && privateKey.isNotEmpty) {
-      encKey = await encryptionEngine.encrypt(plaintext: privateKey, secretKey: secretKey);
+      encKey = await encryptionEngine.encrypt(
+        plaintext: privateKey,
+        secretKey: secretKey,
+      );
     }
     if (passphrase != null && passphrase.isNotEmpty) {
-      encPassphrase = await encryptionEngine.encrypt(plaintext: passphrase, secretKey: secretKey);
+      encPassphrase = await encryptionEngine.encrypt(
+        plaintext: passphrase,
+        secretKey: secretKey,
+      );
     }
 
     final identityId = id ?? const Uuid().v4();
@@ -70,13 +79,20 @@ class VaultRepository {
       passwordEncrypted: Value(encPassword),
       privateKeyEncrypted: Value(encKey),
       passphraseEncrypted: Value(encPassphrase),
-      createdAt: Value(now),
+      // Keep the original creation date on edits.
+      createdAt: id == null ? Value(now) : const Value.absent(),
     );
 
     if (id == null) {
       await identitiesDao.insertIdentity(companion);
     } else {
-      await identitiesDao.updateIdentity(companion);
+      final updated = await identitiesDao.updateIdentityById(
+        identityId,
+        companion,
+      );
+      if (updated != 1) {
+        throw StateError('Identity not found: $identityId');
+      }
     }
 
     return IdentityModel(
@@ -95,7 +111,9 @@ class VaultRepository {
   /// Lists identities. With [decryptSecrets] the secrets are decrypted
   /// best-effort: a row whose secrets are unreadable is still returned, flagged
   /// with [IdentityModel.hasUndecryptableSecrets] instead of silently blank.
-  Future<List<IdentityModel>> getAllIdentities({bool decryptSecrets = false}) async {
+  Future<List<IdentityModel>> getAllIdentities({
+    bool decryptSecrets = false,
+  }) async {
     final rows = await identitiesDao.getAllIdentities();
     final result = <IdentityModel>[];
 
@@ -114,11 +132,24 @@ class VaultRepository {
 
       if (decryptSecrets && secretKey != null) {
         try {
-          password = await _decryptField(row.passwordEncrypted, secretKey, row.id, 'password');
-          privateKey =
-              await _decryptField(row.privateKeyEncrypted, secretKey, row.id, 'privateKey');
-          passphrase =
-              await _decryptField(row.passphraseEncrypted, secretKey, row.id, 'passphrase');
+          password = await _decryptField(
+            row.passwordEncrypted,
+            secretKey,
+            row.id,
+            'password',
+          );
+          privateKey = await _decryptField(
+            row.privateKeyEncrypted,
+            secretKey,
+            row.id,
+            'privateKey',
+          );
+          passphrase = await _decryptField(
+            row.passphraseEncrypted,
+            secretKey,
+            row.id,
+            'passphrase',
+          );
         } on SecretDecryptionException {
           undecryptable = true;
           password = null;
@@ -150,7 +181,10 @@ class VaultRepository {
   /// Throws [SecretDecryptionException] when [decryptSecrets] is set and a
   /// stored secret cannot be decrypted — callers must surface this rather than
   /// connecting with silently missing credentials.
-  Future<IdentityModel?> getIdentityById(String id, {bool decryptSecrets = true}) async {
+  Future<IdentityModel?> getIdentityById(
+    String id, {
+    bool decryptSecrets = true,
+  }) async {
     final row = await identitiesDao.getIdentityById(id);
     if (row == null) return null;
 
@@ -160,9 +194,24 @@ class VaultRepository {
 
     if (decryptSecrets) {
       final secretKey = await vaultKeyService.getDek();
-      password = await _decryptField(row.passwordEncrypted, secretKey, row.id, 'password');
-      privateKey = await _decryptField(row.privateKeyEncrypted, secretKey, row.id, 'privateKey');
-      passphrase = await _decryptField(row.passphraseEncrypted, secretKey, row.id, 'passphrase');
+      password = await _decryptField(
+        row.passwordEncrypted,
+        secretKey,
+        row.id,
+        'password',
+      );
+      privateKey = await _decryptField(
+        row.privateKeyEncrypted,
+        secretKey,
+        row.id,
+        'privateKey',
+      );
+      passphrase = await _decryptField(
+        row.passphraseEncrypted,
+        secretKey,
+        row.id,
+        'passphrase',
+      );
     }
 
     return IdentityModel(

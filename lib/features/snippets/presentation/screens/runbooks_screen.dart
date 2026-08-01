@@ -12,7 +12,8 @@ import '../widgets/variable_input_dialog.dart';
 
 class RunbooksScreen extends ConsumerStatefulWidget {
   final String workspaceId;
-  final Future<String> Function(String command, int timeoutSeconds)? customCommandRunner;
+  final Future<(String output, int exitCode)> Function(String command, int timeoutSeconds)?
+      customCommandRunner;
 
   const RunbooksScreen({
     super.key,
@@ -58,7 +59,7 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
         (String command, int timeoutSeconds) async {
           // Default fallback runner simulation if no active terminal runner passed
           await Future.delayed(const Duration(milliseconds: 500));
-          return 'Executed: $command\nStatus: OK';
+          return ('Executed: $command\nStatus: OK', 0);
         };
 
     final result = await ref.read(runbooksNotifierProvider.notifier).executeRunbook(

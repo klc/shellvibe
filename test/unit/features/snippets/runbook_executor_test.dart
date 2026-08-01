@@ -41,9 +41,9 @@ void main() {
         runbook,
         (command, timeoutSeconds) async {
           executedCommands.add(command);
-          if (command.contains('git pull')) return 'Already up to date.';
-          if (command.contains('docker-compose')) return 'Container App Running';
-          return 'OK';
+          if (command.contains('git pull')) return ('Already up to date.', 0);
+          if (command.contains('docker-compose')) return ('Container App Running', 0);
+          return ('OK', 0);
         },
       );
 
@@ -81,7 +81,7 @@ void main() {
         runbook,
         (command, timeout) async {
           executedCommands.add(command);
-          return 'UNHEALTHY - Connection refused';
+          return ('UNHEALTHY - Connection refused', 1);
         },
       );
 
@@ -113,7 +113,7 @@ void main() {
         runbook,
         (command, timeout) async {
           actualCommand = command;
-          return 'Done';
+          return ('Done', 0);
         },
         variableValues: {
           'AppName': 'AuthService',
@@ -123,6 +123,37 @@ void main() {
 
       expect(result.overallSuccess, isTrue);
       expect(actualCommand, equals('echo "Deploying AuthService to production"'));
+    });
+
+    test('Fails a step whose exit code does not match expectedExitCode', () async {
+      final runbook = RunbookModel(
+        id: 'rb_4',
+        workspaceId: 'ws_1',
+        title: 'Exit Code Gate',
+        createdAt: DateTime.now(),
+        steps: const [
+          RunbookStepModel(
+            id: 'step_1',
+            runbookId: 'rb_4',
+            stepOrder: 1,
+            command: 'command_that_fails',
+            expectedExitCode: 1,
+          ),
+        ],
+      );
+
+      final result = await executor.executeRunbook(
+        runbook,
+        (command, timeout) async => ('unused output', 0),
+      );
+
+      expect(result.overallSuccess, isFalse);
+      expect(result.failedStep?.id, equals('step_1'));
+      expect(result.stepResults.single.exitCode, equals(0));
+      expect(
+        result.stepResults.single.errorMessage,
+        contains('does not match expected 1'),
+      );
     });
   });
 }

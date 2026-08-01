@@ -26,14 +26,18 @@ final sftpServiceProvider = AutoDisposeProvider<SftpService>.internal(
 // ignore: unused_element
 typedef SftpServiceRef = AutoDisposeProviderRef<SftpService>;
 String _$sftpTransferQueueWorkerHash() =>
-    r'1f049534dba149a609dc622ea20db3ccef329ac5';
+    r'3dc947addffe8bb05c3e24d15f5c8d84f1cba919';
 
-/// Provider for [SftpTransferQueueWorker]
+/// Provider for [SftpTransferQueueWorker].
+///
+/// keepAlive: the transfer queue must survive screen navigation — an
+/// autoDispose worker would be torn down (closing the queue controller) while
+/// transfers are in flight, failing them mid-write and wiping the queue.
 ///
 /// Copied from [sftpTransferQueueWorker].
 @ProviderFor(sftpTransferQueueWorker)
 final sftpTransferQueueWorkerProvider =
-    AutoDisposeProvider<SftpTransferQueueWorker>.internal(
+    Provider<SftpTransferQueueWorker>.internal(
       sftpTransferQueueWorker,
       name: r'sftpTransferQueueWorkerProvider',
       debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
@@ -45,8 +49,7 @@ final sftpTransferQueueWorkerProvider =
 
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
-typedef SftpTransferQueueWorkerRef =
-    AutoDisposeProviderRef<SftpTransferQueueWorker>;
+typedef SftpTransferQueueWorkerRef = ProviderRef<SftpTransferQueueWorker>;
 String _$transferQueueStreamHash() =>
     r'b14b1f9d58eddd63be2303b43ac5b9638a0bee88';
 
@@ -69,21 +72,20 @@ final transferQueueStreamProvider =
 // ignore: unused_element
 typedef TransferQueueStreamRef =
     AutoDisposeStreamProviderRef<List<TransferItem>>;
-String _$sftpNotifierHash() => r'2ad5611d89947dd95481e32114938bb2f04425da';
+String _$sftpNotifierHash() => r'74e11e66ef3662c0d34bb07122433c22d517e6fa';
 
 /// See also [SftpNotifier].
 @ProviderFor(SftpNotifier)
-final sftpNotifierProvider =
-    AutoDisposeNotifierProvider<SftpNotifier, SftpState>.internal(
-      SftpNotifier.new,
-      name: r'sftpNotifierProvider',
-      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-          ? null
-          : _$sftpNotifierHash,
-      dependencies: null,
-      allTransitiveDependencies: null,
-    );
+final sftpNotifierProvider = NotifierProvider<SftpNotifier, SftpState>.internal(
+  SftpNotifier.new,
+  name: r'sftpNotifierProvider',
+  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+      ? null
+      : _$sftpNotifierHash,
+  dependencies: null,
+  allTransitiveDependencies: null,
+);
 
-typedef _$SftpNotifier = AutoDisposeNotifier<SftpState>;
+typedef _$SftpNotifier = Notifier<SftpState>;
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

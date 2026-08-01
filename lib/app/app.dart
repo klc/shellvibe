@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -21,6 +23,7 @@ class TerlyApp extends ConsumerStatefulWidget {
 
 class _TerlyAppState extends ConsumerState<TerlyApp> {
   late final AppLifecycleListener _lifecycleListener;
+  Timer? _autoLockTimer;
 
   @override
   void initState() {
@@ -30,16 +33,28 @@ class _TerlyAppState extends ConsumerState<TerlyApp> {
     );
   }
 
-  /// Locks the vault when the application enters a background or hidden state.
+  /// Locks the vault after the configured auto-lock delay when the app enters
+  /// a background or hidden state. Honors `autoLockTimerSeconds` (0 = disabled)
+  /// instead of locking instantly and unconditionally.
   void _onLifecycleChange(AppLifecycleState state) {
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden) {
-      ref.read(vaultNotifierProvider.notifier).lock();
+      final settings = ref.read(settingsNotifierProvider).value;
+      final delaySeconds = settings?.autoLockTimerSeconds ?? 0;
+      if (delaySeconds <= 0) return;
+      _autoLockTimer?.cancel();
+      _autoLockTimer = Timer(Duration(seconds: delaySeconds), () {
+        ref.read(vaultNotifierProvider.notifier).lock();
+      });
+    } else if (state == AppLifecycleState.resumed) {
+      _autoLockTimer?.cancel();
+      _autoLockTimer = null;
     }
   }
 
   @override
   void dispose() {
+    _autoLockTimer?.cancel();
     _lifecycleListener.dispose();
     super.dispose();
   }

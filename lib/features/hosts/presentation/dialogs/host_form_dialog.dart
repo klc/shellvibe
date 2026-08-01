@@ -316,8 +316,25 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                 // Jump Host Selection
                 hostsAsync.when(
                   data: (hosts) {
+                    final excludedJumpHostIds = <String>{};
+                    if (isEditing) {
+                      final editedId = widget.initialHost!.id;
+                      excludedJumpHostIds.add(editedId);
+                      final jumpTargets = {for (final h in hosts) h.id: h.jumpHostId};
+                      for (final h in hosts) {
+                        final visited = <String>{};
+                        var current = h.jumpHostId;
+                        while (current != null && visited.add(current)) {
+                          if (current == editedId) {
+                            excludedJumpHostIds.add(h.id);
+                            break;
+                          }
+                          current = jumpTargets[current];
+                        }
+                      }
+                    }
                     final candidateJumpHosts = hosts
-                        .where((h) => isEditing ? h.id != widget.initialHost!.id : true)
+                        .where((h) => !excludedJumpHostIds.contains(h.id))
                         .toList();
 
                     return ShadSelectFormField<String?>(

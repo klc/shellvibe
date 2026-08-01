@@ -32,22 +32,28 @@ class HostsRepository {
     final companion = HostsCompanion(
       id: Value(hostId),
       workspaceId: Value(workspaceId),
-      groupId: groupId != null ? Value(groupId) : const Value.absent(),
-      identityId: identityId != null ? Value(identityId) : const Value.absent(),
+      // A present null is required on edits so cleared optional fields are
+      // written as NULL instead of leaving the previous value untouched.
+      groupId: Value<String?>(groupId),
+      identityId: Value<String?>(identityId),
       label: Value(label),
       hostname: Value(hostname),
-      username: username != null ? Value(username) : const Value.absent(),
+      username: Value<String?>(username),
       port: Value(port),
       protocol: Value(protocol),
-      colorTag: colorTag != null ? Value(colorTag) : const Value.absent(),
-      jumpHostId: jumpHostId != null ? Value(jumpHostId) : const Value.absent(),
-      createdAt: Value(now),
+      colorTag: Value<String?>(colorTag),
+      jumpHostId: Value<String?>(jumpHostId),
+      // Keep the original creation date on edits.
+      createdAt: id == null ? Value(now) : const Value.absent(),
     );
 
     if (id == null) {
       await hostsDao.insertHost(companion);
     } else {
-      await hostsDao.updateHost(companion);
+      final updated = await hostsDao.updateHostById(hostId, companion);
+      if (updated != 1) {
+        throw StateError('Host not found: $hostId');
+      }
     }
 
     return HostModel(
@@ -129,15 +135,18 @@ class HostsRepository {
     final companion = HostGroupsCompanion(
       id: Value(groupId),
       workspaceId: Value(workspaceId),
-      parentId: parentId != null ? Value(parentId) : const Value.absent(),
+      parentId: Value<String?>(parentId),
       name: Value(name),
-      colorTag: colorTag != null ? Value(colorTag) : const Value.absent(),
+      colorTag: Value<String?>(colorTag),
     );
 
     if (id == null) {
       await hostsDao.insertHostGroup(companion);
     } else {
-      await hostsDao.updateHostGroup(companion);
+      final updated = await hostsDao.updateHostGroupById(groupId, companion);
+      if (updated != 1) {
+        throw StateError('Host group not found: $groupId');
+      }
     }
 
     return HostGroupModel(

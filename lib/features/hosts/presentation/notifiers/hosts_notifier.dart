@@ -52,6 +52,9 @@ class HostsNotifier extends _$HostsNotifier {
       state = AsyncData(items);
     } catch (e, st) {
       state = AsyncError<List<HostModel>>(e, st).copyWithPrevious(previousState);
+      // Rethrow so form dialogs can surface the failure instead of popping
+      // "success" while the host was never persisted.
+      rethrow;
     }
   }
 
@@ -89,6 +92,8 @@ class HostsNotifier extends _$HostsNotifier {
       state = AsyncData(items);
     } catch (e, st) {
       state = AsyncError<List<HostModel>>(e, st).copyWithPrevious(previousState);
+      // See addHost: rethrow so the edit dialog reports the failure.
+      rethrow;
     }
   }
 

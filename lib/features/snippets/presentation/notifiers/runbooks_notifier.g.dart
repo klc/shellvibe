@@ -42,7 +42,7 @@ final runbookExecutorProvider = AutoDisposeProvider<RunbookExecutor>.internal(
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef RunbookExecutorRef = AutoDisposeProviderRef<RunbookExecutor>;
-String _$runbooksNotifierHash() => r'a61083fef556856abb437a2663a1a1c33e5ccbd3';
+String _$runbooksNotifierHash() => r'1d3855e1d7ea9500b7c798bd45c09a94ecad9fbd';
 
 /// See also [RunbooksNotifier].
 @ProviderFor(RunbooksNotifier)

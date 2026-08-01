@@ -189,13 +189,16 @@ class _RunbookEditorDialogState extends State<RunbookEditorDialog> {
                             ],
                           ),
                           ShadInputFormField(
-                            key: Key('step_command_$idx'),
+                            key: ValueKey('step_command_${step.id}'),
                             initialValue: step.command,
                             label: const Text('Command'),
                             placeholder: const Text('docker-compose pull'),
                             validator: (val) => val.trim().isEmpty ? 'Command required' : null,
                             onChanged: (val) {
-                              _steps[idx] = step.copyWith(command: val);
+                              // Read the live element: `step` is the build-time
+                              // snapshot, so copying from it would silently
+                              // revert edits made to the other fields.
+                              _steps[idx] = _steps[idx].copyWith(command: val);
                             },
                           ),
                           const SizedBox(height: 8),
@@ -203,7 +206,7 @@ class _RunbookEditorDialogState extends State<RunbookEditorDialog> {
                             children: [
                               Expanded(
                                 child: ShadInputFormField(
-                                  key: Key('step_exit_code_$idx'),
+                                  key: ValueKey('step_exit_code_${step.id}'),
                                   initialValue: step.expectedExitCode.toString(),
                                   keyboardType: TextInputType.number,
                                   label: const Text('Exit Code'),
@@ -217,7 +220,8 @@ class _RunbookEditorDialogState extends State<RunbookEditorDialog> {
                                   onChanged: (val) {
                                     final code = int.tryParse(val.trim());
                                     if (code != null) {
-                                      _steps[idx] = step.copyWith(expectedExitCode: code);
+                                      _steps[idx] =
+                                          _steps[idx].copyWith(expectedExitCode: code);
                                     }
                                   },
                                 ),
@@ -225,11 +229,11 @@ class _RunbookEditorDialogState extends State<RunbookEditorDialog> {
                               const SizedBox(width: 8),
                               Expanded(
                                 child: ShadInputFormField(
-                                  key: Key('step_pattern_$idx'),
+                                  key: ValueKey('step_pattern_${step.id}'),
                                   initialValue: step.expectedOutputPattern ?? '',
                                   label: const Text('Output Regex / String'),
                                   onChanged: (val) {
-                                    _steps[idx] = step.copyWith(
+                                    _steps[idx] = _steps[idx].copyWith(
                                       expectedOutputPattern: val.isEmpty ? null : val,
                                     );
                                   },

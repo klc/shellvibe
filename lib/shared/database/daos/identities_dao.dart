@@ -31,7 +31,13 @@ class IdentitiesDao extends DatabaseAccessor<AppDatabase> with _$IdentitiesDaoMi
     return into(identities).insert(identity);
   }
 
-  Future<bool> updateIdentity(Insertable<Identity> identity) => update(identities).replace(identity);
+  /// Updates an existing identity by id.
+  ///
+  /// Deliberately not `update.replace`: replace is an UPSERT that would
+  /// resurrect a deleted row and clobber `createdAt` on every edit.
+  Future<int> updateIdentityById(String id, Insertable<Identity> identity) {
+    return (update(identities)..where((tbl) => tbl.id.equals(id))).write(identity);
+  }
 
   Future<int> deleteIdentity(String id) {
     return (delete(identities)..where((tbl) => tbl.id.equals(id))).go();
