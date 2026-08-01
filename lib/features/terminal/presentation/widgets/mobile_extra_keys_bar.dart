@@ -26,13 +26,56 @@ class _MobileExtraKeysBarState extends State<MobileExtraKeysBar> {
       if (ctrlChar != null) {
         output = ctrlChar;
       } else if (rawChar.length == 1) {
-        final code = rawChar.toUpperCase().codeUnitAt(0);
+        final code = rawChar.codeUnitAt(0);
         if (code >= 65 && code <= 90) {
           // A-Z -> ASCII 1-26
           output = String.fromCharCode(code - 64);
+        } else if (code >= 97 && code <= 122) {
+          // a-z -> ASCII 1-26
+          output = String.fromCharCode(code - 96);
+        } else {
+          // Symbols ASCII control code conversion
+          switch (rawChar) {
+            case '|':
+              output = '\x1c';
+              break;
+            case '~':
+              output = '\x1e';
+              break;
+            case '/':
+              output = '\x1f';
+              break;
+            case '-':
+              output = '\x1f';
+              break;
+            case '[':
+              output = '\x1b';
+              break;
+            case '\\':
+              output = '\x1c';
+              break;
+            case ']':
+              output = '\x1d';
+              break;
+            case '^':
+              output = '\x1e';
+              break;
+            case '_':
+              output = '\x1f';
+              break;
+            case '@':
+              output = '\x00';
+              break;
+            default:
+              if (code >= 32 && code <= 126) {
+                output = String.fromCharCode(code & 0x1F);
+              }
+          }
         }
       }
-    } else if (_altActive) {
+    }
+
+    if (_altActive) {
       output = '\x1b$output';
     }
 

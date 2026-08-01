@@ -11,8 +11,8 @@ class TerminalSSHBridge {
   final Terminal terminal;
   final SSHSession session;
 
-  StreamSubscription<Uint8List>? _stdoutSubscription;
-  StreamSubscription<Uint8List>? _stderrSubscription;
+  StreamSubscription<String>? _stdoutSubscription;
+  StreamSubscription<String>? _stderrSubscription;
   bool _isDisposed = false;
 
   /// Returns true if the bridge has been disposed.
@@ -37,32 +37,46 @@ class TerminalSSHBridge {
     };
 
     // 2. Wire remote output streams (stdout, stderr) from SSH session -> xterm Terminal
-    _stdoutSubscription = session.stdout.listen(
-      (Uint8List data) {
+    _stdoutSubscription = session.stdout
+        .cast<List<int>>()
+        .transform(const Utf8Decoder(allowMalformed: true))
+        .listen(
+      (String data) {
         if (_isDisposed) return;
-        terminal.write(utf8.decode(data, allowMalformed: true));
+        terminal.write(data);
       },
       onError: (Object error) {
         if (_isDisposed) return;
         terminal.write('\r\n[SSH stdout error: $error]\r\n');
       },
+      onDone: _onStreamDone,
     );
 
-    _stderrSubscription = session.stderr.listen(
-      (Uint8List data) {
+    _stderrSubscription = session.stderr
+        .cast<List<int>>()
+        .transform(const Utf8Decoder(allowMalformed: true))
+        .listen(
+      (String data) {
         if (_isDisposed) return;
-        terminal.write(utf8.decode(data, allowMalformed: true));
+        terminal.write(data);
       },
       onError: (Object error) {
         if (_isDisposed) return;
         terminal.write('\r\n[SSH stderr error: $error]\r\n');
       },
+      onDone: _onStreamDone,
     );
 
     // 3. Wire window resize event from xterm Terminal -> SSH session terminal resize
     terminal.onResize = (int width, int height, int pixelWidth, int pixelHeight) {
       resizeTerminal(width, height, pixelWidth, pixelHeight);
     };
+  }
+
+  void _onStreamDone() {
+    if (_isDisposed) return;
+    terminal.write('\r\n\x1b[1;33m[Session closed / Process exited]\x1b[0m\r\n');
+    dispose();
   }
 
   /// Resizes the remote SSH session terminal dimensions to [width] columns and [height] rows.

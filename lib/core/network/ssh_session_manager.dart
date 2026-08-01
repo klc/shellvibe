@@ -63,6 +63,7 @@ class SSHSessionManager {
   SSHSocket? _socket;
   Timer? _keepAliveTimer;
   bool _isConnected = false;
+  bool _isPromptingHostKey = false;
 
   SSHSessionManager({this.knownHostsDao});
 
@@ -121,12 +122,7 @@ class SSHSessionManager {
 
     // 4. Wait for SSH authentication handshake with timeout
     try {
-      await client.authenticated.timeout(
-        config.timeout,
-        onTimeout: () {
-          throw TimeoutException('SSH authentication handshake timed out after ${config.timeout.inSeconds}s');
-        },
-      );
+      await _waitForAuthenticated(client, config.timeout);
       _client = client;
       _isConnected = true;
 
@@ -138,6 +134,38 @@ class SSHSessionManager {
     } catch (e) {
       await close();
       throw Exception('SSH authentication failed for ${config.username}@${config.hostname}: $e');
+    }
+  }
+
+  Future<void> _waitForAuthenticated(SSHClient client, Duration timeout) async {
+    DateTime deadline = DateTime.now().add(timeout);
+
+    while (true) {
+      if (_isPromptingHostKey) {
+        await Future.delayed(const Duration(milliseconds: 200));
+        deadline = DateTime.now().add(timeout);
+        continue;
+      }
+
+      final remaining = deadline.difference(DateTime.now());
+      if (remaining.isNegative) {
+        throw TimeoutException(
+          'SSH authentication handshake timed out after ${timeout.inSeconds}s',
+        );
+      }
+
+      try {
+        await client.authenticated.timeout(remaining);
+        return;
+      } on TimeoutException {
+        if (_isPromptingHostKey) {
+          deadline = DateTime.now().add(timeout);
+          continue;
+        }
+        throw TimeoutException(
+          'SSH authentication handshake timed out after ${timeout.inSeconds}s',
+        );
+      }
     }
   }
 
@@ -179,13 +207,18 @@ class SSHSessionManager {
           // Host key mismatch! Prompt user via callback.
           bool approve = false;
           if (promptCallback != null) {
-            approve = await promptCallback(
-              hostname,
-              port,
-              keyType,
-              fingerprint,
-              HostKeyVerificationStatus.mismatch,
-            );
+            _isPromptingHostKey = true;
+            try {
+              approve = await promptCallback(
+                hostname,
+                port,
+                keyType,
+                fingerprint,
+                HostKeyVerificationStatus.mismatch,
+              );
+            } finally {
+              _isPromptingHostKey = false;
+            }
           }
 
           if (approve) {
@@ -207,13 +240,18 @@ class SSHSessionManager {
         // Unknown host (First connection)
         bool approve = true;
         if (promptCallback != null) {
-          approve = await promptCallback(
-            hostname,
-            port,
-            keyType,
-            fingerprint,
-            HostKeyVerificationStatus.unknown,
-          );
+          _isPromptingHostKey = true;
+          try {
+            approve = await promptCallback(
+              hostname,
+              port,
+              keyType,
+              fingerprint,
+              HostKeyVerificationStatus.unknown,
+            );
+          } finally {
+            _isPromptingHostKey = false;
+          }
         }
 
         if (approve) {
@@ -234,13 +272,18 @@ class SSHSessionManager {
 
     // Fallback if no DAO provided
     if (promptCallback != null) {
-      return await promptCallback(
-        hostname,
-        port,
-        keyType,
-        fingerprint,
-        HostKeyVerificationStatus.unknown,
-      );
+      _isPromptingHostKey = true;
+      try {
+        return await promptCallback(
+          hostname,
+          port,
+          keyType,
+          fingerprint,
+          HostKeyVerificationStatus.unknown,
+        );
+      } finally {
+        _isPromptingHostKey = false;
+      }
     }
     return true;
   }
@@ -278,9 +321,15 @@ class SSHSessionManager {
       try {
         await activeClient.ping();
       } catch (_) {
+        _keepAliveTimer?.cancel();
+        _keepAliveTimer = null;
         _isConnected = false;
         // Ping failed, connection may have been dropped
       }
+    } else {
+      _keepAliveTimer?.cancel();
+      _keepAliveTimer = null;
+      _isConnected = false;
     }
   }
 

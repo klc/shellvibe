@@ -97,5 +97,59 @@ void main() {
       await tester.tap(find.byKey(const Key('key_dash')));
       expect(emittedData, equals('-'));
     });
+
+    testWidgets('Combined Ctrl + Alt active emits ESC prefix and Ctrl transformed character', (tester) async {
+      String? emittedData;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MobileExtraKeysBar(
+              onInput: (data) => emittedData = data,
+            ),
+          ),
+        ),
+      );
+
+      // Tap Ctrl and Alt
+      await tester.tap(find.byKey(const Key('key_ctrl')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('key_alt')));
+      await tester.pump();
+
+      // Tap pipe '|' -> Ctrl+| is \x1c, with Alt prefix -> \x1b\x1c
+      await tester.tap(find.byKey(const Key('key_pipe')));
+      await tester.pump();
+
+      expect(emittedData, equals('\x1b\x1c'));
+    });
+
+    testWidgets('Ctrl modifier transforms symbols to ASCII control codes', (tester) async {
+      String? emittedData;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MobileExtraKeysBar(
+              onInput: (data) => emittedData = data,
+            ),
+          ),
+        ),
+      );
+
+      // Ctrl + '|' -> \x1c
+      await tester.tap(find.byKey(const Key('key_ctrl')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('key_pipe')));
+      await tester.pump();
+      expect(emittedData, equals('\x1c'));
+
+      // Ctrl + '~' -> \x1e
+      await tester.tap(find.byKey(const Key('key_ctrl')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('key_tilde')));
+      await tester.pump();
+      expect(emittedData, equals('\x1e'));
+    });
   });
 }

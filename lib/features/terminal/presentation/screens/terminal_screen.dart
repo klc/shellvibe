@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:xterm2/xterm.dart';
@@ -9,12 +10,12 @@ import '../widgets/mobile_extra_keys_bar.dart';
 
 class TerminalScreen extends ConsumerStatefulWidget {
   final TerminalTabSession session;
-  final bool showExtraKeys;
+  final bool? showExtraKeys;
 
   const TerminalScreen({
     super.key,
     required this.session,
-    this.showExtraKeys = true,
+    this.showExtraKeys,
   });
 
   @override
@@ -143,6 +144,10 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
       AppPalette.nord => _nordTheme,
     };
 
+    final shouldShowExtraKeys = widget.showExtraKeys ??
+        (defaultTargetPlatform == TargetPlatform.iOS ||
+            defaultTargetPlatform == TargetPlatform.android);
+
     return Column(
       children: [
         if (session.isConnecting)
@@ -181,7 +186,7 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
             ),
           ),
         ),
-        if (widget.showExtraKeys)
+        if (shouldShowExtraKeys)
           MobileExtraKeysBar(
             terminal: session.terminal,
           ),
