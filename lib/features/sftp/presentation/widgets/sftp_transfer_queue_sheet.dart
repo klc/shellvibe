@@ -44,6 +44,7 @@ class SftpTransferQueueSheet extends ConsumerWidget {
                 ),
                 IconButton(
                   icon: const Icon(Icons.close),
+                  tooltip: 'Close Queue',
                   onPressed: () => Navigator.of(context).pop(),
                 ),
               ],
@@ -185,22 +186,26 @@ class _TransferTile extends ConsumerWidget {
         if (item.status == TransferStatus.inProgress)
           IconButton(
             icon: const Icon(Icons.pause, size: 18),
+            tooltip: 'Pause Transfer',
             onPressed: () => worker.pauseTransfer(item.id),
           )
         else if (item.status == TransferStatus.paused && client != null)
           IconButton(
             icon: const Icon(Icons.play_arrow, size: 18),
+            tooltip: 'Resume Transfer',
             onPressed: () => worker.resumeTransfer(client, item.id),
           )
         else if ((item.status == TransferStatus.failed || item.status == TransferStatus.cancelled) &&
             client != null)
           IconButton(
             icon: const Icon(Icons.refresh, size: 18),
+            tooltip: 'Retry Transfer',
             onPressed: () => worker.retryTransfer(client, item.id),
           ),
         if (item.status == TransferStatus.inProgress || item.status == TransferStatus.pending || item.status == TransferStatus.paused)
           IconButton(
             icon: const Icon(Icons.close, size: 18),
+            tooltip: 'Cancel Transfer',
             onPressed: () => worker.cancelTransfer(item.id),
           ),
       ],

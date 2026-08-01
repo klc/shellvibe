@@ -100,6 +100,7 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh Rules',
             onPressed: () => ref.read(tunnelsNotifierProvider.notifier).loadRules(widget.filterHostId),
           ),
         ],
