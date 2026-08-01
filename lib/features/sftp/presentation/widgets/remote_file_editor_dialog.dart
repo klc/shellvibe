@@ -184,6 +184,14 @@ class _RemoteFileEditorDialogState extends ConsumerState<RemoteFileEditorDialog>
                 ],
               ),
             ),
+            const SizedBox(width: 8),
+            Tooltip(
+              message: 'Close',
+              child: ShadIconButton.ghost(
+                icon: const Icon(Icons.close, size: 18),
+                onPressed: _handleClose,
+              ),
+            ),
           ],
         ),
         actions: [
