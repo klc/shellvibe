@@ -119,7 +119,7 @@ void main() {
     );
 
     test(
-      'Host key mismatch is denied before invoking a trust prompt',
+      'Host key mismatch invokes prompt callback with mismatch status and denies connection',
       () async {
         const hostname = 'secure.example.com';
         const port = 22;
@@ -150,13 +150,13 @@ void main() {
           },
         );
 
-        expect(capturedStatus, isNull);
+        expect(capturedStatus, equals(HostKeyVerificationStatus.mismatch));
         expect(verified, isFalse);
       },
     );
 
     test(
-      'Host key mismatch is denied and never updates database even if prompt approves',
+      'Host key mismatch invokes prompt callback with mismatch status and never updates database',
       () async {
         const hostname = 'secure.example.com';
         const port = 2222;
@@ -188,7 +188,7 @@ void main() {
           },
         );
 
-        expect(capturedStatus, isNull);
+        expect(capturedStatus, equals(HostKeyVerificationStatus.mismatch));
         expect(verified, isFalse);
 
         // The original trusted key remains unchanged.

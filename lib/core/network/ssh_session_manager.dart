@@ -275,6 +275,20 @@ class SSHSessionManager {
           // flow. Updating known_hosts requires a separate, explicitly
           // verified key-rotation operation; a prompt alone cannot establish
           // that the new key belongs to the intended server.
+          if (promptCallback != null) {
+            _isPromptingHostKey = true;
+            try {
+              await promptCallback(
+                hostname,
+                port,
+                keyType,
+                fingerprint,
+                HostKeyVerificationStatus.mismatch,
+              );
+            } finally {
+              _isPromptingHostKey = false;
+            }
+          }
           return false;
         }
       } else {

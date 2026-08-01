@@ -8,6 +8,7 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'package:terly2/features/hosts/domain/models/host_model.dart';
 import 'package:terly2/features/hosts/presentation/screens/hosts_screen.dart';
+import 'package:terly2/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import 'package:terly2/shared/database/app_database.dart';
 import 'package:terly2/shared/providers/database_providers.dart';
 
@@ -137,6 +138,56 @@ void main() {
       expect(find.byKey(const Key('host_label_input')), findsOneWidget);
       expect(find.byKey(const Key('host_hostname_input')), findsOneWidget);
       expect(find.byKey(const Key('host_username_input')), findsOneWidget);
+    });
+
+    testWidgets('Triggers defaultConnectHost opening tab when onConnectHost is null', (tester) async {
+      await db.hostsDao.insertHost(
+        HostsCompanion.insert(
+          id: 'host-2',
+          workspaceId: 'default',
+          label: 'Default Host Test',
+          hostname: '192.168.1.101',
+          username: const Value('root'),
+          port: const Value(22),
+          createdAt: DateTime.now(),
+        ),
+      );
+
+      final container = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+        ],
+      );
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: ShadTheme(
+            data: ShadThemeData(
+              colorScheme: const ShadSlateColorScheme.light(),
+              brightness: Brightness.light,
+            ),
+            child: const MaterialApp(
+              home: HostsScreen(),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      final connectButton = find.byKey(const Key('connect_host_host-2'));
+      expect(connectButton, findsOneWidget);
+
+      await tester.tap(connectButton);
+      await tester.pump();
+
+      final tabsState = container.read(terminalTabsNotifierProvider);
+      expect(tabsState.tabs.length, equals(1));
+      expect(tabsState.tabs.first.title, equals('Default Host Test'));
+
+      await container.read(terminalTabsNotifierProvider.notifier).closeTab(tabsState.tabs.first.id);
+      await tester.pump(const Duration(seconds: 16));
     });
   });
 }

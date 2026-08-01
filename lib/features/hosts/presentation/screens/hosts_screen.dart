@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
+import '../../../terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import '../dialogs/host_form_dialog.dart';
 import '../dialogs/host_group_form_dialog.dart';
 import '../notifiers/host_groups_notifier.dart';
@@ -124,7 +126,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
                             onEditHost: (h) =>
                                 _openHostForm(context, initialHost: h),
                             onDeleteHost: (h) => _deleteHost(context, h),
-                            onConnectHost: widget.onConnectHost,
+                            onConnectHost: _onConnectHost,
                           );
                         } else if (item is String &&
                             item == 'UNGROUPED_HEADER') {
@@ -149,7 +151,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
                             onEdit: () =>
                                 _openHostForm(context, initialHost: item),
                             onDelete: () => _deleteHost(context, item),
-                            onConnect: () => widget.onConnectHost?.call(item),
+                            onConnect: () => _onConnectHost(item),
                           );
                         }
 
@@ -170,6 +172,21 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
         ],
       ),
     );
+  }
+
+  void _defaultConnectHost(HostModel host) {
+    ref.read(terminalTabsNotifierProvider.notifier).openTabForHost(host);
+    if (mounted) {
+      GoRouter.maybeOf(context)?.go('/terminal');
+    }
+  }
+
+  void _onConnectHost(HostModel host) {
+    if (widget.onConnectHost != null) {
+      widget.onConnectHost!(host);
+    } else {
+      _defaultConnectHost(host);
+    }
   }
 
   void _openHostForm(BuildContext context, {HostModel? initialHost}) {
