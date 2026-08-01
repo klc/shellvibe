@@ -10,18 +10,27 @@ class SftpService {
   static const int defaultMaxReadFileSizeBytes = 10 * 1024 * 1024;
 
   /// List items in a remote directory
-  Future<List<SftpFileItem>> listDirectory(SftpClient client, String path) async {
+  Future<List<SftpFileItem>> listDirectory(
+    SftpClient client,
+    String path,
+  ) async {
     final sftpNames = <SftpName>[];
     await for (final chunk in client.readdir(path)) {
       sftpNames.addAll(chunk);
     }
 
-    // Exclude '.' and '..' entries
-    final filtered = sftpNames.where(
-      (item) => item.filename != '.' && item.filename != '..',
-    );
+    // Exclude '.' and '..' entries, and mitigate path traversal (slip attacks)
+    final filtered = sftpNames.where((item) {
+      final name = item.filename;
+      if (name == '.' || name == '..') return false;
+      // Mitigate path traversal attacks from malicious servers
+      if (name.contains('/') || name.contains('\\')) return false;
+      return true;
+    });
 
-    final items = filtered.map((item) => SftpFileItem.fromSftpName(item, path)).toList();
+    final items = filtered
+        .map((item) => SftpFileItem.fromSftpName(item, path))
+        .toList();
 
     // Sort: Directories first, then files alphabetically
     items.sort((a, b) {
@@ -68,7 +77,8 @@ class SftpService {
         );
       }
     } catch (e) {
-      if (e is Exception && e.toString().contains('Use readFileStream or downloadToFile')) {
+      if (e is Exception &&
+          e.toString().contains('Use readFileStream or downloadToFile')) {
         rethrow;
       }
       // Stat check failed or unsupported by remote SFTP server; fallback to chunk-level limit check below.
@@ -150,13 +160,18 @@ class SftpService {
     final total = await localFile.length();
     final remoteFile = await client.open(
       remotePath,
-      mode: SftpFileOpenMode.create | SftpFileOpenMode.write | SftpFileOpenMode.truncate,
+      mode:
+          SftpFileOpenMode.create |
+          SftpFileOpenMode.write |
+          SftpFileOpenMode.truncate,
     );
 
     try {
       int transferred = 0;
       final inputStream = localFile.openRead().map((chunk) {
-        final uint8Chunk = chunk is Uint8List ? chunk : Uint8List.fromList(chunk);
+        final uint8Chunk = chunk is Uint8List
+            ? chunk
+            : Uint8List.fromList(chunk);
         transferred += uint8Chunk.length;
         if (onProgress != null) {
           onProgress(transferred, total);
@@ -179,7 +194,10 @@ class SftpService {
   }) async {
     final file = await client.open(
       path,
-      mode: SftpFileOpenMode.create | SftpFileOpenMode.write | SftpFileOpenMode.truncate,
+      mode:
+          SftpFileOpenMode.create |
+          SftpFileOpenMode.write |
+          SftpFileOpenMode.truncate,
     );
     try {
       const chunkSize = 32 * 1024; // 32 KB chunks
@@ -215,7 +233,11 @@ class SftpService {
   }
 
   /// Delete remote file or directory
-  Future<void> deleteItem(SftpClient client, String path, {required bool isDirectory}) async {
+  Future<void> deleteItem(
+    SftpClient client,
+    String path, {
+    required bool isDirectory,
+  }) async {
     if (isDirectory) {
       await client.rmdir(path);
     } else {
@@ -224,22 +246,32 @@ class SftpService {
   }
 
   /// Rename or move remote file/directory
-  Future<void> renameItem(SftpClient client, String oldPath, String newPath) async {
+  Future<void> renameItem(
+    SftpClient client,
+    String oldPath,
+    String newPath,
+  ) async {
     await client.rename(oldPath, newPath);
   }
 
   /// Change file/directory permissions
-  Future<void> changePermissions(SftpClient client, String path, int permissions) async {
+  Future<void> changePermissions(
+    SftpClient client,
+    String path,
+    int permissions,
+  ) async {
     final attr = SftpFileAttrs(mode: SftpFileMode.value(permissions));
     await client.setStat(path, attr);
   }
 
   /// Change file owner / group IDs
-  Future<void> changeOwner(SftpClient client, String path, {int? uid, int? gid}) async {
-    final attr = SftpFileAttrs(
-      userID: uid,
-      groupID: gid,
-    );
+  Future<void> changeOwner(
+    SftpClient client,
+    String path, {
+    int? uid,
+    int? gid,
+  }) async {
+    final attr = SftpFileAttrs(userID: uid, groupID: gid);
     await client.setStat(path, attr);
   }
 }
