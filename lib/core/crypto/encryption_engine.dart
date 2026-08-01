@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:isolate';
 import 'dart:typed_data';
 import 'package:cryptography/cryptography.dart';
 
@@ -92,6 +93,40 @@ class EncryptionEngine {
       return base64.encode(builder.toBytes());
     } catch (e) {
       throw CryptoException('Failed to encrypt payload using AES-256-GCM', e);
+    }
+  }
+
+  /// Derives a 256-bit [SecretKey] in a background isolate to avoid
+  /// blocking the UI thread during the expensive Argon2id computation.
+  ///
+  /// KDF parameters are duplicated inline because [Isolate.run] closures
+  /// cannot capture non-sendable instance fields.
+  Future<SecretKey> deriveMasterKeyInBackground({
+    required String masterPassword,
+    required Uint8List salt,
+  }) async {
+    try {
+      final keyBytes = await Isolate.run(() async {
+        final kdf = Argon2id(
+          parallelism: 1,
+          memory: 65536,
+          iterations: 3,
+          hashLength: 32,
+        );
+        final passwordBytes = utf8.encode(masterPassword);
+        final secretKey = SecretKey(passwordBytes);
+        final derivedKey = await kdf.deriveKey(
+          secretKey: secretKey,
+          nonce: salt,
+        );
+        return await derivedKey.extractBytes();
+      });
+      return SecretKey(keyBytes);
+    } catch (e) {
+      throw CryptoException(
+        'Failed to derive master key in background isolate',
+        e,
+      );
     }
   }
 

@@ -1,27 +1,56 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:terly2/app/router/app_router.dart';
-import 'package:terly2/app/theme/app_theme.dart';
-import 'package:terly2/features/settings/domain/models/app_settings_model.dart';
-import 'package:terly2/features/settings/presentation/notifiers/settings_notifier.dart';
 
-class TerlyApp extends ConsumerWidget {
+import '../features/vault/presentation/notifiers/vault_notifier.dart';
+import 'router/app_router.dart';
+import 'theme/app_theme.dart';
+
+/// Root application widget.
+///
+/// Converts to [ConsumerStatefulWidget] to install an [AppLifecycleListener]
+/// that auto-locks the vault when the app moves to the background.
+class TerlyApp extends ConsumerStatefulWidget {
   const TerlyApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final router = ref.watch(appRouterProvider);
-    final settingsAsync = ref.watch(settingsNotifierProvider);
-    final settings = settingsAsync.value ?? const AppSettingsModel();
+  ConsumerState<TerlyApp> createState() => _TerlyAppState();
+}
 
-    final themeData = AppTheme.buildTheme(settings);
+class _TerlyAppState extends ConsumerState<TerlyApp> {
+  late final AppLifecycleListener _lifecycleListener;
+
+  @override
+  void initState() {
+    super.initState();
+    _lifecycleListener = AppLifecycleListener(
+      onStateChange: _onLifecycleChange,
+    );
+  }
+
+  /// Locks the vault when the application enters a background or hidden state.
+  void _onLifecycleChange(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      ref.read(vaultNotifierProvider.notifier).lock();
+    }
+  }
+
+  @override
+  void dispose() {
+    _lifecycleListener.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final router = ref.watch(appRouterProvider);
 
     return MaterialApp.router(
-      title: 'Terly2',
+      title: 'Terly',
       debugShowCheckedModeBanner: false,
-      theme: themeData,
-      darkTheme: themeData,
-      themeMode: settings.themeMode,
+      theme: AppTheme.darkTheme,
+      darkTheme: AppTheme.darkTheme,
+      themeMode: ThemeMode.dark,
       routerConfig: router,
     );
   }
