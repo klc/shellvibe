@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 
+import '../features/settings/domain/models/app_settings_model.dart';
+import '../features/settings/presentation/notifiers/settings_notifier.dart';
 import '../features/vault/presentation/notifiers/vault_notifier.dart';
 import 'router/app_router.dart';
 import 'theme/app_theme.dart';
@@ -44,14 +47,18 @@ class _TerlyAppState extends ConsumerState<TerlyApp> {
   @override
   Widget build(BuildContext context) {
     final router = ref.watch(appRouterProvider);
+    final settingsAsync = ref.watch(settingsNotifierProvider);
+    final settings = settingsAsync.value ?? const AppSettingsModel();
 
-    return MaterialApp.router(
+    return ShadApp.router(
       title: 'Terly',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.darkTheme,
-      darkTheme: AppTheme.darkTheme,
-      themeMode: ThemeMode.dark,
+      theme: AppTheme.buildShadTheme(settings.copyWith(themeMode: ThemeMode.light)),
+      darkTheme: AppTheme.buildShadTheme(settings),
+      themeMode: settings.themeMode,
+      materialThemeBuilder: (context, theme) => AppTheme.buildTheme(settings),
       routerConfig: router,
     );
   }
 }
+

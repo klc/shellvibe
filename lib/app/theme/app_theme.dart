@@ -1,8 +1,55 @@
 import 'package:flutter/material.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 import '../../features/settings/domain/models/app_settings_model.dart';
 
 class AppTheme {
   static ThemeData get darkTheme => buildTheme(const AppSettingsModel());
+
+  static ShadThemeData get darkShadTheme => buildShadTheme(const AppSettingsModel());
+  static ShadThemeData get lightShadTheme => buildShadTheme(const AppSettingsModel(themeMode: ThemeMode.light));
+
+  static ShadThemeData buildShadTheme(AppSettingsModel settings) {
+    final isDark = settings.themeMode != ThemeMode.light;
+
+    ShadColorScheme colorScheme;
+    switch (settings.palette) {
+      case AppPalette.oled:
+        colorScheme = const ShadSlateColorScheme.dark(
+          background: Color(0xFF000000),
+          card: Color(0xFF121212),
+          primary: Color(0xFF00E676),
+        );
+        break;
+      case AppPalette.catppuccin:
+        colorScheme = const ShadSlateColorScheme.dark(
+          background: Color(0xFF1E1E2E),
+          card: Color(0xFF181825),
+          primary: Color(0xFF8AADF4),
+        );
+        break;
+      case AppPalette.nord:
+        colorScheme = const ShadSlateColorScheme.dark(
+          background: Color(0xFF2E3440),
+          card: Color(0xFF3B4252),
+          primary: Color(0xFF88C0D0),
+        );
+        break;
+      case AppPalette.dark:
+        colorScheme = isDark
+            ? const ShadSlateColorScheme.dark(
+                background: Color(0xFF0F172A),
+                card: Color(0xFF1E293B),
+                primary: Color(0xFF38BDF8),
+              )
+            : const ShadSlateColorScheme.light();
+        break;
+    }
+
+    return ShadThemeData(
+      brightness: isDark ? Brightness.dark : Brightness.light,
+      colorScheme: colorScheme,
+    );
+  }
 
   static ThemeData buildTheme(AppSettingsModel settings) {
     Color scaffoldBg;
@@ -60,3 +107,4 @@ class AppTheme {
     );
   }
 }
+

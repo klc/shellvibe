@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../../features/settings/presentation/notifiers/settings_notifier.dart';
 import '../../features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
@@ -31,56 +33,56 @@ class NavigationItemData {
 const List<NavigationItemData> appNavigationItems = [
   NavigationItemData(
     label: 'Hosts',
-    icon: Icons.dns_outlined,
-    selectedIcon: Icons.dns,
+    icon: LucideIcons.server,
+    selectedIcon: LucideIcons.server,
     path: '/hosts',
     shortcut: '⌘1',
     tooltip: 'SSH & Remote Hosts (Cmd+1)',
   ),
   NavigationItemData(
     label: 'Terminal',
-    icon: Icons.terminal_outlined,
-    selectedIcon: Icons.terminal,
+    icon: LucideIcons.terminal,
+    selectedIcon: LucideIcons.terminal,
     path: '/terminal',
     shortcut: '⌘2',
     tooltip: 'Terminal Workstation (Cmd+2)',
   ),
   NavigationItemData(
     label: 'Vault',
-    icon: Icons.shield_outlined,
-    selectedIcon: Icons.shield,
+    icon: LucideIcons.shieldCheck,
+    selectedIcon: LucideIcons.shieldCheck,
     path: '/vault',
     shortcut: '⌘3',
     tooltip: 'Credentials & Key Vault (Cmd+3)',
   ),
   NavigationItemData(
     label: 'SFTP',
-    icon: Icons.folder_zip_outlined,
-    selectedIcon: Icons.folder_zip,
+    icon: LucideIcons.folderSync,
+    selectedIcon: LucideIcons.folderSync,
     path: '/sftp',
     shortcut: '⌘4',
     tooltip: 'Dual-Pane SFTP Manager (Cmd+4)',
   ),
   NavigationItemData(
     label: 'Tunnels',
-    icon: Icons.alt_route_outlined,
-    selectedIcon: Icons.alt_route,
+    icon: LucideIcons.network,
+    selectedIcon: LucideIcons.network,
     path: '/tunnels',
     shortcut: '⌘5',
     tooltip: 'Port Forwarding Tunnels (Cmd+5)',
   ),
   NavigationItemData(
     label: 'Snippets',
-    icon: Icons.bolt_outlined,
-    selectedIcon: Icons.bolt,
+    icon: LucideIcons.zap,
+    selectedIcon: LucideIcons.zap,
     path: '/snippets',
     shortcut: '⌘6',
     tooltip: 'Snippets & Runbooks (Cmd+6)',
   ),
   NavigationItemData(
     label: 'Settings',
-    icon: Icons.settings_outlined,
-    selectedIcon: Icons.settings,
+    icon: LucideIcons.settings,
+    selectedIcon: LucideIcons.settings,
     path: '/settings',
     shortcut: '⌘7',
     tooltip: 'Application Settings (Cmd+7)',
