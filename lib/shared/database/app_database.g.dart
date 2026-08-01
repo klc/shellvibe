@@ -2157,6 +2157,10 @@ class $KnownHostsTable extends KnownHosts
   @override
   Set<GeneratedColumn> get $primaryKey => {id};
   @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {hostname, port},
+  ];
+  @override
   KnownHost map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return KnownHost(

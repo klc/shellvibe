@@ -143,7 +143,19 @@ class Socks5ProxyServer {
       final targetPort = (portBytes[0] << 8) | portBytes[1];
 
       // Step 3: Open SSH channel to destination target
-      final sshChannel = await sshClient.forwardLocal(targetHost, targetPort);
+      SSHForwardChannel sshChannel;
+      try {
+        sshChannel = await sshClient.forwardLocal(targetHost, targetPort);
+      } catch (_) {
+        try {
+          clientSocket.add([0x05, 0x04, 0x00, 0x01, 0, 0, 0, 0, 0, 0]);
+          await clientSocket.flush();
+        } catch (_) {}
+        await reader.detach();
+        _activeSockets.remove(clientSocket);
+        clientSocket.destroy();
+        return;
+      }
       _activeChannels.add(sshChannel);
 
       // Detach reader before piping directly from clientSocket
@@ -226,6 +238,13 @@ class Socks5ProxyServer {
         _activeSubscriptions.remove(sub2);
       }
     } catch (_) {
+      if (_activeChannels.isNotEmpty) {
+        // Find channels associated or close all remaining channels in exception
+        for (final ch in List<SSHForwardChannel>.from(_activeChannels)) {
+          ch.close();
+        }
+        _activeChannels.clear();
+      }
       await reader.detach();
       _activeSockets.remove(clientSocket);
       clientSocket.destroy();

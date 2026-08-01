@@ -69,7 +69,7 @@ final transferQueueStreamProvider =
 // ignore: unused_element
 typedef TransferQueueStreamRef =
     AutoDisposeStreamProviderRef<List<TransferItem>>;
-String _$sftpNotifierHash() => r'090a95bd6ec86a1adcf0a06b53129b35449626d1';
+String _$sftpNotifierHash() => r'2ad5611d89947dd95481e32114938bb2f04425da';
 
 /// See also [SftpNotifier].
 @ProviderFor(SftpNotifier)

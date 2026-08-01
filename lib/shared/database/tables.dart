@@ -69,6 +69,11 @@ class KnownHosts extends Table {
 
   @override
   Set<Column> get primaryKey => {id};
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+        {hostname, port}
+      ];
 }
 
 /// 6. Port Forward Rules Table

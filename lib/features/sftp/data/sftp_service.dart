@@ -112,6 +112,7 @@ class SftpService {
     final localFile = File(localPath);
     final sink = localFile.openWrite();
     int count = 0;
+    bool success = false;
 
     try {
       await for (final chunk in readFileStream(client, remotePath)) {
@@ -122,8 +123,14 @@ class SftpService {
         }
       }
       await sink.flush();
+      success = true;
     } finally {
       await sink.close();
+      if (!success && await localFile.exists()) {
+        try {
+          await localFile.delete();
+        } catch (_) {}
+      }
     }
   }
 
@@ -148,16 +155,16 @@ class SftpService {
 
     try {
       int transferred = 0;
-      final stream = localFile.openRead();
-
-      await for (final chunk in stream) {
+      final inputStream = localFile.openRead().map((chunk) {
         final uint8Chunk = chunk is Uint8List ? chunk : Uint8List.fromList(chunk);
-        await remoteFile.write(Stream.value(uint8Chunk), offset: transferred);
         transferred += uint8Chunk.length;
         if (onProgress != null) {
           onProgress(transferred, total);
         }
-      }
+        return uint8Chunk;
+      });
+
+      await remoteFile.write(inputStream, offset: 0);
     } finally {
       await remoteFile.close();
     }

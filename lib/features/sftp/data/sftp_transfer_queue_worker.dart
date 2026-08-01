@@ -209,9 +209,10 @@ class SftpTransferQueueWorker {
   ) async {
     final item = _queue[id]!;
     final remoteFile = await client.open(item.sourcePath, mode: SftpFileOpenMode.read);
+    final localFile = File(item.destinationPath);
+    bool completedSuccessfully = false;
 
     try {
-      final localFile = File(item.destinationPath);
       await localFile.parent.create(recursive: true);
       final sink = localFile.openWrite(mode: FileMode.write);
 
@@ -239,12 +240,20 @@ class SftpTransferQueueWorker {
 
           onProgress(transferred, speed);
         }
-      } finally {
         await sink.flush();
+        if (_cancelFlags[id] != true && _pauseFlags[id] != true) {
+          completedSuccessfully = true;
+        }
+      } finally {
         await sink.close();
       }
     } finally {
       await remoteFile.close();
+      if (!completedSuccessfully && await localFile.exists()) {
+        try {
+          await localFile.delete();
+        } catch (_) {}
+      }
     }
   }
 
@@ -270,27 +279,30 @@ class SftpTransferQueueWorker {
       int lastTimeMs = stopwatch.elapsedMilliseconds;
       int lastTransferred = 0;
 
-      final stream = localFile.openRead();
-      await for (final chunk in stream) {
-        if (_cancelFlags[id] == true || _pauseFlags[id] == true) {
-          break;
+      Stream<Uint8List> buildStream() async* {
+        await for (final chunk in localFile.openRead()) {
+          if (_cancelFlags[id] == true || _pauseFlags[id] == true) {
+            break;
+          }
+
+          final uint8Chunk = chunk is Uint8List ? chunk : Uint8List.fromList(chunk);
+          transferred += uint8Chunk.length;
+
+          final nowMs = stopwatch.elapsedMilliseconds;
+          final deltaMs = nowMs - lastTimeMs;
+          int speed = item.speedBytesPerSec;
+          if (deltaMs >= 500) {
+            speed = ((transferred - lastTransferred) * 1000) ~/ deltaMs;
+            lastTimeMs = nowMs;
+            lastTransferred = transferred;
+          }
+
+          onProgress(transferred, speed);
+          yield uint8Chunk;
         }
-
-        final uint8Chunk = chunk is Uint8List ? chunk : Uint8List.fromList(chunk);
-        await remoteFile.write(Stream.value(uint8Chunk), offset: transferred);
-        transferred += uint8Chunk.length;
-
-        final nowMs = stopwatch.elapsedMilliseconds;
-        final deltaMs = nowMs - lastTimeMs;
-        int speed = item.speedBytesPerSec;
-        if (deltaMs >= 500) {
-          speed = ((transferred - lastTransferred) * 1000) ~/ deltaMs;
-          lastTimeMs = nowMs;
-          lastTransferred = transferred;
-        }
-
-        onProgress(transferred, speed);
       }
+
+      await remoteFile.write(buildStream(), offset: 0);
     } finally {
       await remoteFile.close();
     }

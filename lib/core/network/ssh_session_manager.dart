@@ -108,7 +108,7 @@ class SSHSessionManager {
       onPasswordRequest: config.password != null ? () => config.password! : null,
       keepAliveInterval: config.keepAliveInterval,
       onVerifyHostKey: (String type, Uint8List fingerprintBytes) async {
-        final fingerprintStr = utf8.decode(fingerprintBytes);
+        final fingerprintStr = base64.encode(fingerprintBytes);
         return await _verifyHostKey(
           hostname: config.hostname,
           port: config.port,
@@ -278,6 +278,7 @@ class SSHSessionManager {
       try {
         await activeClient.ping();
       } catch (_) {
+        _isConnected = false;
         // Ping failed, connection may have been dropped
       }
     }

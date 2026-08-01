@@ -8,10 +8,11 @@ part 'known_hosts_dao.g.dart';
 class KnownHostsDao extends DatabaseAccessor<AppDatabase> with _$KnownHostsDaoMixin {
   KnownHostsDao(super.db);
 
-  Future<KnownHost?> findKnownHost(String hostname, int port) {
-    return (select(knownHosts)
+  Future<KnownHost?> findKnownHost(String hostname, int port) async {
+    final list = await (select(knownHosts)
           ..where((tbl) => tbl.hostname.equals(hostname) & tbl.port.equals(port)))
-        .getSingleOrNull();
+        .get();
+    return list.firstOrNull;
   }
 
   Future<List<KnownHost>> getAllKnownHosts() => select(knownHosts).get();
