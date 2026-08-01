@@ -23,7 +23,7 @@ final hostsRepositoryProvider = AutoDisposeProvider<HostsRepository>.internal(
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef HostsRepositoryRef = AutoDisposeProviderRef<HostsRepository>;
-String _$hostsNotifierHash() => r'5da21f14147121e2e58467c22c389b3586dbbf23';
+String _$hostsNotifierHash() => r'3af401f6714366e189f3ad7f2701d39727cb7de9';
 
 /// See also [HostsNotifier].
 @ProviderFor(HostsNotifier)

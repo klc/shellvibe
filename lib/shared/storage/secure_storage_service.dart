@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:typed_data';
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 /// Standard storage key definitions for [SecureStorageService].
@@ -10,9 +10,11 @@ abstract class SecureStorageKeys {
 }
 
 /// Secure Storage Service leveraging hardware-backed secure storage
-/// (iOS Keychain, Android KeyStore, Windows Credential Manager, macOS Keychain, Linux Secret Service).
+/// (iOS Keychain, Android KeyStore, Windows Credential Manager, macOS Keychain, Linux Secret Service)
+/// with in-memory fallback for un-entitled macOS environment (-34018).
 class SecureStorageService {
   final FlutterSecureStorage _storage;
+  final Map<String, String> _inMemoryFallback = {};
 
   SecureStorageService({FlutterSecureStorage? storage})
       : _storage = storage ??
@@ -22,40 +24,49 @@ class SecureStorageService {
               mOptions: MacOsOptions(accessibility: KeychainAccessibility.first_unlock),
             );
 
+  bool _isEntitlementError(Object e) {
+    if (e is PlatformException) {
+      return e.code == '-34018' ||
+          (e.message != null && e.message!.contains('-34018')) ||
+          (e.message != null && e.message!.contains('entitlement'));
+    }
+    return false;
+  }
+
   /// Stores the 256-bit Master Key as a Base64 string in secure storage.
   Future<void> saveMasterKey(List<int> keyBytes) async {
     final base64Key = base64.encode(keyBytes);
-    await _storage.write(key: SecureStorageKeys.masterKey, value: base64Key);
+    await write(key: SecureStorageKeys.masterKey, value: base64Key);
   }
 
   /// Retrieves the Master Key bytes from secure storage if present.
   Future<Uint8List?> getMasterKey() async {
-    final base64Key = await _storage.read(key: SecureStorageKeys.masterKey);
+    final base64Key = await read(key: SecureStorageKeys.masterKey);
     if (base64Key == null) return null;
     return Uint8List.fromList(base64.decode(base64Key));
   }
 
   /// Deletes the Master Key from secure storage.
   Future<void> deleteMasterKey() async {
-    await _storage.delete(key: SecureStorageKeys.masterKey);
+    await delete(key: SecureStorageKeys.masterKey);
   }
 
   /// Stores the Master Salt bytes as a Base64 string in secure storage.
   Future<void> saveMasterSalt(Uint8List saltBytes) async {
     final base64Salt = base64.encode(saltBytes);
-    await _storage.write(key: SecureStorageKeys.masterSalt, value: base64Salt);
+    await write(key: SecureStorageKeys.masterSalt, value: base64Salt);
   }
 
   /// Retrieves the Master Salt bytes from secure storage if present.
   Future<Uint8List?> getMasterSalt() async {
-    final base64Salt = await _storage.read(key: SecureStorageKeys.masterSalt);
+    final base64Salt = await read(key: SecureStorageKeys.masterSalt);
     if (base64Salt == null) return null;
     return Uint8List.fromList(base64.decode(base64Salt));
   }
 
   /// Deletes the Master Salt from secure storage.
   Future<void> deleteMasterSalt() async {
-    await _storage.delete(key: SecureStorageKeys.masterSalt);
+    await delete(key: SecureStorageKeys.masterSalt);
   }
 
   /// Stores a sensitive token (e.g. OAuth token, API token, session secret) under a key.
@@ -63,7 +74,7 @@ class SecureStorageService {
     final fullKey = key.startsWith(SecureStorageKeys.tokenPrefix)
         ? key
         : '${SecureStorageKeys.tokenPrefix}$key';
-    await _storage.write(key: fullKey, value: token);
+    await write(key: fullKey, value: token);
   }
 
   /// Retrieves a sensitive token by key.
@@ -71,7 +82,7 @@ class SecureStorageService {
     final fullKey = key.startsWith(SecureStorageKeys.tokenPrefix)
         ? key
         : '${SecureStorageKeys.tokenPrefix}$key';
-    return await _storage.read(key: fullKey);
+    return await read(key: fullKey);
   }
 
   /// Deletes a sensitive token by key.
@@ -79,31 +90,72 @@ class SecureStorageService {
     final fullKey = key.startsWith(SecureStorageKeys.tokenPrefix)
         ? key
         : '${SecureStorageKeys.tokenPrefix}$key';
-    await _storage.delete(key: fullKey);
+    await delete(key: fullKey);
   }
 
   /// Writes an arbitrary key-value pair to secure storage.
   Future<void> write({required String key, required String value}) async {
-    await _storage.write(key: key, value: value);
+    try {
+      await _storage.write(key: key, value: value);
+    } catch (e) {
+      if (_isEntitlementError(e)) {
+        _inMemoryFallback[key] = value;
+      } else {
+        rethrow;
+      }
+    }
   }
 
   /// Reads an arbitrary key from secure storage.
   Future<String?> read({required String key}) async {
-    return await _storage.read(key: key);
+    try {
+      return await _storage.read(key: key) ?? _inMemoryFallback[key];
+    } catch (e) {
+      if (_isEntitlementError(e)) {
+        return _inMemoryFallback[key];
+      }
+      rethrow;
+    }
   }
 
   /// Deletes an arbitrary key from secure storage.
   Future<void> delete({required String key}) async {
-    await _storage.delete(key: key);
+    try {
+      await _storage.delete(key: key);
+      _inMemoryFallback.remove(key);
+    } catch (e) {
+      if (_isEntitlementError(e)) {
+        _inMemoryFallback.remove(key);
+      } else {
+        rethrow;
+      }
+    }
   }
 
   /// Clears all stored key-value pairs in secure storage.
   Future<void> deleteAll() async {
-    await _storage.deleteAll();
+    try {
+      await _storage.deleteAll();
+      _inMemoryFallback.clear();
+    } catch (e) {
+      if (_isEntitlementError(e)) {
+        _inMemoryFallback.clear();
+      } else {
+        rethrow;
+      }
+    }
   }
 
   /// Checks if a key exists in secure storage.
   Future<bool> containsKey({required String key}) async {
-    return await _storage.containsKey(key: key);
+    try {
+      final exists = await _storage.containsKey(key: key);
+      return exists || _inMemoryFallback.containsKey(key);
+    } catch (e) {
+      if (_isEntitlementError(e)) {
+        return _inMemoryFallback.containsKey(key);
+      }
+      rethrow;
+    }
   }
 }

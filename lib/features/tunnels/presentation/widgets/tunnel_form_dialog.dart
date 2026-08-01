@@ -3,8 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../../../shared/database/app_database.dart';
-import '../../../../shared/providers/database_providers.dart';
+import '../../../hosts/domain/models/host_model.dart';
+import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
 import '../../domain/models/tunnel_rule_model.dart';
 
 class TunnelFormDialog extends ConsumerStatefulWidget {
@@ -31,7 +31,7 @@ class _TunnelFormDialogState extends ConsumerState<TunnelFormDialog> {
   late TextEditingController _remotePortController;
   bool _autoStart = false;
 
-  List<Host> _hosts = [];
+  List<HostModel> _hosts = [];
   bool _isLoadingHosts = true;
 
   @override
@@ -63,8 +63,8 @@ class _TunnelFormDialogState extends ConsumerState<TunnelFormDialog> {
 
   Future<void> _loadHosts() async {
     try {
-      final hostsDao = ref.read(hostsDaoProvider);
-      final hosts = await hostsDao.getAllHosts();
+      final hostsRepo = ref.read(hostsRepositoryProvider);
+      final hosts = await hostsRepo.getAllHosts();
       if (mounted) {
         setState(() {
           _hosts = hosts;

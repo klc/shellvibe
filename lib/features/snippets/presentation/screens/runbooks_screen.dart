@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../../domain/models/runbook_model.dart';
 import '../../domain/models/runbook_step_model.dart';
@@ -86,7 +87,7 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
   void _showResultDialog(RunbookExecutionResult result) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => ShadDialog(
         title: Row(
           children: [
             Icon(
@@ -97,7 +98,7 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
             Text(result.overallSuccess ? 'Runbook Succeeded' : 'Runbook Failed'),
           ],
         ),
-        content: SizedBox(
+        description: SizedBox(
           width: 500,
           child: SingleChildScrollView(
             child: Column(
@@ -149,7 +150,7 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
           ),
         ),
         actions: [
-          TextButton(
+          ShadButton.outline(
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('Close'),
           ),
@@ -201,115 +202,117 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
               final runbook = runbooks[index];
               final isThisExecuting = _isExecuting && _executingRunbookId == runbook.id;
 
-              return Card(
-                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                child: ExpansionTile(
-                  key: Key('runbook_tile_${runbook.id}'),
-                  title: Text(
-                    runbook.title,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                  ),
-                  subtitle: Text(
-                    '${runbook.steps.length} Steps ${runbook.description != null ? "• ${runbook.description}" : ""}',
-                  ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      ElevatedButton.icon(
-                        key: Key('runbook_execute_${runbook.id}'),
-                        onPressed: isThisExecuting ? null : () => _executeRunbook(runbook),
-                        icon: isThisExecuting
-                            ? const SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.play_arrow, color: Colors.green),
-                        label: Text(isThisExecuting ? 'Running...' : 'Run'),
-                      ),
-                      const SizedBox(width: 8),
-                      PopupMenuButton<String>(
-                        onSelected: (val) async {
-                          if (val == 'edit') {
-                            final updated = await RunbookEditorDialog.show(
-                              context,
-                              runbook: runbook,
-                              workspaceId: widget.workspaceId,
-                            );
-                            if (updated != null) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: ShadCard(
+                  child: ExpansionTile(
+                    key: Key('runbook_tile_${runbook.id}'),
+                    title: Text(
+                      runbook.title,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+                    subtitle: Text(
+                      '${runbook.steps.length} Steps ${runbook.description != null ? "• ${runbook.description}" : ""}',
+                    ),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ShadButton(
+                          key: Key('runbook_execute_${runbook.id}'),
+                          onPressed: isThisExecuting ? null : () => _executeRunbook(runbook),
+                          leading: isThisExecuting
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Icon(Icons.play_arrow, color: Colors.green, size: 16),
+                          child: Text(isThisExecuting ? 'Running...' : 'Run'),
+                        ),
+                        const SizedBox(width: 8),
+                        PopupMenuButton<String>(
+                          onSelected: (val) async {
+                            if (val == 'edit') {
+                              final updated = await RunbookEditorDialog.show(
+                                context,
+                                runbook: runbook,
+                                workspaceId: widget.workspaceId,
+                              );
+                              if (updated != null) {
+                                ref
+                                    .read(runbooksNotifierProvider.notifier)
+                                    .updateRunbook(updated);
+                              }
+                            } else if (val == 'delete') {
                               ref
                                   .read(runbooksNotifierProvider.notifier)
-                                  .updateRunbook(updated);
+                                  .deleteRunbook(runbook.id);
                             }
-                          } else if (val == 'delete') {
-                            ref
-                                .read(runbooksNotifierProvider.notifier)
-                                .deleteRunbook(runbook.id);
-                          }
-                        },
-                        itemBuilder: (context) => [
-                          const PopupMenuItem(value: 'edit', child: Text('Edit')),
-                          const PopupMenuItem(
-                            value: 'delete',
-                            child: Text('Delete', style: TextStyle(color: Colors.red)),
-                          ),
-                        ],
+                          },
+                          itemBuilder: (context) => [
+                            const PopupMenuItem(value: 'edit', child: Text('Edit')),
+                            const PopupMenuItem(
+                              value: 'delete',
+                              child: Text('Delete', style: TextStyle(color: Colors.red)),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    children: [
+                      const Divider(),
+                      Padding(
+                        padding: const EdgeInsets.all(12.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: runbook.steps.map((step) {
+                            final status = _stepStatuses[step.id];
+                            Color statusColor = Colors.grey;
+                            IconData statusIcon = Icons.arrow_right;
+
+                            if (status == 'running') {
+                              statusColor = Colors.orange;
+                              statusIcon = Icons.hourglass_top;
+                            } else if (status == 'success') {
+                              statusColor = Colors.green;
+                              statusIcon = Icons.check_circle;
+                            } else if (status == 'failed') {
+                              statusColor = Colors.red;
+                              statusIcon = Icons.cancel;
+                            }
+
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 4.0),
+                              child: Row(
+                                children: [
+                                  Icon(statusIcon, color: statusColor, size: 18),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Step ${step.stepOrder}:',
+                                    style: const TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      step.command,
+                                      style: const TextStyle(fontFamily: 'monospace'),
+                                    ),
+                                  ),
+                                  if (step.expectedOutputPattern != null)
+                                    ShadBadge.secondary(
+                                      child: Text(
+                                        'Pattern: ${step.expectedOutputPattern}',
+                                        style: const TextStyle(fontSize: 10),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                        ),
                       ),
                     ],
                   ),
-                  children: [
-                    const Divider(),
-                    Padding(
-                      padding: const EdgeInsets.all(12.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: runbook.steps.map((step) {
-                          final status = _stepStatuses[step.id];
-                          Color statusColor = Colors.grey;
-                          IconData statusIcon = Icons.arrow_right;
-
-                          if (status == 'running') {
-                            statusColor = Colors.orange;
-                            statusIcon = Icons.hourglass_top;
-                          } else if (status == 'success') {
-                            statusColor = Colors.green;
-                            statusIcon = Icons.check_circle;
-                          } else if (status == 'failed') {
-                            statusColor = Colors.red;
-                            statusIcon = Icons.cancel;
-                          }
-
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 4.0),
-                            child: Row(
-                              children: [
-                                Icon(statusIcon, color: statusColor, size: 18),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Step ${step.stepOrder}:',
-                                  style: const TextStyle(fontWeight: FontWeight.bold),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    step.command,
-                                    style: const TextStyle(fontFamily: 'monospace'),
-                                  ),
-                                ),
-                                if (step.expectedOutputPattern != null)
-                                  Chip(
-                                    label: Text('Pattern: ${step.expectedOutputPattern}',
-                                        style: const TextStyle(fontSize: 10)),
-                                    padding: EdgeInsets.zero,
-                                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                  ),
-                              ],
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                  ],
                 ),
               );
             },

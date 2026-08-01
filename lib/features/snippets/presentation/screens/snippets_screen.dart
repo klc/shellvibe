@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../../../settings/presentation/notifiers/settings_notifier.dart';
 import '../../domain/models/snippet_model.dart';
@@ -52,15 +53,19 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
         duration: Duration(seconds: clearSeconds),
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Copied snippet to clipboard: "$finalCode"')),
+        ShadToaster.of(context).show(
+          ShadToast(
+            description: Text('Copied snippet to clipboard: "$finalCode"'),
+          ),
         );
       }
     } else {
       widget.onExecuteCommand!(finalCode);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Executed snippet: "$finalCode"')),
+        ShadToaster.of(context).show(
+          ShadToast(
+            description: Text('Executed snippet: "$finalCode"'),
+          ),
         );
       }
     }
@@ -110,13 +115,10 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
               children: [
                 Padding(
                   padding: const EdgeInsets.all(12.0),
-                  child: TextField(
+                  child: ShadInput(
                     key: const Key('snippets_search_field'),
-                    decoration: const InputDecoration(
-                      hintText: 'Search snippets by title, code or tag...',
-                      prefixIcon: Icon(Icons.search),
-                      border: OutlineInputBorder(),
-                    ),
+                    placeholder: const Text('Search snippets by title, code or tag...'),
+                    leading: const Icon(Icons.search, size: 16),
                     onChanged: (val) {
                       setState(() {
                         _searchQuery = val.trim().toLowerCase();
@@ -151,24 +153,36 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
                               padding: const EdgeInsets.symmetric(horizontal: 12.0),
                               child: Row(
                                 children: [
-                                  FilterChip(
-                                    label: const Text('All'),
-                                    selected: _selectedTag == null,
-                                    onSelected: (_) => setState(() => _selectedTag = null),
-                                  ),
+                                  if (_selectedTag == null)
+                                    ShadButton(
+                                      size: ShadButtonSize.sm,
+                                      onPressed: () => setState(() => _selectedTag = null),
+                                      child: const Text('All'),
+                                    )
+                                  else
+                                    ShadButton.outline(
+                                      size: ShadButtonSize.sm,
+                                      onPressed: () => setState(() => _selectedTag = null),
+                                      child: const Text('All'),
+                                    ),
                                   const SizedBox(width: 6),
-                                  ...allTags.map((tag) => Padding(
-                                        padding: const EdgeInsets.only(right: 6.0),
-                                        child: FilterChip(
-                                          label: Text('#$tag'),
-                                          selected: _selectedTag == tag,
-                                          onSelected: (selected) {
-                                            setState(() {
-                                              _selectedTag = selected ? tag : null;
-                                            });
-                                          },
-                                        ),
-                                      )),
+                                  ...allTags.map((tag) {
+                                    final isSelected = _selectedTag == tag;
+                                    return Padding(
+                                      padding: const EdgeInsets.only(right: 6.0),
+                                      child: isSelected
+                                          ? ShadButton(
+                                              size: ShadButtonSize.sm,
+                                              onPressed: () => setState(() => _selectedTag = null),
+                                              child: Text('#$tag'),
+                                            )
+                                          : ShadButton.outline(
+                                              size: ShadButtonSize.sm,
+                                              onPressed: () => setState(() => _selectedTag = tag),
+                                              child: Text('#$tag'),
+                                            ),
+                                    );
+                                  }),
                                 ],
                               ),
                             ),
@@ -182,97 +196,95 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
                                     itemCount: filtered.length,
                                     itemBuilder: (context, index) {
                                       final snippet = filtered[index];
-                                      return Card(
-                                        margin:
-                                            const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                        child: ListTile(
-                                          key: Key('snippet_card_${snippet.id}'),
-                                          title: Text(
-                                            snippet.title,
-                                            style: const TextStyle(fontWeight: FontWeight.bold),
-                                          ),
-                                          subtitle: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              const SizedBox(height: 4),
-                                              Container(
-                                                padding: const EdgeInsets.all(8),
-                                                decoration: BoxDecoration(
-                                                  color: Colors.black26,
-                                                  borderRadius: BorderRadius.circular(4),
-                                                ),
-                                                width: double.infinity,
-                                                child: Text(
-                                                  snippet.code,
-                                                  style: const TextStyle(
-                                                    fontFamily: 'monospace',
-                                                    fontSize: 12,
+                                      return Padding(
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                        child: ShadCard(
+                                          child: ListTile(
+                                            key: Key('snippet_card_${snippet.id}'),
+                                            title: Text(
+                                              snippet.title,
+                                              style: const TextStyle(fontWeight: FontWeight.bold),
+                                            ),
+                                            subtitle: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                const SizedBox(height: 4),
+                                                Container(
+                                                  padding: const EdgeInsets.all(8),
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.black26,
+                                                    borderRadius: BorderRadius.circular(4),
+                                                  ),
+                                                  width: double.infinity,
+                                                  child: Text(
+                                                    snippet.code,
+                                                    style: const TextStyle(
+                                                      fontFamily: 'monospace',
+                                                      fontSize: 12,
+                                                    ),
                                                   ),
                                                 ),
-                                              ),
-                                              if (snippet.tags.isNotEmpty) ...[
-                                                const SizedBox(height: 6),
-                                                Wrap(
-                                                  spacing: 4,
-                                                  children: snippet.tags
-                                                      .map((t) => Chip(
-                                                            label: Text('#$t',
-                                                                style: const TextStyle(fontSize: 10)),
-                                                            padding: EdgeInsets.zero,
-                                                            materialTapTargetSize:
-                                                                MaterialTapTargetSize.shrinkWrap,
-                                                          ))
-                                                      .toList(),
-                                                ),
+                                                if (snippet.tags.isNotEmpty) ...[
+                                                  const SizedBox(height: 6),
+                                                  Wrap(
+                                                    spacing: 4,
+                                                    children: snippet.tags
+                                                        .map((t) => ShadBadge.secondary(
+                                                              child: Text('#$t',
+                                                                  style: const TextStyle(fontSize: 10)),
+                                                            ))
+                                                        .toList(),
+                                                  ),
+                                                ],
                                               ],
-                                            ],
-                                          ),
-                                          trailing: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              IconButton(
-                                                key: Key('snippet_copy_${snippet.id}'),
-                                                icon: const Icon(Icons.copy, size: 20),
-                                                tooltip: 'Copy Code',
-                                                onPressed: () =>
-                                                    _handleExecuteOrCopy(snippet, copyOnly: true),
-                                              ),
-                                              IconButton(
-                                                key: Key('snippet_run_${snippet.id}'),
-                                                icon: const Icon(Icons.play_arrow,
-                                                    color: Colors.green, size: 22),
-                                                tooltip: 'Execute in Terminal',
-                                                onPressed: () => _handleExecuteOrCopy(snippet),
-                                              ),
-                                              PopupMenuButton<String>(
-                                                onSelected: (val) async {
-                                                  if (val == 'edit') {
-                                                    final updated = await SnippetFormDialog.show(
-                                                      context,
-                                                      snippet: snippet,
-                                                      workspaceId: widget.workspaceId,
-                                                    );
-                                                    if (updated != null) {
+                                            ),
+                                            trailing: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                IconButton(
+                                                  key: Key('snippet_copy_${snippet.id}'),
+                                                  icon: const Icon(Icons.copy, size: 20),
+                                                  tooltip: 'Copy Code',
+                                                  onPressed: () =>
+                                                      _handleExecuteOrCopy(snippet, copyOnly: true),
+                                                ),
+                                                IconButton(
+                                                  key: Key('snippet_run_${snippet.id}'),
+                                                  icon: const Icon(Icons.play_arrow,
+                                                      color: Colors.green, size: 22),
+                                                  tooltip: 'Execute in Terminal',
+                                                  onPressed: () => _handleExecuteOrCopy(snippet),
+                                                ),
+                                                PopupMenuButton<String>(
+                                                  onSelected: (val) async {
+                                                    if (val == 'edit') {
+                                                      final updated = await SnippetFormDialog.show(
+                                                        context,
+                                                        snippet: snippet,
+                                                        workspaceId: widget.workspaceId,
+                                                      );
+                                                      if (updated != null) {
+                                                        ref
+                                                            .read(snippetsNotifierProvider.notifier)
+                                                            .updateSnippet(updated);
+                                                      }
+                                                    } else if (val == 'delete') {
                                                       ref
                                                           .read(snippetsNotifierProvider.notifier)
-                                                          .updateSnippet(updated);
+                                                          .deleteSnippet(snippet.id);
                                                     }
-                                                  } else if (val == 'delete') {
-                                                    ref
-                                                        .read(snippetsNotifierProvider.notifier)
-                                                        .deleteSnippet(snippet.id);
-                                                  }
-                                                },
-                                                itemBuilder: (context) => [
-                                                  const PopupMenuItem(
-                                                      value: 'edit', child: Text('Edit')),
-                                                  const PopupMenuItem(
-                                                      value: 'delete',
-                                                      child: Text('Delete',
-                                                          style: TextStyle(color: Colors.red))),
-                                                ],
-                                              ),
-                                            ],
+                                                  },
+                                                  itemBuilder: (context) => [
+                                                    const PopupMenuItem(
+                                                        value: 'edit', child: Text('Edit')),
+                                                    const PopupMenuItem(
+                                                        value: 'delete',
+                                                        child: Text('Delete',
+                                                            style: TextStyle(color: Colors.red))),
+                                                  ],
+                                                ),
+                                              ],
+                                            ),
                                           ),
                                         ),
                                       );

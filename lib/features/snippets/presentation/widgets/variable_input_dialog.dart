@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 
 /// Dialog to prompt the user for variable inputs in placeholders.
 class VariableInputDialog extends StatefulWidget {
@@ -51,34 +52,14 @@ class _VariableInputDialogState extends State<VariableInputDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
+    return ShadDialog(
       title: Text(widget.title),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: widget.variables.map((v) {
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8.0),
-              child: TextField(
-                key: Key('variable_input_$v'),
-                controller: _controllers[v],
-                decoration: InputDecoration(
-                  labelText: v,
-                  hintText: 'Enter value for \${INPUT:$v}',
-                  border: const OutlineInputBorder(),
-                ),
-              ),
-            );
-          }).toList(),
-        ),
-      ),
       actions: [
-        TextButton(
+        ShadButton.outline(
           onPressed: () => Navigator.of(context).pop(null),
           child: const Text('Cancel'),
         ),
-        ElevatedButton(
+        ShadButton(
           key: const Key('variable_input_confirm_button'),
           onPressed: () {
             final result = <String, String>{};
@@ -90,6 +71,26 @@ class _VariableInputDialogState extends State<VariableInputDialog> {
           child: const Text('Submit'),
         ),
       ],
+      child: SizedBox(
+        width: 400,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: widget.variables.map((v) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                child: ShadInput(
+                  key: Key('variable_input_$v'),
+                  controller: _controllers[v],
+                  placeholder: Text('Enter value for \${INPUT:$v} ($v)'),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ),
     );
   }
 }
+

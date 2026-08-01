@@ -8,6 +8,7 @@ void main() {
       const settings = AppSettingsModel();
       expect(settings.themeMode, equals(ThemeMode.dark));
       expect(settings.palette, equals(AppPalette.dark));
+      expect(settings.terminalPalette, equals(TerminalPalette.dark));
       expect(settings.fontFamily, equals('RobotoMono'));
       expect(settings.fontSize, equals(14.0));
       expect(settings.cursorStyle, equals(AppCursorStyle.block));
@@ -19,11 +20,13 @@ void main() {
       const settings = AppSettingsModel();
       final updated = settings.copyWith(
         palette: AppPalette.catppuccin,
+        terminalPalette: TerminalPalette.dracula,
         fontSize: 16.0,
         autoLockTimerSeconds: 60,
       );
 
       expect(updated.palette, equals(AppPalette.catppuccin));
+      expect(updated.terminalPalette, equals(TerminalPalette.dracula));
       expect(updated.fontSize, equals(16.0));
       expect(updated.autoLockTimerSeconds, equals(60));
       expect(updated.fontFamily, equals('RobotoMono'));
@@ -33,6 +36,7 @@ void main() {
       const settings = AppSettingsModel(
         themeMode: ThemeMode.light,
         palette: AppPalette.nord,
+        terminalPalette: TerminalPalette.solarizedDark,
         fontFamily: 'FiraCode',
         fontSize: 18.0,
         cursorStyle: AppCursorStyle.underline,
@@ -45,6 +49,7 @@ void main() {
 
       expect(restored.themeMode, equals(ThemeMode.light));
       expect(restored.palette, equals(AppPalette.nord));
+      expect(restored.terminalPalette, equals(TerminalPalette.solarizedDark));
       expect(restored.fontFamily, equals('FiraCode'));
       expect(restored.fontSize, equals(18.0));
       expect(restored.cursorStyle, equals(AppCursorStyle.underline));

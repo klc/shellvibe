@@ -6,7 +6,7 @@ part of 'vault_notifier.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$vaultNotifierHash() => r'275ee9fd6bbfaa403dd7fe1fc5625031a9d6037e';
+String _$vaultNotifierHash() => r'dd58f882cfe0e2e094d3f06efc82a80ca1acf960';
 
 /// Manages the vault lifecycle: setup, lock, unlock, brute-force protection.
 ///

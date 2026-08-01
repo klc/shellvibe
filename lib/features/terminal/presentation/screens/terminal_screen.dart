@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:xterm2/xterm.dart';
@@ -9,12 +10,12 @@ import '../widgets/mobile_extra_keys_bar.dart';
 
 class TerminalScreen extends ConsumerStatefulWidget {
   final TerminalTabSession session;
-  final bool showExtraKeys;
+  final bool? showExtraKeys;
 
   const TerminalScreen({
     super.key,
     required this.session,
-    this.showExtraKeys = true,
+    this.showExtraKeys,
   });
 
   @override
@@ -130,18 +131,78 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
     searchHitForeground: const Color(0xFF2E3440),
   );
 
+  // Dracula Palette
+  static final _draculaTheme = TerminalTheme(
+    cursor: const Color(0xFFF8F8F2),
+    selection: const Color(0xFF44475A),
+    foreground: const Color(0xFFF8F8F2),
+    background: const Color(0xFF282A36),
+    black: const Color(0xFF21222C),
+    red: const Color(0xFFFF5555),
+    green: const Color(0xFF50FA7B),
+    yellow: const Color(0xFFF1FA8C),
+    blue: const Color(0xFFBD93F9),
+    magenta: const Color(0xFFFF79C6),
+    cyan: const Color(0xFF8BE9FD),
+    white: const Color(0xFFF8F8F2),
+    brightBlack: const Color(0xFF6272A4),
+    brightRed: const Color(0xFFFF6E6E),
+    brightGreen: const Color(0xFF69FF94),
+    brightYellow: const Color(0xFFFFFFA5),
+    brightBlue: const Color(0xFFD6ACFF),
+    brightMagenta: const Color(0xFFFF92D0),
+    brightCyan: const Color(0xFFA4FFFF),
+    brightWhite: const Color(0xFFFFFFFF),
+    searchHitBackground: const Color(0xFFBD93F9),
+    searchHitBackgroundCurrent: const Color(0xFFFF79C6),
+    searchHitForeground: const Color(0xFF282A36),
+  );
+
+  // Solarized Dark Palette
+  static final _solarizedDarkTheme = TerminalTheme(
+    cursor: const Color(0xFF93A1A1),
+    selection: const Color(0xFF073642),
+    foreground: const Color(0xFF839496),
+    background: const Color(0xFF002B36),
+    black: const Color(0xFF073642),
+    red: const Color(0xFFDC322F),
+    green: const Color(0xFF859900),
+    yellow: const Color(0xFFB58900),
+    blue: const Color(0xFF268BD2),
+    magenta: const Color(0xFFD33682),
+    cyan: const Color(0xFF2AA198),
+    white: const Color(0xFFEEE8D5),
+    brightBlack: const Color(0xFF002B36),
+    brightRed: const Color(0xFFCB4B16),
+    brightGreen: const Color(0xFF586E75),
+    brightYellow: const Color(0xFF657B83),
+    brightBlue: const Color(0xFF839496),
+    brightMagenta: const Color(0xFF6C71C4),
+    brightCyan: const Color(0xFF93A1A1),
+    brightWhite: const Color(0xFFFDF6E3),
+    searchHitBackground: const Color(0xFF2AA198),
+    searchHitBackgroundCurrent: const Color(0xFF268BD2),
+    searchHitForeground: const Color(0xFF002B36),
+  );
+
   @override
   Widget build(BuildContext context) {
     final session = widget.session;
     final settingsAsync = ref.watch(settingsNotifierProvider);
     final settings = settingsAsync.value ?? const AppSettingsModel();
 
-    final theme = switch (settings.palette) {
-      AppPalette.dark => _darkTheme,
-      AppPalette.oled => _oledTheme,
-      AppPalette.catppuccin => _catppuccinTheme,
-      AppPalette.nord => _nordTheme,
+    final theme = switch (settings.terminalPalette) {
+      TerminalPalette.dark => _darkTheme,
+      TerminalPalette.oled => _oledTheme,
+      TerminalPalette.catppuccin => _catppuccinTheme,
+      TerminalPalette.nord => _nordTheme,
+      TerminalPalette.dracula => _draculaTheme,
+      TerminalPalette.solarizedDark => _solarizedDarkTheme,
     };
+
+    final shouldShowExtraKeys = widget.showExtraKeys ??
+        (defaultTargetPlatform == TargetPlatform.iOS ||
+            defaultTargetPlatform == TargetPlatform.android);
 
     return Column(
       children: [
@@ -174,6 +235,11 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
               session.terminal,
               theme: theme,
               autofocus: true,
+              cursorType: switch (settings.cursorStyle) {
+                AppCursorStyle.block => TerminalCursorType.block,
+                AppCursorStyle.underline => TerminalCursorType.underline,
+                AppCursorStyle.bar => TerminalCursorType.verticalBar,
+              },
               textStyle: TerminalStyle(
                 fontSize: settings.fontSize,
                 fontFamily: settings.fontFamily,
@@ -181,7 +247,7 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
             ),
           ),
         ),
-        if (widget.showExtraKeys)
+        if (shouldShowExtraKeys)
           MobileExtraKeysBar(
             terminal: session.terminal,
           ),

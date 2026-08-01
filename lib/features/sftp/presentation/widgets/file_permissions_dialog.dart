@@ -1,4 +1,6 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 import '../../domain/models/sftp_file_item.dart';
 
 class FilePermissionsResult {
@@ -41,15 +43,15 @@ class _FilePermissionsDialogState extends State<FilePermissionsDialog> {
 
     uR = str.isNotEmpty && str[0] == 'r';
     uW = str.length > 1 && str[1] == 'w';
-    uX = str.length > 2 && str[2] == 'x';
+    uX = str.length > 2 && (str[2] == 'x' || str[2] == 's' || str[2] == 't');
 
     gR = str.length > 3 && str[3] == 'r';
     gW = str.length > 4 && str[4] == 'w';
-    gX = str.length > 5 && str[5] == 'x';
+    gX = str.length > 5 && (str[5] == 'x' || str[5] == 's' || str[5] == 't');
 
     oR = str.length > 6 && str[6] == 'r';
     oW = str.length > 7 && str[7] == 'w';
-    oX = str.length > 8 && str[8] == 'x';
+    oX = str.length > 8 && (str[8] == 'x' || str[8] == 's' || str[8] == 't');
 
     _uidController = TextEditingController(text: widget.item.ownerId?.toString() ?? '');
     _gidController = TextEditingController(text: widget.item.groupId?.toString() ?? '');
@@ -80,7 +82,10 @@ class _FilePermissionsDialogState extends State<FilePermissionsDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
+    final screenWidth = MediaQuery.of(context).size.width;
+    final dialogWidth = math.min(screenWidth * 0.9, 400.0);
+
+    return ShadDialog(
       title: Row(
         children: [
           const Icon(Icons.security, color: Colors.cyanAccent),
@@ -94,15 +99,38 @@ class _FilePermissionsDialogState extends State<FilePermissionsDialog> {
           ),
         ],
       ),
-      content: SingleChildScrollView(
-        child: SizedBox(
-          width: 400,
+      actions: [
+        ShadButton.outline(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ShadButton(
+          onPressed: () {
+            final uid = int.tryParse(_uidController.text.trim());
+            final gid = int.tryParse(_gidController.text.trim());
+            Navigator.of(context).pop(
+              FilePermissionsResult(
+                mode: _calculatedMode,
+                uid: uid,
+                gid: gid,
+              ),
+            );
+          },
+          leading: const Icon(Icons.check, size: 16),
+          child: const Text('Apply Changes'),
+        ),
+      ],
+      child: SizedBox(
+        width: dialogWidth,
+        child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Octal Permissions: 0$_octalString',
-                  style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.cyanAccent)),
+              Text(
+                'Octal Permissions: 0$_octalString',
+                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.cyanAccent),
+              ),
               const SizedBox(height: 12),
               const Text('Mode (chmod):', style: TextStyle(fontWeight: FontWeight.w600)),
               const SizedBox(height: 8),
@@ -121,25 +149,25 @@ class _FilePermissionsDialogState extends State<FilePermissionsDialog> {
                   TableRow(
                     children: [
                       const Padding(padding: EdgeInsets.all(8), child: Text('User')),
-                      Checkbox(value: uR, onChanged: (v) => setState(() => uR = v ?? false)),
-                      Checkbox(value: uW, onChanged: (v) => setState(() => uW = v ?? false)),
-                      Checkbox(value: uX, onChanged: (v) => setState(() => uX = v ?? false)),
+                      Center(child: ShadCheckbox(value: uR, onChanged: (v) => setState(() => uR = v))),
+                      Center(child: ShadCheckbox(value: uW, onChanged: (v) => setState(() => uW = v))),
+                      Center(child: ShadCheckbox(value: uX, onChanged: (v) => setState(() => uX = v))),
                     ],
                   ),
                   TableRow(
                     children: [
                       const Padding(padding: EdgeInsets.all(8), child: Text('Group')),
-                      Checkbox(value: gR, onChanged: (v) => setState(() => gR = v ?? false)),
-                      Checkbox(value: gW, onChanged: (v) => setState(() => gW = v ?? false)),
-                      Checkbox(value: gX, onChanged: (v) => setState(() => gX = v ?? false)),
+                      Center(child: ShadCheckbox(value: gR, onChanged: (v) => setState(() => gR = v))),
+                      Center(child: ShadCheckbox(value: gW, onChanged: (v) => setState(() => gW = v))),
+                      Center(child: ShadCheckbox(value: gX, onChanged: (v) => setState(() => gX = v))),
                     ],
                   ),
                   TableRow(
                     children: [
                       const Padding(padding: EdgeInsets.all(8), child: Text('Others')),
-                      Checkbox(value: oR, onChanged: (v) => setState(() => oR = v ?? false)),
-                      Checkbox(value: oW, onChanged: (v) => setState(() => oW = v ?? false)),
-                      Checkbox(value: oX, onChanged: (v) => setState(() => oX = v ?? false)),
+                      Center(child: ShadCheckbox(value: oR, onChanged: (v) => setState(() => oR = v))),
+                      Center(child: ShadCheckbox(value: oW, onChanged: (v) => setState(() => oW = v))),
+                      Center(child: ShadCheckbox(value: oX, onChanged: (v) => setState(() => oX = v))),
                     ],
                   ),
                 ],
@@ -150,26 +178,18 @@ class _FilePermissionsDialogState extends State<FilePermissionsDialog> {
               Row(
                 children: [
                   Expanded(
-                    child: TextField(
+                    child: ShadInput(
                       controller: _uidController,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'User ID (UID)',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
+                      placeholder: const Text('User ID (UID)'),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: TextField(
+                    child: ShadInput(
                       controller: _gidController,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Group ID (GID)',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
+                      placeholder: const Text('Group ID (GID)'),
                     ),
                   ),
                 ],
@@ -178,27 +198,7 @@ class _FilePermissionsDialogState extends State<FilePermissionsDialog> {
           ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton.icon(
-          icon: const Icon(Icons.check),
-          label: const Text('Apply Changes'),
-          onPressed: () {
-            final uid = int.tryParse(_uidController.text.trim());
-            final gid = int.tryParse(_gidController.text.trim());
-            Navigator.of(context).pop(
-              FilePermissionsResult(
-                mode: _calculatedMode,
-                uid: uid,
-                gid: gid,
-              ),
-            );
-          },
-        ),
-      ],
     );
   }
 }
+

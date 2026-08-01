@@ -54,7 +54,7 @@ class _TerlyAppState extends ConsumerState<TerlyApp> {
       title: 'Terly',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.buildShadTheme(settings.copyWith(themeMode: ThemeMode.light)),
-      darkTheme: AppTheme.buildShadTheme(settings),
+      darkTheme: AppTheme.buildShadTheme(settings.copyWith(themeMode: ThemeMode.dark)),
       themeMode: settings.themeMode,
       materialThemeBuilder: (context, theme) => AppTheme.buildTheme(settings),
       routerConfig: router,

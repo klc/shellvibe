@@ -238,7 +238,10 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                         label: const Text('Port'),
                         validator: (v) {
                           if (v.trim().isEmpty) return 'Required';
-                          if (int.tryParse(v) == null) return 'Invalid';
+                          final port = int.tryParse(v.trim());
+                          if (port == null || port < 1 || port > 65535) {
+                            return 'Must be between 1 and 65535';
+                          }
                           return null;
                         },
                       ),
@@ -284,7 +287,11 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                     selectedOptionBuilder: (context, value) {
                       if (value == null) return const Text('(None - Prompt on Connect)');
                       final i = identities.where((item) => item.id == value).firstOrNull;
-                      return Text(i != null ? '${i.title} (${i.username})' : value);
+                      return Text(
+                        i != null
+                            ? '${i.title}${i.username.isNotEmpty ? ' (${i.username})' : ''}'
+                            : value,
+                      );
                     },
                     options: [
                       const ShadOption<String?>(
@@ -294,7 +301,9 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                       ...identities.map(
                         (i) => ShadOption<String?>(
                           value: i.id,
-                          child: Text('${i.title} (${i.username})'),
+                          child: Text(
+                            '${i.title}${i.username.isNotEmpty ? ' (${i.username})' : ''}',
+                          ),
                         ),
                       ),
                     ],

@@ -1,7 +1,10 @@
+import 'dart:math' as math;
+
 import 'package:dartssh2/dartssh2.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../../domain/models/sftp_file_item.dart';
 import '../providers/sftp_providers.dart';
@@ -25,6 +28,7 @@ class SftpDualPaneScreen extends ConsumerStatefulWidget {
 
 class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
   final TextEditingController _searchController = TextEditingController();
+  int _selectedMobileTab = 0; // 0: Local Workstation, 1: Remote SFTP
 
   @override
   void initState() {
@@ -70,11 +74,14 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(sftpNotifierProvider);
     final notifier = ref.read(sftpNotifierProvider.notifier);
+    final colorScheme = ShadTheme.of(context).colorScheme;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF181825),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1E1E2E),
+        backgroundColor: colorScheme.card,
         elevation: 0,
         title: Row(
           children: [
@@ -107,93 +114,117 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
           // Global Search & Control Bar
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            color: const Color(0xFF181825),
+            color: Theme.of(context).scaffoldBackgroundColor,
             child: Row(
               children: [
                 Expanded(
-                  child: SizedBox(
-                    height: 36,
-                    child: TextField(
-                      controller: _searchController,
-                      onChanged: notifier.setSearchQuery,
-                      decoration: InputDecoration(
-                        hintText: 'Filter files...',
-                        prefixIcon: const Icon(Icons.search, size: 18),
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                        filled: true,
-                        fillColor: const Color(0xFF313244),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide.none,
-                        ),
-                      ),
-                    ),
+                  child: ShadInput(
+                    controller: _searchController,
+                    onChanged: notifier.setSearchQuery,
+                    placeholder: const Text('Filter files...'),
+                    leading: const Icon(Icons.search, size: 18),
                   ),
                 ),
               ],
             ),
           ),
-          // Dual Pane Layout
-          Expanded(
-            child: Row(
-              children: [
-                // Left Pane: Local File System
-                Expanded(
-                  child: DropTarget(
-                    onDragDone: (details) => _handleDragAndDropUpload(details.files, state.remotePath),
-                    child: _buildPane(
-                      title: 'Local Workstation',
-                      path: state.localPath,
-                      files: state.localFiles,
-                      isLoading: state.isLoadingLocal,
-                      error: state.localError,
-                      isLocal: true,
-                      onNavigateUp: notifier.navigateLocalUp,
-                      onItemTap: (item) {
-                        if (item.isDirectory) {
-                          notifier.loadLocalDirectory(item.path);
-                        }
-                      },
-                      onDelete: notifier.deleteLocalItem,
-                      onUpload: (item) => notifier.uploadLocalItem(item),
+          // Responsive Segmented Tab Switcher for Mobile / Narrow screens (< 600px)
+          if (isMobile)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: SizedBox(
+                width: double.infinity,
+                child: SegmentedButton<int>(
+                  segments: [
+                    const ButtonSegment<int>(
+                      value: 0,
+                      label: Text('Local Workstation'),
+                      icon: Icon(Icons.laptop, size: 16),
                     ),
-                  ),
-                ),
-                const VerticalDivider(width: 1, color: Colors.white12),
-                // Right Pane: Remote SFTP File System
-                Expanded(
-                  child: DropTarget(
-                    onDragDone: (details) => _handleDragAndDropUpload(details.files, state.remotePath),
-                    child: _buildPane(
-                      title: state.remoteClient != null ? 'Remote SFTP Server' : 'Remote (Disconnected)',
-                      path: state.remotePath,
-                      files: state.remoteFiles,
-                      isLoading: state.isLoadingRemote,
-                      error: state.remoteError,
-                      isLocal: false,
-                      onNavigateUp: notifier.navigateRemoteUp,
-                      onItemTap: (item) {
-                        if (item.isDirectory) {
-                          notifier.loadRemoteDirectory(item.path);
-                        } else {
-                          _openFileEditor(item);
-                        }
-                      },
-                      onDelete: notifier.deleteRemoteItem,
-                      onDownload: (item) => notifier.downloadItem(item),
-                      onEditPermissions: _openPermissionsDialog,
-                      onEditContent: _openFileEditor,
-                      onCreateFolder: () => _showCreateDialog(isFolder: true),
-                      onCreateFile: () => _showCreateDialog(isFolder: false),
-                      onRename: (item) => _showRenameDialog(item),
+                    ButtonSegment<int>(
+                      value: 1,
+                      label: Text(
+                        state.remoteClient != null ? 'Remote SFTP' : 'Remote (Disconnected)',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      icon: const Icon(Icons.dns, size: 16),
                     ),
-                  ),
+                  ],
+                  selected: {_selectedMobileTab},
+                  onSelectionChanged: (newSelection) {
+                    setState(() {
+                      _selectedMobileTab = newSelection.first;
+                    });
+                  },
                 ),
-              ],
+              ),
             ),
+          // Dual Pane or Responsive Single Pane View
+          Expanded(
+            child: isMobile
+                ? (_selectedMobileTab == 0
+                    ? _buildLocalPane(state, notifier)
+                    : _buildRemotePane(state, notifier))
+                : Row(
+                    children: [
+                      Expanded(child: _buildLocalPane(state, notifier)),
+                      VerticalDivider(width: 1, color: colorScheme.border),
+                      Expanded(child: _buildRemotePane(state, notifier)),
+                    ],
+                  ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildLocalPane(SftpState state, SftpNotifier notifier) {
+    return DropTarget(
+      onDragDone: (details) => _handleDragAndDropUpload(details.files, state.remotePath),
+      child: _buildPane(
+        title: 'Local Workstation',
+        path: state.localPath,
+        files: state.localFiles,
+        isLoading: state.isLoadingLocal,
+        error: state.localError,
+        isLocal: true,
+        onNavigateUp: notifier.navigateLocalUp,
+        onItemTap: (item) {
+          if (item.isDirectory) {
+            notifier.loadLocalDirectory(item.path);
+          }
+        },
+        onDelete: notifier.deleteLocalItem,
+        onUpload: (item) => notifier.uploadLocalItem(item),
+      ),
+    );
+  }
+
+  Widget _buildRemotePane(SftpState state, SftpNotifier notifier) {
+    return DropTarget(
+      onDragDone: (details) => _handleDragAndDropUpload(details.files, state.remotePath),
+      child: _buildPane(
+        title: state.remoteClient != null ? 'Remote SFTP Server' : 'Remote (Disconnected)',
+        path: state.remotePath,
+        files: state.remoteFiles,
+        isLoading: state.isLoadingRemote,
+        error: state.remoteError,
+        isLocal: false,
+        onNavigateUp: notifier.navigateRemoteUp,
+        onItemTap: (item) {
+          if (item.isDirectory) {
+            notifier.loadRemoteDirectory(item.path);
+          } else {
+            _openFileEditor(item);
+          }
+        },
+        onDelete: notifier.deleteRemoteItem,
+        onDownload: (item) => notifier.downloadItem(item),
+        onEditPermissions: _openPermissionsDialog,
+        onEditContent: _openFileEditor,
+        onCreateFolder: () => _showCreateDialog(isFolder: true),
+        onCreateFile: () => _showCreateDialog(isFolder: false),
+        onRename: (item) => _showRenameDialog(item),
       ),
     );
   }
@@ -216,6 +247,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     VoidCallback? onCreateFile,
     Function(SftpFileItem)? onRename,
   }) {
+    final colorScheme = ShadTheme.of(context).colorScheme;
     final searchQuery = ref.watch(sftpNotifierProvider).searchQuery.toLowerCase();
     final filteredFiles = searchQuery.isEmpty
         ? files
@@ -226,7 +258,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
         // Pane Header
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          color: const Color(0xFF1E1E2E),
+          color: colorScheme.card,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -272,7 +304,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF313244),
+                        color: colorScheme.muted,
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
@@ -299,10 +331,10 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
                       ),
                     )
                   : filteredFiles.isEmpty
-                      ? const Center(child: Text('Empty Directory', style: TextStyle(color: Colors.white38)))
+                      ? Center(child: Text('Empty Directory', style: TextStyle(color: colorScheme.mutedForeground)))
                       : ListView.separated(
                           itemCount: filteredFiles.length,
-                          separatorBuilder: (_, _) => const Divider(height: 1, color: Colors.white10),
+                          separatorBuilder: (_, _) => Divider(height: 1, color: colorScheme.border),
                           itemBuilder: (context, index) {
                             final item = filteredFiles[index];
                             return _buildFileItemTile(
@@ -334,6 +366,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     VoidCallback? onEditContent,
     VoidCallback? onRename,
   }) {
+    final colorScheme = ShadTheme.of(context).colorScheme;
     IconData iconData;
     Color iconColor;
 
@@ -358,7 +391,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
       ),
       subtitle: Text(
         '${item.formattedSize} • ${item.permissions}',
-        style: const TextStyle(fontSize: 11, color: Colors.white54),
+        style: TextStyle(fontSize: 11, color: colorScheme.mutedForeground),
       ),
       onTap: onTap,
       trailing: PopupMenuButton<String>(
@@ -410,33 +443,39 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     }
   }
 
-  void _showCreateDialog({required bool isFolder}) {
+  void _showCreateDialog({required bool isFolder}) async {
     final controller = TextEditingController();
-    showDialog(
+    final screenWidth = MediaQuery.of(context).size.width;
+    final dialogWidth = math.min(screenWidth * 0.9, 450.0);
+
+    final name = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => ShadDialog(
         title: Text(isFolder ? 'Create Remote Directory' : 'Create Remote File'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: InputDecoration(
-            hintText: isFolder ? 'folder_name' : 'filename.txt',
-            border: const OutlineInputBorder(),
+        description: SizedBox(
+          width: dialogWidth,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 8),
+              ShadInput(
+                controller: controller,
+                autofocus: true,
+                placeholder: Text(isFolder ? 'folder_name' : 'filename.txt'),
+              ),
+            ],
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
-          ElevatedButton(
+          ShadButton.outline(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          ShadButton(
             onPressed: () {
-              final name = controller.text.trim();
-              if (name.isNotEmpty) {
-                Navigator.of(ctx).pop();
-                final notifier = ref.read(sftpNotifierProvider.notifier);
-                if (isFolder) {
-                  notifier.createRemoteFolder(name);
-                } else {
-                  notifier.createRemoteFile(name);
-                }
+              final text = controller.text.trim();
+              if (text.isNotEmpty) {
+                Navigator.of(ctx).pop(text);
               }
             },
             child: const Text('Create'),
@@ -444,27 +483,50 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
         ],
       ),
     );
+    controller.dispose();
+
+    if (name != null && name.isNotEmpty) {
+      final notifier = ref.read(sftpNotifierProvider.notifier);
+      if (isFolder) {
+        notifier.createRemoteFolder(name);
+      } else {
+        notifier.createRemoteFile(name);
+      }
+    }
   }
 
-  void _showRenameDialog(SftpFileItem item) {
+  void _showRenameDialog(SftpFileItem item) async {
     final controller = TextEditingController(text: item.name);
-    showDialog(
+    final screenWidth = MediaQuery.of(context).size.width;
+    final dialogWidth = math.min(screenWidth * 0.9, 450.0);
+
+    final newName = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => ShadDialog(
         title: Text('Rename ${item.name}'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(border: OutlineInputBorder()),
+        description: SizedBox(
+          width: dialogWidth,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 8),
+              ShadInput(
+                controller: controller,
+                autofocus: true,
+              ),
+            ],
+          ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
-          ElevatedButton(
+          ShadButton.outline(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          ShadButton(
             onPressed: () {
-              final newName = controller.text.trim();
-              if (newName.isNotEmpty && newName != item.name) {
-                Navigator.of(ctx).pop();
-                ref.read(sftpNotifierProvider.notifier).renameRemoteItem(item, newName);
+              final text = controller.text.trim();
+              if (text.isNotEmpty && text != item.name) {
+                Navigator.of(ctx).pop(text);
               }
             },
             child: const Text('Rename'),
@@ -472,5 +534,11 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
         ],
       ),
     );
+    controller.dispose();
+
+    if (newName != null && newName.isNotEmpty && newName != item.name) {
+      ref.read(sftpNotifierProvider.notifier).renameRemoteItem(item, newName);
+    }
   }
 }
+

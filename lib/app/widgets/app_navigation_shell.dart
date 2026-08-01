@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../../features/settings/presentation/notifiers/settings_notifier.dart';
@@ -124,6 +123,7 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
   @override
   Widget build(BuildContext context) {
     final isDesktop = _isDesktopPlatform(context);
+    final colorScheme = ShadTheme.of(context).colorScheme;
 
     return CallbackShortcuts(
       bindings: {
@@ -153,7 +153,7 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
                   ? Row(
                       children: [
                         _buildDesktopSidebar(context),
-                        const VerticalDivider(width: 1, thickness: 1, color: Color(0xFF2E3144)),
+                        VerticalDivider(width: 1, thickness: 1, color: colorScheme.border),
                         Expanded(child: widget.navigationShell),
                       ],
                     )
@@ -171,6 +171,8 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
   }
 
   Widget _buildTopHeader(BuildContext context) {
+    final colorScheme = ShadTheme.of(context).colorScheme;
+
     final activeWorkspaceId = ref.watch(activeWorkspaceIdProvider);
     final workspaces = ref.watch(workspacesProvider);
 
@@ -191,10 +193,10 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
     return Container(
       height: 48,
       padding: const EdgeInsets.symmetric(horizontal: 8),
-      decoration: const BoxDecoration(
-        color: Color(0xFF181825),
+      decoration: BoxDecoration(
+        color: colorScheme.card,
         border: Border(
-          bottom: BorderSide(color: Color(0xFF2E3144), width: 1),
+          bottom: BorderSide(color: colorScheme.border, width: 1),
         ),
       ),
       child: Row(
@@ -207,14 +209,14 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
                 width: 24,
                 height: 24,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF8AADF4),
+                  color: colorScheme.primary,
                   borderRadius: BorderRadius.circular(6),
                 ),
-                child: const Center(
+                child: Center(
                   child: Text(
                     '>_',
                     style: TextStyle(
-                      color: Color(0xFF1E1E2E),
+                      color: colorScheme.primaryForeground,
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
                     ),
@@ -223,10 +225,10 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
               ),
               if (!isCompactHeader) ...[
                 const SizedBox(width: 8),
-                const Text(
+                Text(
                   'Terly2',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: colorScheme.foreground,
                     fontWeight: FontWeight.bold,
                     fontSize: 15,
                     letterSpacing: 0.5,
@@ -243,18 +245,18 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
               key: const Key('workspace_selector_dropdown'),
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: const Color(0xFF24273A),
+                color: colorScheme.muted.withValues(alpha: 0.5),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFF363A4F)),
+                border: Border.all(color: colorScheme.border),
               ),
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<String>(
                   value: activeWorkspaceId,
-                  dropdownColor: const Color(0xFF24273A),
-                  icon: const Icon(Icons.keyboard_arrow_down, color: Color(0xFF8AADF4), size: 14),
+                  dropdownColor: colorScheme.card,
+                  icon: Icon(Icons.keyboard_arrow_down, color: colorScheme.primary, size: 14),
                   isDense: true,
                   isExpanded: true,
-                  style: const TextStyle(color: Colors.white, fontSize: 11),
+                  style: TextStyle(color: colorScheme.foreground, fontSize: 11),
                   onChanged: (newVal) {
                     if (newVal != null) {
                       ref.read(activeWorkspaceIdProvider.notifier).state = newVal;
@@ -266,7 +268,7 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.workspaces_outline, size: 12, color: Color(0xFF8AADF4)),
+                          Icon(Icons.workspaces_outline, size: 12, color: colorScheme.primary),
                           const SizedBox(width: 4),
                           Expanded(
                             child: Text(
@@ -299,10 +301,10 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
                   decoration: BoxDecoration(
                     color: activeSshCount > 0
                         ? Colors.green.withValues(alpha: 0.15)
-                        : Colors.white10,
+                        : colorScheme.muted.withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(6),
                     border: Border.all(
-                      color: activeSshCount > 0 ? Colors.green : Colors.grey.withValues(alpha: 0.3),
+                      color: activeSshCount > 0 ? Colors.green : colorScheme.border,
                     ),
                   ),
                   child: Row(
@@ -311,7 +313,7 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
                       Icon(
                         Icons.terminal,
                         size: 13,
-                        color: activeSshCount > 0 ? Colors.green : Colors.grey,
+                        color: activeSshCount > 0 ? Colors.green : colorScheme.mutedForeground,
                       ),
                       if (!isCompactHeader) ...[
                         const SizedBox(width: 4),
@@ -320,7 +322,7 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
-                            color: activeSshCount > 0 ? Colors.green : Colors.grey,
+                            color: activeSshCount > 0 ? Colors.green : colorScheme.mutedForeground,
                           ),
                         ),
                       ],
@@ -339,12 +341,12 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
                   decoration: BoxDecoration(
                     color: activeTunnelsCount > 0
                         ? Colors.amber.withValues(alpha: 0.15)
-                        : Colors.white10,
+                        : colorScheme.muted.withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(6),
                     border: Border.all(
                       color: activeTunnelsCount > 0
                           ? Colors.amber
-                          : Colors.grey.withValues(alpha: 0.3),
+                          : colorScheme.border,
                     ),
                   ),
                   child: Row(
@@ -353,7 +355,7 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
                       Icon(
                         Icons.alt_route,
                         size: 13,
-                        color: activeTunnelsCount > 0 ? Colors.amber : Colors.grey,
+                        color: activeTunnelsCount > 0 ? Colors.amber : colorScheme.mutedForeground,
                       ),
                       if (!isCompactHeader) ...[
                         const SizedBox(width: 4),
@@ -362,7 +364,7 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
-                            color: activeTunnelsCount > 0 ? Colors.amber : Colors.grey,
+                            color: activeTunnelsCount > 0 ? Colors.amber : colorScheme.mutedForeground,
                           ),
                         ),
                       ],
@@ -380,13 +382,13 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                   decoration: BoxDecoration(
                     color: isBiometricsEnabled
-                        ? const Color(0xFF8AADF4).withValues(alpha: 0.15)
-                        : Colors.white10,
+                        ? colorScheme.primary.withValues(alpha: 0.15)
+                        : colorScheme.muted.withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(6),
                     border: Border.all(
                       color: isBiometricsEnabled
-                          ? const Color(0xFF8AADF4)
-                          : Colors.grey.withValues(alpha: 0.3),
+                          ? colorScheme.primary
+                          : colorScheme.border,
                     ),
                   ),
                   child: Row(
@@ -395,7 +397,7 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
                       Icon(
                         isBiometricsEnabled ? Icons.fingerprint : Icons.lock_open,
                         size: 13,
-                        color: isBiometricsEnabled ? const Color(0xFF8AADF4) : Colors.grey,
+                        color: isBiometricsEnabled ? colorScheme.primary : colorScheme.mutedForeground,
                       ),
                       if (!isCompactHeader) ...[
                         const SizedBox(width: 4),
@@ -404,7 +406,7 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
-                            color: isBiometricsEnabled ? const Color(0xFF8AADF4) : Colors.grey,
+                            color: isBiometricsEnabled ? colorScheme.primary : colorScheme.mutedForeground,
                           ),
                         ),
                       ],
@@ -422,11 +424,12 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
   Widget _buildDesktopSidebar(BuildContext context) {
     final currentIndex = widget.navigationShell.currentIndex;
     final sidebarWidth = _isSidebarCollapsed ? 68.0 : 240.0;
+    final colorScheme = ShadTheme.of(context).colorScheme;
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
       width: sidebarWidth,
-      color: const Color(0xFF181825),
+      color: colorScheme.card,
       child: Column(
         children: [
           const SizedBox(height: 8),
@@ -440,7 +443,7 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
                 key: const Key('sidebar_toggle_button'),
                 icon: Icon(
                   _isSidebarCollapsed ? Icons.chevron_right : Icons.chevron_left,
-                  color: Colors.grey,
+                  color: colorScheme.mutedForeground,
                 ),
                 tooltip: _isSidebarCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar',
                 onPressed: () {
@@ -451,7 +454,7 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
               ),
             ),
           ),
-          const Divider(color: Color(0xFF2E3144), height: 1),
+          Divider(color: colorScheme.border, height: 1),
           const SizedBox(height: 8),
 
           // Navigation List Items
@@ -479,11 +482,11 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
                         ),
                         decoration: BoxDecoration(
                           color: isSelected
-                              ? const Color(0xFF8AADF4).withValues(alpha: 0.15)
+                              ? colorScheme.primary.withValues(alpha: 0.15)
                               : Colors.transparent,
                           borderRadius: BorderRadius.circular(8),
                           border: isSelected
-                              ? Border.all(color: const Color(0xFF8AADF4).withValues(alpha: 0.4))
+                              ? Border.all(color: colorScheme.primary.withValues(alpha: 0.4))
                               : null,
                         ),
                         child: _isSidebarCollapsed
@@ -491,7 +494,7 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
                                 child: Icon(
                                   isSelected ? item.selectedIcon : item.icon,
                                   size: 20,
-                                  color: isSelected ? const Color(0xFF8AADF4) : Colors.white60,
+                                  color: isSelected ? colorScheme.primary : colorScheme.mutedForeground,
                                 ),
                               )
                             : SingleChildScrollView(
@@ -504,8 +507,7 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
                                       Icon(
                                         isSelected ? item.selectedIcon : item.icon,
                                         size: 20,
-                                        color:
-                                            isSelected ? const Color(0xFF8AADF4) : Colors.white60,
+                                        color: isSelected ? colorScheme.primary : colorScheme.mutedForeground,
                                       ),
                                       const SizedBox(width: 12),
                                       Expanded(
@@ -517,7 +519,7 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
                                             fontSize: 14,
                                             fontWeight:
                                                 isSelected ? FontWeight.bold : FontWeight.w500,
-                                            color: isSelected ? Colors.white : Colors.white70,
+                                            color: isSelected ? colorScheme.foreground : colorScheme.mutedForeground,
                                           ),
                                         ),
                                       ),
@@ -526,14 +528,14 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
                                         padding: const EdgeInsets.symmetric(
                                             horizontal: 6, vertical: 2),
                                         decoration: BoxDecoration(
-                                          color: Colors.white.withValues(alpha: 0.06),
+                                          color: colorScheme.muted.withValues(alpha: 0.5),
                                           borderRadius: BorderRadius.circular(4),
                                         ),
                                         child: Text(
                                           item.shortcut,
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                             fontSize: 10,
-                                            color: Colors.grey,
+                                            color: colorScheme.mutedForeground,
                                             fontWeight: FontWeight.bold,
                                           ),
                                         ),
@@ -556,26 +558,37 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
 
   Widget _buildMobileBottomBar(BuildContext context) {
     final currentIndex = widget.navigationShell.currentIndex;
+    final colorScheme = ShadTheme.of(context).colorScheme;
+    final screenWidth = MediaQuery.of(context).size.width;
+    const minWidth = 540.0;
+    final barWidth = screenWidth < minWidth ? minWidth : screenWidth;
 
     return Container(
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: Color(0xFF2E3144), width: 1)),
+      decoration: BoxDecoration(
+        color: colorScheme.card,
+        border: Border(top: BorderSide(color: colorScheme.border, width: 1)),
       ),
-      child: NavigationBar(
-        key: const Key('mobile_bottom_navigation_bar'),
-        selectedIndex: currentIndex,
-        onDestinationSelected: _onTabSelected,
-        backgroundColor: const Color(0xFF181825),
-        indicatorColor: const Color(0xFF8AADF4).withValues(alpha: 0.25),
-        destinations: appNavigationItems.map((item) {
-          return NavigationDestination(
-            key: Key('mobile_nav_destination_${item.label.toLowerCase()}'),
-            icon: Icon(item.icon, color: Colors.white60),
-            selectedIcon: Icon(item.selectedIcon, color: const Color(0xFF8AADF4)),
-            label: item.label,
-            tooltip: item.tooltip,
-          );
-        }).toList(),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: SizedBox(
+          width: barWidth,
+          child: NavigationBar(
+            key: const Key('mobile_bottom_navigation_bar'),
+            selectedIndex: currentIndex,
+            onDestinationSelected: _onTabSelected,
+            backgroundColor: colorScheme.card,
+            indicatorColor: colorScheme.primary.withValues(alpha: 0.25),
+            destinations: appNavigationItems.map((item) {
+              return NavigationDestination(
+                key: Key('mobile_nav_destination_${item.label.toLowerCase()}'),
+                icon: Icon(item.icon, color: colorScheme.mutedForeground),
+                selectedIcon: Icon(item.selectedIcon, color: colorScheme.primary),
+                label: item.label,
+                tooltip: item.tooltip,
+              );
+            }).toList(),
+          ),
+        ),
       ),
     );
   }

@@ -46,6 +46,10 @@ class FakeSSHSession implements SSHSession {
     _stderrController.close();
   }
 
+  void emitBytes(Uint8List bytes) {
+    _stdoutController.add(bytes);
+  }
+
   void emitStdout(String data) {
     _stdoutController.add(Uint8List.fromList(utf8.encode(data)));
   }
@@ -121,6 +125,29 @@ void main() {
       expect(terminal.onOutput, isNull);
       expect(terminal.onResize, isNull);
       expect(session.isClosed, isTrue);
+    });
+
+    test('UTF-8 decoder handles multi-byte split Turkish characters across chunks', () async {
+      // 'ğ' in UTF-8 is [0xC4, 0x9F]
+      session.emitBytes(Uint8List.fromList([0xC4]));
+      await Future.delayed(const Duration(milliseconds: 20));
+      session.emitBytes(Uint8List.fromList([0x9F]));
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      expect(terminal.buffer.lines[0].toString(), contains('ğ'));
+    });
+
+    test('onDone writes session closed message and disposes bridge', () async {
+      session.emitStdout('stdout end');
+      session.close();
+
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      expect(
+        terminal.buffer.getText(),
+        contains('[Session closed / Process exited]'),
+      );
+      expect(bridge.isDisposed, isTrue);
     });
   });
 }

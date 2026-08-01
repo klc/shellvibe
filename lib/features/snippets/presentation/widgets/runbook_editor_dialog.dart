@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../domain/models/runbook_model.dart';
@@ -82,9 +83,43 @@ class _RunbookEditorDialogState extends State<RunbookEditorDialog> {
   Widget build(BuildContext context) {
     final isEditing = widget.runbook != null;
 
-    return AlertDialog(
+    return ShadDialog(
       title: Text(isEditing ? 'Edit Runbook' : 'New Runbook'),
-      content: SizedBox(
+      actions: [
+        ShadButton.outline(
+          onPressed: () => Navigator.of(context).pop(null),
+          child: const Text('Cancel'),
+        ),
+        ShadButton(
+          key: const Key('runbook_save_button'),
+          onPressed: () {
+            if (_steps.isEmpty) {
+              ShadToaster.of(context).show(
+                const ShadToast.destructive(
+                  title: Text('Validation Error'),
+                  description: Text('Runbook must have at least 1 step.'),
+                ),
+              );
+              return;
+            }
+            if (_formKey.currentState!.validate()) {
+              final result = RunbookModel(
+                id: widget.runbook?.id ?? const Uuid().v4(),
+                workspaceId: widget.workspaceId,
+                title: _titleController.text.trim(),
+                description: _descriptionController.text.trim().isEmpty
+                    ? null
+                    : _descriptionController.text.trim(),
+                steps: _steps,
+                createdAt: widget.runbook?.createdAt ?? DateTime.now(),
+              );
+              Navigator.of(context).pop(result);
+            }
+          },
+          child: Text(isEditing ? 'Save' : 'Create'),
+        ),
+      ],
+      child: SizedBox(
         width: 550,
         child: SingleChildScrollView(
           child: Form(
@@ -93,24 +128,18 @@ class _RunbookEditorDialogState extends State<RunbookEditorDialog> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                TextFormField(
+                ShadInputFormField(
                   key: const Key('runbook_title_field'),
                   controller: _titleController,
-                  decoration: const InputDecoration(
-                    labelText: 'Runbook Title',
-                    hintText: 'e.g. Deploy Microservices Pipeline',
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: (val) => val == null || val.trim().isEmpty ? 'Title is required' : null,
+                  label: const Text('Runbook Title'),
+                  placeholder: const Text('e.g. Deploy Microservices Pipeline'),
+                  validator: (val) => val.trim().isEmpty ? 'Title is required' : null,
                 ),
                 const SizedBox(height: 12),
-                TextFormField(
+                ShadInputFormField(
                   key: const Key('runbook_desc_field'),
                   controller: _descriptionController,
-                  decoration: const InputDecoration(
-                    labelText: 'Description (optional)',
-                    border: OutlineInputBorder(),
-                  ),
+                  label: const Text('Description (optional)'),
                 ),
                 const SizedBox(height: 16),
                 Row(
@@ -120,11 +149,11 @@ class _RunbookEditorDialogState extends State<RunbookEditorDialog> {
                       'Steps (${_steps.length})',
                       style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                     ),
-                    ElevatedButton.icon(
+                    ShadButton(
                       key: const Key('runbook_add_step_button'),
                       onPressed: _addStep,
-                      icon: const Icon(Icons.add, size: 16),
-                      label: const Text('Add Step'),
+                      leading: const Icon(Icons.add, size: 16),
+                      child: const Text('Add Step'),
                     ),
                   ],
                 ),
@@ -153,22 +182,18 @@ class _RunbookEditorDialogState extends State<RunbookEditorDialog> {
                                 style: const TextStyle(fontWeight: FontWeight.bold),
                               ),
                               const Spacer(),
-                              IconButton(
-                                icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                              ShadIconButton.ghost(
+                                icon: const Icon(Icons.delete, color: Colors.red, size: 18),
                                 onPressed: () => _removeStep(idx),
                               ),
                             ],
                           ),
-                          TextFormField(
+                          ShadInputFormField(
                             key: Key('step_command_$idx'),
                             initialValue: step.command,
-                            decoration: const InputDecoration(
-                              labelText: 'Command',
-                              hintText: 'docker-compose pull',
-                              border: OutlineInputBorder(),
-                            ),
-                            validator: (val) =>
-                                val == null || val.trim().isEmpty ? 'Command required' : null,
+                            label: const Text('Command'),
+                            placeholder: const Text('docker-compose pull'),
+                            validator: (val) => val.trim().isEmpty ? 'Command required' : null,
                             onChanged: (val) {
                               _steps[idx] = step.copyWith(command: val);
                             },
@@ -177,29 +202,32 @@ class _RunbookEditorDialogState extends State<RunbookEditorDialog> {
                           Row(
                             children: [
                               Expanded(
-                                child: TextFormField(
+                                child: ShadInputFormField(
                                   key: Key('step_exit_code_$idx'),
                                   initialValue: step.expectedExitCode.toString(),
                                   keyboardType: TextInputType.number,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Exit Code',
-                                    border: OutlineInputBorder(),
-                                  ),
+                                  label: const Text('Exit Code'),
+                                  validator: (val) {
+                                    if (val.trim().isEmpty) return 'Required';
+                                    if (int.tryParse(val.trim()) == null) {
+                                      return 'Must be a valid integer';
+                                    }
+                                    return null;
+                                  },
                                   onChanged: (val) {
-                                    final code = int.tryParse(val) ?? 0;
-                                    _steps[idx] = step.copyWith(expectedExitCode: code);
+                                    final code = int.tryParse(val.trim());
+                                    if (code != null) {
+                                      _steps[idx] = step.copyWith(expectedExitCode: code);
+                                    }
                                   },
                                 ),
                               ),
                               const SizedBox(width: 8),
                               Expanded(
-                                child: TextFormField(
+                                child: ShadInputFormField(
                                   key: Key('step_pattern_$idx'),
                                   initialValue: step.expectedOutputPattern ?? '',
-                                  decoration: const InputDecoration(
-                                    labelText: 'Output Regex / String',
-                                    border: OutlineInputBorder(),
-                                  ),
+                                  label: const Text('Output Regex / String'),
                                   onChanged: (val) {
                                     _steps[idx] = step.copyWith(
                                       expectedOutputPattern: val.isEmpty ? null : val,
@@ -219,31 +247,7 @@ class _RunbookEditorDialogState extends State<RunbookEditorDialog> {
           ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(null),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          key: const Key('runbook_save_button'),
-          onPressed: () {
-            if (_formKey.currentState!.validate()) {
-              final result = RunbookModel(
-                id: widget.runbook?.id ?? const Uuid().v4(),
-                workspaceId: widget.workspaceId,
-                title: _titleController.text.trim(),
-                description: _descriptionController.text.trim().isEmpty
-                    ? null
-                    : _descriptionController.text.trim(),
-                steps: _steps,
-                createdAt: widget.runbook?.createdAt ?? DateTime.now(),
-              );
-              Navigator.of(context).pop(result);
-            }
-          },
-          child: Text(isEditing ? 'Save' : 'Create'),
-        ),
-      ],
     );
   }
 }
+

@@ -12,7 +12,7 @@ class TerminalLocalPtyBridge {
   final Terminal terminal;
   final Pty pty;
 
-  StreamSubscription<Uint8List>? _outputSubscription;
+  StreamSubscription<String>? _outputSubscription;
   bool _isDisposed = false;
 
   /// Returns true if the bridge has been disposed.
@@ -37,15 +37,19 @@ class TerminalLocalPtyBridge {
     };
 
     // 2. Wire local PTY output stream -> xterm Terminal
-    _outputSubscription = pty.output.listen(
-      (Uint8List data) {
+    _outputSubscription = pty.output
+        .cast<List<int>>()
+        .transform(const Utf8Decoder(allowMalformed: true))
+        .listen(
+      (String data) {
         if (_isDisposed) return;
-        terminal.write(utf8.decode(data, allowMalformed: true));
+        terminal.write(data);
       },
       onError: (Object error) {
         if (_isDisposed) return;
         terminal.write('\r\n[PTY stream error: $error]\r\n');
       },
+      onDone: _onStreamDone,
     );
 
     // 3. Wire window resize event from xterm Terminal -> Local PTY resize
@@ -53,6 +57,17 @@ class TerminalLocalPtyBridge {
     terminal.onResize = (int width, int height, int pixelWidth, int pixelHeight) {
       resizeTerminal(width, height);
     };
+  }
+
+  void _onStreamDone() {
+    if (_isDisposed) return;
+    try {
+      final code = pty.exitCode;
+      terminal.write('\r\n\x1b[1;33m[Process exited with code $code]\x1b[0m\r\n');
+    } catch (_) {
+      terminal.write('\r\n\x1b[1;33m[Session closed / Process exited]\x1b[0m\r\n');
+    }
+    dispose();
   }
 
   /// Resizes local PTY dimensions to [height] rows and [width] columns.
@@ -120,12 +135,18 @@ class LocalPtyManager {
     }
 
     final exec = executable ?? getDefaultShell();
+    final env = <String, String>{
+      ...Platform.environment,
+      'TERM': 'xterm-256color',
+      ...?environment,
+    };
+    final workDir = workingDirectory ?? Platform.environment['HOME'];
 
     return Pty.start(
       exec,
       arguments: arguments,
-      workingDirectory: workingDirectory,
-      environment: environment,
+      workingDirectory: workDir,
+      environment: env,
       rows: rows,
       columns: columns,
     );

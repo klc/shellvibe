@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../../../../core/sync/e2ee_cloud_sync_service.dart';
 import '../../../../shared/providers/database_providers.dart';
@@ -30,8 +31,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final canCheck = await service.canCheckBiometrics();
     if (!canCheck) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Biometric authentication is not available on this device.')),
+        ShadToaster.of(context).show(
+          const ShadToast(
+            description: Text('Biometric authentication is not available on this device.'),
+          ),
         );
       }
       return;
@@ -39,22 +42,29 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     final success = await service.authenticate(localizedReason: 'Test Terly2 Biometric Lock');
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            success ? 'Biometric Authentication Successful!' : 'Biometric Authentication Failed/Cancelled.',
+      if (success) {
+        ShadToaster.of(context).show(
+          const ShadToast(
+            description: Text('Biometric Authentication Successful!'),
           ),
-          backgroundColor: success ? Colors.green : Colors.red,
-        ),
-      );
+        );
+      } else {
+        ShadToaster.of(context).show(
+          const ShadToast.destructive(
+            description: Text('Biometric Authentication Failed/Cancelled.'),
+          ),
+        );
+      }
     }
   }
 
   Future<void> _handleExportE2EEBackup() async {
     final password = _masterPasswordController.text.trim();
     if (password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a Master Password for Zero-Knowledge encryption.')),
+      ShadToaster.of(context).show(
+        const ShadToast(
+          description: Text('Please enter a Master Password for Zero-Knowledge encryption.'),
+        ),
       );
       return;
     }
@@ -72,13 +82,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       if (mounted) {
         showDialog(
           context: context,
-          builder: (context) => AlertDialog(
+          builder: (context) => ShadDialog(
             title: const Text('Backup Exported (Copied to Clipboard)'),
-            content: SingleChildScrollView(
+            description: SingleChildScrollView(
               child: SelectableText(backupJson),
             ),
             actions: [
-              TextButton(
+              ShadButton.outline(
                 onPressed: () => Navigator.of(context).pop(),
                 child: const Text('Close'),
               ),
@@ -88,8 +98,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to export backup: $e'), backgroundColor: Colors.red),
+        ShadToaster.of(context).show(
+          ShadToast.destructive(
+            description: Text('Failed to export backup: $e'),
+          ),
         );
       }
     }
@@ -100,9 +112,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final backupJson = _backupPackageController.text.trim();
 
     if (password.isEmpty || backupJson.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please provide both Master Password and Backup Package JSON.'),
+      ShadToaster.of(context).show(
+        const ShadToast(
+          description: Text('Please provide both Master Password and Backup Package JSON.'),
         ),
       );
       return;
@@ -118,17 +130,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Zero-Knowledge Backup Imported & Restored Successfully!'),
-            backgroundColor: Colors.green,
+        ShadToaster.of(context).show(
+          const ShadToast(
+            description: Text('Zero-Knowledge Backup Imported & Restored Successfully!'),
           ),
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Import failed (wrong password or corrupted backup): $e'), backgroundColor: Colors.red),
+        ShadToaster.of(context).show(
+          ShadToast.destructive(
+            description: Text('Import failed (wrong password or corrupted backup): $e'),
+          ),
         );
       }
     }
@@ -149,95 +162,193 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           return ListView(
             padding: const EdgeInsets.all(16.0),
             children: [
-              // --- Section 1: Appearance & Theme ---
-              _buildSectionHeader('Appearance & Terminal Theme', Icons.palette),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12.0),
-                  child: Column(
-                    children: [
-                      ListTile(
-                        title: const Text('Theme Mode'),
-                        trailing: DropdownButton<ThemeMode>(
-                          key: const Key('settings_theme_mode_dropdown'),
-                          value: settings.themeMode,
-                          onChanged: (mode) {
-                            if (mode != null) notifier.setThemeMode(mode);
-                          },
-                          items: const [
-                            DropdownMenuItem(value: ThemeMode.dark, child: Text('Dark')),
-                            DropdownMenuItem(value: ThemeMode.light, child: Text('Light')),
-                            DropdownMenuItem(value: ThemeMode.system, child: Text('System')),
+              // --- Section 1: Application Appearance ---
+              _buildSectionHeader('App Theme & Appearance', Icons.palette),
+              ShadCard(
+                child: Column(
+                  children: [
+                    ListTile(
+                      title: const Text('App Theme Mode'),
+                      trailing: ShadSelect<ThemeMode>(
+                        key: const Key('settings_theme_mode_dropdown'),
+                        initialValue: settings.themeMode,
+                        selectedOptionBuilder: (context, value) {
+                          switch (value) {
+                            case ThemeMode.dark:
+                              return const Text('Dark');
+                            case ThemeMode.light:
+                              return const Text('Light');
+                            case ThemeMode.system:
+                              return const Text('System');
+                          }
+                        },
+                        options: const [
+                          ShadOption(value: ThemeMode.dark, child: Text('Dark')),
+                          ShadOption(value: ThemeMode.light, child: Text('Light')),
+                          ShadOption(value: ThemeMode.system, child: Text('System')),
+                        ],
+                        onChanged: (mode) {
+                          if (mode != null) notifier.setThemeMode(mode);
+                        },
+                      ),
+                    ),
+                    const Divider(),
+                    ListTile(
+                      title: const Text('App UI Color Palette'),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Current: ${settings.palette.name.toUpperCase()}'),
+                          if (settings.themeMode == ThemeMode.light) ...[
+                            const SizedBox(height: 4),
+                            const ShadBadge.secondary(
+                              child: Text('Light mode uses default Light Slate theme'),
+                            ),
                           ],
-                        ),
+                        ],
                       ),
-                      const Divider(),
-                      ListTile(
-                        title: const Text('Color Palette'),
-                        subtitle: Text('Current: ${settings.palette.name.toUpperCase()}'),
-                        trailing: DropdownButton<AppPalette>(
-                          key: const Key('settings_palette_dropdown'),
-                          value: settings.palette,
-                          onChanged: (palette) {
-                            if (palette != null) notifier.setPalette(palette);
-                          },
-                          items: const [
-                            DropdownMenuItem(value: AppPalette.dark, child: Text('Dark Default')),
-                            DropdownMenuItem(value: AppPalette.oled, child: Text('OLED Pure Black')),
-                            DropdownMenuItem(value: AppPalette.catppuccin, child: Text('Catppuccin')),
-                            DropdownMenuItem(value: AppPalette.nord, child: Text('Nord')),
-                          ],
-                        ),
+                      trailing: ShadSelect<AppPalette>(
+                        key: const Key('settings_palette_dropdown'),
+                        initialValue: settings.palette,
+                        selectedOptionBuilder: (context, value) {
+                          switch (value) {
+                            case AppPalette.dark:
+                              return const Text('Dark Slate');
+                            case AppPalette.oled:
+                              return const Text('OLED Pure Black');
+                            case AppPalette.catppuccin:
+                              return const Text('Catppuccin');
+                            case AppPalette.nord:
+                              return const Text('Nord');
+                          }
+                        },
+                        options: const [
+                          ShadOption(value: AppPalette.dark, child: Text('Dark Slate')),
+                          ShadOption(value: AppPalette.oled, child: Text('OLED Pure Black')),
+                          ShadOption(value: AppPalette.catppuccin, child: Text('Catppuccin')),
+                          ShadOption(value: AppPalette.nord, child: Text('Nord')),
+                        ],
+                        onChanged: (palette) {
+                          if (palette != null) notifier.setPalette(palette);
+                        },
                       ),
-                      const Divider(),
-                      ListTile(
-                        title: const Text('Font Family'),
-                        trailing: DropdownButton<String>(
-                          key: const Key('settings_font_family_dropdown'),
-                          value: settings.fontFamily,
-                          onChanged: (font) {
-                            if (font != null) notifier.setFontFamily(font);
-                          },
-                          items: const [
-                            DropdownMenuItem(value: 'RobotoMono', child: Text('Roboto Mono')),
-                            DropdownMenuItem(value: 'FiraCode', child: Text('Fira Code')),
-                            DropdownMenuItem(value: 'Inter', child: Text('Inter')),
-                            DropdownMenuItem(value: 'Courier', child: Text('Courier')),
-                          ],
-                        ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // --- Section 2: Terminal Customization & Theme ---
+              _buildSectionHeader('Terminal Theme & Shell', Icons.terminal),
+              ShadCard(
+                child: Column(
+                  children: [
+                    ListTile(
+                      title: const Text('Terminal Color Scheme'),
+                      subtitle: Text('Current: ${settings.terminalPalette.name.toUpperCase()}'),
+                      trailing: ShadSelect<TerminalPalette>(
+                        key: const Key('settings_terminal_palette_dropdown'),
+                        initialValue: settings.terminalPalette,
+                        selectedOptionBuilder: (context, value) {
+                          switch (value) {
+                            case TerminalPalette.dark:
+                              return const Text('Dark Default');
+                            case TerminalPalette.oled:
+                              return const Text('OLED True Black');
+                            case TerminalPalette.catppuccin:
+                              return const Text('Catppuccin Macchiato');
+                            case TerminalPalette.nord:
+                              return const Text('Nord');
+                            case TerminalPalette.dracula:
+                              return const Text('Dracula');
+                            case TerminalPalette.solarizedDark:
+                              return const Text('Solarized Dark');
+                          }
+                        },
+                        options: const [
+                          ShadOption(value: TerminalPalette.dark, child: Text('Dark Default')),
+                          ShadOption(value: TerminalPalette.oled, child: Text('OLED True Black')),
+                          ShadOption(value: TerminalPalette.catppuccin, child: Text('Catppuccin Macchiato')),
+                          ShadOption(value: TerminalPalette.nord, child: Text('Nord')),
+                          ShadOption(value: TerminalPalette.dracula, child: Text('Dracula')),
+                          ShadOption(value: TerminalPalette.solarizedDark, child: Text('Solarized Dark')),
+                        ],
+                        onChanged: (palette) {
+                          if (palette != null) notifier.setTerminalPalette(palette);
+                        },
                       ),
-                      const Divider(),
-                      ListTile(
-                        title: const Text('Font Size'),
-                        subtitle: Slider(
-                          key: const Key('settings_font_size_slider'),
-                          min: 10,
-                          max: 24,
-                          divisions: 14,
-                          value: settings.fontSize,
-                          label: '${settings.fontSize.toInt()} px',
-                          onChanged: (val) => notifier.setFontSize(val),
-                        ),
-                        trailing: Text('${settings.fontSize.toInt()} px'),
+                    ),
+                    const Divider(),
+                    ListTile(
+                      title: const Text('Font Family'),
+                      trailing: ShadSelect<String>(
+                        key: const Key('settings_font_family_dropdown'),
+                        initialValue: settings.fontFamily,
+                        selectedOptionBuilder: (context, value) {
+                          switch (value) {
+                            case 'FiraCode':
+                              return const Text('Fira Code');
+                            case 'Inter':
+                              return const Text('Inter');
+                            case 'Courier':
+                              return const Text('Courier');
+                            case 'RobotoMono':
+                            default:
+                              return const Text('Roboto Mono');
+                          }
+                        },
+                        options: const [
+                          ShadOption(value: 'RobotoMono', child: Text('Roboto Mono')),
+                          ShadOption(value: 'FiraCode', child: Text('Fira Code')),
+                          ShadOption(value: 'Inter', child: Text('Inter')),
+                          ShadOption(value: 'Courier', child: Text('Courier')),
+                        ],
+                        onChanged: (font) {
+                          if (font != null) notifier.setFontFamily(font);
+                        },
                       ),
-                      const Divider(),
-                      ListTile(
-                        title: const Text('Cursor Style'),
-                        trailing: DropdownButton<AppCursorStyle>(
-                          key: const Key('settings_cursor_style_dropdown'),
-                          value: settings.cursorStyle,
-                          onChanged: (style) {
-                            if (style != null) notifier.setCursorStyle(style);
-                          },
-                          items: const [
-                            DropdownMenuItem(value: AppCursorStyle.block, child: Text('Block')),
-                            DropdownMenuItem(value: AppCursorStyle.underline, child: Text('Underline')),
-                            DropdownMenuItem(value: AppCursorStyle.bar, child: Text('Bar')),
-                          ],
-                        ),
+                    ),
+                    const Divider(),
+                    ListTile(
+                      title: const Text('Font Size'),
+                      subtitle: Slider(
+                        key: const Key('settings_font_size_slider'),
+                        min: 10,
+                        max: 24,
+                        divisions: 14,
+                        value: settings.fontSize,
+                        label: '${settings.fontSize.toInt()} px',
+                        onChanged: (val) => notifier.setFontSize(val),
                       ),
-                    ],
-                  ),
+                      trailing: Text('${settings.fontSize.toInt()} px'),
+                    ),
+                    const Divider(),
+                    ListTile(
+                      title: const Text('Cursor Style'),
+                      trailing: ShadSelect<AppCursorStyle>(
+                        key: const Key('settings_cursor_style_dropdown'),
+                        initialValue: settings.cursorStyle,
+                        selectedOptionBuilder: (context, value) {
+                          switch (value) {
+                            case AppCursorStyle.underline:
+                              return const Text('Underline');
+                            case AppCursorStyle.bar:
+                              return const Text('Bar');
+                            case AppCursorStyle.block:
+                              return const Text('Block');
+                          }
+                        },
+                        options: const [
+                          ShadOption(value: AppCursorStyle.block, child: Text('Block')),
+                          ShadOption(value: AppCursorStyle.underline, child: Text('Underline')),
+                          ShadOption(value: AppCursorStyle.bar, child: Text('Bar')),
+                        ],
+                        onChanged: (style) {
+                          if (style != null) notifier.setCursorStyle(style);
+                        },
+                      ),
+                    ),
+                  ],
                 ),
               ),
 
@@ -245,57 +356,80 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
               // --- Section 2: Security & Biometrics ---
               _buildSectionHeader('Security & Biometric Controls', Icons.security),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12.0),
-                  child: Column(
-                    children: [
-                      ListTile(
-                        title: const Text('Biometric Lock (FaceID / TouchID / Windows Hello)'),
-                        subtitle: const Text('Verify identity on app launch or resume'),
-                        trailing: ElevatedButton(
-                          key: const Key('test_biometrics_button'),
-                          onPressed: _handleTestBiometrics,
-                          child: const Text('Test Lock'),
-                        ),
+              ShadCard(
+                child: Column(
+                  children: [
+                    ListTile(
+                      title: const Text('Biometric Lock (FaceID / TouchID / Windows Hello)'),
+                      subtitle: const Text('Verify identity on app launch or resume'),
+                      trailing: ShadButton(
+                        key: const Key('test_biometrics_button'),
+                        onPressed: _handleTestBiometrics,
+                        child: const Text('Test Lock'),
                       ),
-                      const Divider(),
-                      ListTile(
-                        title: const Text('Auto-Lock Timer'),
-                        trailing: DropdownButton<int>(
-                          key: const Key('settings_autolock_dropdown'),
-                          value: settings.autoLockTimerSeconds,
-                          onChanged: (sec) {
-                            if (sec != null) notifier.setAutoLockTimer(sec);
-                          },
-                          items: const [
-                            DropdownMenuItem(value: 0, child: Text('Disabled')),
-                            DropdownMenuItem(value: 30, child: Text('30 Seconds')),
-                            DropdownMenuItem(value: 60, child: Text('1 Minute')),
-                            DropdownMenuItem(value: 300, child: Text('5 Minutes')),
-                          ],
-                        ),
+                    ),
+                    const Divider(),
+                    ListTile(
+                      title: const Text('Auto-Lock Timer'),
+                      trailing: ShadSelect<int>(
+                        key: const Key('settings_autolock_dropdown'),
+                        initialValue: settings.autoLockTimerSeconds,
+                        selectedOptionBuilder: (context, value) {
+                          switch (value) {
+                            case 30:
+                              return const Text('30 Seconds');
+                            case 60:
+                              return const Text('1 Minute');
+                            case 300:
+                              return const Text('5 Minutes');
+                            case 0:
+                            default:
+                              return const Text('Disabled');
+                          }
+                        },
+                        options: const [
+                          ShadOption(value: 0, child: Text('Disabled')),
+                          ShadOption(value: 30, child: Text('30 Seconds')),
+                          ShadOption(value: 60, child: Text('1 Minute')),
+                          ShadOption(value: 300, child: Text('5 Minutes')),
+                        ],
+                        onChanged: (sec) {
+                          if (sec != null) notifier.setAutoLockTimer(sec);
+                        },
                       ),
-                      const Divider(),
-                      ListTile(
-                        title: const Text('Clipboard Auto-Clear'),
-                        subtitle: const Text('Clear copied sensitive passwords/keys after timer'),
-                        trailing: DropdownButton<int>(
-                          key: const Key('settings_clipboard_clear_dropdown'),
-                          value: settings.clipboardAutoClearSeconds,
-                          onChanged: (sec) {
-                            if (sec != null) notifier.setClipboardAutoClear(sec);
-                          },
-                          items: const [
-                            DropdownMenuItem(value: 0, child: Text('Disabled')),
-                            DropdownMenuItem(value: 15, child: Text('15 Seconds')),
-                            DropdownMenuItem(value: 30, child: Text('30 Seconds')),
-                            DropdownMenuItem(value: 60, child: Text('60 Seconds')),
-                          ],
-                        ),
+                    ),
+                    const Divider(),
+                    ListTile(
+                      title: const Text('Clipboard Auto-Clear'),
+                      subtitle: const Text('Clear copied sensitive passwords/keys after timer'),
+                      trailing: ShadSelect<int>(
+                        key: const Key('settings_clipboard_clear_dropdown'),
+                        initialValue: settings.clipboardAutoClearSeconds,
+                        selectedOptionBuilder: (context, value) {
+                          switch (value) {
+                            case 15:
+                              return const Text('15 Seconds');
+                            case 30:
+                              return const Text('30 Seconds');
+                            case 60:
+                              return const Text('60 Seconds');
+                            case 0:
+                            default:
+                              return const Text('Disabled');
+                          }
+                        },
+                        options: const [
+                          ShadOption(value: 0, child: Text('Disabled')),
+                          ShadOption(value: 15, child: Text('15 Seconds')),
+                          ShadOption(value: 30, child: Text('30 Seconds')),
+                          ShadOption(value: 60, child: Text('60 Seconds')),
+                        ],
+                        onChanged: (sec) {
+                          if (sec != null) notifier.setClipboardAutoClear(sec);
+                        },
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
 
@@ -303,69 +437,56 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
               // --- Section 3: Zero-Knowledge E2EE Cloud Sync ---
               _buildSectionHeader('Zero-Knowledge E2EE Cloud Sync', Icons.cloud_sync),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Encrypt database records locally with AES-256-GCM using Argon2id key derivation.',
-                        style: TextStyle(fontSize: 13, color: Colors.grey),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        key: const Key('sync_master_password_field'),
-                        controller: _masterPasswordController,
-                        obscureText: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Master Password',
-                          hintText: 'Enter password to encrypt/decrypt backup',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              key: const Key('export_backup_button'),
-                              onPressed: _handleExportE2EEBackup,
-                              icon: const Icon(Icons.download),
-                              label: const Text('Export Encrypted Backup'),
-                            ),
+              ShadCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Encrypt database records locally with AES-256-GCM using Argon2id key derivation.',
+                      style: TextStyle(fontSize: 13, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 12),
+                    ShadInput(
+                      key: const Key('sync_master_password_field'),
+                      controller: _masterPasswordController,
+                      obscureText: true,
+                      placeholder: const Text('Enter password to encrypt/decrypt backup'),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ShadButton(
+                            key: const Key('export_backup_button'),
+                            onPressed: _handleExportE2EEBackup,
+                            leading: const Icon(Icons.download, size: 16),
+                            child: const Text('Export Encrypted Backup'),
                           ),
-                        ],
-                      ),
-                      const Divider(height: 24),
-                      TextField(
-                        key: const Key('sync_backup_package_field'),
-                        controller: _backupPackageController,
-                        maxLines: 3,
-                        decoration: const InputDecoration(
-                          labelText: 'Paste Encrypted Backup JSON',
-                          hintText: '{"schema_version": 1, "salt": "...", "payload": "..."}',
-                          border: OutlineInputBorder(),
                         ),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              key: const Key('import_backup_button'),
-                              onPressed: _handleImportE2EEBackup,
-                              icon: const Icon(Icons.upload),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.orange,
-                              ),
-                              label: const Text('Import Encrypted Backup'),
-                            ),
+                      ],
+                    ),
+                    const Divider(height: 24),
+                    ShadInput(
+                      key: const Key('sync_backup_package_field'),
+                      controller: _backupPackageController,
+                      maxLines: 3,
+                      placeholder: const Text('{"schema_version": 1, "salt": "...", "payload": "..."}'),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ShadButton(
+                            key: const Key('import_backup_button'),
+                            onPressed: _handleImportE2EEBackup,
+                            leading: const Icon(Icons.upload, size: 16),
+                            backgroundColor: Colors.orange,
+                            child: const Text('Import Encrypted Backup'),
                           ),
-                        ],
-                      ),
-                    ],
-                  ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ],

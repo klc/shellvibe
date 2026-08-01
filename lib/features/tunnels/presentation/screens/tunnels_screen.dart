@@ -1,10 +1,11 @@
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../../../../core/network/tunnel_engine.dart';
-import '../../../../shared/database/app_database.dart';
-import '../../../../shared/providers/database_providers.dart';
+import '../../../hosts/domain/models/host_model.dart';
+import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
 import '../../domain/models/tunnel_rule_model.dart';
 import '../providers/tunnels_providers.dart';
 import '../widgets/tunnel_form_dialog.dart';
@@ -24,7 +25,7 @@ class TunnelsScreen extends ConsumerStatefulWidget {
 }
 
 class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
-  final Map<String, Host> _hostsMap = {};
+  final Map<String, HostModel> _hostsMap = {};
 
   @override
   void initState() {
@@ -34,7 +35,7 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
 
   Future<void> _loadHostsMap() async {
     try {
-      final hosts = await ref.read(hostsDaoProvider).getAllHosts();
+      final hosts = await ref.read(hostsRepositoryProvider).getAllHosts();
       if (mounted) {
         setState(() {
           for (final h in hosts) {
@@ -74,15 +75,16 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(tunnelsNotifierProvider);
     final activeTunnelsAsync = ref.watch(activeTunnelsStreamProvider);
+    final colorScheme = ShadTheme.of(context).colorScheme;
 
     final filteredRules = widget.filterHostId != null
         ? state.rules.where((r) => r.hostId == widget.filterHostId).toList()
         : state.rules;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF181825),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1E1E2E),
+        backgroundColor: colorScheme.card,
         elevation: 0,
         title: const Row(
           children: [
@@ -125,11 +127,11 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.hub_outlined, size: 64, color: Colors.white24),
+                  Icon(Icons.hub_outlined, size: 64, color: colorScheme.mutedForeground),
                   const SizedBox(height: 16),
-                  const Text(
+                  Text(
                     'No Port Forwarding Rules configured.',
-                    style: TextStyle(color: Colors.white54, fontSize: 16),
+                    style: TextStyle(color: colorScheme.mutedForeground, fontSize: 16),
                   ),
                   const SizedBox(height: 16),
                   ElevatedButton.icon(
@@ -168,8 +170,9 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
   Widget _buildRuleCard({
     required TunnelRuleModel rule,
     ActiveTunnel? activeTunnel,
-    Host? host,
+    HostModel? host,
   }) {
+    final colorScheme = ShadTheme.of(context).colorScheme;
     final isActive = activeTunnel?.isActive ?? false;
 
     Color badgeColor;
@@ -194,11 +197,11 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
     }
 
     return Card(
-      color: const Color(0xFF1E1E2E),
+      color: colorScheme.card,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
-          color: isActive ? Colors.greenAccent : Colors.white10,
+          color: isActive ? Colors.greenAccent : colorScheme.border,
           width: isActive ? 1.5 : 1,
         ),
       ),
@@ -242,10 +245,9 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
                       if (widget.activeSshClient != null) {
                         await notifier.startRule(rule, widget.activeSshClient!);
                       } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Active SSH Connection required to start tunnel'),
-                            backgroundColor: Colors.orange,
+                        ShadToaster.of(context).show(
+                          const ShadToast.destructive(
+                            description: Text('Active SSH Connection required to start tunnel'),
                           ),
                         );
                       }
@@ -280,7 +282,7 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: const Color(0xFF313244),
+                color: colorScheme.muted,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
@@ -318,11 +320,11 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
                     style: const TextStyle(color: Colors.greenAccent, fontSize: 12, fontWeight: FontWeight.w600),
                   ),
                   const Spacer(),
-                  const Icon(Icons.data_usage, size: 16, color: Colors.white54),
+                  Icon(Icons.data_usage, size: 16, color: colorScheme.mutedForeground),
                   const SizedBox(width: 6),
                   Text(
                     'Total Transferred: ${activeTunnel.formattedBytes}',
-                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                    style: TextStyle(color: colorScheme.mutedForeground, fontSize: 12),
                   ),
                 ],
               ),

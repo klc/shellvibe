@@ -42,7 +42,7 @@ class TerminalTabsState {
   }
 }
 
-@riverpod
+@Riverpod(keepAlive: true)
 class TerminalTabsNotifier extends _$TerminalTabsNotifier {
   @override
   TerminalTabsState build() {

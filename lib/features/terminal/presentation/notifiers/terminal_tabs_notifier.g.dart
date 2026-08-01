@@ -7,15 +7,12 @@ part of 'terminal_tabs_notifier.dart';
 // **************************************************************************
 
 String _$terminalTabsNotifierHash() =>
-    r'39ee7043d23b04421928ec60cf994637baf83674';
+    r'd230bd7aa84db7c8c829164f3880bfded9d8a57b';
 
 /// See also [TerminalTabsNotifier].
 @ProviderFor(TerminalTabsNotifier)
 final terminalTabsNotifierProvider =
-    AutoDisposeNotifierProvider<
-      TerminalTabsNotifier,
-      TerminalTabsState
-    >.internal(
+    NotifierProvider<TerminalTabsNotifier, TerminalTabsState>.internal(
       TerminalTabsNotifier.new,
       name: r'terminalTabsNotifierProvider',
       debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
@@ -25,6 +22,6 @@ final terminalTabsNotifierProvider =
       allTransitiveDependencies: null,
     );
 
-typedef _$TerminalTabsNotifier = AutoDisposeNotifier<TerminalTabsState>;
+typedef _$TerminalTabsNotifier = Notifier<TerminalTabsState>;
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

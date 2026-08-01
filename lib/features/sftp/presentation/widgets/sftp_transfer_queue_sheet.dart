@@ -1,6 +1,7 @@
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 import '../../data/sftp_transfer_queue_worker.dart';
 import '../../domain/models/transfer_item.dart';
 import '../providers/sftp_providers.dart';
@@ -11,13 +12,14 @@ class SftpTransferQueueSheet extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final queueAsync = ref.watch(transferQueueStreamProvider);
+    final colorScheme = ShadTheme.of(context).colorScheme;
 
     return Container(
       height: 320,
-      decoration: const BoxDecoration(
-        color: Color(0xFF1E1E2E),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-        boxShadow: [
+      decoration: BoxDecoration(
+        color: colorScheme.card,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+        boxShadow: const [
           BoxShadow(color: Colors.black54, blurRadius: 10, spreadRadius: 2),
         ],
       ),
@@ -35,45 +37,47 @@ class SftpTransferQueueSheet extends ConsumerWidget {
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
                 const Spacer(),
-                TextButton.icon(
-                  icon: const Icon(Icons.clear_all, size: 18),
-                  label: const Text('Clear Finished'),
+                ShadButton.ghost(
+                  leading: const Icon(Icons.clear_all, size: 18),
                   onPressed: () {
                     ref.read(sftpTransferQueueWorkerProvider).clearFinished();
                   },
+                  child: const Text('Clear Finished'),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  tooltip: 'Close Queue',
-                  onPressed: () => Navigator.of(context).pop(),
+                Tooltip(
+                  message: 'Close Queue',
+                  child: ShadIconButton.ghost(
+                    icon: const Icon(Icons.close, size: 18),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
                 ),
               ],
             ),
           ),
-          const Divider(height: 1),
+          Divider(height: 1, color: colorScheme.border),
           // Queue list
           Expanded(
             child: queueAsync.when(
               data: (queue) {
                 if (queue.isEmpty) {
-                  return const Center(
+                  return Center(
                     child: Text(
                       'No active or queued file transfers.',
-                      style: TextStyle(color: Colors.white54),
+                      style: TextStyle(color: colorScheme.mutedForeground),
                     ),
                   );
                 }
 
                 return ListView.separated(
                   itemCount: queue.length,
-                  separatorBuilder: (_, _) => const Divider(height: 1, color: Colors.white10),
+                  separatorBuilder: (_, _) => Divider(height: 1, color: colorScheme.border),
                   itemBuilder: (context, index) {
                     final item = queue[index];
                     return _TransferTile(item: item);
                   },
                 );
               },
-              loading: () => const Center(child: CircularProgressIndicator()),
+              loading: () => const Center(child: ShadProgress()),
               error: (err, stack) => Center(child: Text('Error loading queue: $err')),
             ),
           ),
@@ -92,7 +96,8 @@ class _TransferTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isUpload = item.type == TransferType.upload;
     final worker = ref.watch(sftpTransferQueueWorkerProvider);
-    final sftpClient = ref.watch(sftpNotifierProvider).remoteClient;
+    final sftpClient = ref.watch(sftpNotifierProvider.select((s) => s.remoteClient));
+    final colorScheme = ShadTheme.of(context).colorScheme;
 
     IconData statusIcon;
     Color statusColor;
@@ -153,16 +158,14 @@ class _TransferTile extends ConsumerWidget {
           Row(
             children: [
               Expanded(
-                child: LinearProgressIndicator(
+                child: ShadProgress(
                   value: item.progress,
-                  backgroundColor: Colors.white12,
-                  valueColor: AlwaysStoppedAnimation<Color>(statusColor),
                 ),
               ),
               const SizedBox(width: 12),
               Text(
                 '${(item.progress * 100).toStringAsFixed(0)}%',
-                style: const TextStyle(fontSize: 12, color: Colors.white70),
+                style: TextStyle(fontSize: 12, color: colorScheme.mutedForeground),
               ),
             ],
           ),
@@ -184,31 +187,40 @@ class _TransferTile extends ConsumerWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         if (item.status == TransferStatus.inProgress)
-          IconButton(
-            icon: const Icon(Icons.pause, size: 18),
-            tooltip: 'Pause Transfer',
-            onPressed: () => worker.pauseTransfer(item.id),
+          Tooltip(
+            message: 'Pause Transfer',
+            child: ShadIconButton.ghost(
+              icon: const Icon(Icons.pause, size: 18),
+              onPressed: () => worker.pauseTransfer(item.id),
+            ),
           )
         else if (item.status == TransferStatus.paused && client != null)
-          IconButton(
-            icon: const Icon(Icons.play_arrow, size: 18),
-            tooltip: 'Resume Transfer',
-            onPressed: () => worker.resumeTransfer(client, item.id),
+          Tooltip(
+            message: 'Resume Transfer',
+            child: ShadIconButton.ghost(
+              icon: const Icon(Icons.play_arrow, size: 18),
+              onPressed: () => worker.resumeTransfer(client, item.id),
+            ),
           )
         else if ((item.status == TransferStatus.failed || item.status == TransferStatus.cancelled) &&
             client != null)
-          IconButton(
-            icon: const Icon(Icons.refresh, size: 18),
-            tooltip: 'Retry Transfer',
-            onPressed: () => worker.retryTransfer(client, item.id),
+          Tooltip(
+            message: 'Retry Transfer',
+            child: ShadIconButton.ghost(
+              icon: const Icon(Icons.refresh, size: 18),
+              onPressed: () => worker.retryTransfer(client, item.id),
+            ),
           ),
         if (item.status == TransferStatus.inProgress || item.status == TransferStatus.pending || item.status == TransferStatus.paused)
-          IconButton(
-            icon: const Icon(Icons.close, size: 18),
-            tooltip: 'Cancel Transfer',
-            onPressed: () => worker.cancelTransfer(item.id),
+          Tooltip(
+            message: 'Cancel Transfer',
+            child: ShadIconButton.ghost(
+              icon: const Icon(Icons.close, size: 18),
+              onPressed: () => worker.cancelTransfer(item.id),
+            ),
           ),
       ],
     );
   }
 }
+
