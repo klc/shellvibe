@@ -41,7 +41,7 @@ dependencies:
   go_router: ^14.2.0
 
   # Terminal & SSH Engine
-  xterm: ^4.0.0
+  xterm2: ^5.2.0
   dartssh2: ^2.22.5
   flutter_pty: ^0.4.2
 

@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:xterm/xterm.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:xterm2/xterm.dart';
 
+import '../../../settings/domain/models/app_settings_model.dart';
+import '../../../settings/presentation/notifiers/settings_notifier.dart';
 import '../../domain/models/terminal_tab_session.dart';
 import '../widgets/mobile_extra_keys_bar.dart';
 
-class TerminalScreen extends StatefulWidget {
+class TerminalScreen extends ConsumerStatefulWidget {
   final TerminalTabSession session;
   final bool showExtraKeys;
 
@@ -15,12 +18,66 @@ class TerminalScreen extends StatefulWidget {
   });
 
   @override
-  State<TerminalScreen> createState() => _TerminalScreenState();
+  ConsumerState<TerminalScreen> createState() => _TerminalScreenState();
 }
 
-class _TerminalScreenState extends State<TerminalScreen> {
+class _TerminalScreenState extends ConsumerState<TerminalScreen> {
+  // Dark Palette
+  static final _darkTheme = TerminalTheme(
+    cursor: const Color(0xFFA855F7),
+    selection: const Color(0xFF3F3F46),
+    foreground: const Color(0xFFF4F4F5),
+    background: const Color(0xFF18181B),
+    black: const Color(0xFF27272A),
+    red: const Color(0xFFEF4444),
+    green: const Color(0xFF22C55E),
+    yellow: const Color(0xFFEAB308),
+    blue: const Color(0xFF3B82F6),
+    magenta: const Color(0xFFA855F7),
+    cyan: const Color(0xFF06B6D4),
+    white: const Color(0xFFE4E4E7),
+    brightBlack: const Color(0xFF52525B),
+    brightRed: const Color(0xFFF87171),
+    brightGreen: const Color(0xFF4ADE80),
+    brightYellow: const Color(0xFFFACC15),
+    brightBlue: const Color(0xFF60A5FA),
+    brightMagenta: const Color(0xFFC084FC),
+    brightCyan: const Color(0xFF22D3EE),
+    brightWhite: const Color(0xFFFAFAFA),
+    searchHitBackground: const Color(0xFF6366F1),
+    searchHitBackgroundCurrent: const Color(0xFFA855F7),
+    searchHitForeground: const Color(0xFFFFFFFF),
+  );
+
+  // OLED Palette (True Black)
+  static final _oledTheme = TerminalTheme(
+    cursor: const Color(0xFF00E676),
+    selection: const Color(0xFF263238),
+    foreground: const Color(0xFFECEFF1),
+    background: const Color(0xFF000000),
+    black: const Color(0xFF212121),
+    red: const Color(0xFFFF5252),
+    green: const Color(0xFF00E676),
+    yellow: const Color(0xFFFFD740),
+    blue: const Color(0xFF40C4FF),
+    magenta: const Color(0xFFE040FB),
+    cyan: const Color(0xFF18FFFF),
+    white: const Color(0xFFEEFFFF),
+    brightBlack: const Color(0xFF424242),
+    brightRed: const Color(0xFFFF8A80),
+    brightGreen: const Color(0xFFB9F6CA),
+    brightYellow: const Color(0xFFFFE57F),
+    brightBlue: const Color(0xFF80D8FF),
+    brightMagenta: const Color(0xFFEA80FC),
+    brightCyan: const Color(0xFFA7FFEB),
+    brightWhite: const Color(0xFFFFFFFF),
+    searchHitBackground: const Color(0xFF00E676),
+    searchHitBackgroundCurrent: const Color(0xFF18FFFF),
+    searchHitForeground: const Color(0xFF000000),
+  );
+
   // Catppuccin Macchiato Dark Terminal Theme Palette
-  static final _terminalTheme = TerminalTheme(
+  static final _catppuccinTheme = TerminalTheme(
     cursor: const Color(0xFFF4D9E1),
     selection: const Color(0xFF5B6078),
     foreground: const Color(0xFFCAD3F5),
@@ -46,16 +103,52 @@ class _TerminalScreenState extends State<TerminalScreen> {
     searchHitForeground: const Color(0xFF1E1E2E),
   );
 
+  // Nord Palette
+  static final _nordTheme = TerminalTheme(
+    cursor: const Color(0xFFD8DEE9),
+    selection: const Color(0xFF434C5E),
+    foreground: const Color(0xFFD8DEE9),
+    background: const Color(0xFF2E3440),
+    black: const Color(0xFF3B4252),
+    red: const Color(0xFFBF616A),
+    green: const Color(0xFFA3BE8C),
+    yellow: const Color(0xFFEBCB8B),
+    blue: const Color(0xFF81A1C1),
+    magenta: const Color(0xFFB48EAD),
+    cyan: const Color(0xFF88C0D0),
+    white: const Color(0xFFE5E9F0),
+    brightBlack: const Color(0xFF4C566A),
+    brightRed: const Color(0xFFD08770),
+    brightGreen: const Color(0xFFA3BE8C),
+    brightYellow: const Color(0xFFEBCB8B),
+    brightBlue: const Color(0xFF5E81AC),
+    brightMagenta: const Color(0xFFB48EAD),
+    brightCyan: const Color(0xFF8FBCBB),
+    brightWhite: const Color(0xFFECEFF4),
+    searchHitBackground: const Color(0xFF88C0D0),
+    searchHitBackgroundCurrent: const Color(0xFF81A1C1),
+    searchHitForeground: const Color(0xFF2E3440),
+  );
+
   @override
   Widget build(BuildContext context) {
     final session = widget.session;
+    final settingsAsync = ref.watch(settingsNotifierProvider);
+    final settings = settingsAsync.value ?? const AppSettingsModel();
+
+    final theme = switch (settings.palette) {
+      AppPalette.dark => _darkTheme,
+      AppPalette.oled => _oledTheme,
+      AppPalette.catppuccin => _catppuccinTheme,
+      AppPalette.nord => _nordTheme,
+    };
 
     return Column(
       children: [
         if (session.isConnecting)
-          const LinearProgressIndicator(
-            backgroundColor: Color(0xFF24273A),
-            color: Color(0xFF8AADF4),
+          LinearProgressIndicator(
+            backgroundColor: theme.background,
+            color: theme.blue,
           ),
         if (session.errorMessage != null)
           Container(
@@ -76,13 +169,14 @@ class _TerminalScreenState extends State<TerminalScreen> {
           ),
         Expanded(
           child: Container(
-            color: const Color(0xFF24273A),
+            color: theme.background,
             child: TerminalView(
               session.terminal,
-              theme: _terminalTheme,
-              textStyle: const TerminalStyle(
-                fontSize: 14,
-                fontFamily: 'monospace',
+              theme: theme,
+              autofocus: true,
+              textStyle: TerminalStyle(
+                fontSize: settings.fontSize,
+                fontFamily: settings.fontFamily,
               ),
             ),
           ),

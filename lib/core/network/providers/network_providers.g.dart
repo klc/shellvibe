@@ -6,10 +6,11 @@ part of 'network_providers.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$sshSessionManagerHash() => r'b503f8b136cf69f229285a3917a6da9d752cb19d';
+String _$sshSessionManagerHash() => r'da3af5bfd09b4df5470b875700e0ce3671cb8c64';
 
-/// Auto-disposing provider for [SSHSessionManager].
-/// Automatically closes SSH client connection and timers on disposal.
+/// Provider for [SSHSessionManager].
+/// Note: [TerminalTabSession] instances instantiate dedicated [SSHSessionManager]
+/// instances per connection to ensure tabs do not share SSH clients/sockets.
 ///
 /// Copied from [sshSessionManager].
 @ProviderFor(sshSessionManager)

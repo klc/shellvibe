@@ -5,7 +5,7 @@ import 'dart:typed_data';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:terly2/core/network/terminal_ssh_bridge.dart';
-import 'package:xterm/xterm.dart';
+import 'package:xterm2/xterm.dart';
 
 /// Fake implementation of [SSHSession] for testing stream bridge behavior.
 class FakeSSHSession implements SSHSession {

@@ -4,7 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_pty/flutter_pty.dart';
-import 'package:xterm/xterm.dart';
+import 'package:xterm2/xterm.dart';
 
 /// Two-way stream bridge binding an xterm [Terminal] UI widget
 /// and a local pseudo-terminal [Pty] instance.

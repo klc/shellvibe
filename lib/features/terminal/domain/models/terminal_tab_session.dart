@@ -1,5 +1,5 @@
 import 'package:flutter/widgets.dart';
-import 'package:xterm/xterm.dart';
+import 'package:xterm2/xterm.dart';
 
 import '../../../../core/network/local_pty_manager.dart';
 import '../../../../core/network/ssh_session_manager.dart';
