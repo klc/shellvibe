@@ -1,6 +1,8 @@
 # Terly2 — Teknik Mimari Spesifikasyonu (Technical Specification & Technology Stack)
 
-> **Doküman Amacı:** Terly2 uygulamasının 5 ana platformda (iOS, Android, macOS, Windows, Linux) yüksek performanslı, güvenli, sürdürülebilir ve mimari açıdan kusursuz bir şekilde geliştirilmesi için teknoloji yığını seçimi, kütüphane analizi, yazılım mimarisi, kritik alt sistem tasarımlarını ve kenar durum (edge case) çözümlerini eksiksiz olarak tanımlamak.
+> **Doküman Amacı:** Terly2 uygulamasının 5 ana platformda (iOS, Android, macOS, Windows, Linux) yüksek performanslı, güvenli ve sürdürülebilir biçimde geliştirilmesi için mevcut teknoloji yığınını, uygulanan mimariyi, kritik alt sistemleri ve planlanan yetenekleri tanımlamak.
+
+> **Doküman Durumu:** Bu yaşayan dokümanda aksi açıkça **Planlanan** olarak belirtilmedikçe anlatılan davranışlar mevcut uygulamayı ifade eder. Paketlerin kesin sürümleri için `pubspec.lock`, doğrudan bağımlılık sınırları için `pubspec.yaml`, veritabanı şeması ve migration'lar için `lib/shared/database/` kaynakları esas alınır.
 
 ---
 
@@ -8,20 +10,20 @@
 
 | Katman / İhtiyaç | Seçilen Teknoloji / Paket | Lisans / Tip | Neden Bu Seçildi? (Seçim Gerekçesi) |
 | :--- | :--- | :--- | :--- |
-| **Framework & Dili** | **Flutter SDK 3.x+ / Dart 3.x** | BSD-3 | Tek kod tabanından 5 platforma yerel performans ve tutarlı UI donanım ivmeli (Skia/Impeller) rendering. |
-| **State Management** | **`flutter_riverpod` (v3.x+) + `riverpod_annotation`** | MIT | `BuildContext` bağımlılığı olmadan async stream'leri (SSH/Socket) yönetebilme, üst düzey tip güvenliği ve kolay test edilebilirlik. |
+| **Framework & Dili** | **Flutter SDK 3.x / Dart SDK `^3.12.2`** | BSD-3 | Tek kod tabanından 5 platforma yerel performans ve tutarlı UI donanım ivmeli (Skia/Impeller) rendering. |
+| **State Management** | **`flutter_riverpod` 3.x + `riverpod_annotation` 4.x** | MIT | `BuildContext` bağımlılığı olmadan async stream'leri (SSH/Socket) yönetebilme, üst düzey tip güvenliği ve kolay test edilebilirlik. |
 | **Terminal UI / Render** | **`xterm2`** *(Forked & Maintained `xterm.dart`)* | MIT | Donanım ivmeli (60 FPS) ANSI/VT100 rendering, CJK/Emoji/IME desteği ve UI katmanından bağımsız terminal tamponu (buffer) yönetimi. |
 | **SSH & SFTP Engine** | **`dart_ssh2`** | MIT | Pure Dart ile yazıldığı için C/C++ native derleme karmaşası olmadan 5 platformda sıfır bağımlılıkla çalışır. KEX şifreleme yüklerini Dart Isolate'lerine devrederek UI donmalarını engeller. |
 | **Yerel PTY Motoru** | **`flutter_pty`** | MIT | macOS, Windows (ConPTY), Linux ve Android üzerinde yerel terminal (Local Shell: zsh/bash/pwsh) başlatabilme. |
 | **Yerel Veritabanı** | **`drift` + `sqlite3` (native assets/hooks)** | MIT | 2026 itibarıyla en güvenilir, sürdürülebilir, tip güvenli ve SQL tabanlı çözümdür. Relational şema yapısı (Host -> Vault -> Tunnel) için mükemmeldir. |
 | **Güvenli Şifreleme** | **`flutter_secure_storage`** | MIT | Şifre ve private key'leri iOS/macOS Keychain, Android KeyStore ve Windows Credential Manager'da donanımsal korur. |
 | **Zero-Knowledge Crypto**| **`cryptography`** | Apache 2.0 | Pure Dart + OS WebCrypto/CommonCrypto ivmeli AES-256-GCM, Argon2id, Ed25519 şifreleme motoru. |
-| **Biyometrik Kilit** | **`local_auth`** | BSD-3 | FaceID, TouchID, Fingerprint ve Windows Hello donanımsal doğrulaması. |
+| **Biyometrik Doğrulama Altyapısı** | **`local_auth`** | BSD-3 | FaceID, TouchID, Fingerprint ve Windows Hello kullanılabilirlik/doğrulama kontrolleri. Mevcut sürümde vault kilidini biyometriyle açma akışına henüz bağlanmamıştır. |
 | **Masaüstü Pencere Yönetimi**| **`window_manager`** | MIT | Frameless pencereler, özel başlık çubuğu (titlebar), boyut/konum saklama ve kapatma aksiyonlarını yakalama. |
 | **Sistem Tepsi / Tray** | **`tray_manager`** | MIT | Arka planda çalışan SSH oturumlarını gösteren sistem tepsi (tray) ikonu ve hızlı menü. |
 | **Küresel Kısayollar** | **`hotkey_manager`** | MIT | Uygulama arka plandayken bile çalışan global klavye kısayolları (ör. `Ctrl+Alt+T` ile terminal açma). |
 | **Sürükle-Bırak (SFTP)** | **`desktop_drop`** | MIT | Masaüstü dosya yöneticisinden uygulama içine dosya sürükleyip indirme/yükleme yapma. |
-| **Mobil Arka Plan** | **`flutter_background_service`** | MIT | Bağlantının uygulama arka plana atıldığında kopmasını önleyen iOS/Android background service katmanı. |
+| **Mobil Arka Plan** | **Planlanan; aktif bir background service paketi yok** | — | Mevcut SSH keep-alive yalnızca uygulama çalışırken bağlantı sağlığını destekler; mobil işletim sisteminin uygulamayı askıya almasını engellemez. |
 
 ---
 
@@ -117,7 +119,7 @@ sequenceDiagram
     Bridge->>SSH: session.write(data)
     SSH->>Server: TCP Soket Üzerinden SSH Encrypted Data
     Server-->>SSH: stdout / stderr Akışı
-    SSH-->>Bridge: session.stdout.listen
+    SSH-->>Bridge: session.stdout.listen ile veri
     Bridge-->>Xterm: terminal.write(String.fromCharCodes)
     Xterm-->>User: Donanım İvmeli Rendered Text Canvas
 
@@ -147,10 +149,14 @@ Local, Remote ve Dynamic SOCKS5 tünellerinin çalışma prensibi:
 
 Uygulamanın güvenlik ve şifreleme iş akışı:
 
-1. **Master Password:** Kullanıcı uygulamayı ilk açtığında güçlü bir Master Password belirler.
-2. **Key Derivation (KDF):** Master Password, `Argon2id` (Salt + Memory Hardening) algoritmasından geçirilerek 256-bit `Master Encryption Key` türetilir.
-3. **Storage:** Master Encryption Key, cihazın donanımsal güvenli alanında saklanır (`flutter_secure_storage`: iOS Keychain / Android KeyStore / Windows Credential Manager).
-4. **Encryption:** Drift veritabanındaki hassas alanlar (SSH şifreleri, private key'ler, sunucu erişim bilgileri) kaydedilmeden önce `AES-256-GCM` ile şifrelenir. Buluta senkronize edilen veri **Zero-Knowledge** prensibiyle şifreli kalır.
+1. **Data Encryption Key (DEK):** Vault ilk oluşturulduğunda rastgele 256-bit bir DEK üretilir. Hassas alanlar bu anahtarla `AES-256-GCM` kullanılarak şifrelenir.
+2. **Master Password Olmadan:** DEK doğrudan platformun güvenli deposunda (`flutter_secure_storage`) saklanır.
+3. **Master Password Etkinleştirildiğinde:** Rastgele salt ve Master Password, `Argon2id` ile 256-bit Key Encryption Key (KEK) üretir. KEK saklanmaz; DEK'i `AES-256-GCM` ile sarmalamak/açmak için kullanılır.
+4. **Kilitli Durum:** Sarmalanmış DEK ve salt güvenli depoda kalır; düz DEK güvenli depodan silinir ve uygulama kilitliyken bellekte tutulmaz.
+5. **Kilidi Açma:** Kullanıcının parolasından KEK yeniden türetilir, DEK bellekte açılır ve vault kilitlendiğinde veya süreç kapandığında bellek referansı temizlenir.
+6. **Şifrelenen Veriler:** SSH şifreleri, private key'ler ve passphrase'ler Drift'e yazılmadan önce DEK ile şifrelenir. Anahtar materyali uygulama veritabanında düz metin tutulmaz.
+
+Android tarafında secure-storage algoritma geçişleri için migration seçenekleri etkindir; buna karşılık anahtarların geçersiz veya farklı bir cihaz yedeğiyle geri yüklenmesini önlemek için uygulamanın Android Auto Backup özelliği kapalıdır.
 
 ---
 
@@ -195,6 +201,7 @@ CREATE TABLE hosts (
     identity_id TEXT REFERENCES identities(id) ON DELETE SET NULL,
     label TEXT NOT NULL,
     hostname TEXT NOT NULL,
+    username TEXT,
     port INTEGER NOT NULL DEFAULT 22,
     protocol TEXT NOT NULL DEFAULT 'ssh', -- 'ssh', 'mosh', 'local', 'serial'
     color_tag TEXT,
@@ -209,7 +216,8 @@ CREATE TABLE known_hosts (
     port INTEGER NOT NULL,
     key_type TEXT NOT NULL, -- 'ssh-ed25519', 'rsa-sha2-512'
     fingerprint_sha256 TEXT NOT NULL,
-    first_seen_at INTEGER NOT NULL
+    first_seen_at INTEGER NOT NULL,
+    UNIQUE (hostname, port)
 );
 
 -- 6. Port Forwarding Rules
@@ -231,7 +239,29 @@ CREATE TABLE snippets (
     code TEXT NOT NULL,
     tags TEXT -- JSON Array of strings
 );
+
+-- 8. Runbooks
+CREATE TABLE runbooks (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    description TEXT,
+    created_at INTEGER NOT NULL
+);
+
+-- 9. Runbook Steps
+CREATE TABLE runbook_steps (
+    id TEXT PRIMARY KEY,
+    runbook_id TEXT NOT NULL REFERENCES runbooks(id) ON DELETE CASCADE,
+    step_order INTEGER NOT NULL,
+    command TEXT NOT NULL,
+    expected_exit_code INTEGER NOT NULL DEFAULT 0,
+    expected_output_pattern TEXT,
+    timeout_seconds INTEGER NOT NULL DEFAULT 30
+);
 ```
+
+Mevcut Drift şema sürümü **3**'tür. Veritabanı açılırken foreign key denetimi etkinleştirilir. Sürüm 2 migration'ı `hosts.username` alanını ekler; sürüm 3 migration'ı eski sürümlerde çift encode edilmiş host-key fingerprint değerlerini normalize eder. Yeni migration'lar geriye dönük veri korunumu ve tekrar çalıştırılabilirlik testleriyle eklenmelidir.
 
 ---
 
@@ -254,10 +284,8 @@ CREATE TABLE snippets (
 
 ### 6.3. Mobil Arka Plan & Uyku Modu Yönetimi (Background Session Persistence)
 - **Sorun:** Cihaz ekranı kapandığında veya uygulama arka plana atıldığında mobil OS (özellikle iOS) TCP soketlerini keser.
-- **Çözüm:**
-  - `ServerAliveInterval 30` ile periyodik SSH keep-alive ping paketleri gönderilir.
-  - `flutter_background_service` ile Android/iOS arka plan işleyicisi (Background Service) aktif tutulur.
-  - Kesintili ve zayıf mobil ağlar için **Mosh (Mobile Shell)** bağlantı seçeneği sunulur.
+- **Mevcut Davranış:** SSH oturum yöneticisi, uygulama çalışır durumdayken 30 saniyelik keep-alive gönderir. Bu mekanizma sessiz bağlantı kopmalarını algılamaya yardımcı olur ancak iOS/Android'in uygulamayı askıya almasını önleyemez.
+- **Planlanan:** Platform politikalarına uygun arka plan oturumu/reconnect stratejisi ayrıca tasarlanacaktır. Mosh protokolü model ve UI seçeneklerinde yer alsa da mevcut kod tabanında çalışan bir Mosh transport motoru bulunmamaktadır; destek tamamlanana kadar ürün yüzeyinde kullanılabilir özellik olarak sunulmamalıdır.
 
 ### 6.4. Mobil Klavye "Sticky Key" Durum Makinesi (Extra Key Bar)
 - **Sorun:** Dokunmatik mobil klavyede `Ctrl` ve `Alt` tuşları yoktur.
@@ -267,8 +295,17 @@ CREATE TABLE snippets (
 
 ### 6.5. Sekme Yaşam Döngüsü & Bellek Temizliği (Memory Leak Prevention)
 - **Sorun:** Çok sayıda sekme açıp kapatırken arka planda kalan soketler ve terminal tamponları bellek sızıntısına yol açabilir.
-- **Çözüm:** 
-  - Riverpod `autoDispose` sağlayıcıları ile sekme kapatıldığı an `SSHClient.close()`, `Socket.destroy()` ve `Terminal.dispose()` zincirleme olarak çağrılarak tüm bellek kaynakları anında serbest bırakılır.
+- **Çözüm:**
+  - Terminal sekmeleri uygulama genelindeki bölünmüş görünüm ve sekme koordinasyonu için `keepAlive` Riverpod notifier tarafından sahiplenilir.
+  - Bir sekme kapatıldığında alt split sekmeleri önce kapatılır; ardından sekmenin `dispose()` zinciri SSH/session, PTY, stream subscription ve terminal kaynaklarını serbest bırakır.
+  - Notifier dispose olduğunda sahip olduğu tüm açık sekmeleri de temizler. Yeni sekme türleri bu merkezi sahiplik ve açık cleanup sözleşmesine uymalıdır.
+
+### 6.6. Android Platform ve Biyometri Gereksinimleri
+- `local_auth` entegrasyonu nedeniyle `MainActivity`, `FlutterFragmentActivity` tabanlıdır ve manifestte `USE_BIOMETRIC` izni bulunur.
+- Launch theme, fragment tabanlı activity ile uyumlu bir AppCompat teması kullanır.
+- Hassas anahtarların cihaz yedeğine taşınmaması için `android:allowBackup="false"` kullanılır.
+- Secure-storage algoritma değişikliklerinde var olan kimlik bilgilerinin korunması için Android migration seçenekleri etkin tutulur; bu ayarlar değiştirilirken mevcut vault verisiyle upgrade testi yapılmalıdır.
+- Biyometrik doğrulama şu anda ayarlar ekranındaki cihaz uygunluğu/test akışında kullanılır. Vault DEK'ini biyometriyle açma ve gerçek auto-lock uygulaması **planlanan** kapsamdır; durum göstergesi tek başına güvenlik garantisi olarak yorumlanmamalıdır.
 
 ---
 
@@ -296,6 +333,7 @@ terly2/
     │   ├── constants/
     │   ├── crypto/               # Argon2id & AES-256-GCM Encryption Engine
     │   ├── network/              # SSH/SFTP & Socket Isolates
+    │   ├── sync/                 # Şifreli senkronizasyon altyapısı
     │   ├── utils/
     │   └── widgets/              # Common UI Components
     ├── features/
@@ -311,6 +349,7 @@ terly2/
     │   └── settings/             # App Settings & Sync
     └── shared/
         ├── database/             # Drift DB tables & DAOs
+        ├── providers/            # Uygulama genelindeki ortak Riverpod provider'ları
         └── storage/              # Secure Storage Service
 ```
 
@@ -323,13 +362,14 @@ terly2/
    - AES-256-GCM / Argon2id şifreleme ve KDF türetim testleri.
    - Dynamic SOCKS5 paket ayrıştırma (handshake) mantığı.
 2. **Database Migration Testing:**
-   - `drift_dev` schema verifikasyon testleri ile versiyon yükseltmelerinde veri kaybının önlenmesi.
+   - Şema oluşturma, foreign key davranışı ve v1 → v2 → v3 geçişlerinin gerçek SQLite verisi üzerinde doğrulanması.
+   - Eski fingerprint formatının yalnızca gerektiğinde ve veri kaybı olmadan normalize edildiğinin test edilmesi.
 3. **Widget & UI Integration Testing:**
    - Masaüstü ve mobil ekran boyutlarında `LayoutBuilder` uyumluluk testleri.
    - `xterm2` klavye girdi ve kısayol çubuğu widget testleri.
 
 ---
 
-## 9. Özet ve Uygulama Adımları
+## 9. Doküman Bakım Sözleşmesi
 
-Bu **Tech Spec** dökümanı ile Terly2 projesinin mimari omurgası, paket seçimleri, güvenlik tasarımı ve kritik kenar durum çözümleri eksiksiz şekilde netleştirilmiştir.
+Bu Tech Spec mevcut mimariyi ve hedeflenen yönü birlikte açıklar; tamamlanmış özellik iddiası taşıyan sabit bir teslim belgesi değildir. Paket güncellemesi, veritabanı migration'ı, güvenlik anahtar akışı veya platform lifecycle davranışı değiştiğinde aynı değişiklik seti içinde güncellenmelidir. Doküman ile kod çelişirse çalışan kaynak kod ve testler esas alınmalı, ardından bu dokümandaki sapma giderilmelidir.
