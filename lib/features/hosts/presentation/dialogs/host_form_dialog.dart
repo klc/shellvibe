@@ -1,9 +1,8 @@
-import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
+import 'package:terly2/core/utils/platform_capabilities.dart';
 import 'package:terly2/features/vault/presentation/notifiers/identities_notifier.dart';
 import '../notifiers/host_groups_notifier.dart';
 import '../notifiers/hosts_notifier.dart';
@@ -222,7 +221,7 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                         options: [
                           const ShadOption(value: 'ssh', child: Text('SSH')),
                           const ShadOption(value: 'mosh', child: Text('Mosh')),
-                          if (kIsWeb || (!Platform.isAndroid && !Platform.isIOS))
+                          if (supportsLocalShell)
                             const ShadOption(value: 'local', child: Text('Local Shell')),
                           const ShadOption(value: 'serial', child: Text('Serial')),
                         ],
@@ -383,4 +382,3 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
     );
   }
 }
-

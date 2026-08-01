@@ -70,46 +70,138 @@ void main() {
       expect(find.text('No hosts or groups configured.'), findsOneWidget);
     });
 
-    testWidgets('Renders host tile when host exists in database and triggers onConnectHost on tap', (tester) async {
-      // Pre-insert a host into database
+    testWidgets('Renders an empty group so it can still be managed', (tester) async {
+      await db.hostsDao.insertHostGroup(
+        HostGroupsCompanion.insert(id: 'empty-group', workspaceId: 'default', name: 'Empty Group'),
+      );
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.text('Empty Group'), findsOneWidget);
+      expect(find.byKey(const ValueKey('group_empty-group')), findsOneWidget);
+      expect(find.text('No hosts or groups configured.'), findsNothing);
+    });
+
+    testWidgets(
+      'Renders host tile when host exists in database and triggers onConnectHost on tap',
+      (tester) async {
+        // Pre-insert a host into database
+        await db.hostsDao.insertHost(
+          HostsCompanion.insert(
+            id: 'host-1',
+            workspaceId: 'default',
+            label: 'Production Server',
+            hostname: '192.168.1.100',
+            username: const Value('ubuntu'),
+            port: const Value(22),
+            createdAt: DateTime.now(),
+          ),
+        );
+
+        HostModel? connectedHost;
+
+        await tester.pumpWidget(
+          createWidgetUnderTest(
+            onConnectHost: (host) {
+              connectedHost = host;
+            },
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 200));
+
+        // Host list rendered
+        expect(find.text('Production Server'), findsOneWidget);
+        expect(find.text('ubuntu@192.168.1.100:22'), findsOneWidget);
+
+        // Tap connect icon button
+        final connectButton = find.byKey(const Key('connect_host_host-1'));
+        expect(connectButton, findsOneWidget);
+
+        await tester.tap(connectButton);
+        await tester.pump();
+
+        expect(connectedHost, isNotNull);
+        expect(connectedHost!.id, equals('host-1'));
+        expect(connectedHost!.label, equals('Production Server'));
+      },
+    );
+
+    testWidgets('Filters hosts by the visible username', (tester) async {
       await db.hostsDao.insertHost(
         HostsCompanion.insert(
-          id: 'host-1',
+          id: 'host-username-match',
           workspaceId: 'default',
           label: 'Production Server',
           hostname: '192.168.1.100',
           username: const Value('ubuntu'),
-          port: const Value(22),
+          createdAt: DateTime.now(),
+        ),
+      );
+      await db.hostsDao.insertHost(
+        HostsCompanion.insert(
+          id: 'host-username-miss',
+          workspaceId: 'default',
+          label: 'Database Server',
+          hostname: '192.168.1.101',
+          username: const Value('postgres'),
           createdAt: DateTime.now(),
         ),
       );
 
-      HostModel? connectedHost;
-
-      await tester.pumpWidget(
-        createWidgetUnderTest(
-          onConnectHost: (host) {
-            connectedHost = host;
-          },
-        ),
-      );
+      await tester.pumpWidget(createWidgetUnderTest());
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
-
-      // Host list rendered
-      expect(find.text('Production Server'), findsOneWidget);
-      expect(find.text('ubuntu@192.168.1.100:22'), findsOneWidget);
-
-      // Tap connect icon button
-      final connectButton = find.byKey(const Key('connect_host_host-1'));
-      expect(connectButton, findsOneWidget);
-
-      await tester.tap(connectButton);
+      await tester.enterText(find.byKey(const Key('hosts_search_input')), 'ubuntu');
       await tester.pump();
 
-      expect(connectedHost, isNotNull);
-      expect(connectedHost!.id, equals('host-1'));
-      expect(connectedHost!.label, equals('Production Server'));
+      expect(find.text('Production Server'), findsOneWidget);
+      expect(find.text('Database Server'), findsNothing);
+    });
+
+    testWidgets('Does not transfer expansion state between filtered groups', (tester) async {
+      await db.hostsDao.insertHostGroup(
+        HostGroupsCompanion.insert(id: 'group-a', workspaceId: 'default', name: 'Group A'),
+      );
+      await db.hostsDao.insertHostGroup(
+        HostGroupsCompanion.insert(id: 'group-b', workspaceId: 'default', name: 'Group B'),
+      );
+      await db.hostsDao.insertHost(
+        HostsCompanion.insert(
+          id: 'host-a',
+          workspaceId: 'default',
+          groupId: const Value('group-a'),
+          label: 'Alpha Server',
+          hostname: 'alpha.example.com',
+          createdAt: DateTime.now(),
+        ),
+      );
+      await db.hostsDao.insertHost(
+        HostsCompanion.insert(
+          id: 'host-b',
+          workspaceId: 'default',
+          groupId: const Value('group-b'),
+          label: 'Beta Server',
+          hostname: 'beta.example.com',
+          createdAt: DateTime.now(),
+        ),
+      );
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.tap(find.text('Group A'));
+      await tester.pumpAndSettle();
+      expect(find.text('Alpha Server'), findsOneWidget);
+
+      await tester.enterText(find.byKey(const Key('hosts_search_input')), 'beta');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Group A'), findsNothing);
+      expect(find.text('Group B'), findsOneWidget);
+      expect(find.text('Beta Server'), findsNothing);
     });
 
     testWidgets('Opens HostGroupFormDialog when add_group_button is tapped', (tester) async {

@@ -1,11 +1,10 @@
-import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../../../../core/network/ssh_session_manager.dart';
+import '../../../../core/utils/platform_capabilities.dart';
 import '../../../hosts/domain/models/host_model.dart';
 import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
 import '../../../vault/domain/models/identity_model.dart';
@@ -49,11 +48,13 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
       autofocus: true,
       child: CallbackShortcuts(
         bindings: {
-          const SingleActivator(LogicalKeyboardKey.keyT, meta: true): () {
-            ref.read(terminalTabsProvider.notifier).openLocalTab();
-          },
-          const SingleActivator(LogicalKeyboardKey.keyT, control: true): () {
-            ref.read(terminalTabsProvider.notifier).openLocalTab();
+          if (supportsLocalShell) ...{
+            const SingleActivator(LogicalKeyboardKey.keyT, meta: true): () {
+              ref.read(terminalTabsProvider.notifier).openLocalTab();
+            },
+            const SingleActivator(LogicalKeyboardKey.keyT, control: true): () {
+              ref.read(terminalTabsProvider.notifier).openLocalTab();
+            },
           },
           const SingleActivator(LogicalKeyboardKey.keyW, meta: true): () {
             if (activeTab != null) {
@@ -227,7 +228,6 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
 
   Widget _buildEmptyState(BuildContext context, WidgetRef ref) {
     final colorScheme = ShadTheme.of(context).colorScheme;
-    final isMobile = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
 
     return Center(
       child: Column(
@@ -249,7 +249,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
           ),
           const SizedBox(height: 8),
           Text(
-            isMobile
+            isMobilePlatform
                 ? 'Select a remote SSH server to connect.'
                 : 'Open a local shell or select a remote SSH server to connect.',
             style: TextStyle(color: colorScheme.mutedForeground),
@@ -260,7 +260,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
             runSpacing: 12,
             alignment: WrapAlignment.center,
             children: [
-              if (!isMobile)
+              if (supportsLocalShell)
                 ShadButton(
                   key: const Key('empty_open_local_button'),
                   leading: const Icon(Icons.computer, size: 18),
@@ -282,14 +282,12 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
   }
 
   void _showNewTabMenu(BuildContext context, WidgetRef ref) {
-    final isMobile = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
-
     showModalBottomSheet(
       context: context,
       builder: (ctx) => Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (!isMobile)
+          if (supportsLocalShell)
             ListTile(
               key: const Key('new_tab_menu_local'),
               leading: const Icon(Icons.computer),

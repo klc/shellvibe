@@ -73,18 +73,30 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
                 final filtered = hosts.where((h) {
                   return h.label.toLowerCase().contains(_searchQuery) ||
                       h.hostname.toLowerCase().contains(_searchQuery) ||
+                      (h.username ?? '').toLowerCase().contains(_searchQuery) ||
                       h.protocol.toLowerCase().contains(_searchQuery);
                 }).toList();
 
                 return groupsAsync.when(
                   data: (groups) {
-                    if (filtered.isEmpty) {
+                    if (hosts.isEmpty && groups.isEmpty) {
                       return const Center(
                         child: Text('No hosts or groups configured.'),
                       );
                     }
 
-                    final items = _buildCategorizedItems(filtered, groups);
+                    final categorized = _buildCategorizedItems(
+                      filtered,
+                      groups,
+                      includeEmptyGroups: _searchQuery.isEmpty,
+                    );
+                    final items = categorized.items;
+
+                    if (items.isEmpty) {
+                      return const Center(
+                        child: Text('No hosts match your search.'),
+                      );
+                    }
 
                     return ListView.builder(
                       itemCount: items.length,
@@ -92,10 +104,10 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
                         final item = items[index];
 
                         if (item is HostGroupModel) {
-                          final groupHosts = filtered
-                              .where((h) => h.groupId == item.id)
-                              .toList();
+                          final groupHosts =
+                              categorized.groupedHosts[item.id] ?? const [];
                           return _GroupExpansionTile(
+                            key: ValueKey('group_${item.id}'),
                             group: item,
                             hosts: groupHosts,
                             onEditHost: (h) =>
@@ -259,23 +271,33 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
     }
   }
 
-  List<dynamic> _buildCategorizedItems(
+  ({List<Object> items, Map<String, List<HostModel>> groupedHosts}) _buildCategorizedItems(
     List<HostModel> filteredHosts,
-    List<HostGroupModel> groups,
-  ) {
-    final list = <dynamic>[];
+    List<HostGroupModel> groups, {
+    required bool includeEmptyGroups,
+  }) {
+    final items = <Object>[];
+    final groupedHosts = <String, List<HostModel>>{};
+    final ungroupedHosts = <HostModel>[];
 
-    for (final group in groups) {
-      final hasHosts = filteredHosts.any((h) => h.groupId == group.id);
-      if (hasHosts) {
-        list.add(group);
+    for (final host in filteredHosts) {
+      final groupId = host.groupId;
+      if (groupId == null) {
+        ungroupedHosts.add(host);
+      } else {
+        groupedHosts.putIfAbsent(groupId, () => []).add(host);
       }
     }
 
-    final ungroupped = filteredHosts.where((h) => h.groupId == null).toList();
-    list.addAll(ungroupped);
+    for (final group in groups) {
+      if (includeEmptyGroups || groupedHosts.containsKey(group.id)) {
+        items.add(group);
+      }
+    }
 
-    return list;
+    items.addAll(ungroupedHosts);
+
+    return (items: items, groupedHosts: groupedHosts);
   }
 }
 
@@ -290,6 +312,7 @@ class _GroupExpansionTile extends StatelessWidget {
   final Set<String> connectingHostIds;
 
   const _GroupExpansionTile({
+    super.key,
     required this.group,
     required this.hosts,
     required this.onEditHost,
