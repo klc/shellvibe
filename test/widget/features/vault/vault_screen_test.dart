@@ -4,12 +4,23 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:cryptography/cryptography.dart';
+import 'package:terly2/core/crypto/encryption_engine.dart';
 import 'package:terly2/features/vault/presentation/screens/vault_screen.dart';
 import 'package:terly2/shared/database/app_database.dart';
 import 'package:terly2/shared/providers/database_providers.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  final fastEngine = EncryptionEngine(
+    kdf: Argon2id(
+      parallelism: 1,
+      memory: 8,
+      iterations: 1,
+      hashLength: 32,
+    ),
+  );
 
   late AppDatabase db;
 
@@ -33,6 +44,7 @@ void main() {
     return ProviderScope(
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
+        encryptionEngineProvider.overrideWithValue(fastEngine),
       ],
       child: const MaterialApp(
         home: VaultScreen(),

@@ -226,6 +226,7 @@ class TunnelEngine {
         }
       });
     } catch (e) {
+      await stopTunnel(ruleId);
       _activeTunnels[ruleId] = ActiveTunnel(
         ruleId: ruleId,
         hostId: hostId,
@@ -360,6 +361,7 @@ class TunnelEngine {
         _subscriptions[ruleId]?.add(sub);
       }
     } catch (e) {
+      await stopTunnel(ruleId);
       _activeTunnels[ruleId] = ActiveTunnel(
         ruleId: ruleId,
         hostId: hostId,

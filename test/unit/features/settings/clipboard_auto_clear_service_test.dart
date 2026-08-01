@@ -50,5 +50,38 @@ void main() {
 
       service.cancelTimer();
     });
+
+    test('clears clipboard when timer expires and content matches sensitiveData', () async {
+      bool wasCleared = false;
+      await service.copyAndScheduleClear(
+        'SecretPassword123',
+        duration: const Duration(milliseconds: 50),
+        onCleared: () => wasCleared = true,
+      );
+
+      await Future.delayed(const Duration(milliseconds: 200));
+
+      final currentData = await Clipboard.getData(Clipboard.kTextPlain);
+      expect(currentData?.text, equals(''));
+      expect(wasCleared, isTrue);
+    });
+
+    test('does NOT clear clipboard when timer expires if user copied different data', () async {
+      bool wasCleared = false;
+      await service.copyAndScheduleClear(
+        'SecretPassword123',
+        duration: const Duration(milliseconds: 50),
+        onCleared: () => wasCleared = true,
+      );
+
+      // User copies something else
+      await Clipboard.setData(const ClipboardData(text: 'OtherUserContent'));
+
+      await Future.delayed(const Duration(milliseconds: 200));
+
+      final currentData = await Clipboard.getData(Clipboard.kTextPlain);
+      expect(currentData?.text, equals('OtherUserContent'));
+      expect(wasCleared, isFalse);
+    });
   });
 }

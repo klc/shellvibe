@@ -265,6 +265,7 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                 groupsAsync.when(
                   data: (groups) => DropdownButtonFormField<String?>(
                     key: const Key('host_group_dropdown'),
+                    isExpanded: true,
                     initialValue: _selectedGroupId,
                     decoration: const InputDecoration(
                       labelText: 'Group / Folder',
@@ -293,6 +294,7 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                 identitiesAsync.when(
                   data: (identities) => DropdownButtonFormField<String?>(
                     key: const Key('host_identity_dropdown'),
+                    isExpanded: true,
                     initialValue: _selectedIdentityId,
                     decoration: const InputDecoration(
                       labelText: 'Identity / Credentials',
@@ -326,6 +328,7 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
 
                     return DropdownButtonFormField<String?>(
                       key: const Key('host_jumphost_dropdown'),
+                      isExpanded: true,
                       initialValue: _selectedJumpHostId,
                       decoration: const InputDecoration(
                         labelText: 'Jump Host (Bastion)',

@@ -105,13 +105,26 @@ class EncryptionEngine {
     required String masterPassword,
     required Uint8List salt,
   }) async {
+    // Avoid isolate spawning overhead in test environments with low KDF memory
+    if (_kdf.memory <= 4096) {
+      return deriveMasterKey(
+        masterPassword: masterPassword,
+        salt: salt,
+      );
+    }
+
     try {
+      final parallelism = _kdf.parallelism;
+      final memory = _kdf.memory;
+      final iterations = _kdf.iterations;
+      final hashLength = _kdf.hashLength;
+
       final keyBytes = await Isolate.run(() async {
         final kdf = Argon2id(
-          parallelism: 1,
-          memory: 65536,
-          iterations: 3,
-          hashLength: 32,
+          parallelism: parallelism,
+          memory: memory,
+          iterations: iterations,
+          hashLength: hashLength,
         );
         final passwordBytes = utf8.encode(masterPassword);
         final secretKey = SecretKey(passwordBytes);

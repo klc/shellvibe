@@ -13,10 +13,13 @@ class ClipboardAutoClearService {
   }) async {
     _timer?.cancel();
     await Clipboard.setData(ClipboardData(text: sensitiveData));
-    if (duration.inSeconds > 0) {
+    if (duration > Duration.zero) {
       _timer = Timer(duration, () async {
-        await Clipboard.setData(const ClipboardData(text: ''));
-        if (onCleared != null) onCleared();
+        final currentData = await Clipboard.getData(Clipboard.kTextPlain);
+        if (currentData?.text == sensitiveData) {
+          await Clipboard.setData(const ClipboardData(text: ''));
+          if (onCleared != null) onCleared();
+        }
       });
     }
   }

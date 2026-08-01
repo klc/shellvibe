@@ -3,15 +3,35 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:cryptography/cryptography.dart';
+import 'package:terly2/core/crypto/encryption_engine.dart';
+import 'package:terly2/shared/providers/database_providers.dart';
 import 'package:terly2/features/vault/presentation/dialogs/vault_unlock_dialog.dart';
 import 'package:terly2/features/vault/presentation/notifiers/vault_notifier.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  final fastEngine = EncryptionEngine(
+    kdf: Argon2id(
+      parallelism: 1,
+      memory: 8,
+      iterations: 1,
+      hashLength: 32,
+    ),
+  );
+
   setUp(() {
     FlutterSecureStorage.setMockInitialValues({});
   });
+
+  ProviderContainer createContainer() {
+    return ProviderContainer(
+      overrides: [
+        encryptionEngineProvider.overrideWithValue(fastEngine),
+      ],
+    );
+  }
 
   Widget createWidgetUnderTest(ProviderContainer container) {
     return UncontrolledProviderScope(
@@ -24,7 +44,7 @@ void main() {
 
   group('VaultUnlockDialog Widget Tests', () {
     testWidgets('Renders password field and unlock button', (tester) async {
-      final container = ProviderContainer();
+      final container = createContainer();
       addTearDown(container.dispose);
 
       await tester.pumpWidget(createWidgetUnderTest(container));
@@ -36,7 +56,7 @@ void main() {
     });
 
     testWidgets('Displays error feedback when wrong password is submitted', (tester) async {
-      final container = ProviderContainer();
+      final container = createContainer();
       addTearDown(container.dispose);
 
       // Setup vault with password
@@ -50,15 +70,15 @@ void main() {
       // Enter wrong password
       await tester.enterText(find.byType(TextField), 'WrongPassword');
       await tester.tap(find.widgetWithText(FilledButton, 'Unlock'));
+      await tester.idle();
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
 
       expect(find.text('Incorrect password'), findsOneWidget);
       expect(find.text('Failed attempts: 1'), findsOneWidget);
     });
 
     testWidgets('Displays lockout UI when max failed attempts reached', (tester) async {
-      final container = ProviderContainer();
+      final container = createContainer();
       addTearDown(container.dispose);
 
       final notifier = container.read(vaultNotifierProvider.notifier);
@@ -79,6 +99,9 @@ void main() {
       // Unlock button should be disabled when locked out
       final filledButton = tester.widget<FilledButton>(find.byType(FilledButton));
       expect(filledButton.onPressed, isNull);
+
+      // Advance time past lockout duration so periodic timer cancels before test teardown
+      await tester.pump(const Duration(seconds: 31));
     });
   });
 }

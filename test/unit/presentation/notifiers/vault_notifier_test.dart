@@ -1,17 +1,33 @@
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:cryptography/cryptography.dart';
+import 'package:terly2/core/crypto/encryption_engine.dart';
+import 'package:terly2/shared/providers/database_providers.dart';
 import 'package:terly2/features/vault/presentation/notifiers/vault_notifier.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  final fastEngine = EncryptionEngine(
+    kdf: Argon2id(
+      parallelism: 1,
+      memory: 8,
+      iterations: 1,
+      hashLength: 32,
+    ),
+  );
 
   group('VaultNotifier State Transition Unit Tests', () {
     late ProviderContainer container;
 
     setUp(() {
       FlutterSecureStorage.setMockInitialValues({});
-      container = ProviderContainer();
+      container = ProviderContainer(
+        overrides: [
+          encryptionEngineProvider.overrideWithValue(fastEngine),
+        ],
+      );
     });
 
     tearDown(() {

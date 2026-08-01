@@ -51,17 +51,18 @@ void main() {
       expect(await cryptoService.decryptField('', masterKey), isNull);
     });
 
-    test('decryptField falls back to returning raw string for legacy unencrypted text', () async {
+    test('decryptField throws IdentityCryptoException when decryption fails', () async {
       final salt = engine.generateSalt(16);
       final masterKey = await engine.deriveMasterKey(
         masterPassword: 'VaultPassword123',
         salt: salt,
       );
 
-      const legacyPlaintext = 'legacy_unencrypted_password_or_key';
-      final result = await cryptoService.decryptField(legacyPlaintext, masterKey);
-
-      expect(result, equals(legacyPlaintext));
+      const invalidOrLegacyText = 'legacy_unencrypted_password_or_key';
+      expect(
+        () => cryptoService.decryptField(invalidOrLegacyText, masterKey),
+        throwsA(isA<IdentityCryptoException>()),
+      );
     });
   });
 }

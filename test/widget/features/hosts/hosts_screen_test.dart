@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:shadcn_ui/shadcn_ui.dart';
+
 import 'package:terly2/features/hosts/domain/models/host_model.dart';
 import 'package:terly2/features/hosts/presentation/screens/hosts_screen.dart';
 import 'package:terly2/shared/database/app_database.dart';
@@ -34,8 +36,15 @@ void main() {
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
       ],
-      child: MaterialApp(
-        home: HostsScreen(onConnectHost: onConnectHost),
+      child: ShadTheme(
+        data: ShadThemeData(
+          colorScheme: const ShadSlateColorScheme.light(),
+          brightness: Brightness.light,
+        ),
+        child: MaterialApp(
+          builder: (context, child) => Material(child: child!),
+          home: HostsScreen(onConnectHost: onConnectHost),
+        ),
       ),
     );
   }

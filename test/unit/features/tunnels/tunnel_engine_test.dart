@@ -98,7 +98,39 @@ void main() {
       expect(fakeListener1.isClosed, isTrue);
       expect(fakeListener2.isClosed, isTrue);
     });
+
+    test('startRemoteForward cleans up resources on error', () async {
+      final fakeSshClient = FakeFailingSSHClient();
+
+      await expectLater(
+        tunnelEngine.startRemoteForward(
+          ruleId: 'r_fail',
+          hostId: 'h1',
+          sshClient: fakeSshClient,
+          remotePort: 9090,
+          localHost: '127.0.0.1',
+          localPort: 8080,
+        ),
+        throwsA(isA<Exception>()),
+      );
+
+      final tunnel = tunnelEngine.getActiveTunnel('r_fail');
+      expect(tunnel, isNotNull);
+      expect(tunnel!.isActive, isFalse);
+      expect(tunnel.error, contains('Remote forward failed'));
+    });
   });
+}
+
+class FakeFailingSSHClient extends Fake implements SSHClient {
+  @override
+  Future<SSHRemoteForward?> forwardRemote({
+    dynamic filter,
+    String? host,
+    int? port,
+  }) async {
+    throw Exception('Remote forward failed');
+  }
 }
 
 class FakeSSHRemoteForward extends Fake implements SSHRemoteForward {
