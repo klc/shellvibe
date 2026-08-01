@@ -3,7 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
+import '../../../terminal/presentation/dialogs/host_key_prompt_dialog.dart';
 import '../../../terminal/presentation/notifiers/terminal_tabs_notifier.dart';
+import '../../../vault/domain/models/identity_model.dart';
+import '../../../vault/presentation/notifiers/identities_notifier.dart';
 import '../dialogs/host_form_dialog.dart';
 import '../dialogs/host_group_form_dialog.dart';
 import '../notifiers/host_groups_notifier.dart';
@@ -174,8 +177,42 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
     );
   }
 
-  void _defaultConnectHost(HostModel host) {
-    ref.read(terminalTabsNotifierProvider.notifier).openTabForHost(host);
+  Future<void> _defaultConnectHost(HostModel host) async {
+    IdentityModel? identity;
+    if (host.identityId != null) {
+      try {
+        identity = await ref
+            .read(identitiesNotifierProvider.notifier)
+            .getDecryptedIdentity(host.identityId!);
+      } catch (e) {
+        if (mounted) {
+          ShadToaster.of(context).show(
+            ShadToast.destructive(
+              description: Text('Cannot read stored credentials: $e'),
+            ),
+          );
+        }
+        return;
+      }
+    }
+
+    await ref.read(terminalTabsNotifierProvider.notifier).openTabForHost(
+          host,
+          identity: identity,
+          onHostKeyPrompt: (hostname, port, keyType, fingerprint, status) async {
+            if (!mounted) return false;
+            final approved = await HostKeyPromptDialog.show(
+              context,
+              hostname: hostname,
+              port: port,
+              keyType: keyType,
+              fingerprint: fingerprint,
+              status: status,
+            );
+            return approved ?? false;
+          },
+        );
+
     if (mounted) {
       GoRouter.maybeOf(context)?.go('/terminal');
     }

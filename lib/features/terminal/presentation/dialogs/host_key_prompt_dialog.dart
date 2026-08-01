@@ -25,6 +25,27 @@ class HostKeyPromptDialog extends StatelessWidget {
     required this.status,
   });
 
+  static Future<bool?> show(
+    BuildContext context, {
+    required String hostname,
+    required int port,
+    required String keyType,
+    required String fingerprint,
+    required HostKeyVerificationStatus status,
+  }) {
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => HostKeyPromptDialog(
+        hostname: hostname,
+        port: port,
+        keyType: keyType,
+        fingerprint: fingerprint,
+        status: status,
+      ),
+    );
+  }
+
   bool get _isMismatch => status == HostKeyVerificationStatus.mismatch;
 
   @override

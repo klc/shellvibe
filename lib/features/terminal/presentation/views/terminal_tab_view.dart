@@ -342,16 +342,13 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
     HostKeyVerificationStatus status,
   ) async {
     if (!mounted) return false;
-    final approved = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => HostKeyPromptDialog(
-        hostname: hostname,
-        port: port,
-        keyType: keyType,
-        fingerprint: fingerprint,
-        status: status,
-      ),
+    final approved = await HostKeyPromptDialog.show(
+      context,
+      hostname: hostname,
+      port: port,
+      keyType: keyType,
+      fingerprint: fingerprint,
+      status: status,
     );
     return approved ?? false;
   }
