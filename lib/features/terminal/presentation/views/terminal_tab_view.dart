@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
 import '../../../vault/domain/models/identity_model.dart';
@@ -8,35 +10,91 @@ import '../notifiers/terminal_tabs_notifier.dart';
 import '../screens/terminal_screen.dart';
 import '../../domain/models/terminal_tab_session.dart';
 
-class TerminalTabView extends ConsumerWidget {
+class TerminalTabView extends ConsumerStatefulWidget {
   const TerminalTabView({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<TerminalTabView> createState() => _TerminalTabViewState();
+}
+
+class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
+  final FocusNode _focusNode = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _focusNode.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final tabsState = ref.watch(terminalTabsNotifierProvider);
     final activeTab = tabsState.activeTab;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF1E1E2E),
-      body: Column(
-        children: [
-          // Top Tab Bar
-          _buildTabBar(context, ref, tabsState),
-          // Tab Content / Body
-          Expanded(
-            child: activeTab == null
-                ? _buildEmptyState(context, ref)
-                : _buildTabBody(context, ref, tabsState, activeTab),
+    return Focus(
+      focusNode: _focusNode,
+      autofocus: true,
+      child: CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.keyT, meta: true): () {
+            ref.read(terminalTabsNotifierProvider.notifier).openLocalTab();
+          },
+          const SingleActivator(LogicalKeyboardKey.keyT, control: true): () {
+            ref.read(terminalTabsNotifierProvider.notifier).openLocalTab();
+          },
+          const SingleActivator(LogicalKeyboardKey.keyW, meta: true): () {
+            if (activeTab != null) {
+              ref.read(terminalTabsNotifierProvider.notifier).closeTab(activeTab.id);
+            }
+          },
+          const SingleActivator(LogicalKeyboardKey.keyW, control: true): () {
+            if (activeTab != null) {
+              ref.read(terminalTabsNotifierProvider.notifier).closeTab(activeTab.id);
+            }
+          },
+        },
+        child: Scaffold(
+          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+          body: Column(
+            children: [
+              // Top Tab Bar
+              _buildTabBar(context, ref, tabsState),
+              // Tab Content / Body
+              Expanded(
+                child: activeTab == null
+                    ? _buildEmptyState(context, ref)
+                    : _buildTabBody(context, ref, tabsState, activeTab),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 
   Widget _buildTabBar(BuildContext context, WidgetRef ref, TerminalTabsState tabsState) {
+    final shadTheme = ShadTheme.of(context);
+    final colorScheme = shadTheme.colorScheme;
+
     return Container(
       height: 40,
-      color: const Color(0xFF181825),
+      decoration: BoxDecoration(
+        color: colorScheme.card,
+        border: Border(
+          bottom: BorderSide(
+            color: colorScheme.border,
+            width: 1,
+          ),
+        ),
+      ),
       child: Row(
         children: [
           Expanded(
@@ -54,10 +112,10 @@ class TerminalTabView extends ConsumerWidget {
                     key: Key('tab_header_${tab.id}'),
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
-                      color: isActive ? const Color(0xFF24273A) : Colors.transparent,
+                      color: isActive ? colorScheme.muted : Colors.transparent,
                       border: Border(
                         bottom: BorderSide(
-                          color: isActive ? const Color(0xFF8AADF4) : Colors.transparent,
+                          color: isActive ? colorScheme.primary : Colors.transparent,
                           width: 2,
                         ),
                       ),
@@ -70,13 +128,13 @@ class TerminalTabView extends ConsumerWidget {
                               ? Icons.terminal
                               : Icons.computer,
                           size: 16,
-                          color: isActive ? const Color(0xFF8AADF4) : Colors.grey,
+                          color: isActive ? colorScheme.primary : colorScheme.mutedForeground,
                         ),
                         const SizedBox(width: 6),
                         Text(
                           tab.title,
                           style: TextStyle(
-                            color: isActive ? Colors.white : Colors.grey,
+                            color: isActive ? colorScheme.foreground : colorScheme.mutedForeground,
                             fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
                             fontSize: 13,
                           ),
@@ -87,10 +145,10 @@ class TerminalTabView extends ConsumerWidget {
                           onTap: () => ref
                               .read(terminalTabsNotifierProvider.notifier)
                               .closeTab(tab.id),
-                          child: const Icon(
+                          child: Icon(
                             Icons.close,
                             size: 14,
-                            color: Colors.grey,
+                            color: colorScheme.mutedForeground,
                           ),
                         ),
                       ],
@@ -104,7 +162,7 @@ class TerminalTabView extends ConsumerWidget {
           if (tabsState.activeTabId != null)
             IconButton(
               key: const Key('split_tab_button'),
-              icon: const Icon(Icons.vertical_split, size: 18, color: Colors.grey),
+              icon: Icon(Icons.vertical_split, size: 18, color: colorScheme.mutedForeground),
               tooltip: 'Split Pane',
               onPressed: () {
                 ref
@@ -115,7 +173,7 @@ class TerminalTabView extends ConsumerWidget {
           // New Tab Button
           IconButton(
             key: const Key('new_tab_button'),
-            icon: const Icon(Icons.add, size: 20, color: Colors.white),
+            icon: Icon(Icons.add, size: 20, color: colorScheme.foreground),
             tooltip: 'New Tab',
             onPressed: () => _showNewTabMenu(context, ref),
           ),
@@ -130,6 +188,8 @@ class TerminalTabView extends ConsumerWidget {
     TerminalTabsState tabsState,
     TerminalTabSession activeTab,
   ) {
+    final colorScheme = ShadTheme.of(context).colorScheme;
+
     // Check if active tab has split children
     final splits = tabsState.tabs.where((t) => t.splitParentId == activeTab.id).toList();
 
@@ -141,7 +201,7 @@ class TerminalTabView extends ConsumerWidget {
     return Row(
       children: [
         Expanded(child: TerminalScreen(session: activeTab)),
-        const VerticalDivider(width: 2, color: Color(0xFF181825)),
+        VerticalDivider(width: 2, color: colorScheme.border),
         ...splits.map(
           (splitTab) => Expanded(
             child: TerminalScreen(session: splitTab),
@@ -152,28 +212,30 @@ class TerminalTabView extends ConsumerWidget {
   }
 
   Widget _buildEmptyState(BuildContext context, WidgetRef ref) {
+    final colorScheme = ShadTheme.of(context).colorScheme;
+
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
+          Icon(
             Icons.terminal,
             size: 64,
-            color: Color(0xFF5B6078),
+            color: colorScheme.mutedForeground,
           ),
           const SizedBox(height: 16),
-          const Text(
+          Text(
             'No Active Terminal Sessions',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: Colors.white70,
+              color: colorScheme.foreground,
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             'Open a local shell or select a remote SSH server to connect.',
-            style: TextStyle(color: Colors.grey),
+            style: TextStyle(color: colorScheme.mutedForeground),
           ),
           const SizedBox(height: 24),
           Wrap(
@@ -181,25 +243,18 @@ class TerminalTabView extends ConsumerWidget {
             runSpacing: 12,
             alignment: WrapAlignment.center,
             children: [
-              ElevatedButton.icon(
+              ShadButton(
                 key: const Key('empty_open_local_button'),
-                icon: const Icon(Icons.computer),
-                label: const Text('Open Local Shell'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF8AADF4),
-                  foregroundColor: const Color(0xFF1E1E2E),
-                ),
+                leading: const Icon(Icons.computer, size: 18),
                 onPressed: () =>
                     ref.read(terminalTabsNotifierProvider.notifier).openLocalTab(),
+                child: const Text('Open Local Shell'),
               ),
-              OutlinedButton.icon(
+              ShadButton.outline(
                 key: const Key('empty_select_host_button'),
-                icon: const Icon(Icons.dns),
-                label: const Text('Connect to Host'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF8AADF4),
-                ),
+                leading: const Icon(Icons.dns, size: 18),
                 onPressed: () => _showSelectHostModal(context, ref),
+                child: const Text('Connect to Host'),
               ),
             ],
           ),

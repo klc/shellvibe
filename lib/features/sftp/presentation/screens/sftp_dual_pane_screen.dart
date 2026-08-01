@@ -28,6 +28,7 @@ class SftpDualPaneScreen extends ConsumerStatefulWidget {
 
 class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
   final TextEditingController _searchController = TextEditingController();
+  int _selectedMobileTab = 0; // 0: Local Workstation, 1: Remote SFTP
 
   @override
   void initState() {
@@ -74,6 +75,8 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     final state = ref.watch(sftpNotifierProvider);
     final notifier = ref.read(sftpNotifierProvider.notifier);
     final colorScheme = ShadTheme.of(context).colorScheme;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -125,66 +128,103 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
               ],
             ),
           ),
-          // Dual Pane Layout
-          Expanded(
-            child: Row(
-              children: [
-                // Left Pane: Local File System
-                Expanded(
-                  child: DropTarget(
-                    onDragDone: (details) => _handleDragAndDropUpload(details.files, state.remotePath),
-                    child: _buildPane(
-                      title: 'Local Workstation',
-                      path: state.localPath,
-                      files: state.localFiles,
-                      isLoading: state.isLoadingLocal,
-                      error: state.localError,
-                      isLocal: true,
-                      onNavigateUp: notifier.navigateLocalUp,
-                      onItemTap: (item) {
-                        if (item.isDirectory) {
-                          notifier.loadLocalDirectory(item.path);
-                        }
-                      },
-                      onDelete: notifier.deleteLocalItem,
-                      onUpload: (item) => notifier.uploadLocalItem(item),
+          // Responsive Segmented Tab Switcher for Mobile / Narrow screens (< 600px)
+          if (isMobile)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: SizedBox(
+                width: double.infinity,
+                child: SegmentedButton<int>(
+                  segments: [
+                    const ButtonSegment<int>(
+                      value: 0,
+                      label: Text('Local Workstation'),
+                      icon: Icon(Icons.laptop, size: 16),
                     ),
-                  ),
-                ),
-                VerticalDivider(width: 1, color: colorScheme.border),
-                // Right Pane: Remote SFTP File System
-                Expanded(
-                  child: DropTarget(
-                    onDragDone: (details) => _handleDragAndDropUpload(details.files, state.remotePath),
-                    child: _buildPane(
-                      title: state.remoteClient != null ? 'Remote SFTP Server' : 'Remote (Disconnected)',
-                      path: state.remotePath,
-                      files: state.remoteFiles,
-                      isLoading: state.isLoadingRemote,
-                      error: state.remoteError,
-                      isLocal: false,
-                      onNavigateUp: notifier.navigateRemoteUp,
-                      onItemTap: (item) {
-                        if (item.isDirectory) {
-                          notifier.loadRemoteDirectory(item.path);
-                        } else {
-                          _openFileEditor(item);
-                        }
-                      },
-                      onDelete: notifier.deleteRemoteItem,
-                      onDownload: (item) => notifier.downloadItem(item),
-                      onEditPermissions: _openPermissionsDialog,
-                      onEditContent: _openFileEditor,
-                      onCreateFolder: () => _showCreateDialog(isFolder: true),
-                      onCreateFile: () => _showCreateDialog(isFolder: false),
-                      onRename: (item) => _showRenameDialog(item),
+                    ButtonSegment<int>(
+                      value: 1,
+                      label: Text(
+                        state.remoteClient != null ? 'Remote SFTP' : 'Remote (Disconnected)',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      icon: const Icon(Icons.dns, size: 16),
                     ),
-                  ),
+                  ],
+                  selected: {_selectedMobileTab},
+                  onSelectionChanged: (newSelection) {
+                    setState(() {
+                      _selectedMobileTab = newSelection.first;
+                    });
+                  },
                 ),
-              ],
+              ),
             ),
+          // Dual Pane or Responsive Single Pane View
+          Expanded(
+            child: isMobile
+                ? (_selectedMobileTab == 0
+                    ? _buildLocalPane(state, notifier)
+                    : _buildRemotePane(state, notifier))
+                : Row(
+                    children: [
+                      Expanded(child: _buildLocalPane(state, notifier)),
+                      VerticalDivider(width: 1, color: colorScheme.border),
+                      Expanded(child: _buildRemotePane(state, notifier)),
+                    ],
+                  ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildLocalPane(SftpState state, SftpNotifier notifier) {
+    return DropTarget(
+      onDragDone: (details) => _handleDragAndDropUpload(details.files, state.remotePath),
+      child: _buildPane(
+        title: 'Local Workstation',
+        path: state.localPath,
+        files: state.localFiles,
+        isLoading: state.isLoadingLocal,
+        error: state.localError,
+        isLocal: true,
+        onNavigateUp: notifier.navigateLocalUp,
+        onItemTap: (item) {
+          if (item.isDirectory) {
+            notifier.loadLocalDirectory(item.path);
+          }
+        },
+        onDelete: notifier.deleteLocalItem,
+        onUpload: (item) => notifier.uploadLocalItem(item),
+      ),
+    );
+  }
+
+  Widget _buildRemotePane(SftpState state, SftpNotifier notifier) {
+    return DropTarget(
+      onDragDone: (details) => _handleDragAndDropUpload(details.files, state.remotePath),
+      child: _buildPane(
+        title: state.remoteClient != null ? 'Remote SFTP Server' : 'Remote (Disconnected)',
+        path: state.remotePath,
+        files: state.remoteFiles,
+        isLoading: state.isLoadingRemote,
+        error: state.remoteError,
+        isLocal: false,
+        onNavigateUp: notifier.navigateRemoteUp,
+        onItemTap: (item) {
+          if (item.isDirectory) {
+            notifier.loadRemoteDirectory(item.path);
+          } else {
+            _openFileEditor(item);
+          }
+        },
+        onDelete: notifier.deleteRemoteItem,
+        onDownload: (item) => notifier.downloadItem(item),
+        onEditPermissions: _openPermissionsDialog,
+        onEditContent: _openFileEditor,
+        onCreateFolder: () => _showCreateDialog(isFolder: true),
+        onCreateFile: () => _showCreateDialog(isFolder: false),
+        onRename: (item) => _showRenameDialog(item),
       ),
     );
   }
