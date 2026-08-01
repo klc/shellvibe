@@ -57,7 +57,11 @@ void main() {
       expect(state.length, equals(1));
       expect(state.first.title, equals('Production Server Key'));
       expect(state.first.username, equals('ubuntu'));
-      expect(state.first.password, equals('SecretPassword123'));
+      expect(state.first.password, isNull);
+
+      final decrypted = await notifier.getDecryptedIdentity(state.first.id);
+      expect(decrypted, isNotNull);
+      expect(decrypted!.password, equals('SecretPassword123'));
     });
 
     test('updateIdentity modifies existing record', () async {
@@ -87,7 +91,11 @@ void main() {
       expect(state.length, equals(1));
       expect(state.first.title, equals('New Title'));
       expect(state.first.username, equals('admin'));
-      expect(state.first.password, equals('Pass2'));
+      expect(state.first.password, isNull);
+
+      final decrypted = await notifier.getDecryptedIdentity(id);
+      expect(decrypted, isNotNull);
+      expect(decrypted!.password, equals('Pass2'));
     });
 
     test('deleteIdentity removes record from state', () async {

@@ -20,7 +20,12 @@ class SnippetsDao extends DatabaseAccessor<AppDatabase> with _$SnippetsDaoMixin 
     return (select(snippets)..where((tbl) => tbl.workspaceId.equals(workspaceId))).watch();
   }
 
-  Future<int> insertSnippet(SnippetsCompanion snippet) => into(snippets).insert(snippet);
+  Future<int> insertSnippet(SnippetsCompanion snippet) async {
+    if (snippet.workspaceId.present) {
+      await db.workspacesDao.ensureWorkspaceExists(snippet.workspaceId.value);
+    }
+    return into(snippets).insert(snippet);
+  }
 
   Future<bool> updateSnippet(SnippetsCompanion snippet) => update(snippets).replace(snippet);
 

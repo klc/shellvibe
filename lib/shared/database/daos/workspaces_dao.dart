@@ -16,7 +16,19 @@ class WorkspacesDao extends DatabaseAccessor<AppDatabase> with _$WorkspacesDaoMi
     return (select(workspaces)..where((tbl) => tbl.id.equals(id))).getSingleOrNull();
   }
 
-  Future<int> insertWorkspace(WorkspacesCompanion workspace) => into(workspaces).insert(workspace);
+  Future<int> insertWorkspace(WorkspacesCompanion workspace) =>
+      into(workspaces).insert(workspace, mode: InsertMode.insertOrIgnore);
+
+  Future<void> ensureWorkspaceExists(String id, {String? name}) async {
+    await into(workspaces).insert(
+      WorkspacesCompanion(
+        id: Value(id),
+        name: Value(name ?? (id == 'default' ? 'Default Workspace' : id)),
+        createdAt: Value(DateTime.now()),
+      ),
+      mode: InsertMode.insertOrIgnore,
+    );
+  }
 
   Future<bool> updateWorkspace(Insertable<Workspace> workspace) => update(workspaces).replace(workspace);
 

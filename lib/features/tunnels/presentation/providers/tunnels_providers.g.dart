@@ -6,6 +6,25 @@ part of 'tunnels_providers.dart';
 // RiverpodGenerator
 // **************************************************************************
 
+String _$tunnelRepositoryHash() => r'0015025dc51e3be2433739fd7b65f4ce7f460d13';
+
+/// Provider for [TunnelRepository]
+///
+/// Copied from [tunnelRepository].
+@ProviderFor(tunnelRepository)
+final tunnelRepositoryProvider = AutoDisposeProvider<TunnelRepository>.internal(
+  tunnelRepository,
+  name: r'tunnelRepositoryProvider',
+  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+      ? null
+      : _$tunnelRepositoryHash,
+  dependencies: null,
+  allTransitiveDependencies: null,
+);
+
+@Deprecated('Will be removed in 3.0. Use Ref instead')
+// ignore: unused_element
+typedef TunnelRepositoryRef = AutoDisposeProviderRef<TunnelRepository>;
 String _$tunnelEngineHash() => r'7aa0beb251d42456ace1deeef18e015a6ab575c7';
 
 /// Provider for [TunnelEngine]
@@ -47,7 +66,7 @@ final activeTunnelsStreamProvider =
 // ignore: unused_element
 typedef ActiveTunnelsStreamRef =
     AutoDisposeStreamProviderRef<List<ActiveTunnel>>;
-String _$tunnelsNotifierHash() => r'1b579c9fcfae5838c5c088a8e77d50d1773f64eb';
+String _$tunnelsNotifierHash() => r'd82ab41df7066e851e02c7d8bd66810c5f00f091';
 
 /// See also [TunnelsNotifier].
 @ProviderFor(TunnelsNotifier)

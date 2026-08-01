@@ -24,7 +24,12 @@ class IdentitiesDao extends DatabaseAccessor<AppDatabase> with _$IdentitiesDaoMi
     return (select(identities)..where((tbl) => tbl.id.equals(id))).getSingleOrNull();
   }
 
-  Future<int> insertIdentity(IdentitiesCompanion identity) => into(identities).insert(identity);
+  Future<int> insertIdentity(IdentitiesCompanion identity) async {
+    if (identity.workspaceId.present) {
+      await db.workspacesDao.ensureWorkspaceExists(identity.workspaceId.value);
+    }
+    return into(identities).insert(identity);
+  }
 
   Future<bool> updateIdentity(Insertable<Identity> identity) => update(identities).replace(identity);
 

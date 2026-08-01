@@ -7,7 +7,7 @@ part of 'settings_notifier.dart';
 // **************************************************************************
 
 String _$settingsRepositoryHash() =>
-    r'0c9f54c8db3e4c14161a786dc4b621d74a850ae0';
+    r'718b69644c76e869689bd7ec94b4a8e9b6251501';
 
 /// See also [settingsRepository].
 @ProviderFor(settingsRepository)
@@ -26,7 +26,7 @@ final settingsRepositoryProvider =
 // ignore: unused_element
 typedef SettingsRepositoryRef = AutoDisposeProviderRef<SettingsRepository>;
 String _$biometricLockServiceHash() =>
-    r'fa98c54364c3b29387f195dcdd68aee62194463d';
+    r'7da2795890f61cfe920aeaa39dbcbe6c90527c0b';
 
 /// See also [biometricLockService].
 @ProviderFor(biometricLockService)
@@ -44,6 +44,26 @@ final biometricLockServiceProvider =
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef BiometricLockServiceRef = AutoDisposeProviderRef<BiometricLockService>;
+String _$clipboardAutoClearServiceHash() =>
+    r'47d38148883ef18a4ccbc73a80820ac539c54333';
+
+/// See also [clipboardAutoClearService].
+@ProviderFor(clipboardAutoClearService)
+final clipboardAutoClearServiceProvider =
+    AutoDisposeProvider<ClipboardAutoClearService>.internal(
+      clipboardAutoClearService,
+      name: r'clipboardAutoClearServiceProvider',
+      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+          ? null
+          : _$clipboardAutoClearServiceHash,
+      dependencies: null,
+      allTransitiveDependencies: null,
+    );
+
+@Deprecated('Will be removed in 3.0. Use Ref instead')
+// ignore: unused_element
+typedef ClipboardAutoClearServiceRef =
+    AutoDisposeProviderRef<ClipboardAutoClearService>;
 String _$settingsNotifierHash() => r'3e173e570b8e44795b658a9b4b86bf8c90373c47';
 
 /// See also [SettingsNotifier].

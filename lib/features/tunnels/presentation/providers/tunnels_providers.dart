@@ -3,10 +3,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../core/network/tunnel_engine.dart';
-import '../../../../shared/database/app_database.dart';
 import '../../../../shared/providers/database_providers.dart';
+import '../../data/repositories/tunnel_repository_impl.dart';
+import '../../domain/models/tunnel_rule_model.dart';
+import '../../domain/repositories/tunnel_repository.dart';
 
 part 'tunnels_providers.g.dart';
+
+/// Provider for [TunnelRepository]
+@riverpod
+TunnelRepository tunnelRepository(Ref ref) {
+  final dao = ref.watch(tunnelsDaoProvider);
+  return TunnelRepositoryImpl(dao);
+}
 
 /// Provider for [TunnelEngine]
 @Riverpod(keepAlive: true)
@@ -27,7 +36,7 @@ Stream<List<ActiveTunnel>> activeTunnelsStream(Ref ref) {
 
 /// State for TunnelsScreen
 class TunnelsState {
-  final List<PortForwardRule> rules;
+  final List<TunnelRuleModel> rules;
   final bool isLoading;
   final String? error;
 
@@ -38,7 +47,7 @@ class TunnelsState {
   });
 
   TunnelsState copyWith({
-    List<PortForwardRule>? rules,
+    List<TunnelRuleModel>? rules,
     bool? isLoading,
     String? error,
   }) {
@@ -62,30 +71,30 @@ class TunnelsNotifier extends _$TunnelsNotifier {
   Future<void> loadRules([String? hostId]) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      final dao = ref.read(tunnelsDaoProvider);
+      final repository = ref.read(tunnelRepositoryProvider);
       final rules = hostId != null
-          ? await dao.getRulesForHost(hostId)
-          : await (dao.select(dao.portForwardRules)).get();
+          ? await repository.getRulesForHost(hostId)
+          : await repository.getAllRules();
       state = state.copyWith(rules: rules, isLoading: false);
     } catch (e) {
       state = state.copyWith(error: e.toString(), isLoading: false);
     }
   }
 
-  Future<void> addRule(PortForwardRulesCompanion rule) async {
+  Future<void> addRule(TunnelRuleModel rule) async {
     try {
-      final dao = ref.read(tunnelsDaoProvider);
-      await dao.insertRule(rule);
+      final repository = ref.read(tunnelRepositoryProvider);
+      await repository.addRule(rule);
       await loadRules();
     } catch (e) {
       state = state.copyWith(error: 'Failed to add rule: $e');
     }
   }
 
-  Future<void> updateRule(PortForwardRule rule) async {
+  Future<void> updateRule(TunnelRuleModel rule) async {
     try {
-      final dao = ref.read(tunnelsDaoProvider);
-      await dao.updateRule(rule);
+      final repository = ref.read(tunnelRepositoryProvider);
+      await repository.updateRule(rule);
       await loadRules();
     } catch (e) {
       state = state.copyWith(error: 'Failed to update rule: $e');
@@ -95,15 +104,15 @@ class TunnelsNotifier extends _$TunnelsNotifier {
   Future<void> deleteRule(String id) async {
     try {
       await ref.read(tunnelEngineProvider).stopTunnel(id);
-      final dao = ref.read(tunnelsDaoProvider);
-      await dao.deleteRule(id);
+      final repository = ref.read(tunnelRepositoryProvider);
+      await repository.deleteRule(id);
       await loadRules();
     } catch (e) {
       state = state.copyWith(error: 'Failed to delete rule: $e');
     }
   }
 
-  Future<void> startRule(PortForwardRule rule, SSHClient sshClient) async {
+  Future<void> startRule(TunnelRuleModel rule, SSHClient sshClient) async {
     final engine = ref.read(tunnelEngineProvider);
     try {
       if (rule.type == 'local') {

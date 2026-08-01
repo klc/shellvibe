@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../settings/presentation/notifiers/settings_notifier.dart';
 import '../../domain/models/snippet_model.dart';
 import '../../domain/services/snippet_variable_parser.dart';
 import '../notifiers/snippets_notifier.dart';
@@ -44,7 +44,13 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
     final finalCode = SnippetVariableParser.substituteVariables(snippet.code, values);
 
     if (copyOnly || widget.onExecuteCommand == null) {
-      await Clipboard.setData(ClipboardData(text: finalCode));
+      final settings = ref.read(settingsNotifierProvider).value;
+      final clearSeconds = settings?.clipboardAutoClearSeconds ?? 30;
+      final autoClearService = ref.read(clipboardAutoClearServiceProvider);
+      await autoClearService.copyAndScheduleClear(
+        finalCode,
+        duration: Duration(seconds: clearSeconds),
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Copied snippet to clipboard: "$finalCode"')),

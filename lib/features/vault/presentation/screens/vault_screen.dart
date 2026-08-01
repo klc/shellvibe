@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../settings/presentation/notifiers/settings_notifier.dart';
 import '../dialogs/identity_form_dialog.dart';
 import '../notifiers/identities_notifier.dart';
 import '../../domain/models/identity_model.dart';
@@ -73,7 +73,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
                     return _IdentityTile(
                       key: ValueKey(item.id),
                       identity: item,
-                      onEdit: () => _openIdentityForm(context, initialIdentity: item),
+                      onEdit: () => _editIdentity(context, item),
                       onDelete: () => _deleteIdentity(context, item),
                     );
                   },
@@ -95,6 +95,14 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
       context: context,
       builder: (ctx) => IdentityFormDialog(initialIdentity: initialIdentity),
     );
+  }
+
+  Future<void> _editIdentity(BuildContext context, IdentityModel item) async {
+    final decrypted =
+        await ref.read(identitiesNotifierProvider.notifier).getDecryptedIdentity(item.id);
+    if (context.mounted) {
+      _openIdentityForm(context, initialIdentity: decrypted ?? item);
+    }
   }
 
   Future<void> _deleteIdentity(BuildContext context, IdentityModel item) async {
@@ -123,7 +131,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
   }
 }
 
-class _IdentityTile extends StatelessWidget {
+class _IdentityTile extends ConsumerWidget {
   final IdentityModel identity;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
@@ -162,7 +170,11 @@ class _IdentityTile extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isPassword = identity.authType == 'password';
+    final isKey = identity.authType == 'key';
+    final canCopy = isPassword || isKey;
+
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: ListTile(
@@ -178,15 +190,37 @@ class _IdentityTile extends StatelessWidget {
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (identity.authType == 'password' && identity.password != null)
+            if (canCopy)
               IconButton(
+                key: Key('copy_identity_button_${identity.id}'),
                 icon: const Icon(Icons.copy, size: 20),
-                tooltip: 'Copy Password',
-                onPressed: () {
-                  Clipboard.setData(ClipboardData(text: identity.password!));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Password copied to clipboard')),
-                  );
+                tooltip: isPassword ? 'Copy Password' : 'Copy Key',
+                onPressed: () async {
+                  final decrypted = await ref
+                      .read(identitiesNotifierProvider.notifier)
+                      .getDecryptedIdentity(identity.id);
+                  final secret = isPassword ? decrypted?.password : decrypted?.privateKey;
+
+                  if (secret != null && secret.isNotEmpty) {
+                    final settings = ref.read(settingsNotifierProvider).value;
+                    final clearSeconds = settings?.clipboardAutoClearSeconds ?? 30;
+                    final autoClearService = ref.read(clipboardAutoClearServiceProvider);
+                    await autoClearService.copyAndScheduleClear(
+                      secret,
+                      duration: Duration(seconds: clearSeconds),
+                    );
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            isPassword
+                                ? 'Password copied to clipboard'
+                                : 'Key copied to clipboard',
+                          ),
+                        ),
+                      );
+                    }
+                  }
                 },
               ),
             IconButton(

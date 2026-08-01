@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/network/tunnel_engine.dart';
 import '../../../../shared/database/app_database.dart';
 import '../../../../shared/providers/database_providers.dart';
+import '../../domain/models/tunnel_rule_model.dart';
 import '../providers/tunnels_providers.dart';
 import '../widgets/tunnel_form_dialog.dart';
 
@@ -45,18 +46,18 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
   }
 
   void _openCreateRuleDialog() async {
-    final companion = await showDialog<PortForwardRulesCompanion>(
+    final rule = await showDialog<TunnelRuleModel>(
       context: context,
       builder: (_) => TunnelFormDialog(defaultHostId: widget.filterHostId),
     );
 
-    if (companion != null) {
-      await ref.read(tunnelsNotifierProvider.notifier).addRule(companion);
+    if (rule != null) {
+      await ref.read(tunnelsNotifierProvider.notifier).addRule(rule);
     }
   }
 
-  void _openEditRuleDialog(PortForwardRule rule) async {
-    final companion = await showDialog<PortForwardRulesCompanion>(
+  void _openEditRuleDialog(TunnelRuleModel rule) async {
+    final updatedRule = await showDialog<TunnelRuleModel>(
       context: context,
       builder: (_) => TunnelFormDialog(
         rule: rule,
@@ -64,17 +65,8 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
       ),
     );
 
-    if (companion != null) {
-      final updated = PortForwardRule(
-        id: rule.id,
-        hostId: companion.hostId.value,
-        type: companion.type.value,
-        localPort: companion.localPort.value,
-        remoteHost: companion.remoteHost.value,
-        remotePort: companion.remotePort.value,
-        autoStart: companion.autoStart.value,
-      );
-      await ref.read(tunnelsNotifierProvider.notifier).updateRule(updated);
+    if (updatedRule != null) {
+      await ref.read(tunnelsNotifierProvider.notifier).updateRule(updatedRule);
     }
   }
 
@@ -173,7 +165,7 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
   }
 
   Widget _buildRuleCard({
-    required PortForwardRule rule,
+    required TunnelRuleModel rule,
     ActiveTunnel? activeTunnel,
     Host? host,
   }) {

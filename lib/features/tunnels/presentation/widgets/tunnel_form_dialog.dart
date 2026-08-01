@@ -1,13 +1,13 @@
-import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../shared/database/app_database.dart';
 import '../../../../shared/providers/database_providers.dart';
+import '../../domain/models/tunnel_rule_model.dart';
 
 class TunnelFormDialog extends ConsumerStatefulWidget {
-  final PortForwardRule? rule;
+  final TunnelRuleModel? rule;
   final String? defaultHostId;
 
   const TunnelFormDialog({
@@ -244,18 +244,16 @@ class _TunnelFormDialogState extends ConsumerState<TunnelFormDialog> {
     final remoteHost = _ruleType != 'dynamic' ? _remoteHostController.text.trim() : null;
     final remotePort = _ruleType != 'dynamic' ? int.tryParse(_remotePortController.text.trim()) : null;
 
-    final ruleId = widget.rule?.id ?? const Uuid().v4();
-
-    final companion = PortForwardRulesCompanion(
-      id: Value(ruleId),
-      hostId: Value(_selectedHostId!),
-      type: Value(_ruleType),
-      localPort: Value(localPort),
-      remoteHost: Value(remoteHost),
-      remotePort: Value(remotePort),
-      autoStart: Value(_autoStart),
+    final rule = TunnelRuleModel(
+      id: widget.rule?.id ?? const Uuid().v4(),
+      hostId: _selectedHostId!,
+      type: _ruleType,
+      localPort: localPort,
+      remoteHost: remoteHost,
+      remotePort: remotePort,
+      autoStart: _autoStart,
     );
 
-    Navigator.of(context).pop(companion);
+    Navigator.of(context).pop(rule);
   }
 }

@@ -23,7 +23,7 @@ class IdentitiesNotifier extends _$IdentitiesNotifier {
   @override
   Future<List<IdentityModel>> build() async {
     final repo = ref.watch(vaultRepositoryProvider);
-    return await repo.getAllIdentities(decryptSecrets: true);
+    return await repo.getAllIdentities(decryptSecrets: false);
   }
 
   Future<void> addIdentity({
@@ -47,7 +47,7 @@ class IdentitiesNotifier extends _$IdentitiesNotifier {
         privateKey: privateKey,
         passphrase: passphrase,
       );
-      return await repo.getAllIdentities(decryptSecrets: true);
+      return await repo.getAllIdentities(decryptSecrets: false);
     });
   }
 
@@ -74,7 +74,7 @@ class IdentitiesNotifier extends _$IdentitiesNotifier {
         privateKey: privateKey,
         passphrase: passphrase,
       );
-      return await repo.getAllIdentities(decryptSecrets: true);
+      return await repo.getAllIdentities(decryptSecrets: false);
     });
   }
 
@@ -83,7 +83,7 @@ class IdentitiesNotifier extends _$IdentitiesNotifier {
     state = await AsyncValue.guard(() async {
       final repo = ref.read(vaultRepositoryProvider);
       await repo.deleteIdentity(id);
-      return await repo.getAllIdentities(decryptSecrets: true);
+      return await repo.getAllIdentities(decryptSecrets: false);
     });
   }
 

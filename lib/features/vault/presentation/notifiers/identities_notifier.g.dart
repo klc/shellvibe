@@ -24,7 +24,7 @@ final vaultRepositoryProvider = AutoDisposeProvider<VaultRepository>.internal(
 // ignore: unused_element
 typedef VaultRepositoryRef = AutoDisposeProviderRef<VaultRepository>;
 String _$identitiesNotifierHash() =>
-    r'539078c2f6cf430fa93f598ab61fa8d2d268d84a';
+    r'8c5e88016f6cc249b44c96f393da11c6799f815a';
 
 /// See also [IdentitiesNotifier].
 @ProviderFor(IdentitiesNotifier)
