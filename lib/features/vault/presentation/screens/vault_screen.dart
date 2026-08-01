@@ -183,7 +183,9 @@ class _IdentityTile extends ConsumerWidget {
             identity.title,
             style: const TextStyle(fontWeight: FontWeight.bold),
           ),
-          subtitle: Text('User: ${identity.username}  •  Auth: ${identity.authType.toUpperCase()}'),
+          subtitle: Text(
+            'User: ${identity.username.isEmpty ? '(Not specified)' : identity.username}  •  Auth: ${identity.authType.toUpperCase()}',
+          ),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [

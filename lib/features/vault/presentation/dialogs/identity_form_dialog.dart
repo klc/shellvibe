@@ -182,6 +182,7 @@ class _IdentityFormDialogState extends ConsumerState<IdentityFormDialog> {
                     controller: _passwordController,
                     obscureText: _obscurePassword,
                     label: const Text('Password'),
+                    validator: (v) => v.trim().isEmpty ? 'Password is required' : null,
                     trailing: IconButton(
                       icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off),
                       onPressed: () => setState(() => _obscurePassword = !_obscurePassword),

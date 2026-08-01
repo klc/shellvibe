@@ -287,7 +287,11 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                     selectedOptionBuilder: (context, value) {
                       if (value == null) return const Text('(None - Prompt on Connect)');
                       final i = identities.where((item) => item.id == value).firstOrNull;
-                      return Text(i != null ? '${i.title} (${i.username})' : value);
+                      return Text(
+                        i != null
+                            ? '${i.title}${i.username.isNotEmpty ? ' (${i.username})' : ''}'
+                            : value,
+                      );
                     },
                     options: [
                       const ShadOption<String?>(
@@ -297,7 +301,9 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                       ...identities.map(
                         (i) => ShadOption<String?>(
                           value: i.id,
-                          child: Text('${i.title} (${i.username})'),
+                          child: Text(
+                            '${i.title}${i.username.isNotEmpty ? ' (${i.username})' : ''}',
+                          ),
                         ),
                       ),
                     ],

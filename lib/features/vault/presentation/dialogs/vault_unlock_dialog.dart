@@ -49,7 +49,11 @@ class _VaultUnlockDialogState extends ConsumerState<VaultUnlockDialog> {
 
     // Start countdown timer if locked out
     if (isLockedOut && _lockoutTimer == null) {
-      _startLockoutTimer();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _lockoutTimer == null) {
+          _startLockoutTimer();
+        }
+      });
     }
 
     final remainingSeconds = vaultState?.remainingLockout.inSeconds ?? 0;
