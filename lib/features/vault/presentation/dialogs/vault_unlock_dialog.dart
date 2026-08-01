@@ -109,6 +109,7 @@ class _VaultUnlockDialogState extends ConsumerState<VaultUnlockDialog> {
                       icon: Icon(
                         _obscure ? Icons.visibility_off : Icons.visibility,
                       ),
+                      tooltip: _obscure ? 'Show password' : 'Hide password',
                       onPressed: () =>
                           setState(() => _obscure = !_obscure),
                     ),

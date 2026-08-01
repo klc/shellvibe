@@ -185,6 +185,7 @@ class _IdentityFormDialogState extends ConsumerState<IdentityFormDialog> {
                     validator: (v) => v.trim().isEmpty ? 'Password is required' : null,
                     trailing: IconButton(
                       icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off),
+                      tooltip: _obscurePassword ? 'Show password' : 'Hide password',
                       onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                     ),
                   ),

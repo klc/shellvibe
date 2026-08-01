@@ -44,9 +44,12 @@ class SftpTransferQueueSheet extends ConsumerWidget {
                   },
                   child: const Text('Clear Finished'),
                 ),
-                ShadIconButton.ghost(
-                  icon: const Icon(Icons.close, size: 18),
-                  onPressed: () => Navigator.of(context).pop(),
+                Tooltip(
+                  message: 'Close Queue',
+                  child: ShadIconButton.ghost(
+                    icon: const Icon(Icons.close, size: 18),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
                 ),
               ],
             ),
@@ -184,25 +187,37 @@ class _TransferTile extends ConsumerWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         if (item.status == TransferStatus.inProgress)
-          ShadIconButton.ghost(
-            icon: const Icon(Icons.pause, size: 18),
-            onPressed: () => worker.pauseTransfer(item.id),
+          Tooltip(
+            message: 'Pause Transfer',
+            child: ShadIconButton.ghost(
+              icon: const Icon(Icons.pause, size: 18),
+              onPressed: () => worker.pauseTransfer(item.id),
+            ),
           )
         else if (item.status == TransferStatus.paused && client != null)
-          ShadIconButton.ghost(
-            icon: const Icon(Icons.play_arrow, size: 18),
-            onPressed: () => worker.resumeTransfer(client, item.id),
+          Tooltip(
+            message: 'Resume Transfer',
+            child: ShadIconButton.ghost(
+              icon: const Icon(Icons.play_arrow, size: 18),
+              onPressed: () => worker.resumeTransfer(client, item.id),
+            ),
           )
         else if ((item.status == TransferStatus.failed || item.status == TransferStatus.cancelled) &&
             client != null)
-          ShadIconButton.ghost(
-            icon: const Icon(Icons.refresh, size: 18),
-            onPressed: () => worker.retryTransfer(client, item.id),
+          Tooltip(
+            message: 'Retry Transfer',
+            child: ShadIconButton.ghost(
+              icon: const Icon(Icons.refresh, size: 18),
+              onPressed: () => worker.retryTransfer(client, item.id),
+            ),
           ),
         if (item.status == TransferStatus.inProgress || item.status == TransferStatus.pending || item.status == TransferStatus.paused)
-          ShadIconButton.ghost(
-            icon: const Icon(Icons.close, size: 18),
-            onPressed: () => worker.cancelTransfer(item.id),
+          Tooltip(
+            message: 'Cancel Transfer',
+            child: ShadIconButton.ghost(
+              icon: const Icon(Icons.close, size: 18),
+              onPressed: () => worker.cancelTransfer(item.id),
+            ),
           ),
       ],
     );
