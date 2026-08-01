@@ -232,6 +232,15 @@ class _RunbookEditorDialogState extends State<RunbookEditorDialog> {
                                   key: ValueKey('step_pattern_${step.id}'),
                                   initialValue: step.expectedOutputPattern ?? '',
                                   label: const Text('Output Regex / String'),
+                                  validator: (val) {
+                                    if (val.isEmpty) return null;
+                                    try {
+                                      RegExp(val);
+                                      return null;
+                                    } catch (_) {
+                                      return 'Invalid regex pattern';
+                                    }
+                                  },
                                   onChanged: (val) {
                                     _steps[idx] = _steps[idx].copyWith(
                                       expectedOutputPattern: val.isEmpty ? null : val,

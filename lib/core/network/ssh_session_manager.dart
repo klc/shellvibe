@@ -69,7 +69,7 @@ class SSHSessionManager {
   Timer? _keepAliveTimer;
   bool _isConnected = false;
   bool _isPromptingHostKey = false;
-  final StreamController<SSHClient?> _clientChanges =
+  StreamController<SSHClient?> _clientChanges =
       StreamController<SSHClient?>.broadcast();
 
   /// Set by [close] while a connect is in flight. The pending connect aborts
@@ -93,6 +93,9 @@ class SSHSessionManager {
   Future<SSHClient> connect(SSHConnectConfig config) async {
     await close();
     _abortRequested = false;
+    if (_clientChanges.isClosed) {
+      _clientChanges = StreamController<SSHClient?>.broadcast();
+    }
 
     // 1. Parse Private Key if provided
     List<SSHKeyPair>? identities;
@@ -169,7 +172,9 @@ class SSHSessionManager {
 
       _client = client;
       _isConnected = true;
-      _clientChanges.add(client);
+      if (!_clientChanges.isClosed) {
+        _clientChanges.add(client);
+      }
 
       if (config.keepAliveInterval != null) {
         startKeepAlive(config.keepAliveInterval!);
@@ -363,14 +368,18 @@ class SSHSessionManager {
         _keepAliveTimer?.cancel();
         _keepAliveTimer = null;
         _isConnected = false;
-        _clientChanges.add(null);
+        if (!_clientChanges.isClosed) {
+          _clientChanges.add(null);
+        }
         // Ping failed, connection may have been dropped
       }
     } else {
       _keepAliveTimer?.cancel();
       _keepAliveTimer = null;
       _isConnected = false;
-      _clientChanges.add(null);
+      if (!_clientChanges.isClosed) {
+        _clientChanges.add(null);
+      }
     }
   }
 
@@ -388,7 +397,6 @@ class SSHSessionManager {
     _isConnected = false;
     if (!_clientChanges.isClosed) {
       _clientChanges.add(null);
-      await _clientChanges.close();
     }
 
     if (_client != null) {

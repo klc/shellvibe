@@ -167,10 +167,12 @@ class Socks5ProxyServer {
 
       // Forward any unconsumed bytes received during handshake/request parsing
       if (unconsumed.isNotEmpty) {
-        sshChannel.sink.add(unconsumed);
-        if (onBytesTransferred != null) {
-          onBytesTransferred!(unconsumed.length);
-        }
+        try {
+          sshChannel.sink.add(unconsumed);
+          if (onBytesTransferred != null) {
+            onBytesTransferred!(unconsumed.length);
+          }
+        } catch (_) {}
       }
 
       // Step 4: Pipe data bidirectionally
@@ -254,16 +256,20 @@ class Socks5ProxyServer {
         sshChannel.close();
       }
     } catch (_) {
-      if (sshChannel != null) {
-        _activeChannels.remove(sshChannel);
-        sshChannel.close();
-      }
+      try {
+        if (sshChannel != null) {
+          _activeChannels.remove(sshChannel);
+          sshChannel.close();
+        }
+      } catch (_) {}
       try {
         await reader.detach();
       } catch (_) {
       } finally {
         _activeSockets.remove(clientSocket);
-        clientSocket.destroy();
+        try {
+          clientSocket.destroy();
+        } catch (_) {}
       }
     }
   }

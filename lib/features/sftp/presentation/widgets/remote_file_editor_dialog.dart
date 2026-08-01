@@ -141,8 +141,9 @@ class _RemoteFileEditorDialogState extends ConsumerState<RemoteFileEditorDialog>
   Widget build(BuildContext context) {
     final colorScheme = ShadTheme.of(context).colorScheme;
     final mediaQuery = MediaQuery.of(context);
+    final availableHeight = mediaQuery.size.height - mediaQuery.viewInsets.bottom;
     final dialogWidth = math.min(mediaQuery.size.width * 0.9, 850.0);
-    final dialogHeight = math.min(mediaQuery.size.height * 0.8, 550.0);
+    final dialogHeight = math.min(availableHeight * 0.8, 550.0);
 
     return PopScope(
       canPop: !_isModified,

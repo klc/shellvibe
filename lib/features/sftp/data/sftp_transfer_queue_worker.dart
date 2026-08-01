@@ -171,6 +171,7 @@ class SftpTransferQueueWorker {
     _queue.removeWhere(
       (id, item) =>
           !_runningIds.contains(id) &&
+          !_restartRequested.containsKey(id) &&
           (item.status == TransferStatus.completed ||
               item.status == TransferStatus.cancelled),
     );
