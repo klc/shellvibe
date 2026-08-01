@@ -2,6 +2,7 @@ import 'package:dartssh2/dartssh2.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../../domain/models/sftp_file_item.dart';
 import '../providers/sftp_providers.dart';
@@ -111,24 +112,11 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
             child: Row(
               children: [
                 Expanded(
-                  child: SizedBox(
-                    height: 36,
-                    child: TextField(
-                      controller: _searchController,
-                      onChanged: notifier.setSearchQuery,
-                      decoration: InputDecoration(
-                        hintText: 'Filter files...',
-                        prefixIcon: const Icon(Icons.search, size: 18),
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                        filled: true,
-                        fillColor: const Color(0xFF313244),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide.none,
-                        ),
-                      ),
-                    ),
+                  child: ShadInput(
+                    controller: _searchController,
+                    onChanged: notifier.setSearchQuery,
+                    placeholder: const Text('Filter files...'),
+                    leading: const Icon(Icons.search, size: 18),
                   ),
                 ),
               ],
@@ -414,19 +402,25 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     final controller = TextEditingController();
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => ShadDialog(
         title: Text(isFolder ? 'Create Remote Directory' : 'Create Remote File'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: InputDecoration(
-            hintText: isFolder ? 'folder_name' : 'filename.txt',
-            border: const OutlineInputBorder(),
-          ),
+        description: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            ShadInput(
+              controller: controller,
+              autofocus: true,
+              placeholder: Text(isFolder ? 'folder_name' : 'filename.txt'),
+            ),
+          ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
-          ElevatedButton(
+          ShadButton.outline(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          ShadButton(
             onPressed: () {
               final name = controller.text.trim();
               if (name.isNotEmpty) {
@@ -450,16 +444,24 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     final controller = TextEditingController(text: item.name);
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => ShadDialog(
         title: Text('Rename ${item.name}'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(border: OutlineInputBorder()),
+        description: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            ShadInput(
+              controller: controller,
+              autofocus: true,
+            ),
+          ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
-          ElevatedButton(
+          ShadButton.outline(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          ShadButton(
             onPressed: () {
               final newName = controller.text.trim();
               if (newName.isNotEmpty && newName != item.name) {
@@ -474,3 +476,4 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     );
   }
 }
+

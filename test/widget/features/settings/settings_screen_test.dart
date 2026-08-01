@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'package:terly2/features/settings/presentation/screens/settings_screen.dart';
 import 'package:terly2/shared/database/app_database.dart';
@@ -33,8 +34,14 @@ void main() {
           overrides: [
             appDatabaseProvider.overrideWithValue(db),
           ],
-          child: const MaterialApp(
-            home: SettingsScreen(),
+          child: ShadTheme(
+            data: ShadThemeData(
+              colorScheme: const ShadSlateColorScheme.light(),
+              brightness: Brightness.light,
+            ),
+            child: const MaterialApp(
+              home: SettingsScreen(),
+            ),
           ),
         ),
       );
