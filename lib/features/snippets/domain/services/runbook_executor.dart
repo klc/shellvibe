@@ -71,12 +71,14 @@ class RunbookExecutor {
 
         // Check output verification pattern if specified
         bool patternMatches = true;
+        String? patternError;
         if (step.expectedOutputPattern != null && step.expectedOutputPattern!.isNotEmpty) {
           try {
             final regex = RegExp(step.expectedOutputPattern!);
             patternMatches = regex.hasMatch(output);
-          } catch (_) {
-            patternMatches = output.contains(step.expectedOutputPattern!);
+          } catch (e) {
+            patternMatches = false;
+            patternError = 'Invalid regex pattern "${step.expectedOutputPattern}": $e';
           }
         }
 
@@ -89,9 +91,10 @@ class RunbookExecutor {
           output: output,
           errorMessage: stepSuccess
               ? null
-              : (exitCodeMatches
-                  ? 'Output verification failed for pattern: "${step.expectedOutputPattern}"'
-                  : 'Exit code $exitCode does not match expected ${step.expectedExitCode}'),
+              : (patternError ??
+                  (exitCodeMatches
+                      ? 'Output verification failed for pattern: "${step.expectedOutputPattern}"'
+                      : 'Exit code $exitCode does not match expected ${step.expectedExitCode}')),
         );
 
         results.add(stepResult);

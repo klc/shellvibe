@@ -347,9 +347,12 @@ class _HostTile extends StatelessWidget {
           ),
           title: Row(
             children: [
-              Text(
-                host.label,
-                style: const TextStyle(fontWeight: FontWeight.bold),
+              Expanded(
+                child: Text(
+                  host.label,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               const SizedBox(width: 8),
               Container(

@@ -197,6 +197,7 @@ class Socks5ProxyServer {
 
       sub1 = clientSocket.listen(
         (data) {
+          if (cleanedUp) return;
           try {
             sshChannel?.sink.add(data);
             if (onBytesTransferred != null) {
@@ -226,6 +227,7 @@ class Socks5ProxyServer {
 
       sub2 = sshChannel.stream.listen(
         (data) {
+          if (cleanedUp) return;
           try {
             clientSocket.add(data);
             if (onBytesTransferred != null) {

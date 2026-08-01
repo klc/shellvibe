@@ -559,36 +559,27 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
   Widget _buildMobileBottomBar(BuildContext context) {
     final currentIndex = widget.navigationShell.currentIndex;
     final colorScheme = ShadTheme.of(context).colorScheme;
-    final screenWidth = MediaQuery.of(context).size.width;
-    const minWidth = 540.0;
-    final barWidth = screenWidth < minWidth ? minWidth : screenWidth;
 
     return Container(
       decoration: BoxDecoration(
         color: colorScheme.card,
         border: Border(top: BorderSide(color: colorScheme.border, width: 1)),
       ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: SizedBox(
-          width: barWidth,
-          child: NavigationBar(
-            key: const Key('mobile_bottom_navigation_bar'),
-            selectedIndex: currentIndex,
-            onDestinationSelected: _onTabSelected,
-            backgroundColor: colorScheme.card,
-            indicatorColor: colorScheme.primary.withValues(alpha: 0.25),
-            destinations: appNavigationItems.map((item) {
-              return NavigationDestination(
-                key: Key('mobile_nav_destination_${item.label.toLowerCase()}'),
-                icon: Icon(item.icon, color: colorScheme.mutedForeground),
-                selectedIcon: Icon(item.selectedIcon, color: colorScheme.primary),
-                label: item.label,
-                tooltip: item.tooltip,
-              );
-            }).toList(),
-          ),
-        ),
+      child: NavigationBar(
+        key: const Key('mobile_bottom_navigation_bar'),
+        selectedIndex: currentIndex,
+        onDestinationSelected: _onTabSelected,
+        backgroundColor: colorScheme.card,
+        indicatorColor: colorScheme.primary.withValues(alpha: 0.25),
+        destinations: appNavigationItems.map((item) {
+          return NavigationDestination(
+            key: Key('mobile_nav_destination_${item.label.toLowerCase()}'),
+            icon: Icon(item.icon, color: colorScheme.mutedForeground),
+            selectedIcon: Icon(item.selectedIcon, color: colorScheme.primary),
+            label: item.label,
+            tooltip: item.tooltip,
+          );
+        }).toList(),
       ),
     );
   }

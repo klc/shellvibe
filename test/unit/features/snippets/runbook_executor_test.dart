@@ -155,5 +155,35 @@ void main() {
         contains('does not match expected 1'),
       );
     });
+
+    test('Fails step safely with error message when expectedOutputPattern is invalid regex', () async {
+      final runbook = RunbookModel(
+        id: 'rb_5',
+        workspaceId: 'ws_1',
+        title: 'Invalid Regex Test',
+        createdAt: DateTime.now(),
+        steps: const [
+          RunbookStepModel(
+            id: 'step_1',
+            runbookId: 'rb_5',
+            stepOrder: 1,
+            command: 'echo "test"',
+            expectedOutputPattern: r'[unclosed_character_class',
+          ),
+        ],
+      );
+
+      final result = await executor.executeRunbook(
+        runbook,
+        (command, timeout) async => ('test output', 0),
+      );
+
+      expect(result.overallSuccess, isFalse);
+      expect(result.failedStep?.id, equals('step_1'));
+      expect(
+        result.stepResults.single.errorMessage,
+        contains('Invalid regex pattern'),
+      );
+    });
   });
 }

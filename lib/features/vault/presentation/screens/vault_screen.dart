@@ -255,6 +255,14 @@ class _IdentityTile extends ConsumerWidget {
                           ),
                         );
                       }
+                    } else {
+                      if (context.mounted) {
+                        ShadToaster.of(context).show(
+                          const ShadToast(
+                            description: Text('No secret saved for this identity'),
+                          ),
+                        );
+                      }
                     }
                   },
                 ),
