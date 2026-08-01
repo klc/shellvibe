@@ -162,13 +162,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           return ListView(
             padding: const EdgeInsets.all(16.0),
             children: [
-              // --- Section 1: Appearance & Theme ---
-              _buildSectionHeader('Appearance & Terminal Theme', Icons.palette),
+              // --- Section 1: Application Appearance ---
+              _buildSectionHeader('App Theme & Appearance', Icons.palette),
               ShadCard(
                 child: Column(
                   children: [
                     ListTile(
-                      title: const Text('Theme Mode'),
+                      title: const Text('App Theme Mode'),
                       trailing: ShadSelect<ThemeMode>(
                         key: const Key('settings_theme_mode_dropdown'),
                         initialValue: settings.themeMode,
@@ -194,7 +194,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ),
                     const Divider(),
                     ListTile(
-                      title: const Text('Color Palette'),
+                      title: const Text('App UI Color Palette'),
                       subtitle: Text('Current: ${settings.palette.name.toUpperCase()}'),
                       trailing: ShadSelect<AppPalette>(
                         key: const Key('settings_palette_dropdown'),
@@ -202,7 +202,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         selectedOptionBuilder: (context, value) {
                           switch (value) {
                             case AppPalette.dark:
-                              return const Text('Dark Default');
+                              return const Text('Dark Slate');
                             case AppPalette.oled:
                               return const Text('OLED Pure Black');
                             case AppPalette.catppuccin:
@@ -212,13 +212,58 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           }
                         },
                         options: const [
-                          ShadOption(value: AppPalette.dark, child: Text('Dark Default')),
+                          ShadOption(value: AppPalette.dark, child: Text('Dark Slate')),
                           ShadOption(value: AppPalette.oled, child: Text('OLED Pure Black')),
                           ShadOption(value: AppPalette.catppuccin, child: Text('Catppuccin')),
                           ShadOption(value: AppPalette.nord, child: Text('Nord')),
                         ],
                         onChanged: (palette) {
                           if (palette != null) notifier.setPalette(palette);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // --- Section 2: Terminal Customization & Theme ---
+              _buildSectionHeader('Terminal Theme & Shell', Icons.terminal),
+              ShadCard(
+                child: Column(
+                  children: [
+                    ListTile(
+                      title: const Text('Terminal Color Scheme'),
+                      subtitle: Text('Current: ${settings.terminalPalette.name.toUpperCase()}'),
+                      trailing: ShadSelect<TerminalPalette>(
+                        key: const Key('settings_terminal_palette_dropdown'),
+                        initialValue: settings.terminalPalette,
+                        selectedOptionBuilder: (context, value) {
+                          switch (value) {
+                            case TerminalPalette.dark:
+                              return const Text('Dark Default');
+                            case TerminalPalette.oled:
+                              return const Text('OLED True Black');
+                            case TerminalPalette.catppuccin:
+                              return const Text('Catppuccin Macchiato');
+                            case TerminalPalette.nord:
+                              return const Text('Nord');
+                            case TerminalPalette.dracula:
+                              return const Text('Dracula');
+                            case TerminalPalette.solarizedDark:
+                              return const Text('Solarized Dark');
+                          }
+                        },
+                        options: const [
+                          ShadOption(value: TerminalPalette.dark, child: Text('Dark Default')),
+                          ShadOption(value: TerminalPalette.oled, child: Text('OLED True Black')),
+                          ShadOption(value: TerminalPalette.catppuccin, child: Text('Catppuccin Macchiato')),
+                          ShadOption(value: TerminalPalette.nord, child: Text('Nord')),
+                          ShadOption(value: TerminalPalette.dracula, child: Text('Dracula')),
+                          ShadOption(value: TerminalPalette.solarizedDark, child: Text('Solarized Dark')),
+                        ],
+                        onChanged: (palette) {
+                          if (palette != null) notifier.setTerminalPalette(palette);
                         },
                       ),
                     ),

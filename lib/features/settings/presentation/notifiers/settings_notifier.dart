@@ -53,6 +53,11 @@ class SettingsNotifier extends _$SettingsNotifier {
     await updateSettings(current.copyWith(palette: palette));
   }
 
+  Future<void> setTerminalPalette(TerminalPalette palette) async {
+    final current = state.value ?? const AppSettingsModel();
+    await updateSettings(current.copyWith(terminalPalette: palette));
+  }
+
   Future<void> setFontFamily(String fontFamily) async {
     final current = state.value ?? const AppSettingsModel();
     await updateSettings(current.copyWith(fontFamily: fontFamily));

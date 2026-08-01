@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 
 enum AppPalette { dark, oled, catppuccin, nord }
 
+enum TerminalPalette { dark, oled, catppuccin, nord, dracula, solarizedDark }
+
 enum AppCursorStyle { block, underline, bar }
 
 /// Model representing global application settings.
 class AppSettingsModel {
   final ThemeMode themeMode;
   final AppPalette palette;
+  final TerminalPalette terminalPalette;
   final String fontFamily;
   final double fontSize;
   final AppCursorStyle cursorStyle;
@@ -17,6 +20,7 @@ class AppSettingsModel {
   const AppSettingsModel({
     this.themeMode = ThemeMode.dark,
     this.palette = AppPalette.dark,
+    this.terminalPalette = TerminalPalette.dark,
     this.fontFamily = 'RobotoMono',
     this.fontSize = 14.0,
     this.cursorStyle = AppCursorStyle.block,
@@ -27,6 +31,7 @@ class AppSettingsModel {
   AppSettingsModel copyWith({
     ThemeMode? themeMode,
     AppPalette? palette,
+    TerminalPalette? terminalPalette,
     String? fontFamily,
     double? fontSize,
     AppCursorStyle? cursorStyle,
@@ -36,6 +41,7 @@ class AppSettingsModel {
     return AppSettingsModel(
       themeMode: themeMode ?? this.themeMode,
       palette: palette ?? this.palette,
+      terminalPalette: terminalPalette ?? this.terminalPalette,
       fontFamily: fontFamily ?? this.fontFamily,
       fontSize: fontSize ?? this.fontSize,
       cursorStyle: cursorStyle ?? this.cursorStyle,
@@ -48,6 +54,7 @@ class AppSettingsModel {
   Map<String, dynamic> toJson() => {
         'themeMode': themeMode.name,
         'palette': palette.name,
+        'terminalPalette': terminalPalette.name,
         'fontFamily': fontFamily,
         'fontSize': fontSize,
         'cursorStyle': cursorStyle.name,
@@ -64,6 +71,10 @@ class AppSettingsModel {
       palette: AppPalette.values.firstWhere(
         (e) => e.name == json['palette'],
         orElse: () => AppPalette.dark,
+      ),
+      terminalPalette: TerminalPalette.values.firstWhere(
+        (e) => e.name == json['terminalPalette'],
+        orElse: () => TerminalPalette.dark,
       ),
       fontFamily: (json['fontFamily'] as String?) ?? 'RobotoMono',
       fontSize: (json['fontSize'] as num?)?.toDouble() ?? 14.0,
