@@ -3,9 +3,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
+import '../../../../core/network/ssh_session_manager.dart';
+import '../../../hosts/domain/models/host_model.dart';
 import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
 import '../../../vault/domain/models/identity_model.dart';
 import '../../../vault/presentation/notifiers/identities_notifier.dart';
+import '../dialogs/host_key_prompt_dialog.dart';
 import '../notifiers/terminal_tabs_notifier.dart';
 import '../screens/terminal_screen.dart';
 import '../../domain/models/terminal_tab_session.dart';
@@ -292,6 +295,58 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
     );
   }
 
+  /// Resolves the host's identity and opens an SSH tab.
+  ///
+  /// Decryption failures are surfaced instead of connecting with silently
+  /// missing credentials, and host key verification is routed through
+  /// [HostKeyPromptDialog] so the user actually gets asked.
+  Future<void> _connectToHost(HostModel host) async {
+    IdentityModel? identity;
+    if (host.identityId != null) {
+      try {
+        identity = await ref
+            .read(identitiesNotifierProvider.notifier)
+            .getDecryptedIdentity(host.identityId!);
+      } catch (e) {
+        if (!mounted) return;
+        ShadToaster.of(context).show(
+          ShadToast.destructive(
+            description: Text('Cannot read stored credentials: $e'),
+          ),
+        );
+        return;
+      }
+    }
+
+    await ref.read(terminalTabsNotifierProvider.notifier).openTabForHost(
+          host,
+          identity: identity,
+          onHostKeyPrompt: _promptHostKey,
+        );
+  }
+
+  Future<bool> _promptHostKey(
+    String hostname,
+    int port,
+    String keyType,
+    String fingerprint,
+    HostKeyVerificationStatus status,
+  ) async {
+    if (!mounted) return false;
+    final approved = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => HostKeyPromptDialog(
+        hostname: hostname,
+        port: port,
+        keyType: keyType,
+        fingerprint: fingerprint,
+        status: status,
+      ),
+    );
+    return approved ?? false;
+  }
+
   void _showSelectHostModal(BuildContext context, WidgetRef ref) {
     showModalBottomSheet(
       context: context,
@@ -317,19 +372,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
                       subtitle: Text('${host.hostname}:${host.port}'),
                       onTap: () async {
                         Navigator.of(ctx).pop();
-
-                        // Fetch assigned identity if present
-                        IdentityModel? identity;
-                        if (host.identityId != null) {
-                          identity = await ref
-                              .read(identitiesNotifierProvider.notifier)
-                              .getDecryptedIdentity(host.identityId!);
-                        }
-
-                        ref.read(terminalTabsNotifierProvider.notifier).openTabForHost(
-                              host,
-                              identity: identity,
-                            );
+                        await _connectToHost(host);
                       },
                     );
                   },

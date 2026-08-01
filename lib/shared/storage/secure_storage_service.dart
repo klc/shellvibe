@@ -4,8 +4,14 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 /// Standard storage key definitions for [SecureStorageService].
 abstract class SecureStorageKeys {
+  /// Plaintext Data Encryption Key. Present only while no master password is set.
   static const String masterKey = 'terly2_master_key';
+
+  /// Argon2id salt for the master password. Its presence means the vault is protected.
   static const String masterSalt = 'terly2_master_salt';
+
+  /// DEK wrapped with the master-password-derived KEK.
+  static const String wrappedDek = 'terly2_wrapped_dek';
   static const String tokenPrefix = 'terly2_token_';
 }
 

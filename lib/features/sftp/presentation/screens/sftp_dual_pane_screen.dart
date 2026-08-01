@@ -59,8 +59,8 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     final notifier = ref.read(sftpNotifierProvider.notifier);
     for (final file in droppedFiles) {
       final item = SftpFileItem(
-        name: file.name,
-        path: file.path,
+        name: file.name as String,
+        path: file.path as String,
         size: 0,
         permissions: '-rw-r--r--',
         isDirectory: false,

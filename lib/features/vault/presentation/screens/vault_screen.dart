@@ -95,8 +95,22 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
   }
 
   Future<void> _editIdentity(BuildContext context, IdentityModel item) async {
-    final decrypted =
-        await ref.read(identitiesNotifierProvider.notifier).getDecryptedIdentity(item.id);
+    IdentityModel? decrypted;
+    try {
+      decrypted =
+          await ref.read(identitiesNotifierProvider.notifier).getDecryptedIdentity(item.id);
+    } catch (e) {
+      // Opening the form with silently blank secrets would overwrite the stored
+      // ones on save, so refuse instead.
+      if (context.mounted) {
+        ShadToaster.of(context).show(
+          ShadToast.destructive(
+            description: Text('Cannot open this identity: $e'),
+          ),
+        );
+      }
+      return;
+    }
     if (context.mounted) {
       _openIdentityForm(context, initialIdentity: decrypted ?? item);
     }
@@ -122,7 +136,17 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
     );
 
     if (confirm == true && mounted) {
-      await ref.read(identitiesNotifierProvider.notifier).deleteIdentity(item.id);
+      try {
+        await ref.read(identitiesNotifierProvider.notifier).deleteIdentity(item.id);
+      } catch (e) {
+        if (context.mounted) {
+          ShadToaster.of(context).show(
+            ShadToast.destructive(
+              description: Text('Failed to delete identity: $e'),
+            ),
+          );
+        }
+      }
     }
   }
 }
@@ -195,9 +219,21 @@ class _IdentityTile extends ConsumerWidget {
                   icon: const Icon(Icons.copy, size: 20),
                   tooltip: isPassword ? 'Copy Password' : 'Copy Key',
                   onPressed: () async {
-                    final decrypted = await ref
-                        .read(identitiesNotifierProvider.notifier)
-                        .getDecryptedIdentity(identity.id);
+                    IdentityModel? decrypted;
+                    try {
+                      decrypted = await ref
+                          .read(identitiesNotifierProvider.notifier)
+                          .getDecryptedIdentity(identity.id);
+                    } catch (e) {
+                      if (context.mounted) {
+                        ShadToaster.of(context).show(
+                          ShadToast.destructive(
+                            description: Text('Cannot read this secret: $e'),
+                          ),
+                        );
+                      }
+                      return;
+                    }
                     final secret = isPassword ? decrypted?.password : decrypted?.privateKey;
 
                     if (secret != null && secret.isNotEmpty) {

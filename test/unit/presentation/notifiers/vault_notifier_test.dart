@@ -4,6 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:cryptography/cryptography.dart';
 import 'package:terly2/core/crypto/encryption_engine.dart';
 import 'package:terly2/shared/providers/database_providers.dart';
+import 'package:terly2/features/vault/presentation/notifiers/identities_notifier.dart';
 import 'package:terly2/features/vault/presentation/notifiers/vault_notifier.dart';
 
 void main() {
@@ -37,7 +38,6 @@ void main() {
     test('Initial state is unconfigured when no master key exists in storage', () async {
       final state = await container.read(vaultNotifierProvider.future);
       expect(state.status, equals(VaultStatus.unconfigured));
-      expect(state.masterKey, isNull);
       expect(state.failedAttempts, equals(0));
       expect(state.isLockedOut, isFalse);
     });
@@ -49,10 +49,13 @@ void main() {
       final state = container.read(vaultNotifierProvider).value;
       expect(state, isNotNull);
       expect(state!.status, equals(VaultStatus.unlocked));
-      expect(state.masterKey, isNotNull);
+      expect(
+        container.read(vaultKeyServiceProvider).isUnlockedInMemory,
+        isTrue,
+      );
     });
 
-    test('lock transitions vault status to locked and clears masterKey', () async {
+    test('lock transitions vault status to locked and drops the key', () async {
       final notifier = container.read(vaultNotifierProvider.notifier);
       await notifier.setup('CorrectMasterPassword123!');
 
@@ -62,7 +65,10 @@ void main() {
 
       final lockedState = container.read(vaultNotifierProvider).value!;
       expect(lockedState.status, equals(VaultStatus.locked));
-      expect(lockedState.masterKey, isNull);
+      expect(
+        container.read(vaultKeyServiceProvider).isUnlockedInMemory,
+        isFalse,
+      );
     });
 
     test('unlock with correct password succeeds', () async {
@@ -75,7 +81,10 @@ void main() {
 
       final state = container.read(vaultNotifierProvider).value!;
       expect(state.status, equals(VaultStatus.unlocked));
-      expect(state.masterKey, isNotNull);
+      expect(
+        container.read(vaultKeyServiceProvider).isUnlockedInMemory,
+        isTrue,
+      );
     });
 
     test('unlock with wrong password increments failedAttempts counter', () async {

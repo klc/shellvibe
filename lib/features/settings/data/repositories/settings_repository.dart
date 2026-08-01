@@ -14,7 +14,7 @@ class SettingsRepository {
       if (jsonStr == null || jsonStr.isEmpty) {
         return const AppSettingsModel();
       }
-      final Map<String, dynamic> jsonMap = jsonDecode(jsonStr);
+      final jsonMap = jsonDecode(jsonStr) as Map<String, dynamic>;
       return AppSettingsModel.fromJson(jsonMap);
     } catch (_) {
       return const AppSettingsModel();

@@ -3,8 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
-import '../../../../core/sync/e2ee_cloud_sync_service.dart';
 import '../../../../shared/providers/database_providers.dart';
+import '../../../vault/presentation/notifiers/identities_notifier.dart';
+import '../../../vault/presentation/notifiers/vault_notifier.dart';
 import '../../domain/models/app_settings_model.dart';
 import '../notifiers/settings_notifier.dart';
 
@@ -18,11 +19,13 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _masterPasswordController = TextEditingController();
   final _backupPackageController = TextEditingController();
+  final _vaultPasswordController = TextEditingController();
 
   @override
   void dispose() {
     _masterPasswordController.dispose();
     _backupPackageController.dispose();
+    _vaultPasswordController.dispose();
     super.dispose();
   }
 
@@ -71,7 +74,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     try {
       final db = ref.read(appDatabaseProvider);
-      final syncService = E2EECloudSyncService();
+      final syncService = ref.read(e2eeCloudSyncServiceProvider);
       final backupJson = await syncService.exportEncryptedBackup(
         db: db,
         masterPassword: password,
@@ -122,8 +125,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     try {
       final db = ref.read(appDatabaseProvider);
-      final syncService = E2EECloudSyncService();
-      await syncService.importEncryptedBackup(
+      final syncService = ref.read(e2eeCloudSyncServiceProvider);
+      final result = await syncService.importEncryptedBackup(
         backupPackageJson: backupJson,
         db: db,
         masterPassword: password,
@@ -131,9 +134,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
       if (mounted) {
         ShadToaster.of(context).show(
-          const ShadToast(
-            description: Text('Zero-Knowledge Backup Imported & Restored Successfully!'),
-          ),
+          result.secretsRecovered
+              ? const ShadToast(
+                  description:
+                      Text('Zero-Knowledge Backup Imported & Restored Successfully!'),
+                )
+              : ShadToast.destructive(
+                  description: Text(result.warning ??
+                      'Backup restored, but stored secrets could not be recovered.'),
+                ),
         );
       }
     } catch (e) {
@@ -435,7 +444,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
               const SizedBox(height: 20),
 
-              // --- Section 3: Zero-Knowledge E2EE Cloud Sync ---
+              // --- Section 3: Vault Master Password ---
+              _buildSectionHeader('Vault Master Password', Icons.lock_outline),
+              _buildVaultMasterPasswordCard(),
+
+              const SizedBox(height: 20),
+
+              // --- Section 4: Zero-Knowledge E2EE Cloud Sync ---
               _buildSectionHeader('Zero-Knowledge E2EE Cloud Sync', Icons.cloud_sync),
               ShadCard(
                 child: Column(
@@ -496,6 +511,101 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         error: (err, stack) => Center(child: Text('Error loading settings: $err')),
       ),
     );
+  }
+
+  Widget _buildVaultMasterPasswordCard() {
+    final vaultStatus = ref.watch(vaultNotifierProvider).valueOrNull?.status;
+    final isConfigured = vaultStatus != null && vaultStatus != VaultStatus.unconfigured;
+
+    return ShadCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            isConfigured
+                ? 'Your vault key is protected by a master password. It is required '
+                    'after every app restart before identity secrets can be used.'
+                : 'Without a master password your vault key is protected only by the '
+                    'operating system keychain. Setting one wraps the key with '
+                    'Argon2id + AES-256-GCM. Existing identities stay readable.',
+            style: const TextStyle(fontSize: 13, color: Colors.grey),
+          ),
+          const SizedBox(height: 12),
+          if (isConfigured)
+            Row(
+              children: [
+                Expanded(
+                  child: ShadButton.outline(
+                    key: const Key('lock_vault_button'),
+                    onPressed: vaultStatus == VaultStatus.locked
+                        ? null
+                        : () => ref.read(vaultNotifierProvider.notifier).lock(),
+                    leading: const Icon(Icons.lock, size: 16),
+                    child: Text(
+                      vaultStatus == VaultStatus.locked
+                          ? 'Vault Locked'
+                          : 'Lock Vault Now',
+                    ),
+                  ),
+                ),
+              ],
+            )
+          else ...[
+            ShadInput(
+              key: const Key('vault_master_password_field'),
+              controller: _vaultPasswordController,
+              obscureText: true,
+              placeholder: const Text('New master password (min 8 characters)'),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: ShadButton(
+                    key: const Key('set_master_password_button'),
+                    onPressed: _handleSetMasterPassword,
+                    leading: const Icon(Icons.lock_outline, size: 16),
+                    child: const Text('Set Master Password'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _handleSetMasterPassword() async {
+    final password = _vaultPasswordController.text;
+    if (password.length < 8) {
+      ShadToaster.of(context).show(
+        const ShadToast.destructive(
+          description: Text('Master password must be at least 8 characters.'),
+        ),
+      );
+      return;
+    }
+
+    try {
+      await ref.read(vaultNotifierProvider.notifier).setup(password);
+      _vaultPasswordController.clear();
+      if (mounted) {
+        ShadToaster.of(context).show(
+          const ShadToast(
+            description: Text('Master password set. The vault now locks on app restart.'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ShadToaster.of(context).show(
+          ShadToast.destructive(
+            description: Text('Failed to set master password: $e'),
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildSectionHeader(String title, IconData icon) {

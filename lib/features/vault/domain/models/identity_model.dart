@@ -10,6 +10,11 @@ class IdentityModel {
   final String? passphrase;
   final DateTime createdAt;
 
+  /// True when at least one stored secret could not be decrypted with the
+  /// current vault key. Distinguishes "no secret stored" from "secret is
+  /// unreadable", which would otherwise both look like a null field.
+  final bool hasUndecryptableSecrets;
+
   const IdentityModel({
     required this.id,
     required this.workspaceId,
@@ -20,6 +25,7 @@ class IdentityModel {
     this.privateKey,
     this.passphrase,
     required this.createdAt,
+    this.hasUndecryptableSecrets = false,
   });
 
   IdentityModel copyWith({
@@ -32,6 +38,7 @@ class IdentityModel {
     String? privateKey,
     String? passphrase,
     DateTime? createdAt,
+    bool? hasUndecryptableSecrets,
   }) {
     return IdentityModel(
       id: id ?? this.id,
@@ -43,6 +50,8 @@ class IdentityModel {
       privateKey: privateKey ?? this.privateKey,
       passphrase: passphrase ?? this.passphrase,
       createdAt: createdAt ?? this.createdAt,
+      hasUndecryptableSecrets:
+          hasUndecryptableSecrets ?? this.hasUndecryptableSecrets,
     );
   }
 
@@ -59,7 +68,8 @@ class IdentityModel {
           password == other.password &&
           privateKey == other.privateKey &&
           passphrase == other.passphrase &&
-          createdAt == other.createdAt;
+          createdAt == other.createdAt &&
+          hasUndecryptableSecrets == other.hasUndecryptableSecrets;
 
   @override
   int get hashCode =>
@@ -71,5 +81,6 @@ class IdentityModel {
       password.hashCode ^
       privateKey.hashCode ^
       passphrase.hashCode ^
-      createdAt.hashCode;
+      createdAt.hashCode ^
+      hasUndecryptableSecrets.hashCode;
 }

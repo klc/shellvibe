@@ -3,6 +3,17 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:terly2/core/network/ssh_session_manager.dart';
 import 'package:terly2/shared/database/app_database.dart';
 
+/// Prompt callback that trusts whatever key it is shown. Unknown hosts are
+/// denied without a prompt, so tests that need a key on record must supply one.
+bool _approvePrompt(
+  String host,
+  int port,
+  String type,
+  String fingerprint,
+  HostKeyVerificationStatus status,
+) =>
+    true;
+
 void main() {
   group('SSHSessionManager Unit Tests', () {
     late AppDatabase db;
@@ -29,6 +40,7 @@ void main() {
         port: port,
         keyType: keyType,
         fingerprint: fingerprint,
+        promptCallback: _approvePrompt,
       );
 
       expect(verified, isTrue);
@@ -53,6 +65,7 @@ void main() {
         port: port,
         keyType: keyType,
         fingerprint: fingerprint,
+        promptCallback: _approvePrompt,
       );
 
       // 2. Second connection
@@ -64,6 +77,34 @@ void main() {
       );
 
       expect(verified, isTrue);
+    });
+
+    test('Unknown host is denied when no prompt callback can confirm the key', () async {
+      final verified = await sessionManager.verifyHostKey(
+        hostname: 'unconfirmed.example.com',
+        port: 22,
+        keyType: 'ssh-ed25519',
+        fingerprint: 'SHA256:noOneAskedTheUser',
+      );
+
+      expect(verified, isFalse);
+      expect(
+        await db.knownHostsDao.findKnownHost('unconfirmed.example.com', 22),
+        isNull,
+      );
+    });
+
+    test('Host key is denied when neither a store nor a prompt is available', () async {
+      final daolessManager = SSHSessionManager();
+      final verified = await daolessManager.verifyHostKey(
+        hostname: 'nowhere.example.com',
+        port: 22,
+        keyType: 'ssh-ed25519',
+        fingerprint: 'SHA256:unverifiable',
+      );
+
+      expect(verified, isFalse);
+      await daolessManager.close();
     });
 
     test('Host key mismatch triggers mismatch status callback and returns false if rejected', () async {
@@ -79,6 +120,7 @@ void main() {
         port: port,
         keyType: keyType,
         fingerprint: originalFingerprint,
+        promptCallback: _approvePrompt,
       );
 
       HostKeyVerificationStatus? capturedStatus;
@@ -112,6 +154,7 @@ void main() {
         port: port,
         keyType: keyType,
         fingerprint: originalFingerprint,
+        promptCallback: _approvePrompt,
       );
 
       HostKeyVerificationStatus? capturedStatus;

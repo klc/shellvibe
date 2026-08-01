@@ -1,16 +1,42 @@
 import 'dart:convert';
+
+import 'package:cryptography/cryptography.dart';
 import 'package:drift/drift.dart';
 
+import '../../features/vault/data/vault_key_service.dart';
 import '../../shared/database/app_database.dart';
 import '../crypto/encryption_engine.dart';
+
+/// Backup envelope format currently produced by [E2EECloudSyncService].
+///
+/// * v1 carried identity ciphertext only — the key that could decrypt it stayed
+///   behind in the exporting device's keychain, so secrets were unrecoverable.
+/// * v2 additionally carries the vault Data Encryption Key, wrapped with the
+///   backup password, making the backup self-contained.
+const int kBackupSchemaVersion = 2;
+
+/// Outcome of [E2EECloudSyncService.importEncryptedBackup].
+class BackupImportResult {
+  /// True when identity secrets were re-encrypted under this device's vault key
+  /// and are therefore usable. False for legacy v1 backups.
+  final bool secretsRecovered;
+
+  /// Human-readable warning to surface, or null when the import was complete.
+  final String? warning;
+
+  const BackupImportResult({required this.secretsRecovered, this.warning});
+}
 
 /// Zero-Knowledge E2EE Cloud Sync Abstraction Service.
 /// Exports and imports encrypted database payloads using AES-256-GCM and Argon2id KDF.
 class E2EECloudSyncService {
   final EncryptionEngine _cryptoEngine;
+  final VaultKeyService vaultKeyService;
 
-  E2EECloudSyncService({EncryptionEngine? cryptoEngine})
-      : _cryptoEngine = cryptoEngine ?? EncryptionEngine();
+  E2EECloudSyncService({
+    required this.vaultKeyService,
+    EncryptionEngine? cryptoEngine,
+  }) : _cryptoEngine = cryptoEngine ?? EncryptionEngine();
 
   /// Exports an encrypted Zero-Knowledge backup package from [db] using [masterPassword].
   Future<String> exportEncryptedBackup({
@@ -127,6 +153,10 @@ class E2EECloudSyncService {
           .toList(),
     };
 
+    // Read the vault key first: if the vault is locked this must fail before
+    // any payload is produced.
+    final dek = await vaultKeyService.getDek();
+
     final jsonStr = jsonEncode(payloadMap);
     final salt = _cryptoEngine.generateSalt();
     final secretKey = await _cryptoEngine.deriveMasterKey(
@@ -139,24 +169,39 @@ class E2EECloudSyncService {
       secretKey: secretKey,
     );
 
+    // Ship the Data Encryption Key inside the envelope, wrapped with the same
+    // backup password. Without it the identity ciphertext above is dead weight
+    // on any other device.
+    final wrappedDek = await _cryptoEngine.encrypt(
+      plaintext: base64.encode(await dek.extractBytes()),
+      secretKey: secretKey,
+    );
+
     final backupEnvelope = {
-      'schema_version': 1,
+      'schema_version': kBackupSchemaVersion,
       'salt': base64.encode(salt),
       'payload': encryptedPayload,
+      'dek_wrapped': wrappedDek,
     };
 
     return jsonEncode(backupEnvelope);
   }
 
   /// Imports and restores an encrypted backup package into [db] using [masterPassword].
-  Future<void> importEncryptedBackup({
+  ///
+  /// For v2 envelopes the identity secrets are decrypted with the backup's own
+  /// Data Encryption Key and re-encrypted under this device's vault key, so
+  /// they stay usable after a cross-device restore. v1 envelopes carry no key;
+  /// their secrets are restored as-is and flagged in [BackupImportResult].
+  Future<BackupImportResult> importEncryptedBackup({
     required String backupPackageJson,
     required AppDatabase db,
     required String masterPassword,
   }) async {
-    final Map<String, dynamic> envelope = jsonDecode(backupPackageJson);
+    final envelope = jsonDecode(backupPackageJson) as Map<String, dynamic>;
     final saltBase64 = envelope['salt'] as String;
     final payloadEncrypted = envelope['payload'] as String;
+    final wrappedDek = envelope['dek_wrapped'] as String?;
 
     final salt = Uint8List.fromList(base64.decode(saltBase64));
     final secretKey = await _cryptoEngine.deriveMasterKey(
@@ -169,7 +214,20 @@ class E2EECloudSyncService {
       secretKey: secretKey,
     );
 
-    final Map<String, dynamic> data = jsonDecode(decryptedJsonStr);
+    final data = jsonDecode(decryptedJsonStr) as Map<String, dynamic>;
+
+    // Resolve both keys up front — a locked vault must abort before the
+    // transaction opens, not halfway through the restore.
+    SecretKey? backupDek;
+    SecretKey? localDek;
+    if (wrappedDek != null) {
+      final backupDekBase64 = await _cryptoEngine.decrypt(
+        encryptedBase64: wrappedDek,
+        secretKey: secretKey,
+      );
+      backupDek = SecretKey(Uint8List.fromList(base64.decode(backupDekBase64)));
+      localDek = await vaultKeyService.getDek();
+    }
 
     await db.transaction(() async {
       // 1. Workspaces
@@ -196,9 +254,12 @@ class E2EECloudSyncService {
                   title: item['title'] as String,
                   username: item['username'] as String,
                   authType: item['authType'] as String,
-                  passwordEncrypted: Value(item['passwordEncrypted'] as String?),
-                  privateKeyEncrypted: Value(item['privateKeyEncrypted'] as String?),
-                  passphraseEncrypted: Value(item['passphraseEncrypted'] as String?),
+                  passwordEncrypted: Value(await _rewrapSecret(
+                      item['passwordEncrypted'] as String?, backupDek, localDek)),
+                  privateKeyEncrypted: Value(await _rewrapSecret(
+                      item['privateKeyEncrypted'] as String?, backupDek, localDek)),
+                  passphraseEncrypted: Value(await _rewrapSecret(
+                      item['passphraseEncrypted'] as String?, backupDek, localDek)),
                   createdAt: DateTime.parse(item['createdAt'] as String),
                 ),
               );
@@ -321,5 +382,33 @@ class E2EECloudSyncService {
         }
       }
     });
+
+    if (wrappedDek == null) {
+      return const BackupImportResult(
+        secretsRecovered: false,
+        warning: 'This is a legacy (v1) backup: it does not contain the vault '
+            'key, so stored passwords and private keys cannot be decrypted on '
+            'this device and must be re-entered.',
+      );
+    }
+    return const BackupImportResult(secretsRecovered: true);
+  }
+
+  /// Re-encrypts one secret from the backup key to this device's vault key.
+  ///
+  /// Returns the ciphertext unchanged when the backup carries no key (v1).
+  Future<String?> _rewrapSecret(
+    String? ciphertext,
+    SecretKey? backupDek,
+    SecretKey? localDek,
+  ) async {
+    if (ciphertext == null) return null;
+    if (backupDek == null || localDek == null) return ciphertext;
+
+    final plaintext = await _cryptoEngine.decrypt(
+      encryptedBase64: ciphertext,
+      secretKey: backupDek,
+    );
+    return _cryptoEngine.encrypt(plaintext: plaintext, secretKey: localDek);
   }
 }
