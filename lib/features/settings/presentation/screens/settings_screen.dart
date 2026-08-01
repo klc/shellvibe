@@ -31,8 +31,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final canCheck = await service.canCheckBiometrics();
     if (!canCheck) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Biometric authentication is not available on this device.')),
+        ShadToaster.of(context).show(
+          const ShadToast(
+            description: Text('Biometric authentication is not available on this device.'),
+          ),
         );
       }
       return;
@@ -40,22 +42,29 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     final success = await service.authenticate(localizedReason: 'Test Terly2 Biometric Lock');
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            success ? 'Biometric Authentication Successful!' : 'Biometric Authentication Failed/Cancelled.',
+      if (success) {
+        ShadToaster.of(context).show(
+          const ShadToast(
+            description: Text('Biometric Authentication Successful!'),
           ),
-          backgroundColor: success ? Colors.green : Colors.red,
-        ),
-      );
+        );
+      } else {
+        ShadToaster.of(context).show(
+          const ShadToast.destructive(
+            description: Text('Biometric Authentication Failed/Cancelled.'),
+          ),
+        );
+      }
     }
   }
 
   Future<void> _handleExportE2EEBackup() async {
     final password = _masterPasswordController.text.trim();
     if (password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a Master Password for Zero-Knowledge encryption.')),
+      ShadToaster.of(context).show(
+        const ShadToast(
+          description: Text('Please enter a Master Password for Zero-Knowledge encryption.'),
+        ),
       );
       return;
     }
@@ -89,8 +98,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to export backup: $e'), backgroundColor: Colors.red),
+        ShadToaster.of(context).show(
+          ShadToast.destructive(
+            description: Text('Failed to export backup: $e'),
+          ),
         );
       }
     }
@@ -101,9 +112,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final backupJson = _backupPackageController.text.trim();
 
     if (password.isEmpty || backupJson.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please provide both Master Password and Backup Package JSON.'),
+      ShadToaster.of(context).show(
+        const ShadToast(
+          description: Text('Please provide both Master Password and Backup Package JSON.'),
         ),
       );
       return;
@@ -119,17 +130,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Zero-Knowledge Backup Imported & Restored Successfully!'),
-            backgroundColor: Colors.green,
+        ShadToaster.of(context).show(
+          const ShadToast(
+            description: Text('Zero-Knowledge Backup Imported & Restored Successfully!'),
           ),
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Import failed (wrong password or corrupted backup): $e'), backgroundColor: Colors.red),
+        ShadToaster.of(context).show(
+          ShadToast.destructive(
+            description: Text('Import failed (wrong password or corrupted backup): $e'),
+          ),
         );
       }
     }

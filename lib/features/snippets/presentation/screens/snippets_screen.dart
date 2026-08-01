@@ -53,15 +53,19 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
         duration: Duration(seconds: clearSeconds),
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Copied snippet to clipboard: "$finalCode"')),
+        ShadToaster.of(context).show(
+          ShadToast(
+            description: Text('Copied snippet to clipboard: "$finalCode"'),
+          ),
         );
       }
     } else {
       widget.onExecuteCommand!(finalCode);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Executed snippet: "$finalCode"')),
+        ShadToaster.of(context).show(
+          ShadToast(
+            description: Text('Executed snippet: "$finalCode"'),
+          ),
         );
       }
     }

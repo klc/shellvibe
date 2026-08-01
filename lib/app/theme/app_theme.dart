@@ -9,7 +9,9 @@ class AppTheme {
   static ShadThemeData get lightShadTheme => buildShadTheme(const AppSettingsModel(themeMode: ThemeMode.light));
 
   static ShadThemeData buildShadTheme(AppSettingsModel settings) {
-    final isDark = settings.themeMode != ThemeMode.light;
+    final isDark = settings.themeMode == ThemeMode.system
+        ? WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark
+        : settings.themeMode == ThemeMode.dark;
 
     ShadColorScheme colorScheme;
     if (!isDark) {
@@ -58,7 +60,9 @@ class AppTheme {
   }
 
   static ThemeData buildTheme(AppSettingsModel settings) {
-    final isDark = settings.themeMode != ThemeMode.light;
+    final isDark = settings.themeMode == ThemeMode.system
+        ? WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark
+        : settings.themeMode == ThemeMode.dark;
 
     Color scaffoldBg;
     Color cardBg;

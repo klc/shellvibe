@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import '../../domain/models/sftp_file_item.dart';
@@ -81,6 +82,9 @@ class _FilePermissionsDialogState extends State<FilePermissionsDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final dialogWidth = math.min(screenWidth * 0.9, 400.0);
+
     return ShadDialog(
       title: Row(
         children: [
@@ -117,7 +121,7 @@ class _FilePermissionsDialogState extends State<FilePermissionsDialog> {
         ),
       ],
       child: SizedBox(
-        width: 400,
+        width: dialogWidth,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,

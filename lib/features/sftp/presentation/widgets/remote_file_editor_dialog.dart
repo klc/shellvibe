@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -107,6 +108,9 @@ class _RemoteFileEditorDialogState extends ConsumerState<RemoteFileEditorDialog>
   @override
   Widget build(BuildContext context) {
     final colorScheme = ShadTheme.of(context).colorScheme;
+    final mediaQuery = MediaQuery.of(context);
+    final dialogWidth = math.min(mediaQuery.size.width * 0.9, 850.0);
+    final dialogHeight = math.min(mediaQuery.size.height * 0.8, 550.0);
 
     return ShadDialog(
       title: Row(
@@ -156,8 +160,8 @@ class _RemoteFileEditorDialogState extends ConsumerState<RemoteFileEditorDialog>
           ),
       ],
       child: SizedBox(
-        width: 850,
-        height: 550,
+        width: dialogWidth,
+        height: dialogHeight,
         child: Column(
           children: [
             const SizedBox(height: 12),

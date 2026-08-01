@@ -244,10 +244,9 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
                       if (widget.activeSshClient != null) {
                         await notifier.startRule(rule, widget.activeSshClient!);
                       } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Active SSH Connection required to start tunnel'),
-                            backgroundColor: Colors.orange,
+                        ShadToaster.of(context).show(
+                          const ShadToast.destructive(
+                            description: Text('Active SSH Connection required to start tunnel'),
                           ),
                         );
                       }

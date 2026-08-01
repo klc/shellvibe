@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:dartssh2/dartssh2.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
@@ -401,22 +403,28 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     }
   }
 
-  void _showCreateDialog({required bool isFolder}) {
+  void _showCreateDialog({required bool isFolder}) async {
     final controller = TextEditingController();
-    showDialog(
+    final screenWidth = MediaQuery.of(context).size.width;
+    final dialogWidth = math.min(screenWidth * 0.9, 450.0);
+
+    final name = await showDialog<String>(
       context: context,
       builder: (ctx) => ShadDialog(
         title: Text(isFolder ? 'Create Remote Directory' : 'Create Remote File'),
-        description: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            ShadInput(
-              controller: controller,
-              autofocus: true,
-              placeholder: Text(isFolder ? 'folder_name' : 'filename.txt'),
-            ),
-          ],
+        description: SizedBox(
+          width: dialogWidth,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 8),
+              ShadInput(
+                controller: controller,
+                autofocus: true,
+                placeholder: Text(isFolder ? 'folder_name' : 'filename.txt'),
+              ),
+            ],
+          ),
         ),
         actions: [
           ShadButton.outline(
@@ -425,15 +433,9 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
           ),
           ShadButton(
             onPressed: () {
-              final name = controller.text.trim();
-              if (name.isNotEmpty) {
-                Navigator.of(ctx).pop();
-                final notifier = ref.read(sftpNotifierProvider.notifier);
-                if (isFolder) {
-                  notifier.createRemoteFolder(name);
-                } else {
-                  notifier.createRemoteFile(name);
-                }
+              final text = controller.text.trim();
+              if (text.isNotEmpty) {
+                Navigator.of(ctx).pop(text);
               }
             },
             child: const Text('Create'),
@@ -441,23 +443,39 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
         ],
       ),
     );
+    controller.dispose();
+
+    if (name != null && name.isNotEmpty) {
+      final notifier = ref.read(sftpNotifierProvider.notifier);
+      if (isFolder) {
+        notifier.createRemoteFolder(name);
+      } else {
+        notifier.createRemoteFile(name);
+      }
+    }
   }
 
-  void _showRenameDialog(SftpFileItem item) {
+  void _showRenameDialog(SftpFileItem item) async {
     final controller = TextEditingController(text: item.name);
-    showDialog(
+    final screenWidth = MediaQuery.of(context).size.width;
+    final dialogWidth = math.min(screenWidth * 0.9, 450.0);
+
+    final newName = await showDialog<String>(
       context: context,
       builder: (ctx) => ShadDialog(
         title: Text('Rename ${item.name}'),
-        description: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            ShadInput(
-              controller: controller,
-              autofocus: true,
-            ),
-          ],
+        description: SizedBox(
+          width: dialogWidth,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 8),
+              ShadInput(
+                controller: controller,
+                autofocus: true,
+              ),
+            ],
+          ),
         ),
         actions: [
           ShadButton.outline(
@@ -466,10 +484,9 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
           ),
           ShadButton(
             onPressed: () {
-              final newName = controller.text.trim();
-              if (newName.isNotEmpty && newName != item.name) {
-                Navigator.of(ctx).pop();
-                ref.read(sftpNotifierProvider.notifier).renameRemoteItem(item, newName);
+              final text = controller.text.trim();
+              if (text.isNotEmpty && text != item.name) {
+                Navigator.of(ctx).pop(text);
               }
             },
             child: const Text('Rename'),
@@ -477,6 +494,11 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
         ],
       ),
     );
+    controller.dispose();
+
+    if (newName != null && newName.isNotEmpty && newName != item.name) {
+      ref.read(sftpNotifierProvider.notifier).renameRemoteItem(item, newName);
+    }
   }
 }
 
