@@ -1,9 +1,6 @@
-import 'package:cryptography/cryptography.dart';
-import 'package:flutter/foundation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../../../../shared/providers/database_providers.dart';
-import '../../../../shared/storage/secure_storage_service.dart';
+import 'identities_notifier.dart';
 
 part 'vault_notifier.g.dart';
 
@@ -19,17 +16,17 @@ enum VaultStatus {
   unlocked,
 }
 
-/// Vault state holding the current status, active [SecretKey], and
-/// brute-force protection counters.
+/// Vault state holding the current status and brute-force protection counters.
+///
+/// The Data Encryption Key itself is deliberately **not** held here — it lives
+/// in [VaultKeyService] alone, so there is exactly one in-memory copy.
 class VaultState {
   final VaultStatus status;
-  final SecretKey? masterKey;
   final int failedAttempts;
   final DateTime? lockoutUntil;
 
   const VaultState({
     required this.status,
-    this.masterKey,
     this.failedAttempts = 0,
     this.lockoutUntil,
   });
@@ -47,15 +44,12 @@ class VaultState {
 
   VaultState copyWith({
     VaultStatus? status,
-    SecretKey? masterKey,
     int? failedAttempts,
     DateTime? lockoutUntil,
-    bool clearMasterKey = false,
     bool clearLockout = false,
   }) {
     return VaultState(
       status: status ?? this.status,
-      masterKey: clearMasterKey ? null : (masterKey ?? this.masterKey),
       failedAttempts: failedAttempts ?? this.failedAttempts,
       lockoutUntil: clearLockout ? null : (lockoutUntil ?? this.lockoutUntil),
     );
@@ -70,40 +64,34 @@ const _kMaxAttemptsBeforeLockout = 5;
 class VaultNotifier extends _$VaultNotifier {
   @override
   Future<VaultState> build() async {
-    final storage = ref.watch(secureStorageServiceProvider);
-    final hasMaster = await storage.containsKey(key: SecureStorageKeys.masterSalt);
-
-    if (hasMaster) {
-      return const VaultState(status: VaultStatus.locked);
+    final keyService = ref.watch(vaultKeyServiceProvider);
+    if (!await keyService.isMasterPasswordConfigured()) {
+      return const VaultState(status: VaultStatus.unconfigured);
     }
-    return const VaultState(status: VaultStatus.unconfigured);
+    return VaultState(
+      status: keyService.isUnlockedInMemory
+          ? VaultStatus.unlocked
+          : VaultStatus.locked,
+    );
   }
 
-  /// Creates a new vault with the given master password.
+  /// Protects the vault with a master password.
   ///
-  /// Derives the master key in a background isolate to avoid UI jank.
+  /// Wraps the existing Data Encryption Key rather than replacing it, so
+  /// identities saved before setup stay decryptable. The Argon2id derivation
+  /// runs in a background isolate to avoid UI jank.
   Future<void> setup(String masterPassword) async {
-    final engine = ref.read(encryptionEngineProvider);
-    final storage = ref.read(secureStorageServiceProvider);
+    final keyService = ref.read(vaultKeyServiceProvider);
 
     state = const AsyncLoading();
 
     state = await AsyncValue.guard(() async {
-      final salt = engine.generateSalt();
-      final secretKey = await engine.deriveMasterKeyInBackground(
-        masterPassword: masterPassword,
-        salt: salt,
-      );
-
-      final keyBytes = await secretKey.extractBytes();
-      await storage.saveMasterSalt(salt);
-      await storage.saveMasterKey(keyBytes);
-
-      return VaultState(status: VaultStatus.unlocked, masterKey: secretKey);
+      await keyService.configureMasterPassword(masterPassword);
+      return const VaultState(status: VaultStatus.unlocked);
     });
   }
 
-  /// Unlocks the vault by deriving the key from the password and comparing it.
+  /// Unlocks the vault by unwrapping the DEK with the master password.
   ///
   /// Implements brute-force protection: after [_kMaxAttemptsBeforeLockout]
   /// failed attempts, imposes an exponentially increasing lockout period
@@ -118,34 +106,16 @@ class VaultNotifier extends _$VaultNotifier {
 
     state = const AsyncLoading();
 
-    final engine = ref.read(encryptionEngineProvider);
-    final storage = ref.read(secureStorageServiceProvider);
+    final keyService = ref.read(vaultKeyServiceProvider);
 
     try {
-      final salt = await storage.getMasterSalt();
-      if (salt == null) {
+      if (!await keyService.isMasterPasswordConfigured()) {
         state = const AsyncData(VaultState(status: VaultStatus.unconfigured));
         return false;
       }
 
-      final derivedKey = await engine.deriveMasterKeyInBackground(
-        masterPassword: masterPassword,
-        salt: salt,
-      );
-
-      final storedKeyBytes = await storage.getMasterKey();
-      if (storedKeyBytes == null) {
-        state = const AsyncData(VaultState(status: VaultStatus.locked));
-        return false;
-      }
-
-      final derivedKeyBytes = await derivedKey.extractBytes();
-      final isMatch = listEquals(derivedKeyBytes, storedKeyBytes);
-
-      if (isMatch) {
-        state = AsyncData(
-          VaultState(status: VaultStatus.unlocked, masterKey: derivedKey),
-        );
+      if (await keyService.unlock(masterPassword)) {
+        state = const AsyncData(VaultState(status: VaultStatus.unlocked));
         return true;
       }
 
@@ -172,8 +142,9 @@ class VaultNotifier extends _$VaultNotifier {
     }
   }
 
-  /// Locks the vault by clearing the master key from memory.
+  /// Locks the vault by dropping the unwrapped DEK from memory.
   void lock() {
+    ref.read(vaultKeyServiceProvider).lock();
     state = const AsyncData(VaultState(status: VaultStatus.locked));
   }
 }

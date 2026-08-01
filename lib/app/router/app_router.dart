@@ -8,9 +8,27 @@ import '../../features/sftp/presentation/screens/sftp_dual_pane_screen.dart';
 import '../../features/snippets/presentation/screens/snippets_screen.dart';
 import '../../features/terminal/presentation/screens/terminal_tab_view.dart';
 import '../../features/tunnels/presentation/screens/tunnels_screen.dart';
+import '../../features/vault/presentation/dialogs/vault_unlock_dialog.dart';
 import '../../features/vault/presentation/notifiers/vault_notifier.dart';
 import '../../features/vault/presentation/screens/vault_screen.dart';
 import '../widgets/app_navigation_shell.dart';
+
+/// Route showing the master password prompt while the vault is locked.
+const kUnlockRoute = '/unlock';
+
+/// Decides where the vault state forces navigation to, or null to stay put.
+///
+/// [status] is null while [vaultNotifierProvider] is still resolving — which
+/// also happens *during* an unlock attempt, so a null status must never bounce
+/// the user off the unlock screen mid-verification.
+String? resolveVaultRedirect(VaultStatus? status, String location) {
+  final isAtUnlock = location == kUnlockRoute;
+
+  if (status == VaultStatus.locked) return isAtUnlock ? null : kUnlockRoute;
+  if (isAtUnlock && status == null) return null;
+  if (isAtUnlock) return '/hosts';
+  return null;
+}
 
 /// Notifier that triggers GoRouter redirect re-evaluation
 /// whenever the vault state changes.
@@ -29,10 +47,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: '/hosts',
     refreshListenable: vaultRouterNotifier,
+    // Gate the whole app behind the unlock screen while the vault is locked.
+    // Without this the master password would never be asked for.
+    redirect: (context, state) => resolveVaultRedirect(
+      ref.read(vaultNotifierProvider).valueOrNull?.status,
+      state.matchedLocation,
+    ),
     routes: [
       GoRoute(
         path: '/',
         redirect: (context, state) => '/hosts',
+      ),
+      GoRoute(
+        path: kUnlockRoute,
+        builder: (context, state) => const VaultUnlockDialog(),
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) {

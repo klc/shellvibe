@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:isolate';
+import 'dart:math';
 import 'dart:typed_data';
 import 'package:cryptography/cryptography.dart';
 
@@ -56,16 +57,20 @@ class EncryptionEngine {
   }
 
   /// Generates a cryptographically secure random salt of [length] bytes (default 16 bytes).
-  Uint8List generateSalt([int length = 16]) {
-    final nonce = _cipher.newNonce();
-    if (nonce.length >= length) {
-      return Uint8List.fromList(nonce.sublist(0, length));
+  Uint8List generateSalt([int length = 16]) => _randomBytes(length);
+
+  /// Generates a cryptographically secure random 256-bit Data Encryption Key.
+  ///
+  /// Use this — never [generateSalt] — when the bytes are used as key material.
+  Uint8List generateKey([int length = 32]) => _randomBytes(length);
+
+  Uint8List _randomBytes(int length) {
+    final random = Random.secure();
+    final bytes = Uint8List(length);
+    for (var i = 0; i < length; i++) {
+      bytes[i] = random.nextInt(256);
     }
-    final builder = BytesBuilder();
-    while (builder.length < length) {
-      builder.add(_cipher.newNonce());
-    }
-    return Uint8List.fromList(builder.toBytes().sublist(0, length));
+    return bytes;
   }
 
   /// Encrypts a UTF-8 plaintext string using AES-256-GCM.

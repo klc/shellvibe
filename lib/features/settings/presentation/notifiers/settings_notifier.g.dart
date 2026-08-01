@@ -64,7 +64,7 @@ final clipboardAutoClearServiceProvider =
 // ignore: unused_element
 typedef ClipboardAutoClearServiceRef =
     AutoDisposeProviderRef<ClipboardAutoClearService>;
-String _$settingsNotifierHash() => r'3e173e570b8e44795b658a9b4b86bf8c90373c47';
+String _$settingsNotifierHash() => r'2259078ad31992554f612d9eef82f72fc2f6b899';
 
 /// See also [SettingsNotifier].
 @ProviderFor(SettingsNotifier)

@@ -8,6 +8,10 @@ import 'package:uuid/uuid.dart';
 import '../../shared/database/app_database.dart';
 import '../../shared/database/daos/known_hosts_dao.dart';
 
+/// Upper bound on how long the handshake waits for the user to answer the
+/// host key prompt, so an unanswered dialog cannot hold the socket forever.
+const _kMaxHostKeyPromptWait = Duration(minutes: 3);
+
 /// Status of host key verification during SSH handshake.
 enum HostKeyVerificationStatus {
   /// The host key is trusted and matches existing record in known_hosts.
@@ -109,7 +113,10 @@ class SSHSessionManager {
       onPasswordRequest: config.password != null ? () => config.password! : null,
       keepAliveInterval: config.keepAliveInterval,
       onVerifyHostKey: (String type, Uint8List fingerprintBytes) async {
-        final fingerprintStr = base64.encode(fingerprintBytes);
+        // dartssh2 already hands us the ASCII "SHA256:<base64>" form, i.e. the
+        // exact string `ssh-keygen -lf` prints. Re-encoding it would produce a
+        // value the user cannot compare against anything.
+        final fingerprintStr = utf8.decode(fingerprintBytes);
         return await _verifyHostKey(
           hostname: config.hostname,
           port: config.port,
@@ -139,9 +146,16 @@ class SSHSessionManager {
 
   Future<void> _waitForAuthenticated(SSHClient client, Duration timeout) async {
     DateTime deadline = DateTime.now().add(timeout);
+    final promptDeadline = DateTime.now().add(_kMaxHostKeyPromptWait);
 
     while (true) {
       if (_isPromptingHostKey) {
+        if (DateTime.now().isAfter(promptDeadline)) {
+          throw TimeoutException(
+            'Host key confirmation was not answered within '
+            '${_kMaxHostKeyPromptWait.inMinutes} minutes',
+          );
+        }
         await Future.delayed(const Duration(milliseconds: 200));
         deadline = DateTime.now().add(timeout);
         continue;
@@ -237,8 +251,9 @@ class SSHSessionManager {
           return false;
         }
       } else {
-        // Unknown host (First connection)
-        bool approve = true;
+        // Unknown host (First connection). Without a prompt callback there is
+        // no one to confirm the key, so deny instead of blind TOFU.
+        bool approve = false;
         if (promptCallback != null) {
           _isPromptingHostKey = true;
           try {
@@ -285,7 +300,9 @@ class SSHSessionManager {
         _isPromptingHostKey = false;
       }
     }
-    return true;
+    // Nothing can vouch for this key: neither a known_hosts store nor a user.
+    // Deny rather than silently accepting an unverified host.
+    return false;
   }
 
   /// Opens an interactive shell [SSHSession].

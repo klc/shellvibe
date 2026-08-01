@@ -5,30 +5,32 @@ import 'package:uuid/uuid.dart';
 import '../../../../core/crypto/encryption_engine.dart';
 import '../../../../shared/database/app_database.dart';
 import '../../../../shared/database/daos/identities_dao.dart';
-import '../../../../shared/storage/secure_storage_service.dart';
 import '../../domain/models/identity_model.dart';
+import '../vault_key_service.dart';
+
+/// Thrown when a stored secret cannot be decrypted with the current vault key.
+class SecretDecryptionException implements Exception {
+  final String identityId;
+  final String field;
+
+  const SecretDecryptionException(this.identityId, this.field);
+
+  @override
+  String toString() =>
+      'SecretDecryptionException: cannot decrypt "$field" of identity '
+      '$identityId. It was encrypted with a different vault key.';
+}
 
 class VaultRepository {
   final IdentitiesDao identitiesDao;
   final EncryptionEngine encryptionEngine;
-  final SecureStorageService secureStorageService;
+  final VaultKeyService vaultKeyService;
 
   VaultRepository({
     required this.identitiesDao,
     required this.encryptionEngine,
-    required this.secureStorageService,
+    required this.vaultKeyService,
   });
-
-  Future<SecretKey> _getOrCreateSecretKey() async {
-    final keyBytes = await secureStorageService.getMasterKey();
-    if (keyBytes != null) {
-      return SecretKey(keyBytes);
-    }
-    // Generate 32-byte secret key and persist in secure storage
-    final newSalt = encryptionEngine.generateSalt(32);
-    await secureStorageService.saveMasterKey(newSalt);
-    return SecretKey(newSalt);
-  }
 
   Future<IdentityModel> saveIdentity({
     String? id,
@@ -40,7 +42,7 @@ class VaultRepository {
     String? privateKey,
     String? passphrase,
   }) async {
-    final secretKey = await _getOrCreateSecretKey();
+    final secretKey = await vaultKeyService.getDek();
 
     String? encPassword;
     String? encKey;
@@ -90,38 +92,38 @@ class VaultRepository {
     );
   }
 
+  /// Lists identities. With [decryptSecrets] the secrets are decrypted
+  /// best-effort: a row whose secrets are unreadable is still returned, flagged
+  /// with [IdentityModel.hasUndecryptableSecrets] instead of silently blank.
   Future<List<IdentityModel>> getAllIdentities({bool decryptSecrets = false}) async {
     final rows = await identitiesDao.getAllIdentities();
     final result = <IdentityModel>[];
 
+    // Never touch the key service when secrets are not requested, so listing
+    // identities keeps working while a protected vault is locked.
     SecretKey? secretKey;
     if (decryptSecrets) {
-      secretKey = await _getOrCreateSecretKey();
+      secretKey = await vaultKeyService.getDek();
     }
 
     for (final row in rows) {
       String? password;
       String? privateKey;
       String? passphrase;
+      var undecryptable = false;
 
       if (decryptSecrets && secretKey != null) {
-        if (row.passwordEncrypted != null) {
-          try {
-            password = await encryptionEngine.decrypt(
-                encryptedBase64: row.passwordEncrypted!, secretKey: secretKey);
-          } catch (_) {}
-        }
-        if (row.privateKeyEncrypted != null) {
-          try {
-            privateKey = await encryptionEngine.decrypt(
-                encryptedBase64: row.privateKeyEncrypted!, secretKey: secretKey);
-          } catch (_) {}
-        }
-        if (row.passphraseEncrypted != null) {
-          try {
-            passphrase = await encryptionEngine.decrypt(
-                encryptedBase64: row.passphraseEncrypted!, secretKey: secretKey);
-          } catch (_) {}
+        try {
+          password = await _decryptField(row.passwordEncrypted, secretKey, row.id, 'password');
+          privateKey =
+              await _decryptField(row.privateKeyEncrypted, secretKey, row.id, 'privateKey');
+          passphrase =
+              await _decryptField(row.passphraseEncrypted, secretKey, row.id, 'passphrase');
+        } on SecretDecryptionException {
+          undecryptable = true;
+          password = null;
+          privateKey = null;
+          passphrase = null;
         }
       }
 
@@ -136,12 +138,18 @@ class VaultRepository {
           privateKey: privateKey,
           passphrase: passphrase,
           createdAt: row.createdAt,
+          hasUndecryptableSecrets: undecryptable,
         ),
       );
     }
     return result;
   }
 
+  /// Loads a single identity.
+  ///
+  /// Throws [SecretDecryptionException] when [decryptSecrets] is set and a
+  /// stored secret cannot be decrypted — callers must surface this rather than
+  /// connecting with silently missing credentials.
   Future<IdentityModel?> getIdentityById(String id, {bool decryptSecrets = true}) async {
     final row = await identitiesDao.getIdentityById(id);
     if (row == null) return null;
@@ -151,25 +159,10 @@ class VaultRepository {
     String? passphrase;
 
     if (decryptSecrets) {
-      final secretKey = await _getOrCreateSecretKey();
-      if (row.passwordEncrypted != null) {
-        try {
-          password = await encryptionEngine.decrypt(
-              encryptedBase64: row.passwordEncrypted!, secretKey: secretKey);
-        } catch (_) {}
-      }
-      if (row.privateKeyEncrypted != null) {
-        try {
-          privateKey = await encryptionEngine.decrypt(
-              encryptedBase64: row.privateKeyEncrypted!, secretKey: secretKey);
-        } catch (_) {}
-      }
-      if (row.passphraseEncrypted != null) {
-        try {
-          passphrase = await encryptionEngine.decrypt(
-              encryptedBase64: row.passphraseEncrypted!, secretKey: secretKey);
-        } catch (_) {}
-      }
+      final secretKey = await vaultKeyService.getDek();
+      password = await _decryptField(row.passwordEncrypted, secretKey, row.id, 'password');
+      privateKey = await _decryptField(row.privateKeyEncrypted, secretKey, row.id, 'privateKey');
+      passphrase = await _decryptField(row.passphraseEncrypted, secretKey, row.id, 'passphrase');
     }
 
     return IdentityModel(
@@ -183,6 +176,23 @@ class VaultRepository {
       passphrase: passphrase,
       createdAt: row.createdAt,
     );
+  }
+
+  Future<String?> _decryptField(
+    String? ciphertext,
+    SecretKey secretKey,
+    String identityId,
+    String field,
+  ) async {
+    if (ciphertext == null) return null;
+    try {
+      return await encryptionEngine.decrypt(
+        encryptedBase64: ciphertext,
+        secretKey: secretKey,
+      );
+    } on CryptoException {
+      throw SecretDecryptionException(identityId, field);
+    }
   }
 
   Future<void> deleteIdentity(String id) async {

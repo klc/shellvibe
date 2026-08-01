@@ -1,19 +1,36 @@
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:terly2/core/crypto/encryption_engine.dart';
 import 'package:terly2/core/sync/e2ee_cloud_sync_service.dart';
+import 'package:terly2/features/vault/data/vault_key_service.dart';
 import 'package:terly2/shared/database/app_database.dart';
+import 'package:terly2/shared/storage/secure_storage_service.dart';
+
+E2EECloudSyncService _buildService(EncryptionEngine engine) {
+  return E2EECloudSyncService(
+    cryptoEngine: engine,
+    vaultKeyService: VaultKeyService(
+      encryptionEngine: engine,
+      secureStorageService: SecureStorageService(),
+    ),
+  );
+}
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   late AppDatabase db1;
   late AppDatabase db2;
   late E2EECloudSyncService syncService;
+  final engine = EncryptionEngine();
 
   setUp(() async {
+    FlutterSecureStorage.setMockInitialValues({});
     db1 = AppDatabase(NativeDatabase.memory());
     db2 = AppDatabase(NativeDatabase.memory());
-    syncService = E2EECloudSyncService(cryptoEngine: EncryptionEngine());
+    syncService = _buildService(engine);
 
     // Populate db1 with test data
     await db1.workspacesDao.insertWorkspace(
@@ -81,6 +98,66 @@ void main() {
       expect(backupJson, contains('schema_version'));
       expect(backupJson, contains('salt'));
       expect(backupJson, contains('payload'));
+      // The wrapped vault key is what makes the backup restorable elsewhere.
+      expect(backupJson, contains('dek_wrapped'));
+    });
+
+    test('identity secrets survive a restore onto a different device', () async {
+      const password = 'SuperSecretMasterPassword123!';
+
+      // Encrypt a secret with device 1's vault key.
+      final device1Dek = await VaultKeyService(
+        encryptionEngine: engine,
+        secureStorageService: SecureStorageService(),
+      ).getDek();
+      final storedSecret = await engine.encrypt(
+        plaintext: 'hunter2',
+        secretKey: device1Dek,
+      );
+      await db1.into(db1.identities).insert(
+            IdentitiesCompanion.insert(
+              id: 'ident_sync',
+              workspaceId: 'ws_test',
+              title: 'Prod root',
+              username: 'root',
+              authType: 'password',
+              passwordEncrypted: Value(storedSecret),
+              createdAt: DateTime.now(),
+            ),
+          );
+
+      final backupJson = await syncService.exportEncryptedBackup(
+        db: db1,
+        masterPassword: password,
+      );
+
+      // Simulate a fresh device: empty keychain, hence a different vault key.
+      FlutterSecureStorage.setMockInitialValues({});
+      final device2KeyService = VaultKeyService(
+        encryptionEngine: engine,
+        secureStorageService: SecureStorageService(),
+      );
+      final device2Service = E2EECloudSyncService(
+        cryptoEngine: engine,
+        vaultKeyService: device2KeyService,
+      );
+
+      final result = await device2Service.importEncryptedBackup(
+        backupPackageJson: backupJson,
+        db: db2,
+        masterPassword: password,
+      );
+
+      expect(result.secretsRecovered, isTrue);
+
+      final restored = await (db2.select(db2.identities)
+            ..where((t) => t.id.equals('ident_sync')))
+          .getSingle();
+      final decrypted = await engine.decrypt(
+        encryptedBase64: restored.passwordEncrypted!,
+        secretKey: await device2KeyService.getDek(),
+      );
+      expect(decrypted, equals('hunter2'));
     });
 
     test('importEncryptedBackup restores database state into db2', () async {

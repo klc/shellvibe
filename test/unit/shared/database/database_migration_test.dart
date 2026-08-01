@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
@@ -65,7 +66,7 @@ void main() {
       final appDb = AppDatabase(NativeDatabase(tempDbFile));
       db = appDb;
 
-      expect(appDb.schemaVersion, equals(2));
+      expect(appDb.schemaVersion, equals(3));
 
       // 3. Verify existing legacy host record can be fetched.
       final fetchedHost = await appDb.hostsDao.getHostById('host-v1');
@@ -97,6 +98,45 @@ void main() {
       final newHost = await appDb.hostsDao.getHostById('host-v2');
       expect(newHost, isNotNull);
       expect(newHost!.username, equals('root'));
+    });
+
+    test('upgrading to v3 rewrites double-encoded known_hosts fingerprints', () async {
+      const plainFingerprint = 'SHA256:5FSkiWFrH2mFbfCzXhAv9k3PPWQiJRuVpH2vhcaGZ6c';
+      final legacyValue = base64.encode(utf8.encode(plainFingerprint));
+
+      final rawDb = sqlite3.open(tempDbFile.path);
+      rawDb.execute('''
+        CREATE TABLE IF NOT EXISTS "known_hosts" (
+          "id" TEXT NOT NULL PRIMARY KEY,
+          "hostname" TEXT NOT NULL,
+          "port" INTEGER NOT NULL DEFAULT 22,
+          "key_type" TEXT NOT NULL,
+          "fingerprint_sha256" TEXT NOT NULL,
+          "first_seen_at" INTEGER NOT NULL
+        );
+      ''');
+      rawDb.execute('PRAGMA user_version = 2;');
+      rawDb.execute(
+        'INSERT INTO known_hosts (id, hostname, port, key_type, fingerprint_sha256, first_seen_at) '
+        "VALUES ('kh-legacy', 'legacy.example.com', 22, 'ssh-ed25519', '$legacyValue', 1600000000);",
+      );
+      // A value that is not legacy-encoded must survive untouched.
+      rawDb.execute(
+        'INSERT INTO known_hosts (id, hostname, port, key_type, fingerprint_sha256, first_seen_at) '
+        "VALUES ('kh-new', 'new.example.com', 22, 'ssh-ed25519', '$plainFingerprint', 1600000000);",
+      );
+      rawDb.dispose();
+
+      final appDb = AppDatabase(NativeDatabase(tempDbFile));
+      db = appDb;
+
+      final migrated = await appDb.knownHostsDao.findKnownHost('legacy.example.com', 22);
+      expect(migrated, isNotNull);
+      expect(migrated!.fingerprintSha256, equals(plainFingerprint));
+
+      final untouched = await appDb.knownHostsDao.findKnownHost('new.example.com', 22);
+      expect(untouched, isNotNull);
+      expect(untouched!.fingerprintSha256, equals(plainFingerprint));
     });
   });
 }

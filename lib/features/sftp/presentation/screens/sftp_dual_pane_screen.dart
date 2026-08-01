@@ -55,7 +55,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     );
   }
 
-  void _handleDragAndDropUpload(List<dynamic> droppedFiles, String remoteDirectoryPath) {
+  void _handleDragAndDropUpload(List<DropItem> droppedFiles, String remoteDirectoryPath) {
     final notifier = ref.read(sftpNotifierProvider.notifier);
     for (final file in droppedFiles) {
       final item = SftpFileItem(
