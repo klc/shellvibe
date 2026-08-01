@@ -32,8 +32,9 @@ class HostsNotifier extends _$HostsNotifier {
     String? colorTag,
     String? jumpHostId,
   }) async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() async {
+    final previousState = state;
+    state = AsyncLoading<List<HostModel>>().copyWithPrevious(previousState);
+    try {
       final repo = ref.read(hostsRepositoryProvider);
       await repo.saveHost(
         workspaceId: workspaceId,
@@ -47,8 +48,11 @@ class HostsNotifier extends _$HostsNotifier {
         colorTag: colorTag,
         jumpHostId: jumpHostId,
       );
-      return await repo.getAllHosts();
-    });
+      final items = await repo.getAllHosts();
+      state = AsyncData(items);
+    } catch (e, st) {
+      state = AsyncError<List<HostModel>>(e, st).copyWithPrevious(previousState);
+    }
   }
 
   Future<void> updateHost({
@@ -64,8 +68,9 @@ class HostsNotifier extends _$HostsNotifier {
     String? colorTag,
     String? jumpHostId,
   }) async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() async {
+    final previousState = state;
+    state = AsyncLoading<List<HostModel>>().copyWithPrevious(previousState);
+    try {
       final repo = ref.read(hostsRepositoryProvider);
       await repo.saveHost(
         id: id,
@@ -80,16 +85,23 @@ class HostsNotifier extends _$HostsNotifier {
         colorTag: colorTag,
         jumpHostId: jumpHostId,
       );
-      return await repo.getAllHosts();
-    });
+      final items = await repo.getAllHosts();
+      state = AsyncData(items);
+    } catch (e, st) {
+      state = AsyncError<List<HostModel>>(e, st).copyWithPrevious(previousState);
+    }
   }
 
   Future<void> deleteHost(String id) async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() async {
+    final previousState = state;
+    state = AsyncLoading<List<HostModel>>().copyWithPrevious(previousState);
+    try {
       final repo = ref.read(hostsRepositoryProvider);
       await repo.deleteHost(id);
-      return await repo.getAllHosts();
-    });
+      final items = await repo.getAllHosts();
+      state = AsyncData(items);
+    } catch (e, st) {
+      state = AsyncError<List<HostModel>>(e, st).copyWithPrevious(previousState);
+    }
   }
 }

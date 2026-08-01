@@ -26,10 +26,13 @@ class SnippetVariableParser {
   /// Substitutes variable placeholders in [code] using [values].
   static String substituteVariables(String code, Map<String, String> values) {
     var result = code;
-    values.forEach((key, val) {
+    final sortedKeys = values.keys.toList()
+      ..sort((a, b) => b.length.compareTo(a.length));
+    for (final key in sortedKeys) {
+      final val = values[key] ?? '';
       result = result.replaceAll('\${INPUT:$key}', val);
       result = result.replaceAll('\${$key}', val);
-    });
+    }
     return result;
   }
 }

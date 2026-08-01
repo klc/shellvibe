@@ -197,10 +197,12 @@ class Socks5ProxyServer {
 
       sub1 = clientSocket.listen(
         (data) {
-          sshChannel?.sink.add(data);
-          if (onBytesTransferred != null) {
-            onBytesTransferred!(data.length);
-          }
+          try {
+            sshChannel?.sink.add(data);
+            if (onBytesTransferred != null) {
+              onBytesTransferred!(data.length);
+            }
+          } catch (_) {}
         },
         onError: (_) {
           cleanupSubscriptions();
@@ -224,10 +226,12 @@ class Socks5ProxyServer {
 
       sub2 = sshChannel.stream.listen(
         (data) {
-          clientSocket.add(data);
-          if (onBytesTransferred != null) {
-            onBytesTransferred!(data.length);
-          }
+          try {
+            clientSocket.add(data);
+            if (onBytesTransferred != null) {
+              onBytesTransferred!(data.length);
+            }
+          } catch (_) {}
         },
         onError: (_) {
           cleanupSubscriptions();

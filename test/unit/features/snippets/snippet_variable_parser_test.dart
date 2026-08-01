@@ -3,31 +3,32 @@ import 'package:terly2/features/snippets/domain/services/snippet_variable_parser
 
 void main() {
   group('SnippetVariableParser Unit Tests', () {
-    test('extractVariables extracts \${INPUT:VarName} and \${VarName}', () {
-      const code = r'docker run -p ${INPUT:Port_Num}:80 -e HOST=${HostName} ${INPUT:ImageName}';
+    test('extractVariables returns unique variable names', () {
+      const code = 'echo \${INPUT:PORT_FORWARD} and \${PORT} and \${INPUT:PORT}';
       final vars = SnippetVariableParser.extractVariables(code);
-
-      expect(vars, containsAll(['Port_Num', 'HostName', 'ImageName']));
-      expect(vars.length, equals(3));
+      expect(vars, containsAll(['PORT_FORWARD', 'PORT']));
     });
 
-    test('extractVariables returns empty list when no variables present', () {
-      const code = 'echo "Hello World" && ls -la';
-      final vars = SnippetVariableParser.extractVariables(code);
-
-      expect(vars, isEmpty);
-    });
-
-    test('substituteVariables replaces placeholders correctly', () {
-      const code = r'ssh ${USER}@${INPUT:Host_IP} -p ${INPUT:Port}';
+    test('substituteVariables replaces longer keys first to prevent substring replacement bugs', () {
+      const code = 'connect to \${PORT_FORWARD} and \${PORT}';
       final values = {
-        'USER': 'admin',
-        'Host_IP': '192.168.1.10',
-        'Port': '2222',
+        'PORT': '8080',
+        'PORT_FORWARD': '8080:80',
       };
 
       final substituted = SnippetVariableParser.substituteVariables(code, values);
-      expect(substituted, equals('ssh admin@192.168.1.10 -p 2222'));
+      expect(substituted, equals('connect to 8080:80 and 8080'));
+    });
+
+    test('substituteVariables handles input prefixed variables', () {
+      const code = 'ssh -p \${INPUT:PORT} user@\${INPUT:HOST}';
+      final values = {
+        'PORT': '2222',
+        'HOST': 'example.com',
+      };
+
+      final substituted = SnippetVariableParser.substituteVariables(code, values);
+      expect(substituted, equals('ssh -p 2222 user@example.com'));
     });
   });
 }

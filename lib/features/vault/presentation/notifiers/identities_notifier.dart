@@ -35,8 +35,9 @@ class IdentitiesNotifier extends _$IdentitiesNotifier {
     String? privateKey,
     String? passphrase,
   }) async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() async {
+    final previousState = state;
+    state = AsyncLoading<List<IdentityModel>>().copyWithPrevious(previousState);
+    try {
       final repo = ref.read(vaultRepositoryProvider);
       await repo.saveIdentity(
         workspaceId: workspaceId,
@@ -47,8 +48,11 @@ class IdentitiesNotifier extends _$IdentitiesNotifier {
         privateKey: privateKey,
         passphrase: passphrase,
       );
-      return await repo.getAllIdentities(decryptSecrets: false);
-    });
+      final items = await repo.getAllIdentities(decryptSecrets: false);
+      state = AsyncData(items);
+    } catch (e, st) {
+      state = AsyncError<List<IdentityModel>>(e, st).copyWithPrevious(previousState);
+    }
   }
 
   Future<void> updateIdentity({
@@ -61,8 +65,9 @@ class IdentitiesNotifier extends _$IdentitiesNotifier {
     String? privateKey,
     String? passphrase,
   }) async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() async {
+    final previousState = state;
+    state = AsyncLoading<List<IdentityModel>>().copyWithPrevious(previousState);
+    try {
       final repo = ref.read(vaultRepositoryProvider);
       await repo.saveIdentity(
         id: id,
@@ -74,17 +79,24 @@ class IdentitiesNotifier extends _$IdentitiesNotifier {
         privateKey: privateKey,
         passphrase: passphrase,
       );
-      return await repo.getAllIdentities(decryptSecrets: false);
-    });
+      final items = await repo.getAllIdentities(decryptSecrets: false);
+      state = AsyncData(items);
+    } catch (e, st) {
+      state = AsyncError<List<IdentityModel>>(e, st).copyWithPrevious(previousState);
+    }
   }
 
   Future<void> deleteIdentity(String id) async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() async {
+    final previousState = state;
+    state = AsyncLoading<List<IdentityModel>>().copyWithPrevious(previousState);
+    try {
       final repo = ref.read(vaultRepositoryProvider);
       await repo.deleteIdentity(id);
-      return await repo.getAllIdentities(decryptSecrets: false);
-    });
+      final items = await repo.getAllIdentities(decryptSecrets: false);
+      state = AsyncData(items);
+    } catch (e, st) {
+      state = AsyncError<List<IdentityModel>>(e, st).copyWithPrevious(previousState);
+    }
   }
 
   Future<IdentityModel?> getDecryptedIdentity(String id) async {

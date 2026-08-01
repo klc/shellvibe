@@ -181,8 +181,10 @@ class TunnelEngine {
 
           sub1 = clientSocket.listen(
             (data) {
-              sshChannel?.sink.add(data);
-              _addBytes(ruleId, data.length);
+              try {
+                sshChannel?.sink.add(data);
+                _addBytes(ruleId, data.length);
+              } catch (_) {}
             },
             onError: (_) {
               cleanupSubscriptions();
@@ -206,8 +208,10 @@ class TunnelEngine {
 
           sub2 = sshChannel.stream.listen(
             (data) {
-              clientSocket.add(data);
-              _addBytes(ruleId, data.length);
+              try {
+                clientSocket.add(data);
+                _addBytes(ruleId, data.length);
+              } catch (_) {}
             },
             onError: (_) {
               cleanupSubscriptions();
@@ -319,8 +323,10 @@ class TunnelEngine {
 
             sub1 = localSocket.listen(
               (data) {
-                connection.sink.add(data);
-                _addBytes(ruleId, data.length);
+                try {
+                  connection.sink.add(data);
+                  _addBytes(ruleId, data.length);
+                } catch (_) {}
               },
               onError: (_) {
                 cleanupSubscriptions();
@@ -344,8 +350,10 @@ class TunnelEngine {
 
             sub2 = connection.stream.listen(
               (data) {
-                localSocket?.add(data);
-                _addBytes(ruleId, data.length);
+                try {
+                  localSocket?.add(data);
+                  _addBytes(ruleId, data.length);
+                } catch (_) {}
               },
               onError: (_) {
                 cleanupSubscriptions();

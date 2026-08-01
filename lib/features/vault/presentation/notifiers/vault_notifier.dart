@@ -121,50 +121,55 @@ class VaultNotifier extends _$VaultNotifier {
     final engine = ref.read(encryptionEngineProvider);
     final storage = ref.read(secureStorageServiceProvider);
 
-    final salt = await storage.getMasterSalt();
-    if (salt == null) {
-      state = const AsyncData(VaultState(status: VaultStatus.unconfigured));
-      return false;
-    }
+    try {
+      final salt = await storage.getMasterSalt();
+      if (salt == null) {
+        state = const AsyncData(VaultState(status: VaultStatus.unconfigured));
+        return false;
+      }
 
-    final derivedKey = await engine.deriveMasterKeyInBackground(
-      masterPassword: masterPassword,
-      salt: salt,
-    );
-
-    final storedKeyBytes = await storage.getMasterKey();
-    if (storedKeyBytes == null) {
-      state = const AsyncData(VaultState(status: VaultStatus.locked));
-      return false;
-    }
-
-    final derivedKeyBytes = await derivedKey.extractBytes();
-    final isMatch = listEquals(derivedKeyBytes, storedKeyBytes);
-
-    if (isMatch) {
-      state = AsyncData(
-        VaultState(status: VaultStatus.unlocked, masterKey: derivedKey),
+      final derivedKey = await engine.deriveMasterKeyInBackground(
+        masterPassword: masterPassword,
+        salt: salt,
       );
-      return true;
+
+      final storedKeyBytes = await storage.getMasterKey();
+      if (storedKeyBytes == null) {
+        state = const AsyncData(VaultState(status: VaultStatus.locked));
+        return false;
+      }
+
+      final derivedKeyBytes = await derivedKey.extractBytes();
+      final isMatch = listEquals(derivedKeyBytes, storedKeyBytes);
+
+      if (isMatch) {
+        state = AsyncData(
+          VaultState(status: VaultStatus.unlocked, masterKey: derivedKey),
+        );
+        return true;
+      }
+
+      // --- Brute-force protection ---
+      final attempts = (currentState?.failedAttempts ?? 0) + 1;
+      DateTime? lockoutUntil;
+
+      if (attempts >= _kMaxAttemptsBeforeLockout) {
+        // Exponential backoff: 30s, 60s, 120s, 240s… capped at 3600s (1h)
+        final exponent = attempts - _kMaxAttemptsBeforeLockout;
+        final lockoutSeconds = (30 * (1 << exponent)).clamp(30, 3600);
+        lockoutUntil = DateTime.now().add(Duration(seconds: lockoutSeconds));
+      }
+
+      state = AsyncData(VaultState(
+        status: VaultStatus.locked,
+        failedAttempts: attempts,
+        lockoutUntil: lockoutUntil,
+      ));
+      return false;
+    } catch (e, st) {
+      state = AsyncError(e, st);
+      return false;
     }
-
-    // --- Brute-force protection ---
-    final attempts = (currentState?.failedAttempts ?? 0) + 1;
-    DateTime? lockoutUntil;
-
-    if (attempts >= _kMaxAttemptsBeforeLockout) {
-      // Exponential backoff: 30s, 60s, 120s, 240s… capped at 3600s (1h)
-      final exponent = attempts - _kMaxAttemptsBeforeLockout;
-      final lockoutSeconds = (30 * (1 << exponent)).clamp(30, 3600);
-      lockoutUntil = DateTime.now().add(Duration(seconds: lockoutSeconds));
-    }
-
-    state = AsyncData(VaultState(
-      status: VaultStatus.locked,
-      failedAttempts: attempts,
-      lockoutUntil: lockoutUntil,
-    ));
-    return false;
   }
 
   /// Locks the vault by clearing the master key from memory.
