@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dartssh2/dartssh2.dart';
 import 'package:uuid/uuid.dart';
@@ -231,7 +232,7 @@ class SftpTransferQueueWorker {
           final deltaMs = nowMs - lastTimeMs;
           int speed = item.speedBytesPerSec;
           if (deltaMs >= 500) {
-            speed = (((transferred - lastTransferred) * 1000) / deltaMs).round();
+            speed = ((transferred - lastTransferred) * 1000) ~/ deltaMs;
             lastTimeMs = nowMs;
             lastTransferred = transferred;
           }
@@ -269,35 +270,26 @@ class SftpTransferQueueWorker {
       int lastTimeMs = stopwatch.elapsedMilliseconds;
       int lastTransferred = 0;
 
-      const chunkSize = 32 * 1024;
-      final randomAccess = await localFile.open();
-
-      try {
-        final length = await randomAccess.length();
-        while (transferred < length) {
-          if (_cancelFlags[id] == true || _pauseFlags[id] == true) {
-            break;
-          }
-
-          final readBytes = await randomAccess.read(chunkSize);
-          if (readBytes.isEmpty) break;
-
-          await remoteFile.write(Stream.value(readBytes), offset: transferred);
-          transferred += readBytes.length;
-
-          final nowMs = stopwatch.elapsedMilliseconds;
-          final deltaMs = nowMs - lastTimeMs;
-          int speed = item.speedBytesPerSec;
-          if (deltaMs >= 500) {
-            speed = (((transferred - lastTransferred) * 1000) / deltaMs).round();
-            lastTimeMs = nowMs;
-            lastTransferred = transferred;
-          }
-
-          onProgress(transferred, speed);
+      final stream = localFile.openRead();
+      await for (final chunk in stream) {
+        if (_cancelFlags[id] == true || _pauseFlags[id] == true) {
+          break;
         }
-      } finally {
-        await randomAccess.close();
+
+        final uint8Chunk = chunk is Uint8List ? chunk : Uint8List.fromList(chunk);
+        await remoteFile.write(Stream.value(uint8Chunk), offset: transferred);
+        transferred += uint8Chunk.length;
+
+        final nowMs = stopwatch.elapsedMilliseconds;
+        final deltaMs = nowMs - lastTimeMs;
+        int speed = item.speedBytesPerSec;
+        if (deltaMs >= 500) {
+          speed = ((transferred - lastTransferred) * 1000) ~/ deltaMs;
+          lastTimeMs = nowMs;
+          lastTransferred = transferred;
+        }
+
+        onProgress(transferred, speed);
       }
     } finally {
       await remoteFile.close();

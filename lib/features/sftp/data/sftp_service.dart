@@ -127,6 +127,42 @@ class SftpService {
     }
   }
 
+  /// Upload local file to remote SFTP path using stream-based chunk reading (`File.openRead()`)
+  /// to avoid loading large files into RAM (OOM protection).
+  Future<void> uploadFromFile(
+    SftpClient client,
+    String localPath,
+    String remotePath, {
+    void Function(int count, int total)? onProgress,
+  }) async {
+    final localFile = File(localPath);
+    if (!await localFile.exists()) {
+      throw Exception('Local file does not exist: $localPath');
+    }
+
+    final total = await localFile.length();
+    final remoteFile = await client.open(
+      remotePath,
+      mode: SftpFileOpenMode.create | SftpFileOpenMode.write | SftpFileOpenMode.truncate,
+    );
+
+    try {
+      int transferred = 0;
+      final stream = localFile.openRead();
+
+      await for (final chunk in stream) {
+        final uint8Chunk = chunk is Uint8List ? chunk : Uint8List.fromList(chunk);
+        await remoteFile.write(Stream.value(uint8Chunk), offset: transferred);
+        transferred += uint8Chunk.length;
+        if (onProgress != null) {
+          onProgress(transferred, total);
+        }
+      }
+    } finally {
+      await remoteFile.close();
+    }
+  }
+
   /// Write byte content to remote file
   Future<void> writeFile(
     SftpClient client,

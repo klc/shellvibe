@@ -51,13 +51,18 @@ class TerminalLocalPtyBridge {
     // 3. Wire window resize event from xterm Terminal -> Local PTY resize
     // Note: flutter_pty resize takes (rows, cols)
     terminal.onResize = (int width, int height, int pixelWidth, int pixelHeight) {
-      if (_isDisposed) return;
-      try {
-        pty.resize(height, width);
-      } catch (e) {
-        terminal.write('\r\n\x1b[33m[PTY resize error: $e]\x1b[0m\r\n');
-      }
+      resizeTerminal(width, height);
     };
+  }
+
+  /// Resizes local PTY dimensions to [height] rows and [width] columns.
+  void resizeTerminal(int width, int height) {
+    if (_isDisposed) return;
+    try {
+      pty.resize(height, width);
+    } catch (e) {
+      terminal.write('\r\n\x1b[33m[PTY resize error: $e]\x1b[0m\r\n');
+    }
   }
 
   /// Cancels PTY output subscription, detaches terminal callbacks,

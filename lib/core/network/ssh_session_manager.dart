@@ -119,9 +119,14 @@ class SSHSessionManager {
       },
     );
 
-    // 4. Wait for SSH authentication handshake
+    // 4. Wait for SSH authentication handshake with timeout
     try {
-      await client.authenticated;
+      await client.authenticated.timeout(
+        config.timeout,
+        onTimeout: () {
+          throw TimeoutException('SSH authentication handshake timed out after ${config.timeout.inSeconds}s');
+        },
+      );
       _client = client;
       _isConnected = true;
 
@@ -284,7 +289,7 @@ class SSHSessionManager {
     _keepAliveTimer = Timer.periodic(interval, (_) => ping());
   }
 
-  /// Cancels timers and closes active SSH client session.
+  /// Cancels timers and closes active SSH client session and socket.
   Future<void> close() async {
     _keepAliveTimer?.cancel();
     _keepAliveTimer = null;
@@ -297,6 +302,11 @@ class SSHSessionManager {
       _client = null;
     }
 
-    _socket = null;
+    if (_socket != null) {
+      try {
+        _socket!.destroy();
+      } catch (_) {}
+      _socket = null;
+    }
   }
 }

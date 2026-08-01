@@ -101,11 +101,16 @@ class SftpState {
 class SftpNotifier extends _$SftpNotifier {
   @override
   SftpState build() {
+    ref.onDispose(() {
+      try {
+        state.remoteClient?.close();
+      } catch (_) {}
+    });
     final defaultLocal = _getDefaultLocalPath();
-    final state = SftpState(localPath: defaultLocal);
+    final initialState = SftpState(localPath: defaultLocal);
     // Initial local directory load
     Future.microtask(() => loadLocalDirectory(defaultLocal));
-    return state;
+    return initialState;
   }
 
   static String _getDefaultLocalPath() {

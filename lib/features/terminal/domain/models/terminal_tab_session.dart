@@ -43,6 +43,13 @@ class TerminalTabSession {
     this.splitDirection,
   });
 
+  /// Resizes the tab terminal and propagates dimensions to the active SSH or PTY session bridge.
+  void resizeTerminal(int width, int height, [int pixelWidth = 0, int pixelHeight = 0]) {
+    terminal.resize(width, height);
+    sshBridge?.resizeTerminal(width, height, pixelWidth, pixelHeight);
+    ptyBridge?.resizeTerminal(width, height);
+  }
+
   Future<void> dispose() async {
     if (sshBridge != null) {
       await sshBridge!.dispose(closeSession: true);

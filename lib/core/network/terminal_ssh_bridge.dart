@@ -61,13 +61,18 @@ class TerminalSSHBridge {
 
     // 3. Wire window resize event from xterm Terminal -> SSH session terminal resize
     terminal.onResize = (int width, int height, int pixelWidth, int pixelHeight) {
-      if (_isDisposed) return;
-      try {
-        session.resizeTerminal(width, height, pixelWidth, pixelHeight);
-      } catch (e) {
-        terminal.write('\r\n\x1b[33m[SSH resize error: $e]\x1b[0m\r\n');
-      }
+      resizeTerminal(width, height, pixelWidth, pixelHeight);
     };
+  }
+
+  /// Resizes the remote SSH session terminal dimensions to [width] columns and [height] rows.
+  void resizeTerminal(int width, int height, [int pixelWidth = 0, int pixelHeight = 0]) {
+    if (_isDisposed) return;
+    try {
+      session.resizeTerminal(width, height, pixelWidth, pixelHeight);
+    } catch (e) {
+      terminal.write('\r\n\x1b[33m[SSH resize error: $e]\x1b[0m\r\n');
+    }
   }
 
   /// Cancels stdout/stderr subscriptions, detaches terminal callbacks,

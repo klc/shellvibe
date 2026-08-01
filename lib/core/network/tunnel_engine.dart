@@ -533,9 +533,10 @@ class TunnelEngine {
     }
   }
 
-  void dispose() {
+  Future<void> dispose() async {
     _statsTimer?.cancel();
-    stopAllTunnels();
-    _tunnelsController.close();
+    _statsTimer = null;
+    await stopAllTunnels();
+    await _tunnelsController.close();
   }
 }
