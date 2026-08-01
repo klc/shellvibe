@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/network/tunnel_engine.dart';
-import '../../../../shared/database/app_database.dart';
-import '../../../../shared/providers/database_providers.dart';
+import '../../../hosts/domain/models/host_model.dart';
+import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
 import '../../domain/models/tunnel_rule_model.dart';
 import '../providers/tunnels_providers.dart';
 import '../widgets/tunnel_form_dialog.dart';
@@ -24,7 +24,7 @@ class TunnelsScreen extends ConsumerStatefulWidget {
 }
 
 class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
-  final Map<String, Host> _hostsMap = {};
+  final Map<String, HostModel> _hostsMap = {};
 
   @override
   void initState() {
@@ -34,7 +34,7 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
 
   Future<void> _loadHostsMap() async {
     try {
-      final hosts = await ref.read(hostsDaoProvider).getAllHosts();
+      final hosts = await ref.read(hostsRepositoryProvider).getAllHosts();
       if (mounted) {
         setState(() {
           for (final h in hosts) {
@@ -167,7 +167,7 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
   Widget _buildRuleCard({
     required TunnelRuleModel rule,
     ActiveTunnel? activeTunnel,
-    Host? host,
+    HostModel? host,
   }) {
     final isActive = activeTunnel?.isActive ?? false;
 

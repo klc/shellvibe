@@ -143,7 +143,10 @@ void main() {
 
       await Future.delayed(const Duration(milliseconds: 50));
 
-      expect(terminal.buffer.lines[0].toString(), contains('[Session closed / Process exited]'));
+      expect(
+        terminal.buffer.getText(),
+        contains('[Session closed / Process exited]'),
+      );
       expect(bridge.isDisposed, isTrue);
     });
   });

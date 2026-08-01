@@ -307,13 +307,16 @@ class _HostTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = ShadTheme.of(context);
+    final primaryColor = theme.colorScheme.primary;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: ShadCard(
         child: ListTile(
           leading: CircleAvatar(
-            backgroundColor: Colors.blue.withValues(alpha: 0.15),
-            child: Icon(_getProtocolIcon(), color: Colors.blue),
+            backgroundColor: primaryColor.withValues(alpha: 0.15),
+            child: Icon(_getProtocolIcon(), color: primaryColor),
           ),
           title: Row(
             children: [
@@ -325,7 +328,7 @@ class _HostTile extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: Colors.blue.shade100,
+                  color: primaryColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
@@ -333,7 +336,7 @@ class _HostTile extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
-                    color: Colors.blue.shade900,
+                    color: primaryColor,
                   ),
                 ),
               ),
