@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../../hosts/domain/models/host_model.dart';
 import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
+import '../../../../shared/providers/workspace_provider.dart';
 import '../../domain/models/tunnel_rule_model.dart';
 import '../providers/tunnels_providers.dart';
 
@@ -61,7 +62,9 @@ class _TunnelFormDialogState extends ConsumerState<TunnelFormDialog> {
   Future<void> _loadHosts() async {
     try {
       final hostsRepo = ref.read(hostsRepositoryProvider);
-      final hosts = await hostsRepo.getAllHosts();
+      final hosts = await hostsRepo.getHostsByWorkspace(
+        ref.read(activeWorkspaceIdProvider),
+      );
       if (mounted) {
         setState(() {
           _hosts = hosts;

@@ -16,6 +16,7 @@ class AppSettingsModel {
   final AppCursorStyle cursorStyle;
   final int autoLockTimerSeconds;
   final int clipboardAutoClearSeconds;
+  final String activeWorkspaceId;
 
   const AppSettingsModel({
     this.themeMode = ThemeMode.dark,
@@ -26,6 +27,7 @@ class AppSettingsModel {
     this.cursorStyle = AppCursorStyle.block,
     this.autoLockTimerSeconds = 0,
     this.clipboardAutoClearSeconds = 30,
+    this.activeWorkspaceId = 'default',
   });
 
   AppSettingsModel copyWith({
@@ -37,6 +39,7 @@ class AppSettingsModel {
     AppCursorStyle? cursorStyle,
     int? autoLockTimerSeconds,
     int? clipboardAutoClearSeconds,
+    String? activeWorkspaceId,
   }) {
     return AppSettingsModel(
       themeMode: themeMode ?? this.themeMode,
@@ -48,19 +51,21 @@ class AppSettingsModel {
       autoLockTimerSeconds: autoLockTimerSeconds ?? this.autoLockTimerSeconds,
       clipboardAutoClearSeconds:
           clipboardAutoClearSeconds ?? this.clipboardAutoClearSeconds,
+      activeWorkspaceId: activeWorkspaceId ?? this.activeWorkspaceId,
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'themeMode': themeMode.name,
-        'palette': palette.name,
-        'terminalPalette': terminalPalette.name,
-        'fontFamily': fontFamily,
-        'fontSize': fontSize,
-        'cursorStyle': cursorStyle.name,
-        'autoLockTimerSeconds': autoLockTimerSeconds,
-        'clipboardAutoClearSeconds': clipboardAutoClearSeconds,
-      };
+    'themeMode': themeMode.name,
+    'palette': palette.name,
+    'terminalPalette': terminalPalette.name,
+    'fontFamily': fontFamily,
+    'fontSize': fontSize,
+    'cursorStyle': cursorStyle.name,
+    'autoLockTimerSeconds': autoLockTimerSeconds,
+    'clipboardAutoClearSeconds': clipboardAutoClearSeconds,
+    'activeWorkspaceId': activeWorkspaceId,
+  };
 
   factory AppSettingsModel.fromJson(Map<String, dynamic> json) {
     return AppSettingsModel(
@@ -83,7 +88,9 @@ class AppSettingsModel {
         orElse: () => AppCursorStyle.block,
       ),
       autoLockTimerSeconds: (json['autoLockTimerSeconds'] as int?) ?? 0,
-      clipboardAutoClearSeconds: (json['clipboardAutoClearSeconds'] as int?) ?? 30,
+      clipboardAutoClearSeconds:
+          (json['clipboardAutoClearSeconds'] as int?) ?? 30,
+      activeWorkspaceId: (json['activeWorkspaceId'] as String?) ?? 'default',
     );
   }
 }

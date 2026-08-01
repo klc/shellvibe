@@ -4,19 +4,17 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../notifiers/host_groups_notifier.dart';
 import '../../domain/models/host_group_model.dart';
+import '../../../../shared/providers/workspace_provider.dart';
 
 class HostGroupFormDialog extends ConsumerStatefulWidget {
   final HostGroupModel? initialGroup;
-  final String workspaceId;
+  final String? workspaceId;
 
-  const HostGroupFormDialog({
-    super.key,
-    this.initialGroup,
-    this.workspaceId = 'default',
-  });
+  const HostGroupFormDialog({super.key, this.initialGroup, this.workspaceId});
 
   @override
-  ConsumerState<HostGroupFormDialog> createState() => _HostGroupFormDialogState();
+  ConsumerState<HostGroupFormDialog> createState() =>
+      _HostGroupFormDialogState();
 }
 
 class _HostGroupFormDialogState extends ConsumerState<HostGroupFormDialog> {
@@ -57,14 +55,19 @@ class _HostGroupFormDialogState extends ConsumerState<HostGroupFormDialog> {
           workspaceId: widget.initialGroup!.workspaceId,
           parentId: _selectedParentId,
           name: _nameController.text.trim(),
-          colorTag: _colorTagController.text.trim().isEmpty ? null : _colorTagController.text.trim(),
+          colorTag: _colorTagController.text.trim().isEmpty
+              ? null
+              : _colorTagController.text.trim(),
         );
       } else {
         await notifier.addGroup(
-          workspaceId: widget.workspaceId,
+          workspaceId:
+              widget.workspaceId ?? ref.read(activeWorkspaceIdProvider),
           parentId: _selectedParentId,
           name: _nameController.text.trim(),
-          colorTag: _colorTagController.text.trim().isEmpty ? null : _colorTagController.text.trim(),
+          colorTag: _colorTagController.text.trim().isEmpty
+              ? null
+              : _colorTagController.text.trim(),
         );
       }
 
@@ -121,13 +124,18 @@ class _HostGroupFormDialogState extends ConsumerState<HostGroupFormDialog> {
                   controller: _nameController,
                   label: const Text('Group Name'),
                   placeholder: const Text('e.g. Production Servers, Staging'),
-                  validator: (v) => v.trim().isEmpty ? 'Group name is required' : null,
+                  validator: (v) =>
+                      v.trim().isEmpty ? 'Group name is required' : null,
                 ),
                 const SizedBox(height: 12),
                 groupsAsync.when(
                   data: (groups) {
                     final availableParents = groups
-                        .where((g) => isEditing ? g.id != widget.initialGroup!.id : true)
+                        .where(
+                          (g) => isEditing
+                              ? g.id != widget.initialGroup!.id
+                              : true,
+                        )
                         .toList();
 
                     return ShadSelectFormField<String?>(
@@ -135,8 +143,12 @@ class _HostGroupFormDialogState extends ConsumerState<HostGroupFormDialog> {
                       initialValue: _selectedParentId,
                       label: const Text('Parent Group (Optional)'),
                       selectedOptionBuilder: (context, value) {
-                        if (value == null) return const Text('(Root Level - No Parent)');
-                        final parent = availableParents.where((g) => g.id == value).firstOrNull;
+                        if (value == null) {
+                          return const Text('(Root Level - No Parent)');
+                        }
+                        final parent = availableParents
+                            .where((g) => g.id == value)
+                            .firstOrNull;
                         return Text(parent?.name ?? value);
                       },
                       options: [
@@ -151,7 +163,8 @@ class _HostGroupFormDialogState extends ConsumerState<HostGroupFormDialog> {
                           ),
                         ),
                       ],
-                      onChanged: (val) => setState(() => _selectedParentId = val),
+                      onChanged: (val) =>
+                          setState(() => _selectedParentId = val),
                     );
                   },
                   loading: () => const LinearProgressIndicator(),
@@ -172,4 +185,3 @@ class _HostGroupFormDialogState extends ConsumerState<HostGroupFormDialog> {
     );
   }
 }
-

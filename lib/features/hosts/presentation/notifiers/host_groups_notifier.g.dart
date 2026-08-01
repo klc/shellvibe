@@ -34,7 +34,7 @@ final class HostGroupsNotifierProvider
 }
 
 String _$hostGroupsNotifierHash() =>
-    r'290c05b93f85b94108b19543a0f864dd4668aca5';
+    r'41050317a246b5172b7026b3ae5f90d53209f62c';
 
 abstract class _$HostGroupsNotifier
     extends $AsyncNotifier<List<HostGroupModel>> {

@@ -2,6 +2,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../shared/providers/database_providers.dart';
+import '../../../../shared/providers/workspace_provider.dart';
 import '../../data/repositories/runbooks_repository.dart';
 import '../../domain/models/runbook_model.dart';
 import '../../domain/models/runbook_step_model.dart';
@@ -25,7 +26,9 @@ class RunbooksNotifier extends _$RunbooksNotifier {
   @override
   Future<List<RunbookModel>> build() async {
     final repo = ref.watch(runbooksRepositoryProvider);
-    return await repo.getAllRunbooks();
+    return await repo.getRunbooksByWorkspace(
+      ref.watch(activeWorkspaceIdProvider),
+    );
   }
 
   Future<void> addRunbook({
@@ -46,7 +49,9 @@ class RunbooksNotifier extends _$RunbooksNotifier {
         createdAt: DateTime.now(),
       );
       await repo.addRunbook(runbook);
-      return await repo.getAllRunbooks();
+      return await repo.getRunbooksByWorkspace(
+        ref.read(activeWorkspaceIdProvider),
+      );
     });
   }
 
@@ -55,7 +60,9 @@ class RunbooksNotifier extends _$RunbooksNotifier {
     state = await AsyncValue.guard(() async {
       final repo = ref.read(runbooksRepositoryProvider);
       await repo.updateRunbook(runbook);
-      return await repo.getAllRunbooks();
+      return await repo.getRunbooksByWorkspace(
+        ref.read(activeWorkspaceIdProvider),
+      );
     });
   }
 
@@ -64,14 +71,19 @@ class RunbooksNotifier extends _$RunbooksNotifier {
     state = await AsyncValue.guard(() async {
       final repo = ref.read(runbooksRepositoryProvider);
       await repo.deleteRunbook(id);
-      return await repo.getAllRunbooks();
+      return await repo.getRunbooksByWorkspace(
+        ref.read(activeWorkspaceIdProvider),
+      );
     });
   }
 
   Future<RunbookExecutionResult> executeRunbook(
     RunbookModel runbook,
-    Future<(String output, int exitCode)> Function(String command, int timeoutSeconds)
-        commandRunner, {
+    Future<(String output, int exitCode)> Function(
+      String command,
+      int timeoutSeconds,
+    )
+    commandRunner, {
     Map<String, String> variableValues = const {},
     void Function(RunbookStepModel step, String status)? onProgress,
   }) async {

@@ -49,6 +49,20 @@ class AppDatabase extends _$AppDatabase {
     return MigrationStrategy(
       beforeOpen: (details) async {
         await customStatement('PRAGMA foreign_keys = ON;');
+        final workspaceTableExists = await customSelect(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+          variables: [Variable.withString(workspaces.actualTableName)],
+        ).get();
+        if (workspaceTableExists.isNotEmpty) {
+          await into(workspaces).insert(
+            WorkspacesCompanion.insert(
+              id: 'default',
+              name: 'Default Workspace',
+              createdAt: DateTime.now(),
+            ),
+            mode: InsertMode.insertOrIgnore,
+          );
+        }
       },
       onUpgrade: (m, from, to) async {
         if (from < 2) {
@@ -79,8 +93,9 @@ class AppDatabase extends _$AppDatabase {
     for (final row in rows) {
       final decoded = _decodeLegacyFingerprint(row.fingerprintSha256);
       if (decoded == null) continue;
-      await (update(knownHosts)..where((t) => t.id.equals(row.id)))
-          .write(KnownHostsCompanion(fingerprintSha256: Value(decoded)));
+      await (update(knownHosts)..where((t) => t.id.equals(row.id))).write(
+        KnownHostsCompanion(fingerprintSha256: Value(decoded)),
+      );
     }
   }
 

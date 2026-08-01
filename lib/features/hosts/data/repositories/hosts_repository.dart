@@ -94,6 +94,11 @@ class HostsRepository {
         .toList();
   }
 
+  Future<List<HostModel>> getHostsByWorkspace(String workspaceId) async {
+    final rows = await hostsDao.getHostsByWorkspace(workspaceId);
+    return rows.map(_mapHost).toList();
+  }
+
   Future<HostModel?> getHostById(String id) async {
     final row = await hostsDao.getHostById(id);
     if (row == null) return null;
@@ -173,6 +178,13 @@ class HostsRepository {
         .toList();
   }
 
+  Future<List<HostGroupModel>> getHostGroupsByWorkspace(
+    String workspaceId,
+  ) async {
+    final rows = await hostsDao.getHostGroupsByWorkspace(workspaceId);
+    return rows.map(_mapGroup).toList();
+  }
+
   Future<HostGroupModel?> getHostGroupById(String id) async {
     final row = await hostsDao.getHostGroupById(id);
     if (row == null) return null;
@@ -191,5 +203,32 @@ class HostsRepository {
 
   Stream<List<HostGroup>> watchHostGroups() {
     return hostsDao.watchAllHostGroups();
+  }
+
+  HostModel _mapHost(Host row) {
+    return HostModel(
+      id: row.id,
+      workspaceId: row.workspaceId,
+      groupId: row.groupId,
+      identityId: row.identityId,
+      label: row.label,
+      hostname: row.hostname,
+      username: row.username,
+      port: row.port,
+      protocol: row.protocol,
+      colorTag: row.colorTag,
+      jumpHostId: row.jumpHostId,
+      createdAt: row.createdAt,
+    );
+  }
+
+  HostGroupModel _mapGroup(HostGroup row) {
+    return HostGroupModel(
+      id: row.id,
+      workspaceId: row.workspaceId,
+      parentId: row.parentId,
+      name: row.name,
+      colorTag: row.colorTag,
+    );
   }
 }

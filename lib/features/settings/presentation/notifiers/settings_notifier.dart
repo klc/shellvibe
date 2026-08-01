@@ -104,4 +104,9 @@ class SettingsNotifier extends _$SettingsNotifier {
     final current = _base;
     await updateSettings(current.copyWith(clipboardAutoClearSeconds: seconds));
   }
+
+  Future<void> setActiveWorkspace(String workspaceId) async {
+    final current = _base;
+    await updateSettings(current.copyWith(activeWorkspaceId: workspaceId));
+  }
 }

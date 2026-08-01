@@ -46,7 +46,10 @@ void main() {
       expect(fetched.colorCode, equals('#FF0000'));
 
       final all = await workspacesDao.getAllWorkspaces();
-      expect(all.length, equals(1));
+      expect(
+        all.map((workspace) => workspace.id),
+        containsAll(['default', 'ws-1']),
+      );
 
       // Update
       await workspacesDao.updateWorkspace(

@@ -1,6 +1,7 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../shared/providers/database_providers.dart';
+import '../../../../shared/providers/workspace_provider.dart';
 import '../../../../core/sync/e2ee_cloud_sync_service.dart';
 import '../../data/repositories/vault_repository.dart';
 import '../../data/vault_key_service.dart';
@@ -45,7 +46,10 @@ class IdentitiesNotifier extends _$IdentitiesNotifier {
   @override
   Future<List<IdentityModel>> build() async {
     final repo = ref.watch(vaultRepositoryProvider);
-    return await repo.getAllIdentities(decryptSecrets: false);
+    return await repo.getAllIdentities(
+      decryptSecrets: false,
+      workspaceId: ref.watch(activeWorkspaceIdProvider),
+    );
   }
 
   Future<void> addIdentity({
@@ -69,7 +73,10 @@ class IdentitiesNotifier extends _$IdentitiesNotifier {
         privateKey: privateKey,
         passphrase: passphrase,
       );
-      final items = await repo.getAllIdentities(decryptSecrets: false);
+      final items = await repo.getAllIdentities(
+        decryptSecrets: false,
+        workspaceId: ref.read(activeWorkspaceIdProvider),
+      );
       state = AsyncData(items);
     } catch (_) {
       state = previousState;
@@ -102,7 +109,10 @@ class IdentitiesNotifier extends _$IdentitiesNotifier {
         privateKey: privateKey,
         passphrase: passphrase,
       );
-      final items = await repo.getAllIdentities(decryptSecrets: false);
+      final items = await repo.getAllIdentities(
+        decryptSecrets: false,
+        workspaceId: ref.read(activeWorkspaceIdProvider),
+      );
       state = AsyncData(items);
     } catch (_) {
       state = previousState;
@@ -117,7 +127,10 @@ class IdentitiesNotifier extends _$IdentitiesNotifier {
     try {
       final repo = ref.read(vaultRepositoryProvider);
       await repo.deleteIdentity(id);
-      final items = await repo.getAllIdentities(decryptSecrets: false);
+      final items = await repo.getAllIdentities(
+        decryptSecrets: false,
+        workspaceId: ref.read(activeWorkspaceIdProvider),
+      );
       state = AsyncData(items);
     } catch (_) {
       state = previousState;

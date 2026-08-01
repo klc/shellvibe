@@ -10,14 +10,18 @@ class HostsDao extends DatabaseAccessor<AppDatabase> with _$HostsDaoMixin {
 
   Future<List<Host>> getAllHosts() => select(hosts).get();
 
-  Stream<List<Host>> watchAllHosts() => select(hosts).watch();
-
   Future<List<Host>> getHostsByWorkspace(String workspaceId) {
-    return (select(hosts)..where((tbl) => tbl.workspaceId.equals(workspaceId))).get();
+    return (select(
+      hosts,
+    )..where((tbl) => tbl.workspaceId.equals(workspaceId))).get();
   }
 
+  Stream<List<Host>> watchAllHosts() => select(hosts).watch();
+
   Stream<List<Host>> watchHostsByWorkspace(String workspaceId) {
-    return (select(hosts)..where((tbl) => tbl.workspaceId.equals(workspaceId))).watch();
+    return (select(
+      hosts,
+    )..where((tbl) => tbl.workspaceId.equals(workspaceId))).watch();
   }
 
   Future<Host?> getHostById(String id) {
@@ -47,18 +51,24 @@ class HostsDao extends DatabaseAccessor<AppDatabase> with _$HostsDaoMixin {
 
   Future<List<HostGroup>> getAllHostGroups() => select(hostGroups).get();
 
-  Stream<List<HostGroup>> watchAllHostGroups() => select(hostGroups).watch();
-
   Future<List<HostGroup>> getHostGroupsByWorkspace(String workspaceId) {
-    return (select(hostGroups)..where((tbl) => tbl.workspaceId.equals(workspaceId))).get();
+    return (select(
+      hostGroups,
+    )..where((tbl) => tbl.workspaceId.equals(workspaceId))).get();
   }
 
+  Stream<List<HostGroup>> watchAllHostGroups() => select(hostGroups).watch();
+
   Stream<List<HostGroup>> watchHostGroupsByWorkspace(String workspaceId) {
-    return (select(hostGroups)..where((tbl) => tbl.workspaceId.equals(workspaceId))).watch();
+    return (select(
+      hostGroups,
+    )..where((tbl) => tbl.workspaceId.equals(workspaceId))).watch();
   }
 
   Future<HostGroup?> getHostGroupById(String id) {
-    return (select(hostGroups)..where((tbl) => tbl.id.equals(id))).getSingleOrNull();
+    return (select(
+      hostGroups,
+    )..where((tbl) => tbl.id.equals(id))).getSingleOrNull();
   }
 
   Future<int> insertHostGroup(HostGroupsCompanion group) async {

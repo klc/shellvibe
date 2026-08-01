@@ -7,16 +7,13 @@ import 'package:terly2/features/vault/presentation/notifiers/identities_notifier
 import '../notifiers/host_groups_notifier.dart';
 import '../notifiers/hosts_notifier.dart';
 import '../../domain/models/host_model.dart';
+import '../../../../shared/providers/workspace_provider.dart';
 
 class HostFormDialog extends ConsumerStatefulWidget {
   final HostModel? initialHost;
-  final String workspaceId;
+  final String? workspaceId;
 
-  const HostFormDialog({
-    super.key,
-    this.initialHost,
-    this.workspaceId = 'default',
-  });
+  const HostFormDialog({super.key, this.initialHost, this.workspaceId});
 
   @override
   ConsumerState<HostFormDialog> createState() => _HostFormDialogState();
@@ -45,7 +42,9 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
     _labelController = TextEditingController(text: init?.label ?? '');
     _hostnameController = TextEditingController(text: init?.hostname ?? '');
     _usernameController = TextEditingController(text: init?.username ?? '');
-    _portController = TextEditingController(text: (init?.port ?? 22).toString());
+    _portController = TextEditingController(
+      text: (init?.port ?? 22).toString(),
+    );
     _colorTagController = TextEditingController(text: init?.colorTag ?? '');
     _hostnameFocusNode = FocusNode();
 
@@ -94,7 +93,9 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
       final notifier = ref.read(hostsProvider.notifier);
       final isEditing = widget.initialHost != null;
       final portVal = int.tryParse(_portController.text.trim()) ?? 22;
-      final usernameVal = _usernameController.text.trim().isEmpty ? null : _usernameController.text.trim();
+      final usernameVal = _usernameController.text.trim().isEmpty
+          ? null
+          : _usernameController.text.trim();
 
       if (isEditing) {
         await notifier.updateHost(
@@ -107,12 +108,15 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
           username: usernameVal,
           port: portVal,
           protocol: _protocol,
-          colorTag: _colorTagController.text.trim().isEmpty ? null : _colorTagController.text.trim(),
+          colorTag: _colorTagController.text.trim().isEmpty
+              ? null
+              : _colorTagController.text.trim(),
           jumpHostId: _selectedJumpHostId,
         );
       } else {
         await notifier.addHost(
-          workspaceId: widget.workspaceId,
+          workspaceId:
+              widget.workspaceId ?? ref.read(activeWorkspaceIdProvider),
           groupId: _selectedGroupId,
           identityId: _selectedIdentityId,
           label: _labelController.text.trim(),
@@ -120,7 +124,9 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
           username: usernameVal,
           port: portVal,
           protocol: _protocol,
-          colorTag: _colorTagController.text.trim().isEmpty ? null : _colorTagController.text.trim(),
+          colorTag: _colorTagController.text.trim().isEmpty
+              ? null
+              : _colorTagController.text.trim(),
           jumpHostId: _selectedJumpHostId,
         );
       }
@@ -155,7 +161,9 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
           Text(isEditing ? 'Edit Server Host' : 'Add Server Host'),
         ],
       ),
-      description: const Text('Configure remote connection details for this workstation.'),
+      description: const Text(
+        'Configure remote connection details for this workstation.',
+      ),
       actions: [
         ShadButton.outline(
           onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
@@ -188,7 +196,8 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                   label: const Text('Label / Name'),
                   placeholder: const Text('e.g. AWS Production Web'),
                   leading: const Icon(LucideIcons.tag, size: 16),
-                  validator: (v) => v.trim().isEmpty ? 'Label is required' : null,
+                  validator: (v) =>
+                      v.trim().isEmpty ? 'Label is required' : null,
                 ),
                 const SizedBox(height: 12),
                 ShadInputFormField(
@@ -196,9 +205,12 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                   focusNode: _hostnameFocusNode,
                   controller: _hostnameController,
                   label: const Text('Hostname / IP Address'),
-                  placeholder: const Text('e.g. 192.168.1.10 or root@192.168.1.10'),
+                  placeholder: const Text(
+                    'e.g. 192.168.1.10 or root@192.168.1.10',
+                  ),
                   leading: const Icon(LucideIcons.globe, size: 16),
-                  validator: (v) => v.trim().isEmpty ? 'Hostname is required' : null,
+                  validator: (v) =>
+                      v.trim().isEmpty ? 'Hostname is required' : null,
                 ),
                 const SizedBox(height: 12),
                 ShadInputFormField(
@@ -217,13 +229,20 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                         key: const Key('host_protocol_dropdown'),
                         initialValue: _protocol,
                         label: const Text('Protocol'),
-                        selectedOptionBuilder: (context, value) => Text(value.toUpperCase()),
+                        selectedOptionBuilder: (context, value) =>
+                            Text(value.toUpperCase()),
                         options: [
                           const ShadOption(value: 'ssh', child: Text('SSH')),
                           const ShadOption(value: 'mosh', child: Text('Mosh')),
                           if (supportsLocalShell)
-                            const ShadOption(value: 'local', child: Text('Local Shell')),
-                          const ShadOption(value: 'serial', child: Text('Serial')),
+                            const ShadOption(
+                              value: 'local',
+                              child: Text('Local Shell'),
+                            ),
+                          const ShadOption(
+                            value: 'serial',
+                            child: Text('Serial'),
+                          ),
                         ],
                         onChanged: (val) {
                           if (val != null) setState(() => _protocol = val);
@@ -258,8 +277,12 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                     initialValue: _selectedGroupId,
                     label: const Text('Group / Folder'),
                     selectedOptionBuilder: (context, value) {
-                      if (value == null) return const Text('(None - Ungrouped)');
-                      final g = groups.where((item) => item.id == value).firstOrNull;
+                      if (value == null) {
+                        return const Text('(None - Ungrouped)');
+                      }
+                      final g = groups
+                          .where((item) => item.id == value)
+                          .firstOrNull;
                       return Text(g?.name ?? value);
                     },
                     options: [
@@ -287,8 +310,12 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                     initialValue: _selectedIdentityId,
                     label: const Text('Identity / Credentials'),
                     selectedOptionBuilder: (context, value) {
-                      if (value == null) return const Text('(None - Prompt on Connect)');
-                      final i = identities.where((item) => item.id == value).firstOrNull;
+                      if (value == null) {
+                        return const Text('(None - Prompt on Connect)');
+                      }
+                      final i = identities
+                          .where((item) => item.id == value)
+                          .firstOrNull;
                       return Text(
                         i != null
                             ? '${i.title}${i.username.isNotEmpty ? ' (${i.username})' : ''}'
@@ -309,7 +336,8 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                         ),
                       ),
                     ],
-                    onChanged: (val) => setState(() => _selectedIdentityId = val),
+                    onChanged: (val) =>
+                        setState(() => _selectedIdentityId = val),
                   ),
                   loading: () => const LinearProgressIndicator(),
                   error: (e, s) => Text('Error loading identities: $e'),
@@ -322,7 +350,9 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                     if (isEditing) {
                       final editedId = widget.initialHost!.id;
                       excludedJumpHostIds.add(editedId);
-                      final jumpTargets = {for (final h in hosts) h.id: h.jumpHostId};
+                      final jumpTargets = {
+                        for (final h in hosts) h.id: h.jumpHostId,
+                      };
                       for (final h in hosts) {
                         final visited = <String>{};
                         var current = h.jumpHostId;
@@ -344,9 +374,15 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                       initialValue: _selectedJumpHostId,
                       label: const Text('Jump Host (Bastion)'),
                       selectedOptionBuilder: (context, value) {
-                        if (value == null) return const Text('(Direct Connection)');
-                        final h = candidateJumpHosts.where((item) => item.id == value).firstOrNull;
-                        return Text(h != null ? '${h.label} (${h.hostname})' : value);
+                        if (value == null) {
+                          return const Text('(Direct Connection)');
+                        }
+                        final h = candidateJumpHosts
+                            .where((item) => item.id == value)
+                            .firstOrNull;
+                        return Text(
+                          h != null ? '${h.label} (${h.hostname})' : value,
+                        );
                       },
                       options: [
                         const ShadOption<String?>(
@@ -360,7 +396,8 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                           ),
                         ),
                       ],
-                      onChanged: (val) => setState(() => _selectedJumpHostId = val),
+                      onChanged: (val) =>
+                          setState(() => _selectedJumpHostId = val),
                     );
                   },
                   loading: () => const LinearProgressIndicator(),

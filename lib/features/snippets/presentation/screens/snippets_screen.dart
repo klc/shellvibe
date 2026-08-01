@@ -5,6 +5,7 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 import '../../../../app/theme/terly_tokens.dart';
 import '../../../../app/widgets/terly_ui.dart';
 import '../../../settings/presentation/notifiers/settings_notifier.dart';
+import '../../../../shared/providers/workspace_provider.dart';
 import '../../domain/models/snippet_model.dart';
 import '../../domain/services/snippet_variable_parser.dart';
 import '../notifiers/snippets_notifier.dart';
@@ -13,14 +14,10 @@ import '../widgets/variable_input_dialog.dart';
 import 'runbooks_screen.dart';
 
 class SnippetsScreen extends ConsumerStatefulWidget {
-  final String workspaceId;
+  final String? workspaceId;
   final void Function(String command)? onExecuteCommand;
 
-  const SnippetsScreen({
-    super.key,
-    this.workspaceId = 'default',
-    this.onExecuteCommand,
-  });
+  const SnippetsScreen({super.key, this.workspaceId, this.onExecuteCommand});
 
   @override
   ConsumerState<SnippetsScreen> createState() => _SnippetsScreenState();
@@ -80,6 +77,8 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
   @override
   Widget build(BuildContext context) {
     final snippetsAsync = ref.watch(snippetsProvider);
+    final String workspaceId =
+        widget.workspaceId ?? ref.watch(activeWorkspaceIdProvider);
 
     return DefaultTabController(
       length: 2,
@@ -98,7 +97,7 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
                   onPressed: () async {
                     final newSnippet = await SnippetFormDialog.show(
                       context,
-                      workspaceId: widget.workspaceId,
+                      workspaceId: workspaceId,
                     );
                     if (newSnippet != null) {
                       ref
@@ -377,8 +376,7 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
                                                                   snippet:
                                                                       snippet,
                                                                   workspaceId:
-                                                                      widget
-                                                                          .workspaceId,
+                                                                      workspaceId,
                                                                 );
                                                             if (updated !=
                                                                 null) {
@@ -444,7 +442,7 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
                       ),
                     ],
                   ),
-                  RunbooksScreen(workspaceId: widget.workspaceId),
+                  RunbooksScreen(workspaceId: workspaceId),
                 ],
               ),
             ),

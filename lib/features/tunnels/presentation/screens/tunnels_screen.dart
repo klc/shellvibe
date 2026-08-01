@@ -9,6 +9,7 @@ import '../../../../core/network/tunnel_engine.dart';
 import '../../../hosts/domain/models/host_model.dart';
 import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
 import '../../../terminal/presentation/notifiers/terminal_tabs_notifier.dart';
+import '../../../../shared/providers/workspace_provider.dart';
 import '../../domain/models/tunnel_rule_model.dart';
 import '../providers/tunnels_providers.dart';
 import '../widgets/tunnel_form_dialog.dart';
@@ -34,7 +35,9 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
 
   Future<void> _loadHostsMap() async {
     try {
-      final hosts = await ref.read(hostsRepositoryProvider).getAllHosts();
+      final hosts = await ref
+          .read(hostsRepositoryProvider)
+          .getHostsByWorkspace(ref.read(activeWorkspaceIdProvider));
       if (mounted) {
         setState(() {
           for (final h in hosts) {

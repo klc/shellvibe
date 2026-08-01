@@ -1,6 +1,7 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../shared/providers/database_providers.dart';
+import '../../../../shared/providers/workspace_provider.dart';
 import '../../data/repositories/hosts_repository.dart';
 import '../../domain/models/host_model.dart';
 
@@ -17,7 +18,8 @@ class HostsNotifier extends _$HostsNotifier {
   @override
   Future<List<HostModel>> build() async {
     final repo = ref.watch(hostsRepositoryProvider);
-    return await repo.getAllHosts();
+    final workspaceId = ref.watch(activeWorkspaceIdProvider);
+    return await repo.getHostsByWorkspace(workspaceId);
   }
 
   Future<void> addHost({
@@ -47,7 +49,9 @@ class HostsNotifier extends _$HostsNotifier {
         colorTag: colorTag,
         jumpHostId: jumpHostId,
       );
-      final items = await repo.getAllHosts();
+      final items = await repo.getHostsByWorkspace(
+        ref.read(activeWorkspaceIdProvider),
+      );
       state = AsyncData(items);
     } catch (_) {
       state = previousState;
@@ -86,7 +90,9 @@ class HostsNotifier extends _$HostsNotifier {
         colorTag: colorTag,
         jumpHostId: jumpHostId,
       );
-      final items = await repo.getAllHosts();
+      final items = await repo.getHostsByWorkspace(
+        ref.read(activeWorkspaceIdProvider),
+      );
       state = AsyncData(items);
     } catch (_) {
       state = previousState;
@@ -100,7 +106,9 @@ class HostsNotifier extends _$HostsNotifier {
     try {
       final repo = ref.read(hostsRepositoryProvider);
       await repo.deleteHost(id);
-      final items = await repo.getAllHosts();
+      final items = await repo.getHostsByWorkspace(
+        ref.read(activeWorkspaceIdProvider),
+      );
       state = AsyncData(items);
     } catch (_) {
       state = previousState;

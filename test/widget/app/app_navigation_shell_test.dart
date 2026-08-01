@@ -13,6 +13,7 @@ import 'package:terly2/features/terminal/presentation/views/terminal_tab_view.da
 import 'package:terly2/features/tunnels/presentation/screens/tunnels_screen.dart';
 import 'package:terly2/features/vault/presentation/notifiers/vault_notifier.dart';
 import 'package:terly2/features/vault/presentation/screens/vault_screen.dart';
+import 'package:terly2/features/workspaces/presentation/screens/workspace_manager_screen.dart';
 import 'package:terly2/shared/database/app_database.dart';
 import 'package:terly2/shared/providers/database_providers.dart';
 
@@ -117,8 +118,13 @@ void main() {
         await pumpTabTransition(tester);
         expect(find.byType(SnippetsScreen), findsOneWidget);
 
-        // 6. Switch to Settings (/settings - Index 6)
+        // 6. Switch to Workspaces (/workspaces - Index 6)
         await tester.tap(find.byKey(const Key('nav_item_6')));
+        await pumpTabTransition(tester);
+        expect(find.byType(WorkspaceManagerScreen), findsOneWidget);
+
+        // 7. Switch to Settings (/settings - Index 7)
+        await tester.tap(find.byKey(const Key('nav_item_7')));
         await pumpTabTransition(tester);
         expect(find.byType(SettingsScreen), findsOneWidget);
 

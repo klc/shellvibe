@@ -3,6 +3,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../core/network/tunnel_engine.dart';
 import '../../../../shared/providers/database_providers.dart';
+import '../../../../shared/providers/workspace_provider.dart';
 import '../../data/repositories/tunnel_repository_impl.dart';
 import '../../domain/models/tunnel_rule_model.dart';
 import '../../domain/repositories/tunnel_repository.dart';
@@ -66,6 +67,7 @@ class TunnelsNotifier extends _$TunnelsNotifier {
 
   @override
   TunnelsState build() {
+    ref.watch(activeWorkspaceIdProvider);
     ref.onDispose(() => _disposed = true);
     // Initial fetch of rules
     Future.microtask(() => loadRules());
@@ -79,7 +81,9 @@ class TunnelsNotifier extends _$TunnelsNotifier {
       final repository = ref.read(tunnelRepositoryProvider);
       final rules = hostId != null
           ? await repository.getRulesForHost(hostId)
-          : await repository.getAllRules();
+          : await repository.getRulesByWorkspace(
+              ref.read(activeWorkspaceIdProvider),
+            );
       if (_disposed) return;
       state = state.copyWith(rules: rules, isLoading: false);
     } catch (e) {

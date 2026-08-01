@@ -1,33 +1,46 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class WorkspaceItem {
-  final String id;
-  final String name;
-  final String description;
+import '../../features/settings/presentation/notifiers/settings_notifier.dart';
+import '../../features/workspaces/data/repositories/workspace_repository.dart';
+import '../../features/workspaces/domain/models/workspace_model.dart';
+import 'database_providers.dart';
 
-  const WorkspaceItem({
-    required this.id,
-    required this.name,
-    required this.description,
-  });
-}
-
-const defaultWorkspaces = [
-  WorkspaceItem(id: 'default', name: 'Default Workspace', description: 'Primary environment'),
-  WorkspaceItem(id: 'production', name: 'Production', description: 'Production infrastructure'),
-  WorkspaceItem(id: 'staging', name: 'Staging', description: 'Staging & test environments'),
-];
+final workspacesProvider = FutureProvider<List<WorkspaceModel>>((ref) {
+  final repository = WorkspaceRepository(
+    ref.watch(appDatabaseProvider).workspacesDao,
+  );
+  return repository.getWorkspaces();
+});
 
 class ActiveWorkspaceIdNotifier extends Notifier<String> {
   @override
-  String build() => 'default';
+  String build() {
+    final settings = ref.watch(settingsProvider);
+    final workspaces = ref.watch(workspacesProvider).value;
+    final savedId = settings.value?.activeWorkspaceId ?? 'default';
 
-  void select(String workspaceId) => state = workspaceId;
+    if (workspaces == null ||
+        workspaces.any((workspace) => workspace.id == savedId)) {
+      return savedId;
+    }
+
+    return 'default';
+  }
+
+  Future<void> select(String workspaceId) async {
+    final workspaces = ref.read(workspacesProvider).value;
+    if (workspaces != null &&
+        !workspaces.any((workspace) => workspace.id == workspaceId)) {
+      return;
+    }
+    if (state == workspaceId) return;
+
+    state = workspaceId;
+    await ref.read(settingsProvider.notifier).setActiveWorkspace(workspaceId);
+  }
 }
 
 final activeWorkspaceIdProvider =
     NotifierProvider<ActiveWorkspaceIdNotifier, String>(
       ActiveWorkspaceIdNotifier.new,
     );
-
-final workspacesProvider = Provider<List<WorkspaceItem>>((ref) => defaultWorkspaces);

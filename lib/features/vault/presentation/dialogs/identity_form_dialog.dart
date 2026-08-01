@@ -3,16 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import '../notifiers/identities_notifier.dart';
 import '../../domain/models/identity_model.dart';
+import '../../../../shared/providers/workspace_provider.dart';
 
 class IdentityFormDialog extends ConsumerStatefulWidget {
   final IdentityModel? initialIdentity;
-  final String workspaceId;
+  final String? workspaceId;
 
-  const IdentityFormDialog({
-    super.key,
-    this.initialIdentity,
-    this.workspaceId = 'default',
-  });
+  const IdentityFormDialog({super.key, this.initialIdentity, this.workspaceId});
 
   @override
   ConsumerState<IdentityFormDialog> createState() => _IdentityFormDialogState();
@@ -75,7 +72,8 @@ class _IdentityFormDialogState extends ConsumerState<IdentityFormDialog> {
         );
       } else {
         await notifier.addIdentity(
-          workspaceId: widget.workspaceId,
+          workspaceId:
+              widget.workspaceId ?? ref.read(activeWorkspaceIdProvider),
           title: _titleController.text.trim(),
           username: _usernameController.text.trim(),
           authType: _authType,
@@ -139,7 +137,8 @@ class _IdentityFormDialogState extends ConsumerState<IdentityFormDialog> {
                   controller: _titleController,
                   label: const Text('Title / Label'),
                   placeholder: const Text('e.g. Production Server Key'),
-                  validator: (v) => v.trim().isEmpty ? 'Title is required' : null,
+                  validator: (v) =>
+                      v.trim().isEmpty ? 'Title is required' : null,
                 ),
                 const SizedBox(height: 12),
                 ShadInputFormField(
@@ -182,11 +181,19 @@ class _IdentityFormDialogState extends ConsumerState<IdentityFormDialog> {
                     controller: _passwordController,
                     obscureText: _obscurePassword,
                     label: const Text('Password'),
-                    validator: (v) => v.trim().isEmpty ? 'Password is required' : null,
+                    validator: (v) =>
+                        v.trim().isEmpty ? 'Password is required' : null,
                     trailing: IconButton(
-                      icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off),
-                      tooltip: _obscurePassword ? 'Show password' : 'Hide password',
-                      onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                      icon: Icon(
+                        _obscurePassword
+                            ? Icons.visibility
+                            : Icons.visibility_off,
+                      ),
+                      tooltip: _obscurePassword
+                          ? 'Show password'
+                          : 'Hide password',
+                      onPressed: () =>
+                          setState(() => _obscurePassword = !_obscurePassword),
                     ),
                   ),
                 ],
@@ -196,8 +203,11 @@ class _IdentityFormDialogState extends ConsumerState<IdentityFormDialog> {
                     controller: _privateKeyController,
                     maxLines: 4,
                     label: const Text('Private Key (PEM)'),
-                    placeholder: const Text('-----BEGIN OPENSSH PRIVATE KEY-----...'),
-                    validator: (v) => v.trim().isEmpty ? 'Private key is required' : null,
+                    placeholder: const Text(
+                      '-----BEGIN OPENSSH PRIVATE KEY-----...',
+                    ),
+                    validator: (v) =>
+                        v.trim().isEmpty ? 'Private key is required' : null,
                   ),
                   const SizedBox(height: 12),
                   ShadInputFormField(
@@ -224,4 +234,3 @@ class _IdentityFormDialogState extends ConsumerState<IdentityFormDialog> {
     );
   }
 }
-

@@ -184,7 +184,7 @@ final class IdentitiesNotifierProvider
 }
 
 String _$identitiesNotifierHash() =>
-    r'ed24a89c16bf960b4ccbc1010644b3a54889191c';
+    r'2624e947c01f43fcd6c0ffefcfb944b1067a9f3d';
 
 abstract class _$IdentitiesNotifier
     extends $AsyncNotifier<List<IdentityModel>> {

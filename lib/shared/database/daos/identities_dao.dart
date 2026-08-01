@@ -5,23 +5,30 @@ import '../tables.dart';
 part 'identities_dao.g.dart';
 
 @DriftAccessor(tables: [Identities, Workspaces])
-class IdentitiesDao extends DatabaseAccessor<AppDatabase> with _$IdentitiesDaoMixin {
+class IdentitiesDao extends DatabaseAccessor<AppDatabase>
+    with _$IdentitiesDaoMixin {
   IdentitiesDao(super.db);
 
   Future<List<Identity>> getAllIdentities() => select(identities).get();
 
-  Stream<List<Identity>> watchAllIdentities() => select(identities).watch();
-
   Future<List<Identity>> getIdentitiesByWorkspace(String workspaceId) {
-    return (select(identities)..where((tbl) => tbl.workspaceId.equals(workspaceId))).get();
+    return (select(
+      identities,
+    )..where((tbl) => tbl.workspaceId.equals(workspaceId))).get();
   }
 
+  Stream<List<Identity>> watchAllIdentities() => select(identities).watch();
+
   Stream<List<Identity>> watchIdentitiesByWorkspace(String workspaceId) {
-    return (select(identities)..where((tbl) => tbl.workspaceId.equals(workspaceId))).watch();
+    return (select(
+      identities,
+    )..where((tbl) => tbl.workspaceId.equals(workspaceId))).watch();
   }
 
   Future<Identity?> getIdentityById(String id) {
-    return (select(identities)..where((tbl) => tbl.id.equals(id))).getSingleOrNull();
+    return (select(
+      identities,
+    )..where((tbl) => tbl.id.equals(id))).getSingleOrNull();
   }
 
   Future<int> insertIdentity(IdentitiesCompanion identity) async {
@@ -36,7 +43,9 @@ class IdentitiesDao extends DatabaseAccessor<AppDatabase> with _$IdentitiesDaoMi
   /// Deliberately not `update.replace`: replace is an UPSERT that would
   /// resurrect a deleted row and clobber `createdAt` on every edit.
   Future<int> updateIdentityById(String id, Insertable<Identity> identity) {
-    return (update(identities)..where((tbl) => tbl.id.equals(id))).write(identity);
+    return (update(
+      identities,
+    )..where((tbl) => tbl.id.equals(id))).write(identity);
   }
 
   Future<int> deleteIdentity(String id) {

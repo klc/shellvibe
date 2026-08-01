@@ -9,22 +9,19 @@ import '../../domain/models/runbook_step_model.dart';
 import '../../domain/services/runbook_executor.dart';
 import '../../domain/services/snippet_variable_parser.dart';
 import '../notifiers/runbooks_notifier.dart';
+import '../../../../shared/providers/workspace_provider.dart';
 import '../widgets/runbook_editor_dialog.dart';
 import '../widgets/variable_input_dialog.dart';
 
 class RunbooksScreen extends ConsumerStatefulWidget {
-  final String workspaceId;
+  final String? workspaceId;
   final Future<(String output, int exitCode)> Function(
     String command,
     int timeoutSeconds,
   )?
   customCommandRunner;
 
-  const RunbooksScreen({
-    super.key,
-    this.workspaceId = 'default',
-    this.customCommandRunner,
-  });
+  const RunbooksScreen({super.key, this.workspaceId, this.customCommandRunner});
 
   @override
   ConsumerState<RunbooksScreen> createState() => _RunbooksScreenState();
@@ -182,6 +179,8 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
   @override
   Widget build(BuildContext context) {
     final runbooksAsync = ref.watch(runbooksProvider);
+    final String workspaceId =
+        widget.workspaceId ?? ref.watch(activeWorkspaceIdProvider);
 
     final tokens = TerlyTokens.resolve(context);
 
@@ -211,7 +210,7 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
                 onPressed: () async {
                   final newRunbook = await RunbookEditorDialog.show(
                     context,
-                    workspaceId: widget.workspaceId,
+                    workspaceId: workspaceId,
                   );
                   if (newRunbook != null) {
                     ref
@@ -299,7 +298,7 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
                                       await RunbookEditorDialog.show(
                                         context,
                                         runbook: runbook,
-                                        workspaceId: widget.workspaceId,
+                                        workspaceId: workspaceId,
                                       );
                                   if (updated != null) {
                                     ref

@@ -184,7 +184,7 @@ final class TunnelsNotifierProvider
   }
 }
 
-String _$tunnelsNotifierHash() => r'7cfb74bc0867b06a535fd60dbc2fa0914f9760db';
+String _$tunnelsNotifierHash() => r'7357fec4d91437f6afd1aba639d3636768901233';
 
 abstract class _$TunnelsNotifier extends $Notifier<TunnelsState> {
   TunnelsState build();

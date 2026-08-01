@@ -14,6 +14,7 @@ void main() {
       expect(settings.cursorStyle, equals(AppCursorStyle.block));
       expect(settings.autoLockTimerSeconds, equals(0));
       expect(settings.clipboardAutoClearSeconds, equals(30));
+      expect(settings.activeWorkspaceId, equals('default'));
     });
 
     test('copyWith produces updated model', () {
@@ -23,6 +24,7 @@ void main() {
         terminalPalette: TerminalPalette.dracula,
         fontSize: 16.0,
         autoLockTimerSeconds: 60,
+        activeWorkspaceId: 'client-ops',
       );
 
       expect(updated.palette, equals(AppPalette.catppuccin));
@@ -30,6 +32,7 @@ void main() {
       expect(updated.fontSize, equals(16.0));
       expect(updated.autoLockTimerSeconds, equals(60));
       expect(updated.fontFamily, equals('RobotoMono'));
+      expect(updated.activeWorkspaceId, equals('client-ops'));
     });
 
     test('toJson and fromJson serialization cycle', () {
@@ -42,6 +45,7 @@ void main() {
         cursorStyle: AppCursorStyle.underline,
         autoLockTimerSeconds: 300,
         clipboardAutoClearSeconds: 15,
+        activeWorkspaceId: 'client-ops',
       );
 
       final json = settings.toJson();
@@ -55,6 +59,16 @@ void main() {
       expect(restored.cursorStyle, equals(AppCursorStyle.underline));
       expect(restored.autoLockTimerSeconds, equals(300));
       expect(restored.clipboardAutoClearSeconds, equals(15));
+      expect(restored.activeWorkspaceId, equals('client-ops'));
+    });
+
+    test('older settings JSON defaults active workspace to default', () {
+      final restored = AppSettingsModel.fromJson(const {
+        'themeMode': 'dark',
+        'palette': 'dark',
+      });
+
+      expect(restored.activeWorkspaceId, equals('default'));
     });
   });
 }

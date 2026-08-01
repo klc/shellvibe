@@ -113,8 +113,11 @@ class VaultRepository {
   /// with [IdentityModel.hasUndecryptableSecrets] instead of silently blank.
   Future<List<IdentityModel>> getAllIdentities({
     bool decryptSecrets = false,
+    String? workspaceId,
   }) async {
-    final rows = await identitiesDao.getAllIdentities();
+    final rows = workspaceId == null
+        ? await identitiesDao.getAllIdentities()
+        : await identitiesDao.getIdentitiesByWorkspace(workspaceId);
     final result = <IdentityModel>[];
 
     // Never touch the key service when secrets are not requested, so listing

@@ -7,6 +7,7 @@ import '../../../../app/widgets/terly_ui.dart';
 import '../../../settings/presentation/notifiers/settings_notifier.dart';
 import '../dialogs/identity_form_dialog.dart';
 import '../notifiers/identities_notifier.dart';
+import '../../../../shared/providers/workspace_provider.dart';
 import '../../domain/models/identity_model.dart';
 
 class VaultScreen extends ConsumerStatefulWidget {
@@ -120,7 +121,10 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
   }) {
     showDialog(
       context: context,
-      builder: (ctx) => IdentityFormDialog(initialIdentity: initialIdentity),
+      builder: (ctx) => IdentityFormDialog(
+        initialIdentity: initialIdentity,
+        workspaceId: ref.read(activeWorkspaceIdProvider),
+      ),
     );
   }
 

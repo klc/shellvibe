@@ -12,6 +12,15 @@ class RunbooksRepository {
 
   Future<List<RunbookModel>> getAllRunbooks() async {
     final runbooks = await _dao.getAllRunbooks();
+    return _loadModels(runbooks);
+  }
+
+  Future<List<RunbookModel>> getRunbooksByWorkspace(String workspaceId) async {
+    final runbooks = await _dao.getRunbooksByWorkspace(workspaceId);
+    return _loadModels(runbooks);
+  }
+
+  Future<List<RunbookModel>> _loadModels(List<Runbook> runbooks) async {
     final results = <RunbookModel>[];
     for (final r in runbooks) {
       final steps = await _dao.getStepsForRunbook(r.id);
@@ -42,15 +51,17 @@ class RunbooksRepository {
     await _dao.insertRunbook(companion);
 
     final stepCompanions = runbook.steps
-        .map((s) => RunbookStepsCompanion.insert(
-              id: s.id,
-              runbookId: runbook.id,
-              stepOrder: s.stepOrder,
-              command: s.command,
-              expectedExitCode: Value(s.expectedExitCode),
-              expectedOutputPattern: Value(s.expectedOutputPattern),
-              timeoutSeconds: Value(s.timeoutSeconds),
-            ))
+        .map(
+          (s) => RunbookStepsCompanion.insert(
+            id: s.id,
+            runbookId: runbook.id,
+            stepOrder: s.stepOrder,
+            command: s.command,
+            expectedExitCode: Value(s.expectedExitCode),
+            expectedOutputPattern: Value(s.expectedOutputPattern),
+            timeoutSeconds: Value(s.timeoutSeconds),
+          ),
+        )
         .toList();
     await _dao.replaceSteps(runbook.id, stepCompanions);
   }
@@ -66,15 +77,17 @@ class RunbooksRepository {
     await _dao.updateRunbook(companion);
 
     final stepCompanions = runbook.steps
-        .map((s) => RunbookStepsCompanion.insert(
-              id: s.id,
-              runbookId: runbook.id,
-              stepOrder: s.stepOrder,
-              command: s.command,
-              expectedExitCode: Value(s.expectedExitCode),
-              expectedOutputPattern: Value(s.expectedOutputPattern),
-              timeoutSeconds: Value(s.timeoutSeconds),
-            ))
+        .map(
+          (s) => RunbookStepsCompanion.insert(
+            id: s.id,
+            runbookId: runbook.id,
+            stepOrder: s.stepOrder,
+            command: s.command,
+            expectedExitCode: Value(s.expectedExitCode),
+            expectedOutputPattern: Value(s.expectedOutputPattern),
+            timeoutSeconds: Value(s.timeoutSeconds),
+          ),
+        )
         .toList();
     await _dao.replaceSteps(runbook.id, stepCompanions);
   }
@@ -91,15 +104,17 @@ class RunbooksRepository {
       description: r.description,
       createdAt: r.createdAt,
       steps: steps
-          .map((s) => RunbookStepModel(
-                id: s.id,
-                runbookId: s.runbookId,
-                stepOrder: s.stepOrder,
-                command: s.command,
-                expectedExitCode: s.expectedExitCode,
-                expectedOutputPattern: s.expectedOutputPattern,
-                timeoutSeconds: s.timeoutSeconds,
-              ))
+          .map(
+            (s) => RunbookStepModel(
+              id: s.id,
+              runbookId: s.runbookId,
+              stepOrder: s.stepOrder,
+              command: s.command,
+              expectedExitCode: s.expectedExitCode,
+              expectedOutputPattern: s.expectedOutputPattern,
+              timeoutSeconds: s.timeoutSeconds,
+            ),
+          )
           .toList(),
     );
   }

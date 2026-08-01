@@ -17,6 +17,12 @@ class TunnelRepositoryImpl implements TunnelRepository {
   }
 
   @override
+  Future<List<TunnelRuleModel>> getRulesByWorkspace(String workspaceId) async {
+    final rules = await _dao.getRulesByWorkspace(workspaceId);
+    return rules.map(_mapToDomain).toList();
+  }
+
+  @override
   Future<List<TunnelRuleModel>> getRulesForHost(String hostId) async {
     final rules = await _dao.getRulesForHost(hostId);
     return rules.map(_mapToDomain).toList();

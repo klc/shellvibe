@@ -11,6 +11,7 @@ import '../../features/tunnels/presentation/screens/tunnels_screen.dart';
 import '../../features/vault/presentation/dialogs/vault_unlock_dialog.dart';
 import '../../features/vault/presentation/notifiers/vault_notifier.dart';
 import '../../features/vault/presentation/screens/vault_screen.dart';
+import '../../features/workspaces/presentation/screens/workspace_manager_screen.dart';
 import '../widgets/app_navigation_shell.dart';
 
 /// Route showing the master password prompt while the vault is locked.
@@ -54,10 +55,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       state.matchedLocation,
     ),
     routes: [
-      GoRoute(
-        path: '/',
-        redirect: (context, state) => '/hosts',
-      ),
+      GoRoute(path: '/', redirect: (context, state) => '/hosts'),
       GoRoute(
         path: kUnlockRoute,
         builder: (context, state) => const VaultUnlockDialog(),
@@ -121,7 +119,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               ),
             ],
           ),
-          // Index 6: Settings
+          // Index 6: Workspaces
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/workspaces',
+                builder: (context, state) => const WorkspaceManagerScreen(),
+              ),
+            ],
+          ),
+          // Index 7: Settings
           StatefulShellBranch(
             routes: [
               GoRoute(

@@ -14,6 +14,8 @@ import '../../shared/providers/workspace_provider.dart';
 import '../theme/terly_tokens.dart';
 import 'terly_ui.dart';
 
+const _manageWorkspacesMenuValue = '__manage_workspaces__';
+
 class NavigationItemData {
   final String label;
   final IconData icon;
@@ -82,12 +84,20 @@ const List<NavigationItemData> appNavigationItems = [
     tooltip: 'Snippets & Runbooks (Cmd+6)',
   ),
   NavigationItemData(
+    label: 'Workspaces',
+    icon: LucideIcons.panelTop,
+    selectedIcon: LucideIcons.panelTop,
+    path: '/workspaces',
+    shortcut: '⌘7',
+    tooltip: 'Workspace Manager (Cmd+7)',
+  ),
+  NavigationItemData(
     label: 'Settings',
     icon: LucideIcons.settings,
     selectedIcon: LucideIcons.settings,
     path: '/settings',
-    shortcut: '⌘7',
-    tooltip: 'Application Settings (Cmd+7)',
+    shortcut: '⌘8',
+    tooltip: 'Application Settings (Cmd+8)',
   ),
 ];
 
@@ -181,7 +191,7 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
   Widget _buildTopHeader(BuildContext context, {required bool isDesktop}) {
     final tokens = TerlyTokens.resolve(context);
     final activeWorkspaceId = ref.watch(activeWorkspaceIdProvider);
-    final workspaces = ref.watch(workspacesProvider);
+    final workspacesAsync = ref.watch(workspacesProvider);
     final terminalState = ref.watch(terminalTabsProvider);
     final activeSshCount = terminalState.tabs
         .where((tab) => tab.isConnected)
@@ -237,7 +247,7 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
           ),
           const SizedBox(width: 12),
           ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: isDesktop ? 210 : 140),
+            constraints: BoxConstraints(maxWidth: isDesktop ? 230 : 155),
             child: Container(
               key: const Key('workspace_selector_dropdown'),
               height: 34,
@@ -247,40 +257,69 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
                 borderRadius: BorderRadius.circular(tokens.radiusMedium),
                 border: Border.all(color: tokens.border),
               ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: activeWorkspaceId,
-                  isDense: true,
-                  isExpanded: true,
-                  dropdownColor: tokens.surfaceRaised,
-                  icon: Icon(
-                    LucideIcons.chevronsUpDown,
-                    size: 13,
-                    color: tokens.textMuted,
+              child: workspacesAsync.when(
+                loading: () => const Center(
+                  child: SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2),
                   ),
-                  style: Theme.of(
-                    context,
-                  ).textTheme.labelMedium?.copyWith(color: tokens.textPrimary),
-                  onChanged: (value) {
-                    if (value != null) {
-                      ref
-                          .read(activeWorkspaceIdProvider.notifier)
-                          .select(value);
-                    }
-                  },
-                  items: workspaces
-                      .map(
-                        (workspace) => DropdownMenuItem<String>(
-                          value: workspace.id,
-                          child: Text(
-                            workspace.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                ),
+                error: (_, _) => const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('Workspace unavailable'),
+                ),
+                data: (items) {
+                  final selectedId =
+                      items.any(
+                        (workspace) => workspace.id == activeWorkspaceId,
+                      )
+                      ? activeWorkspaceId
+                      : items.firstOrNull?.id;
+                  if (selectedId == null) return const SizedBox.shrink();
+
+                  return DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: selectedId,
+                      isDense: true,
+                      isExpanded: true,
+                      dropdownColor: tokens.surfaceRaised,
+                      icon: Icon(
+                        LucideIcons.chevronsUpDown,
+                        size: 13,
+                        color: tokens.textMuted,
+                      ),
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: tokens.textPrimary,
+                      ),
+                      onChanged: (value) {
+                        if (value == _manageWorkspacesMenuValue) {
+                          _onTabSelected(6);
+                        } else if (value != null) {
+                          ref
+                              .read(activeWorkspaceIdProvider.notifier)
+                              .select(value);
+                        }
+                      },
+                      items: [
+                        ...items.map(
+                          (workspace) => DropdownMenuItem<String>(
+                            value: workspace.id,
+                            child: Text(
+                              workspace.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                         ),
-                      )
-                      .toList(),
-                ),
+                        const DropdownMenuItem<String>(
+                          value: _manageWorkspacesMenuValue,
+                          child: Text('Manage Workspaces…'),
+                        ),
+                      ],
+                    ),
+                  );
+                },
               ),
             ),
           ),
@@ -561,22 +600,32 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
               ),
-              for (final index in [2, 4, 5, 6])
-                ListTile(
-                  key: Key(
-                    'mobile_tool_${appNavigationItems[index].label.toLowerCase()}',
-                  ),
-                  leading: Icon(appNavigationItems[index].icon, size: 18),
-                  title: Text(appNavigationItems[index].label),
-                  subtitle: Text(
-                    appNavigationItems[index].tooltip.split(' (').first,
-                  ),
-                  trailing: const Icon(LucideIcons.chevronRight, size: 16),
-                  onTap: () {
-                    Navigator.of(sheetContext).pop();
-                    _onTabSelected(index);
-                  },
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    for (final index in [2, 4, 5, 6, 7])
+                      ListTile(
+                        key: Key(
+                          'mobile_tool_${appNavigationItems[index].label.toLowerCase()}',
+                        ),
+                        leading: Icon(appNavigationItems[index].icon, size: 18),
+                        title: Text(appNavigationItems[index].label),
+                        subtitle: Text(
+                          appNavigationItems[index].tooltip.split(' (').first,
+                        ),
+                        trailing: const Icon(
+                          LucideIcons.chevronRight,
+                          size: 16,
+                        ),
+                        onTap: () {
+                          Navigator.of(sheetContext).pop();
+                          _onTabSelected(index);
+                        },
+                      ),
+                  ],
                 ),
+              ),
             ],
           ),
         ),

@@ -2,6 +2,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../shared/providers/database_providers.dart';
+import '../../../../shared/providers/workspace_provider.dart';
 import '../../data/repositories/snippets_repository.dart';
 import '../../domain/models/snippet_model.dart';
 
@@ -18,7 +19,9 @@ class SnippetsNotifier extends _$SnippetsNotifier {
   @override
   Future<List<SnippetModel>> build() async {
     final repo = ref.watch(snippetsRepositoryProvider);
-    return await repo.getAllSnippets();
+    return await repo.getSnippetsByWorkspace(
+      ref.watch(activeWorkspaceIdProvider),
+    );
   }
 
   Future<void> addSnippet({
@@ -38,7 +41,9 @@ class SnippetsNotifier extends _$SnippetsNotifier {
         tags: tags,
       );
       await repo.addSnippet(snippet);
-      return await repo.getAllSnippets();
+      return await repo.getSnippetsByWorkspace(
+        ref.read(activeWorkspaceIdProvider),
+      );
     });
   }
 
@@ -47,7 +52,9 @@ class SnippetsNotifier extends _$SnippetsNotifier {
     state = await AsyncValue.guard(() async {
       final repo = ref.read(snippetsRepositoryProvider);
       await repo.updateSnippet(snippet);
-      return await repo.getAllSnippets();
+      return await repo.getSnippetsByWorkspace(
+        ref.read(activeWorkspaceIdProvider),
+      );
     });
   }
 
@@ -56,7 +63,9 @@ class SnippetsNotifier extends _$SnippetsNotifier {
     state = await AsyncValue.guard(() async {
       final repo = ref.read(snippetsRepositoryProvider);
       await repo.deleteSnippet(id);
-      return await repo.getAllSnippets();
+      return await repo.getSnippetsByWorkspace(
+        ref.read(activeWorkspaceIdProvider),
+      );
     });
   }
 }

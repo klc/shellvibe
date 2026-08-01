@@ -1,6 +1,7 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../domain/models/host_group_model.dart';
+import '../../../../shared/providers/workspace_provider.dart';
 import 'hosts_notifier.dart';
 
 part 'host_groups_notifier.g.dart';
@@ -10,7 +11,9 @@ class HostGroupsNotifier extends _$HostGroupsNotifier {
   @override
   Future<List<HostGroupModel>> build() async {
     final repo = ref.watch(hostsRepositoryProvider);
-    return await repo.getAllHostGroups();
+    return await repo.getHostGroupsByWorkspace(
+      ref.watch(activeWorkspaceIdProvider),
+    );
   }
 
   Future<void> addGroup({
@@ -28,7 +31,9 @@ class HostGroupsNotifier extends _$HostGroupsNotifier {
         name: name,
         colorTag: colorTag,
       );
-      final items = await repo.getAllHostGroups();
+      final items = await repo.getHostGroupsByWorkspace(
+        ref.read(activeWorkspaceIdProvider),
+      );
       state = AsyncData(items);
     } catch (_) {
       state = previousState;
@@ -55,7 +60,9 @@ class HostGroupsNotifier extends _$HostGroupsNotifier {
         name: name,
         colorTag: colorTag,
       );
-      final items = await repo.getAllHostGroups();
+      final items = await repo.getHostGroupsByWorkspace(
+        ref.read(activeWorkspaceIdProvider),
+      );
       state = AsyncData(items);
     } catch (_) {
       state = previousState;
@@ -68,7 +75,11 @@ class HostGroupsNotifier extends _$HostGroupsNotifier {
     try {
       final repo = ref.read(hostsRepositoryProvider);
       await repo.deleteHostGroup(id);
-      state = AsyncData(await repo.getAllHostGroups());
+      state = AsyncData(
+        await repo.getHostGroupsByWorkspace(
+          ref.read(activeWorkspaceIdProvider),
+        ),
+      );
     } catch (_) {
       state = previousState;
     }

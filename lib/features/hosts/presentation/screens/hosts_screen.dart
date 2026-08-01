@@ -9,6 +9,7 @@ import '../../../terminal/presentation/dialogs/host_key_prompt_dialog.dart';
 import '../../../terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import '../../../vault/domain/models/identity_model.dart';
 import '../../../vault/presentation/notifiers/identities_notifier.dart';
+import '../../../../shared/providers/workspace_provider.dart';
 import '../dialogs/host_form_dialog.dart';
 import '../dialogs/host_group_form_dialog.dart';
 import '../notifiers/host_groups_notifier.dart';
@@ -274,14 +275,20 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
   void _openHostForm(BuildContext context, {HostModel? initialHost}) {
     showDialog(
       context: context,
-      builder: (ctx) => HostFormDialog(initialHost: initialHost),
+      builder: (ctx) => HostFormDialog(
+        initialHost: initialHost,
+        workspaceId: ref.read(activeWorkspaceIdProvider),
+      ),
     );
   }
 
   void _openGroupForm(BuildContext context, {HostGroupModel? initialGroup}) {
     showDialog(
       context: context,
-      builder: (ctx) => HostGroupFormDialog(initialGroup: initialGroup),
+      builder: (ctx) => HostGroupFormDialog(
+        initialGroup: initialGroup,
+        workspaceId: ref.read(activeWorkspaceIdProvider),
+      ),
     );
   }
 

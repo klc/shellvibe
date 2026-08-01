@@ -203,9 +203,9 @@ void main() {
         masterPassword: password,
       );
 
-      // 2. Verify db2 is empty initially
+      // 2. A fresh database is seeded with the protected default workspace.
       final db2WorkspacesBefore = await db2.workspacesDao.getAllWorkspaces();
-      expect(db2WorkspacesBefore, isEmpty);
+      expect(db2WorkspacesBefore.map((workspace) => workspace.id), ['default']);
 
       // 3. Import backup into db2
       await syncService.importEncryptedBackup(
@@ -216,8 +216,16 @@ void main() {
 
       // 4. Verify data was imported
       final db2Workspaces = await db2.workspacesDao.getAllWorkspaces();
-      expect(db2Workspaces.length, equals(1));
-      expect(db2Workspaces.first.name, equals('Production Workspace'));
+      expect(
+        db2Workspaces.map((workspace) => workspace.id),
+        containsAll(['default', 'ws_test']),
+      );
+      expect(
+        db2Workspaces
+            .singleWhere((workspace) => workspace.id == 'ws_test')
+            .name,
+        equals('Production Workspace'),
+      );
 
       final db2Rules = await db2.tunnelsDao.getRulesForHost('host_sync');
       expect(db2Rules.length, equals(1));
