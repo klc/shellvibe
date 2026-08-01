@@ -45,7 +45,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     if (widget.sftpClient != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         ref
-            .read(sftpNotifierProvider.notifier)
+            .read(sftpProvider.notifier)
             .setRemoteClient(widget.sftpClient);
       });
     } else {
@@ -59,7 +59,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     if (!mounted || _usesProvidedClient) return;
 
     final generation = ++_attachmentGeneration;
-    final activeTab = ref.read(terminalTabsNotifierProvider).activeTab;
+    final activeTab = ref.read(terminalTabsProvider).activeTab;
     final session = activeTab?.sshSessionManager;
 
     if (activeTab == null ||
@@ -67,7 +67,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
         session == null) {
       await _stopWatchingSession();
       if (!mounted || generation != _attachmentGeneration) return;
-      await ref.read(sftpNotifierProvider.notifier).setRemoteClient(null);
+      await ref.read(sftpProvider.notifier).setRemoteClient(null);
       return;
     }
 
@@ -77,7 +77,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     if (!session.isConnected || sshClient == null || sshClient.isClosed) {
       if (!mounted || generation != _attachmentGeneration) return;
       await ref
-          .read(sftpNotifierProvider.notifier)
+          .read(sftpProvider.notifier)
           .setRemoteClient(null, sessionId: activeTab.id);
       return;
     }
@@ -90,14 +90,14 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
         return;
       }
       await ref
-          .read(sftpNotifierProvider.notifier)
+          .read(sftpProvider.notifier)
           .setRemoteClient(client, sessionId: activeTab.id);
     } catch (error) {
       if (!_isCurrentSession(generation, activeTab.id, session, sshClient)) {
         return;
       }
       await ref
-          .read(sftpNotifierProvider.notifier)
+          .read(sftpProvider.notifier)
           .setRemoteClient(null, sessionId: activeTab.id);
     }
   }
@@ -108,7 +108,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     SSHSessionManager session,
     SSHClient sshClient,
   ) {
-    final activeTab = ref.read(terminalTabsNotifierProvider).activeTab;
+    final activeTab = ref.read(terminalTabsProvider).activeTab;
     return mounted &&
         generation == _attachmentGeneration &&
         activeTab?.id == tabId &&
@@ -147,7 +147,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
       if (_usesProvidedClient) {
         unawaited(
           ref
-              .read(sftpNotifierProvider.notifier)
+              .read(sftpProvider.notifier)
               .setRemoteClient(widget.sftpClient),
         );
       } else {
@@ -177,7 +177,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     List<DropItem> droppedFiles,
     String remoteDirectoryPath,
   ) {
-    final notifier = ref.read(sftpNotifierProvider.notifier);
+    final notifier = ref.read(sftpProvider.notifier);
     for (final file in droppedFiles) {
       final item = SftpFileItem(
         name: file.name,
@@ -193,11 +193,11 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
 
   @override
   Widget build(BuildContext context) {
-    ref.listen<TerminalTabsState>(terminalTabsNotifierProvider, (_, _) {
+    ref.listen<TerminalTabsState>(terminalTabsProvider, (_, _) {
       if (!_usesProvidedClient) unawaited(_syncActiveSshSession());
     });
-    final state = ref.watch(sftpNotifierProvider);
-    final notifier = ref.read(sftpNotifierProvider.notifier);
+    final state = ref.watch(sftpProvider);
+    final notifier = ref.read(sftpProvider.notifier);
     final colorScheme = ShadTheme.of(context).colorScheme;
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 600;
@@ -381,7 +381,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
   }) {
     final colorScheme = ShadTheme.of(context).colorScheme;
     final searchQuery = ref
-        .watch(sftpNotifierProvider)
+        .watch(sftpProvider)
         .searchQuery
         .toLowerCase();
     final filteredFiles = searchQuery.isEmpty
@@ -653,7 +653,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     );
 
     if (result != null) {
-      final notifier = ref.read(sftpNotifierProvider.notifier);
+      final notifier = ref.read(sftpProvider.notifier);
       await notifier.changeRemotePermissions(item, result.mode);
       if (result.uid != null || result.gid != null) {
         await notifier.changeRemoteOwner(
@@ -710,7 +710,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     controller.dispose();
 
     if (name != null && name.isNotEmpty) {
-      final notifier = ref.read(sftpNotifierProvider.notifier);
+      final notifier = ref.read(sftpProvider.notifier);
       if (isFolder) {
         notifier.createRemoteFolder(name);
       } else {
@@ -758,7 +758,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     controller.dispose();
 
     if (newName != null && newName.isNotEmpty && newName != item.name) {
-      ref.read(sftpNotifierProvider.notifier).renameRemoteItem(item, newName);
+      ref.read(sftpProvider.notifier).renameRemoteItem(item, newName);
     }
   }
 }

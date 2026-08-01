@@ -4264,10 +4264,7 @@ final class $$WorkspacesTableReferences
   static MultiTypedResultKey<$IdentitiesTable, List<Identity>>
   _identitiesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.identities,
-    aliasName: $_aliasNameGenerator(
-      db.workspaces.id,
-      db.identities.workspaceId,
-    ),
+    aliasName: 'workspaces__id__identities__workspace_id',
   );
 
   $$IdentitiesTableProcessedTableManager get identitiesRefs {
@@ -4285,10 +4282,7 @@ final class $$WorkspacesTableReferences
   static MultiTypedResultKey<$HostGroupsTable, List<HostGroup>>
   _hostGroupsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.hostGroups,
-    aliasName: $_aliasNameGenerator(
-      db.workspaces.id,
-      db.hostGroups.workspaceId,
-    ),
+    aliasName: 'workspaces__id__host_groups__workspace_id',
   );
 
   $$HostGroupsTableProcessedTableManager get hostGroupsRefs {
@@ -4307,7 +4301,7 @@ final class $$WorkspacesTableReferences
     _$AppDatabase db,
   ) => MultiTypedResultKey.fromTable(
     db.hosts,
-    aliasName: $_aliasNameGenerator(db.workspaces.id, db.hosts.workspaceId),
+    aliasName: 'workspaces__id__hosts__workspace_id',
   );
 
   $$HostsTableProcessedTableManager get hostsRefs {
@@ -4326,7 +4320,7 @@ final class $$WorkspacesTableReferences
     _$AppDatabase db,
   ) => MultiTypedResultKey.fromTable(
     db.snippets,
-    aliasName: $_aliasNameGenerator(db.workspaces.id, db.snippets.workspaceId),
+    aliasName: 'workspaces__id__snippets__workspace_id',
   );
 
   $$SnippetsTableProcessedTableManager get snippetsRefs {
@@ -4345,7 +4339,7 @@ final class $$WorkspacesTableReferences
     _$AppDatabase db,
   ) => MultiTypedResultKey.fromTable(
     db.runbooks,
-    aliasName: $_aliasNameGenerator(db.workspaces.id, db.runbooks.workspaceId),
+    aliasName: 'workspaces__id__runbooks__workspace_id',
   );
 
   $$RunbooksTableProcessedTableManager get runbooksRefs {
@@ -4946,9 +4940,7 @@ final class $$IdentitiesTableReferences
   $$IdentitiesTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
   static $WorkspacesTable _workspaceIdTable(_$AppDatabase db) =>
-      db.workspaces.createAlias(
-        $_aliasNameGenerator(db.identities.workspaceId, db.workspaces.id),
-      );
+      db.workspaces.createAlias('identities__workspace_id__workspaces__id');
 
   $$WorkspacesTableProcessedTableManager get workspaceId {
     final $_column = $_itemColumn<String>('workspace_id')!;
@@ -4968,7 +4960,7 @@ final class $$IdentitiesTableReferences
     _$AppDatabase db,
   ) => MultiTypedResultKey.fromTable(
     db.hosts,
-    aliasName: $_aliasNameGenerator(db.identities.id, db.hosts.identityId),
+    aliasName: 'identities__id__hosts__identity_id',
   );
 
   $$HostsTableProcessedTableManager get hostsRefs {
@@ -5420,9 +5412,7 @@ final class $$HostGroupsTableReferences
   $$HostGroupsTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
   static $WorkspacesTable _workspaceIdTable(_$AppDatabase db) =>
-      db.workspaces.createAlias(
-        $_aliasNameGenerator(db.hostGroups.workspaceId, db.workspaces.id),
-      );
+      db.workspaces.createAlias('host_groups__workspace_id__workspaces__id');
 
   $$WorkspacesTableProcessedTableManager get workspaceId {
     final $_column = $_itemColumn<String>('workspace_id')!;
@@ -5439,9 +5429,7 @@ final class $$HostGroupsTableReferences
   }
 
   static $HostGroupsTable _parentIdTable(_$AppDatabase db) =>
-      db.hostGroups.createAlias(
-        $_aliasNameGenerator(db.hostGroups.parentId, db.hostGroups.id),
-      );
+      db.hostGroups.createAlias('host_groups__parent_id__host_groups__id');
 
   $$HostGroupsTableProcessedTableManager? get parentId {
     final $_column = $_itemColumn<String>('parent_id');
@@ -5461,7 +5449,7 @@ final class $$HostGroupsTableReferences
     _$AppDatabase db,
   ) => MultiTypedResultKey.fromTable(
     db.hosts,
-    aliasName: $_aliasNameGenerator(db.hostGroups.id, db.hosts.groupId),
+    aliasName: 'host_groups__id__hosts__group_id',
   );
 
   $$HostsTableProcessedTableManager get hostsRefs {
@@ -5939,9 +5927,7 @@ final class $$HostsTableReferences
   $$HostsTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
   static $WorkspacesTable _workspaceIdTable(_$AppDatabase db) =>
-      db.workspaces.createAlias(
-        $_aliasNameGenerator(db.hosts.workspaceId, db.workspaces.id),
-      );
+      db.workspaces.createAlias('hosts__workspace_id__workspaces__id');
 
   $$WorkspacesTableProcessedTableManager get workspaceId {
     final $_column = $_itemColumn<String>('workspace_id')!;
@@ -5957,8 +5943,8 @@ final class $$HostsTableReferences
     );
   }
 
-  static $HostGroupsTable _groupIdTable(_$AppDatabase db) => db.hostGroups
-      .createAlias($_aliasNameGenerator(db.hosts.groupId, db.hostGroups.id));
+  static $HostGroupsTable _groupIdTable(_$AppDatabase db) =>
+      db.hostGroups.createAlias('hosts__group_id__host_groups__id');
 
   $$HostGroupsTableProcessedTableManager? get groupId {
     final $_column = $_itemColumn<String>('group_id');
@@ -5974,8 +5960,8 @@ final class $$HostsTableReferences
     );
   }
 
-  static $IdentitiesTable _identityIdTable(_$AppDatabase db) => db.identities
-      .createAlias($_aliasNameGenerator(db.hosts.identityId, db.identities.id));
+  static $IdentitiesTable _identityIdTable(_$AppDatabase db) =>
+      db.identities.createAlias('hosts__identity_id__identities__id');
 
   $$IdentitiesTableProcessedTableManager? get identityId {
     final $_column = $_itemColumn<String>('identity_id');
@@ -5991,9 +5977,8 @@ final class $$HostsTableReferences
     );
   }
 
-  static $HostsTable _jumpHostIdTable(_$AppDatabase db) => db.hosts.createAlias(
-    $_aliasNameGenerator(db.hosts.jumpHostId, db.hosts.id),
-  );
+  static $HostsTable _jumpHostIdTable(_$AppDatabase db) =>
+      db.hosts.createAlias('hosts__jump_host_id__hosts__id');
 
   $$HostsTableProcessedTableManager? get jumpHostId {
     final $_column = $_itemColumn<String>('jump_host_id');
@@ -6012,7 +5997,7 @@ final class $$HostsTableReferences
   static MultiTypedResultKey<$PortForwardRulesTable, List<PortForwardRule>>
   _portForwardRulesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.portForwardRules,
-    aliasName: $_aliasNameGenerator(db.hosts.id, db.portForwardRules.hostId),
+    aliasName: 'hosts__id__port_forward_rules__host_id',
   );
 
   $$PortForwardRulesTableProcessedTableManager get portForwardRulesRefs {
@@ -6974,9 +6959,8 @@ final class $$PortForwardRulesTableReferences
     super.$_typedResult,
   );
 
-  static $HostsTable _hostIdTable(_$AppDatabase db) => db.hosts.createAlias(
-    $_aliasNameGenerator(db.portForwardRules.hostId, db.hosts.id),
-  );
+  static $HostsTable _hostIdTable(_$AppDatabase db) =>
+      db.hosts.createAlias('port_forward_rules__host_id__hosts__id');
 
   $$HostsTableProcessedTableManager get hostId {
     final $_column = $_itemColumn<String>('host_id')!;
@@ -7335,9 +7319,7 @@ final class $$SnippetsTableReferences
   $$SnippetsTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
   static $WorkspacesTable _workspaceIdTable(_$AppDatabase db) =>
-      db.workspaces.createAlias(
-        $_aliasNameGenerator(db.snippets.workspaceId, db.workspaces.id),
-      );
+      db.workspaces.createAlias('snippets__workspace_id__workspaces__id');
 
   $$WorkspacesTableProcessedTableManager get workspaceId {
     final $_column = $_itemColumn<String>('workspace_id')!;
@@ -7654,9 +7636,7 @@ final class $$RunbooksTableReferences
   $$RunbooksTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
   static $WorkspacesTable _workspaceIdTable(_$AppDatabase db) =>
-      db.workspaces.createAlias(
-        $_aliasNameGenerator(db.runbooks.workspaceId, db.workspaces.id),
-      );
+      db.workspaces.createAlias('runbooks__workspace_id__workspaces__id');
 
   $$WorkspacesTableProcessedTableManager get workspaceId {
     final $_column = $_itemColumn<String>('workspace_id')!;
@@ -7675,7 +7655,7 @@ final class $$RunbooksTableReferences
   static MultiTypedResultKey<$RunbookStepsTable, List<RunbookStep>>
   _runbookStepsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.runbookSteps,
-    aliasName: $_aliasNameGenerator(db.runbooks.id, db.runbookSteps.runbookId),
+    aliasName: 'runbooks__id__runbook_steps__runbook_id',
   );
 
   $$RunbookStepsTableProcessedTableManager get runbookStepsRefs {
@@ -8072,9 +8052,7 @@ final class $$RunbookStepsTableReferences
   $$RunbookStepsTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
   static $RunbooksTable _runbookIdTable(_$AppDatabase db) =>
-      db.runbooks.createAlias(
-        $_aliasNameGenerator(db.runbookSteps.runbookId, db.runbooks.id),
-      );
+      db.runbooks.createAlias('runbook_steps__runbook_id__runbooks__id');
 
   $$RunbooksTableProcessedTableManager get runbookId {
     final $_column = $_itemColumn<String>('runbook_id')!;

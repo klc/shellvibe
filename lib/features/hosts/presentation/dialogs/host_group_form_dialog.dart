@@ -48,7 +48,7 @@ class _HostGroupFormDialogState extends ConsumerState<HostGroupFormDialog> {
     setState(() => _isLoading = true);
 
     try {
-      final notifier = ref.read(hostGroupsNotifierProvider.notifier);
+      final notifier = ref.read(hostGroupsProvider.notifier);
       final isEditing = widget.initialGroup != null;
 
       if (isEditing) {
@@ -85,7 +85,7 @@ class _HostGroupFormDialogState extends ConsumerState<HostGroupFormDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final groupsAsync = ref.watch(hostGroupsNotifierProvider);
+    final groupsAsync = ref.watch(hostGroupsProvider);
     final isEditing = widget.initialGroup != null;
 
     return ShadDialog(

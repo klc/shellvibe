@@ -57,7 +57,7 @@ class _RemoteFileEditorDialogState extends ConsumerState<RemoteFileEditorDialog>
     }
 
     try {
-      final content = await ref.read(sftpNotifierProvider.notifier).readRemoteFileContent(widget.fileItem.path);
+      final content = await ref.read(sftpProvider.notifier).readRemoteFileContent(widget.fileItem.path);
       if (mounted) {
         _textController.text = content;
         setState(() {
@@ -82,7 +82,7 @@ class _RemoteFileEditorDialogState extends ConsumerState<RemoteFileEditorDialog>
 
     try {
       await ref
-          .read(sftpNotifierProvider.notifier)
+          .read(sftpProvider.notifier)
           .saveRemoteFileContent(widget.fileItem.path, _textController.text);
       if (mounted) {
         setState(() {
@@ -288,4 +288,3 @@ class _RemoteFileEditorDialogState extends ConsumerState<RemoteFileEditorDialog>
   );
 }
 }
-

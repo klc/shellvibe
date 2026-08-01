@@ -6,178 +6,430 @@ part of 'database_providers.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$appDatabaseHash() => r'5a6430ca855c590aff1350743cd4f617eda201f8';
+// GENERATED CODE - DO NOT MODIFY BY HAND
+// ignore_for_file: type=lint, type=warning
+/// Provides a single instance of [AppDatabase].
+
+@ProviderFor(appDatabase)
+final appDatabaseProvider = AppDatabaseProvider._();
 
 /// Provides a single instance of [AppDatabase].
-///
-/// Copied from [appDatabase].
-@ProviderFor(appDatabase)
-final appDatabaseProvider = Provider<AppDatabase>.internal(
-  appDatabase,
-  name: r'appDatabaseProvider',
-  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-      ? null
-      : _$appDatabaseHash,
-  dependencies: null,
-  allTransitiveDependencies: null,
-);
 
-@Deprecated('Will be removed in 3.0. Use Ref instead')
-// ignore: unused_element
-typedef AppDatabaseRef = ProviderRef<AppDatabase>;
-String _$knownHostsDaoHash() => r'a121c97533b0daaae0ec86a4d1f54f93c67db240';
+final class AppDatabaseProvider
+    extends $FunctionalProvider<AppDatabase, AppDatabase, AppDatabase>
+    with $Provider<AppDatabase> {
+  /// Provides a single instance of [AppDatabase].
+  AppDatabaseProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'appDatabaseProvider',
+        isAutoDispose: false,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$appDatabaseHash();
+
+  @$internal
+  @override
+  $ProviderElement<AppDatabase> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  AppDatabase create(Ref ref) {
+    return appDatabase(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(AppDatabase value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<AppDatabase>(value),
+    );
+  }
+}
+
+String _$appDatabaseHash() => r'67f06207fff3a55949c4c4b67200f868a9b6acc8';
 
 /// Auto-disposing provider for [KnownHostsDao].
-///
-/// Copied from [knownHostsDao].
-@ProviderFor(knownHostsDao)
-final knownHostsDaoProvider = AutoDisposeProvider<KnownHostsDao>.internal(
-  knownHostsDao,
-  name: r'knownHostsDaoProvider',
-  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-      ? null
-      : _$knownHostsDaoHash,
-  dependencies: null,
-  allTransitiveDependencies: null,
-);
 
-@Deprecated('Will be removed in 3.0. Use Ref instead')
-// ignore: unused_element
-typedef KnownHostsDaoRef = AutoDisposeProviderRef<KnownHostsDao>;
-String _$hostsDaoHash() => r'3b32f9747158c67072fe40769ab25990cfcd0624';
+@ProviderFor(knownHostsDao)
+final knownHostsDaoProvider = KnownHostsDaoProvider._();
+
+/// Auto-disposing provider for [KnownHostsDao].
+
+final class KnownHostsDaoProvider
+    extends $FunctionalProvider<KnownHostsDao, KnownHostsDao, KnownHostsDao>
+    with $Provider<KnownHostsDao> {
+  /// Auto-disposing provider for [KnownHostsDao].
+  KnownHostsDaoProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'knownHostsDaoProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$knownHostsDaoHash();
+
+  @$internal
+  @override
+  $ProviderElement<KnownHostsDao> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  KnownHostsDao create(Ref ref) {
+    return knownHostsDao(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(KnownHostsDao value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<KnownHostsDao>(value),
+    );
+  }
+}
+
+String _$knownHostsDaoHash() => r'01110c759643efcb98f732ab74133461f49c9ca2';
 
 /// Auto-disposing provider for [HostsDao].
-///
-/// Copied from [hostsDao].
-@ProviderFor(hostsDao)
-final hostsDaoProvider = AutoDisposeProvider<HostsDao>.internal(
-  hostsDao,
-  name: r'hostsDaoProvider',
-  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-      ? null
-      : _$hostsDaoHash,
-  dependencies: null,
-  allTransitiveDependencies: null,
-);
 
-@Deprecated('Will be removed in 3.0. Use Ref instead')
-// ignore: unused_element
-typedef HostsDaoRef = AutoDisposeProviderRef<HostsDao>;
-String _$identitiesDaoHash() => r'ddd5f5e782c1181f08766896e5bc88c79315ee31';
+@ProviderFor(hostsDao)
+final hostsDaoProvider = HostsDaoProvider._();
+
+/// Auto-disposing provider for [HostsDao].
+
+final class HostsDaoProvider
+    extends $FunctionalProvider<HostsDao, HostsDao, HostsDao>
+    with $Provider<HostsDao> {
+  /// Auto-disposing provider for [HostsDao].
+  HostsDaoProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'hostsDaoProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$hostsDaoHash();
+
+  @$internal
+  @override
+  $ProviderElement<HostsDao> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  HostsDao create(Ref ref) {
+    return hostsDao(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(HostsDao value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<HostsDao>(value),
+    );
+  }
+}
+
+String _$hostsDaoHash() => r'0cdd6525a1ccd57c08d2dfcd375d768f664ac1c9';
 
 /// Auto-disposing provider for [IdentitiesDao].
-///
-/// Copied from [identitiesDao].
-@ProviderFor(identitiesDao)
-final identitiesDaoProvider = AutoDisposeProvider<IdentitiesDao>.internal(
-  identitiesDao,
-  name: r'identitiesDaoProvider',
-  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-      ? null
-      : _$identitiesDaoHash,
-  dependencies: null,
-  allTransitiveDependencies: null,
-);
 
-@Deprecated('Will be removed in 3.0. Use Ref instead')
-// ignore: unused_element
-typedef IdentitiesDaoRef = AutoDisposeProviderRef<IdentitiesDao>;
-String _$tunnelsDaoHash() => r'a2aedbd5b24646dc8279dcfaaa2feef6cc285c69';
+@ProviderFor(identitiesDao)
+final identitiesDaoProvider = IdentitiesDaoProvider._();
+
+/// Auto-disposing provider for [IdentitiesDao].
+
+final class IdentitiesDaoProvider
+    extends $FunctionalProvider<IdentitiesDao, IdentitiesDao, IdentitiesDao>
+    with $Provider<IdentitiesDao> {
+  /// Auto-disposing provider for [IdentitiesDao].
+  IdentitiesDaoProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'identitiesDaoProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$identitiesDaoHash();
+
+  @$internal
+  @override
+  $ProviderElement<IdentitiesDao> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  IdentitiesDao create(Ref ref) {
+    return identitiesDao(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(IdentitiesDao value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<IdentitiesDao>(value),
+    );
+  }
+}
+
+String _$identitiesDaoHash() => r'72c01c74e79fde565f6c58294383e6db88720e20';
 
 /// Auto-disposing provider for [TunnelsDao].
-///
-/// Copied from [tunnelsDao].
-@ProviderFor(tunnelsDao)
-final tunnelsDaoProvider = AutoDisposeProvider<TunnelsDao>.internal(
-  tunnelsDao,
-  name: r'tunnelsDaoProvider',
-  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-      ? null
-      : _$tunnelsDaoHash,
-  dependencies: null,
-  allTransitiveDependencies: null,
-);
 
-@Deprecated('Will be removed in 3.0. Use Ref instead')
-// ignore: unused_element
-typedef TunnelsDaoRef = AutoDisposeProviderRef<TunnelsDao>;
-String _$snippetsDaoHash() => r'1e1317d16e7a3ccce7d94cd3e3222c4557b4e529';
+@ProviderFor(tunnelsDao)
+final tunnelsDaoProvider = TunnelsDaoProvider._();
+
+/// Auto-disposing provider for [TunnelsDao].
+
+final class TunnelsDaoProvider
+    extends $FunctionalProvider<TunnelsDao, TunnelsDao, TunnelsDao>
+    with $Provider<TunnelsDao> {
+  /// Auto-disposing provider for [TunnelsDao].
+  TunnelsDaoProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'tunnelsDaoProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$tunnelsDaoHash();
+
+  @$internal
+  @override
+  $ProviderElement<TunnelsDao> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  TunnelsDao create(Ref ref) {
+    return tunnelsDao(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(TunnelsDao value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<TunnelsDao>(value),
+    );
+  }
+}
+
+String _$tunnelsDaoHash() => r'651f29f369e4b6fa8362caa38d51ffa5f901c950';
 
 /// Auto-disposing provider for [SnippetsDao].
-///
-/// Copied from [snippetsDao].
-@ProviderFor(snippetsDao)
-final snippetsDaoProvider = AutoDisposeProvider<SnippetsDao>.internal(
-  snippetsDao,
-  name: r'snippetsDaoProvider',
-  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-      ? null
-      : _$snippetsDaoHash,
-  dependencies: null,
-  allTransitiveDependencies: null,
-);
 
-@Deprecated('Will be removed in 3.0. Use Ref instead')
-// ignore: unused_element
-typedef SnippetsDaoRef = AutoDisposeProviderRef<SnippetsDao>;
-String _$runbooksDaoHash() => r'c87f78f35ed5c54e495a5bb098b6c563e60e3b19';
+@ProviderFor(snippetsDao)
+final snippetsDaoProvider = SnippetsDaoProvider._();
+
+/// Auto-disposing provider for [SnippetsDao].
+
+final class SnippetsDaoProvider
+    extends $FunctionalProvider<SnippetsDao, SnippetsDao, SnippetsDao>
+    with $Provider<SnippetsDao> {
+  /// Auto-disposing provider for [SnippetsDao].
+  SnippetsDaoProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'snippetsDaoProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$snippetsDaoHash();
+
+  @$internal
+  @override
+  $ProviderElement<SnippetsDao> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  SnippetsDao create(Ref ref) {
+    return snippetsDao(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(SnippetsDao value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<SnippetsDao>(value),
+    );
+  }
+}
+
+String _$snippetsDaoHash() => r'22691919cce6c9975407eeffd30271524f94b8b3';
 
 /// Auto-disposing provider for [RunbooksDao].
-///
-/// Copied from [runbooksDao].
-@ProviderFor(runbooksDao)
-final runbooksDaoProvider = AutoDisposeProvider<RunbooksDao>.internal(
-  runbooksDao,
-  name: r'runbooksDaoProvider',
-  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-      ? null
-      : _$runbooksDaoHash,
-  dependencies: null,
-  allTransitiveDependencies: null,
-);
 
-@Deprecated('Will be removed in 3.0. Use Ref instead')
-// ignore: unused_element
-typedef RunbooksDaoRef = AutoDisposeProviderRef<RunbooksDao>;
-String _$encryptionEngineHash() => r'58ded91841741bdc73df7d108861ee2238813ac3';
+@ProviderFor(runbooksDao)
+final runbooksDaoProvider = RunbooksDaoProvider._();
+
+/// Auto-disposing provider for [RunbooksDao].
+
+final class RunbooksDaoProvider
+    extends $FunctionalProvider<RunbooksDao, RunbooksDao, RunbooksDao>
+    with $Provider<RunbooksDao> {
+  /// Auto-disposing provider for [RunbooksDao].
+  RunbooksDaoProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'runbooksDaoProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$runbooksDaoHash();
+
+  @$internal
+  @override
+  $ProviderElement<RunbooksDao> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  RunbooksDao create(Ref ref) {
+    return runbooksDao(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(RunbooksDao value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<RunbooksDao>(value),
+    );
+  }
+}
+
+String _$runbooksDaoHash() => r'59560463966bf8bf51483ce42bee80aa59c87e28';
 
 /// Provider for [EncryptionEngine].
-///
-/// Copied from [encryptionEngine].
-@ProviderFor(encryptionEngine)
-final encryptionEngineProvider = AutoDisposeProvider<EncryptionEngine>.internal(
-  encryptionEngine,
-  name: r'encryptionEngineProvider',
-  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-      ? null
-      : _$encryptionEngineHash,
-  dependencies: null,
-  allTransitiveDependencies: null,
-);
 
-@Deprecated('Will be removed in 3.0. Use Ref instead')
-// ignore: unused_element
-typedef EncryptionEngineRef = AutoDisposeProviderRef<EncryptionEngine>;
-String _$secureStorageServiceHash() =>
-    r'28ef5a96de61720fa06a7ba59ceb572a1791b078';
+@ProviderFor(encryptionEngine)
+final encryptionEngineProvider = EncryptionEngineProvider._();
+
+/// Provider for [EncryptionEngine].
+
+final class EncryptionEngineProvider
+    extends
+        $FunctionalProvider<
+          EncryptionEngine,
+          EncryptionEngine,
+          EncryptionEngine
+        >
+    with $Provider<EncryptionEngine> {
+  /// Provider for [EncryptionEngine].
+  EncryptionEngineProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'encryptionEngineProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$encryptionEngineHash();
+
+  @$internal
+  @override
+  $ProviderElement<EncryptionEngine> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  EncryptionEngine create(Ref ref) {
+    return encryptionEngine(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(EncryptionEngine value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<EncryptionEngine>(value),
+    );
+  }
+}
+
+String _$encryptionEngineHash() => r'0e9c339ef18e10bc1703076e3e2a8e10a8e2b0f8';
 
 /// Provider for [SecureStorageService].
-///
-/// Copied from [secureStorageService].
-@ProviderFor(secureStorageService)
-final secureStorageServiceProvider =
-    AutoDisposeProvider<SecureStorageService>.internal(
-      secureStorageService,
-      name: r'secureStorageServiceProvider',
-      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-          ? null
-          : _$secureStorageServiceHash,
-      dependencies: null,
-      allTransitiveDependencies: null,
-    );
 
-@Deprecated('Will be removed in 3.0. Use Ref instead')
-// ignore: unused_element
-typedef SecureStorageServiceRef = AutoDisposeProviderRef<SecureStorageService>;
-// ignore_for_file: type=lint
-// ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package
+@ProviderFor(secureStorageService)
+final secureStorageServiceProvider = SecureStorageServiceProvider._();
+
+/// Provider for [SecureStorageService].
+
+final class SecureStorageServiceProvider
+    extends
+        $FunctionalProvider<
+          SecureStorageService,
+          SecureStorageService,
+          SecureStorageService
+        >
+    with $Provider<SecureStorageService> {
+  /// Provider for [SecureStorageService].
+  SecureStorageServiceProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'secureStorageServiceProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$secureStorageServiceHash();
+
+  @$internal
+  @override
+  $ProviderElement<SecureStorageService> $createElement(
+    $ProviderPointer pointer,
+  ) => $ProviderElement(pointer);
+
+  @override
+  SecureStorageService create(Ref ref) {
+    return secureStorageService(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(SecureStorageService value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<SecureStorageService>(value),
+    );
+  }
+}
+
+String _$secureStorageServiceHash() =>
+    r'0295e42b0c2763787b4b230961936eabcd0d0877';

@@ -62,7 +62,7 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
           return ('Executed: $command\nStatus: OK', 0);
         };
 
-    final result = await ref.read(runbooksNotifierProvider.notifier).executeRunbook(
+    final result = await ref.read(runbooksProvider.notifier).executeRunbook(
       runbook,
       commandRunner,
       variableValues: variableValues,
@@ -162,7 +162,7 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final runbooksAsync = ref.watch(runbooksNotifierProvider);
+    final runbooksAsync = ref.watch(runbooksProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -178,7 +178,7 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
                 workspaceId: widget.workspaceId,
               );
               if (newRunbook != null) {
-                ref.read(runbooksNotifierProvider.notifier).addRunbook(
+                ref.read(runbooksProvider.notifier).addRunbook(
                       workspaceId: newRunbook.workspaceId,
                       title: newRunbook.title,
                       description: newRunbook.description,
@@ -241,12 +241,12 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
                               );
                               if (updated != null) {
                                 ref
-                                    .read(runbooksNotifierProvider.notifier)
+                                    .read(runbooksProvider.notifier)
                                     .updateRunbook(updated);
                               }
                             } else if (val == 'delete') {
                               ref
-                                  .read(runbooksNotifierProvider.notifier)
+                                  .read(runbooksProvider.notifier)
                                   .deleteRunbook(runbook.id);
                             }
                           },

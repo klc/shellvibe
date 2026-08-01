@@ -53,7 +53,7 @@ void main() {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
-      await container.read(settingsNotifierProvider.future);
+      await container.read(settingsProvider.future);
 
       await tester.pumpWidget(
         UncontrolledProviderScope(
@@ -68,7 +68,7 @@ void main() {
       await tester.pump();
       expect(find.byType(TerminalView), findsOneWidget);
 
-      final settingsNotifier = container.read(settingsNotifierProvider.notifier);
+      final settingsNotifier = container.read(settingsProvider.notifier);
 
       await settingsNotifier.setPalette(AppPalette.catppuccin);
       await tester.pump();

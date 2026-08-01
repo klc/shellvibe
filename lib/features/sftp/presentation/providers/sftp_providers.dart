@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -54,7 +53,7 @@ SftpService sftpService(Ref ref) {
 /// transfers are in flight, failing them mid-write and wiping the queue.
 @Riverpod(keepAlive: true)
 SftpTransferQueueWorker sftpTransferQueueWorker(
-  SftpTransferQueueWorkerRef ref,
+  Ref ref,
 ) {
   final worker = SftpTransferQueueWorker();
   ref.onDispose(() {

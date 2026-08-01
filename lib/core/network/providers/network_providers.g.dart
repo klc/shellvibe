@@ -6,346 +6,307 @@ part of 'network_providers.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$sshSessionManagerHash() => r'da3af5bfd09b4df5470b875700e0ce3671cb8c64';
+// GENERATED CODE - DO NOT MODIFY BY HAND
+// ignore_for_file: type=lint, type=warning
+/// Provider for [SSHSessionManager].
+/// Note: [TerminalTabSession] instances instantiate dedicated [SSHSessionManager]
+/// instances per connection to ensure tabs do not share SSH clients/sockets.
+
+@ProviderFor(sshSessionManager)
+final sshSessionManagerProvider = SshSessionManagerProvider._();
 
 /// Provider for [SSHSessionManager].
 /// Note: [TerminalTabSession] instances instantiate dedicated [SSHSessionManager]
 /// instances per connection to ensure tabs do not share SSH clients/sockets.
-///
-/// Copied from [sshSessionManager].
-@ProviderFor(sshSessionManager)
-final sshSessionManagerProvider =
-    AutoDisposeProvider<SSHSessionManager>.internal(
-      sshSessionManager,
-      name: r'sshSessionManagerProvider',
-      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-          ? null
-          : _$sshSessionManagerHash,
-      dependencies: null,
-      allTransitiveDependencies: null,
-    );
 
-@Deprecated('Will be removed in 3.0. Use Ref instead')
-// ignore: unused_element
-typedef SshSessionManagerRef = AutoDisposeProviderRef<SSHSessionManager>;
-String _$localPtyManagerHash() => r'6f94bf8a4b43f26d026679b597c932f75e826765';
+final class SshSessionManagerProvider
+    extends
+        $FunctionalProvider<
+          SSHSessionManager,
+          SSHSessionManager,
+          SSHSessionManager
+        >
+    with $Provider<SSHSessionManager> {
+  /// Provider for [SSHSessionManager].
+  /// Note: [TerminalTabSession] instances instantiate dedicated [SSHSessionManager]
+  /// instances per connection to ensure tabs do not share SSH clients/sockets.
+  SshSessionManagerProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'sshSessionManagerProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$sshSessionManagerHash();
+
+  @$internal
+  @override
+  $ProviderElement<SSHSessionManager> $createElement(
+    $ProviderPointer pointer,
+  ) => $ProviderElement(pointer);
+
+  @override
+  SSHSessionManager create(Ref ref) {
+    return sshSessionManager(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(SSHSessionManager value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<SSHSessionManager>(value),
+    );
+  }
+}
+
+String _$sshSessionManagerHash() => r'8cc894adfd88a46cd733a95b97f7df9f40b2a337';
 
 /// Auto-disposing provider for [LocalPtyManager].
-///
-/// Copied from [localPtyManager].
+
 @ProviderFor(localPtyManager)
-final localPtyManagerProvider = AutoDisposeProvider<LocalPtyManager>.internal(
-  localPtyManager,
-  name: r'localPtyManagerProvider',
-  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-      ? null
-      : _$localPtyManagerHash,
-  dependencies: null,
-  allTransitiveDependencies: null,
-);
+final localPtyManagerProvider = LocalPtyManagerProvider._();
 
-@Deprecated('Will be removed in 3.0. Use Ref instead')
-// ignore: unused_element
-typedef LocalPtyManagerRef = AutoDisposeProviderRef<LocalPtyManager>;
-String _$terminalSSHBridgeHash() => r'be164f244f445ec4e06c6be9c01f70f39d8c49e1';
+/// Auto-disposing provider for [LocalPtyManager].
 
-/// Copied from Dart SDK
-class _SystemHash {
-  _SystemHash._();
+final class LocalPtyManagerProvider
+    extends
+        $FunctionalProvider<LocalPtyManager, LocalPtyManager, LocalPtyManager>
+    with $Provider<LocalPtyManager> {
+  /// Auto-disposing provider for [LocalPtyManager].
+  LocalPtyManagerProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'localPtyManagerProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
 
-  static int combine(int hash, int value) {
-    // ignore: parameter_assignments
-    hash = 0x1fffffff & (hash + value);
-    // ignore: parameter_assignments
-    hash = 0x1fffffff & (hash + ((0x0007ffff & hash) << 10));
-    return hash ^ (hash >> 6);
+  @override
+  String debugGetCreateSourceHash() => _$localPtyManagerHash();
+
+  @$internal
+  @override
+  $ProviderElement<LocalPtyManager> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  LocalPtyManager create(Ref ref) {
+    return localPtyManager(ref);
   }
 
-  static int finish(int hash) {
-    // ignore: parameter_assignments
-    hash = 0x1fffffff & (hash + ((0x03ffffff & hash) << 3));
-    // ignore: parameter_assignments
-    hash = hash ^ (hash >> 11);
-    return 0x1fffffff & (hash + ((0x00003fff & hash) << 15));
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(LocalPtyManager value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<LocalPtyManager>(value),
+    );
   }
 }
 
+String _$localPtyManagerHash() => r'586576942c0a03be027627397f97981964ea0dc6';
+
 /// Auto-disposing family provider for [TerminalSSHBridge].
 /// Cleanly disposes stream subscriptions and session resources when disposed.
-///
-/// Copied from [terminalSSHBridge].
+
 @ProviderFor(terminalSSHBridge)
-const terminalSSHBridgeProvider = TerminalSSHBridgeFamily();
+final terminalSSHBridgeProvider = TerminalSSHBridgeFamily._();
 
 /// Auto-disposing family provider for [TerminalSSHBridge].
 /// Cleanly disposes stream subscriptions and session resources when disposed.
-///
-/// Copied from [terminalSSHBridge].
-class TerminalSSHBridgeFamily extends Family<TerminalSSHBridge> {
-  /// Auto-disposing family provider for [TerminalSSHBridge].
-  /// Cleanly disposes stream subscriptions and session resources when disposed.
-  ///
-  /// Copied from [terminalSSHBridge].
-  const TerminalSSHBridgeFamily();
 
+final class TerminalSSHBridgeProvider
+    extends
+        $FunctionalProvider<
+          TerminalSSHBridge,
+          TerminalSSHBridge,
+          TerminalSSHBridge
+        >
+    with $Provider<TerminalSSHBridge> {
   /// Auto-disposing family provider for [TerminalSSHBridge].
   /// Cleanly disposes stream subscriptions and session resources when disposed.
-  ///
-  /// Copied from [terminalSSHBridge].
-  TerminalSSHBridgeProvider call(TerminalSSHBridgeParams params) {
-    return TerminalSSHBridgeProvider(params);
+  TerminalSSHBridgeProvider._({
+    required TerminalSSHBridgeFamily super.from,
+    required TerminalSSHBridgeParams super.argument,
+  }) : super(
+         retry: null,
+         name: r'terminalSSHBridgeProvider',
+         isAutoDispose: true,
+         dependencies: null,
+         $allTransitiveDependencies: null,
+       );
+
+  @override
+  String debugGetCreateSourceHash() => _$terminalSSHBridgeHash();
+
+  @override
+  String toString() {
+    return r'terminalSSHBridgeProvider'
+        ''
+        '($argument)';
+  }
+
+  @$internal
+  @override
+  $ProviderElement<TerminalSSHBridge> $createElement(
+    $ProviderPointer pointer,
+  ) => $ProviderElement(pointer);
+
+  @override
+  TerminalSSHBridge create(Ref ref) {
+    final argument = this.argument as TerminalSSHBridgeParams;
+    return terminalSSHBridge(ref, argument);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(TerminalSSHBridge value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<TerminalSSHBridge>(value),
+    );
   }
 
   @override
-  TerminalSSHBridgeProvider getProviderOverride(
-    covariant TerminalSSHBridgeProvider provider,
-  ) {
-    return call(provider.params);
+  bool operator ==(Object other) {
+    return other is TerminalSSHBridgeProvider && other.argument == argument;
   }
 
-  static const Iterable<ProviderOrFamily>? _dependencies = null;
-
   @override
-  Iterable<ProviderOrFamily>? get dependencies => _dependencies;
-
-  static const Iterable<ProviderOrFamily>? _allTransitiveDependencies = null;
-
-  @override
-  Iterable<ProviderOrFamily>? get allTransitiveDependencies =>
-      _allTransitiveDependencies;
-
-  @override
-  String? get name => r'terminalSSHBridgeProvider';
+  int get hashCode {
+    return argument.hashCode;
+  }
 }
 
+String _$terminalSSHBridgeHash() => r'c9e461908673827ee91ab24f2dddb85115d21dc0';
+
 /// Auto-disposing family provider for [TerminalSSHBridge].
 /// Cleanly disposes stream subscriptions and session resources when disposed.
-///
-/// Copied from [terminalSSHBridge].
-class TerminalSSHBridgeProvider extends AutoDisposeProvider<TerminalSSHBridge> {
-  /// Auto-disposing family provider for [TerminalSSHBridge].
-  /// Cleanly disposes stream subscriptions and session resources when disposed.
-  ///
-  /// Copied from [terminalSSHBridge].
-  TerminalSSHBridgeProvider(TerminalSSHBridgeParams params)
-    : this._internal(
-        (ref) => terminalSSHBridge(ref as TerminalSSHBridgeRef, params),
-        from: terminalSSHBridgeProvider,
+
+final class TerminalSSHBridgeFamily extends $Family
+    with $FunctionalFamilyOverride<TerminalSSHBridge, TerminalSSHBridgeParams> {
+  TerminalSSHBridgeFamily._()
+    : super(
+        retry: null,
         name: r'terminalSSHBridgeProvider',
-        debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-            ? null
-            : _$terminalSSHBridgeHash,
-        dependencies: TerminalSSHBridgeFamily._dependencies,
-        allTransitiveDependencies:
-            TerminalSSHBridgeFamily._allTransitiveDependencies,
-        params: params,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+        isAutoDispose: true,
       );
 
-  TerminalSSHBridgeProvider._internal(
-    super._createNotifier, {
-    required super.name,
-    required super.dependencies,
-    required super.allTransitiveDependencies,
-    required super.debugGetCreateSourceHash,
-    required super.from,
-    required this.params,
-  }) : super.internal();
+  /// Auto-disposing family provider for [TerminalSSHBridge].
+  /// Cleanly disposes stream subscriptions and session resources when disposed.
 
-  final TerminalSSHBridgeParams params;
+  TerminalSSHBridgeProvider call(TerminalSSHBridgeParams params) =>
+      TerminalSSHBridgeProvider._(argument: params, from: this);
 
   @override
-  Override overrideWith(
-    TerminalSSHBridge Function(TerminalSSHBridgeRef provider) create,
-  ) {
-    return ProviderOverride(
-      origin: this,
-      override: TerminalSSHBridgeProvider._internal(
-        (ref) => create(ref as TerminalSSHBridgeRef),
-        from: from,
-        name: null,
-        dependencies: null,
-        allTransitiveDependencies: null,
-        debugGetCreateSourceHash: null,
-        params: params,
-      ),
-    );
-  }
-
-  @override
-  AutoDisposeProviderElement<TerminalSSHBridge> createElement() {
-    return _TerminalSSHBridgeProviderElement(this);
-  }
-
-  @override
-  bool operator ==(Object other) {
-    return other is TerminalSSHBridgeProvider && other.params == params;
-  }
-
-  @override
-  int get hashCode {
-    var hash = _SystemHash.combine(0, runtimeType.hashCode);
-    hash = _SystemHash.combine(hash, params.hashCode);
-
-    return _SystemHash.finish(hash);
-  }
+  String toString() => r'terminalSSHBridgeProvider';
 }
-
-@Deprecated('Will be removed in 3.0. Use Ref instead')
-// ignore: unused_element
-mixin TerminalSSHBridgeRef on AutoDisposeProviderRef<TerminalSSHBridge> {
-  /// The parameter `params` of this provider.
-  TerminalSSHBridgeParams get params;
-}
-
-class _TerminalSSHBridgeProviderElement
-    extends AutoDisposeProviderElement<TerminalSSHBridge>
-    with TerminalSSHBridgeRef {
-  _TerminalSSHBridgeProviderElement(super.provider);
-
-  @override
-  TerminalSSHBridgeParams get params =>
-      (origin as TerminalSSHBridgeProvider).params;
-}
-
-String _$terminalPtyBridgeHash() => r'2e1b05c481c71f813ebb77db82651370c3eb9b4e';
 
 /// Auto-disposing family provider for [TerminalLocalPtyBridge].
 /// Cleanly disposes PTY stream subscriptions and process resources when disposed.
-///
-/// Copied from [terminalPtyBridge].
+
 @ProviderFor(terminalPtyBridge)
-const terminalPtyBridgeProvider = TerminalPtyBridgeFamily();
+final terminalPtyBridgeProvider = TerminalPtyBridgeFamily._();
 
 /// Auto-disposing family provider for [TerminalLocalPtyBridge].
 /// Cleanly disposes PTY stream subscriptions and process resources when disposed.
-///
-/// Copied from [terminalPtyBridge].
-class TerminalPtyBridgeFamily extends Family<TerminalLocalPtyBridge> {
-  /// Auto-disposing family provider for [TerminalLocalPtyBridge].
-  /// Cleanly disposes PTY stream subscriptions and process resources when disposed.
-  ///
-  /// Copied from [terminalPtyBridge].
-  const TerminalPtyBridgeFamily();
 
+final class TerminalPtyBridgeProvider
+    extends
+        $FunctionalProvider<
+          TerminalLocalPtyBridge,
+          TerminalLocalPtyBridge,
+          TerminalLocalPtyBridge
+        >
+    with $Provider<TerminalLocalPtyBridge> {
   /// Auto-disposing family provider for [TerminalLocalPtyBridge].
   /// Cleanly disposes PTY stream subscriptions and process resources when disposed.
-  ///
-  /// Copied from [terminalPtyBridge].
-  TerminalPtyBridgeProvider call(TerminalPtyBridgeParams params) {
-    return TerminalPtyBridgeProvider(params);
+  TerminalPtyBridgeProvider._({
+    required TerminalPtyBridgeFamily super.from,
+    required TerminalPtyBridgeParams super.argument,
+  }) : super(
+         retry: null,
+         name: r'terminalPtyBridgeProvider',
+         isAutoDispose: true,
+         dependencies: null,
+         $allTransitiveDependencies: null,
+       );
+
+  @override
+  String debugGetCreateSourceHash() => _$terminalPtyBridgeHash();
+
+  @override
+  String toString() {
+    return r'terminalPtyBridgeProvider'
+        ''
+        '($argument)';
   }
 
+  @$internal
   @override
-  TerminalPtyBridgeProvider getProviderOverride(
-    covariant TerminalPtyBridgeProvider provider,
-  ) {
-    return call(provider.params);
+  $ProviderElement<TerminalLocalPtyBridge> $createElement(
+    $ProviderPointer pointer,
+  ) => $ProviderElement(pointer);
+
+  @override
+  TerminalLocalPtyBridge create(Ref ref) {
+    final argument = this.argument as TerminalPtyBridgeParams;
+    return terminalPtyBridge(ref, argument);
   }
 
-  static const Iterable<ProviderOrFamily>? _dependencies = null;
-
-  @override
-  Iterable<ProviderOrFamily>? get dependencies => _dependencies;
-
-  static const Iterable<ProviderOrFamily>? _allTransitiveDependencies = null;
-
-  @override
-  Iterable<ProviderOrFamily>? get allTransitiveDependencies =>
-      _allTransitiveDependencies;
-
-  @override
-  String? get name => r'terminalPtyBridgeProvider';
-}
-
-/// Auto-disposing family provider for [TerminalLocalPtyBridge].
-/// Cleanly disposes PTY stream subscriptions and process resources when disposed.
-///
-/// Copied from [terminalPtyBridge].
-class TerminalPtyBridgeProvider
-    extends AutoDisposeProvider<TerminalLocalPtyBridge> {
-  /// Auto-disposing family provider for [TerminalLocalPtyBridge].
-  /// Cleanly disposes PTY stream subscriptions and process resources when disposed.
-  ///
-  /// Copied from [terminalPtyBridge].
-  TerminalPtyBridgeProvider(TerminalPtyBridgeParams params)
-    : this._internal(
-        (ref) => terminalPtyBridge(ref as TerminalPtyBridgeRef, params),
-        from: terminalPtyBridgeProvider,
-        name: r'terminalPtyBridgeProvider',
-        debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-            ? null
-            : _$terminalPtyBridgeHash,
-        dependencies: TerminalPtyBridgeFamily._dependencies,
-        allTransitiveDependencies:
-            TerminalPtyBridgeFamily._allTransitiveDependencies,
-        params: params,
-      );
-
-  TerminalPtyBridgeProvider._internal(
-    super._createNotifier, {
-    required super.name,
-    required super.dependencies,
-    required super.allTransitiveDependencies,
-    required super.debugGetCreateSourceHash,
-    required super.from,
-    required this.params,
-  }) : super.internal();
-
-  final TerminalPtyBridgeParams params;
-
-  @override
-  Override overrideWith(
-    TerminalLocalPtyBridge Function(TerminalPtyBridgeRef provider) create,
-  ) {
-    return ProviderOverride(
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(TerminalLocalPtyBridge value) {
+    return $ProviderOverride(
       origin: this,
-      override: TerminalPtyBridgeProvider._internal(
-        (ref) => create(ref as TerminalPtyBridgeRef),
-        from: from,
-        name: null,
-        dependencies: null,
-        allTransitiveDependencies: null,
-        debugGetCreateSourceHash: null,
-        params: params,
-      ),
+      providerOverride: $SyncValueProvider<TerminalLocalPtyBridge>(value),
     );
   }
 
   @override
-  AutoDisposeProviderElement<TerminalLocalPtyBridge> createElement() {
-    return _TerminalPtyBridgeProviderElement(this);
-  }
-
-  @override
   bool operator ==(Object other) {
-    return other is TerminalPtyBridgeProvider && other.params == params;
+    return other is TerminalPtyBridgeProvider && other.argument == argument;
   }
 
   @override
   int get hashCode {
-    var hash = _SystemHash.combine(0, runtimeType.hashCode);
-    hash = _SystemHash.combine(hash, params.hashCode);
-
-    return _SystemHash.finish(hash);
+    return argument.hashCode;
   }
 }
 
-@Deprecated('Will be removed in 3.0. Use Ref instead')
-// ignore: unused_element
-mixin TerminalPtyBridgeRef on AutoDisposeProviderRef<TerminalLocalPtyBridge> {
-  /// The parameter `params` of this provider.
-  TerminalPtyBridgeParams get params;
-}
+String _$terminalPtyBridgeHash() => r'51bc0a650e5cc48e3b936d831ac24cd712d83445';
 
-class _TerminalPtyBridgeProviderElement
-    extends AutoDisposeProviderElement<TerminalLocalPtyBridge>
-    with TerminalPtyBridgeRef {
-  _TerminalPtyBridgeProviderElement(super.provider);
+/// Auto-disposing family provider for [TerminalLocalPtyBridge].
+/// Cleanly disposes PTY stream subscriptions and process resources when disposed.
+
+final class TerminalPtyBridgeFamily extends $Family
+    with
+        $FunctionalFamilyOverride<
+          TerminalLocalPtyBridge,
+          TerminalPtyBridgeParams
+        > {
+  TerminalPtyBridgeFamily._()
+    : super(
+        retry: null,
+        name: r'terminalPtyBridgeProvider',
+        dependencies: null,
+        $allTransitiveDependencies: null,
+        isAutoDispose: true,
+      );
+
+  /// Auto-disposing family provider for [TerminalLocalPtyBridge].
+  /// Cleanly disposes PTY stream subscriptions and process resources when disposed.
+
+  TerminalPtyBridgeProvider call(TerminalPtyBridgeParams params) =>
+      TerminalPtyBridgeProvider._(argument: params, from: this);
 
   @override
-  TerminalPtyBridgeParams get params =>
-      (origin as TerminalPtyBridgeProvider).params;
+  String toString() => r'terminalPtyBridgeProvider';
 }
-
-// ignore_for_file: type=lint
-// ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

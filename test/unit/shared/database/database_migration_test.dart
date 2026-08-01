@@ -60,7 +60,7 @@ void main() {
         INSERT INTO hosts (id, workspace_id, label, hostname, port, protocol, created_at)
         VALUES ('host-v1', 'ws-1', 'Legacy Host', '10.0.0.1', 22, 'ssh', 1600000000);
       ''');
-      rawDb.dispose();
+      rawDb.close();
 
       // 2. Open the database using AppDatabase (which is at schemaVersion 2).
       final appDb = AppDatabase(NativeDatabase(tempDbFile));
@@ -126,7 +126,7 @@ void main() {
         'INSERT INTO known_hosts (id, hostname, port, key_type, fingerprint_sha256, first_seen_at) '
         "VALUES ('kh-new', 'new.example.com', 22, 'ssh-ed25519', '$plainFingerprint', 1600000000);",
       );
-      rawDb.dispose();
+      rawDb.close();
 
       final appDb = AppDatabase(NativeDatabase(tempDbFile));
       db = appDb;

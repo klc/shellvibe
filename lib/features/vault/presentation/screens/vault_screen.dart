@@ -19,7 +19,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final identitiesAsync = ref.watch(identitiesNotifierProvider);
+    final identitiesAsync = ref.watch(identitiesProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -98,7 +98,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
     IdentityModel? decrypted;
     try {
       decrypted =
-          await ref.read(identitiesNotifierProvider.notifier).getDecryptedIdentity(item.id);
+          await ref.read(identitiesProvider.notifier).getDecryptedIdentity(item.id);
     } catch (e) {
       // Opening the form with silently blank secrets would overwrite the stored
       // ones on save, so refuse instead.
@@ -137,7 +137,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
 
     if (confirm == true && mounted) {
       try {
-        await ref.read(identitiesNotifierProvider.notifier).deleteIdentity(item.id);
+        await ref.read(identitiesProvider.notifier).deleteIdentity(item.id);
       } catch (e) {
         if (context.mounted) {
           ShadToaster.of(context).show(
@@ -222,7 +222,7 @@ class _IdentityTile extends ConsumerWidget {
                     IdentityModel? decrypted;
                     try {
                       decrypted = await ref
-                          .read(identitiesNotifierProvider.notifier)
+                          .read(identitiesProvider.notifier)
                           .getDecryptedIdentity(identity.id);
                     } catch (e) {
                       if (context.mounted) {
@@ -237,7 +237,7 @@ class _IdentityTile extends ConsumerWidget {
                     final secret = isPassword ? decrypted?.password : decrypted?.privateKey;
 
                     if (secret != null && secret.isNotEmpty) {
-                      final settings = ref.read(settingsNotifierProvider).value;
+                      final settings = ref.read(settingsProvider).value;
                       final clearSeconds = settings?.clipboardAutoClearSeconds ?? 30;
                       final autoClearService = ref.read(clipboardAutoClearServiceProvider);
                       await autoClearService.copyAndScheduleClear(

@@ -13,7 +13,7 @@ part 'database_providers.g.dart';
 
 /// Provides a single instance of [AppDatabase].
 @Riverpod(keepAlive: true)
-AppDatabase appDatabase(AppDatabaseRef ref) {
+AppDatabase appDatabase(Ref ref) {
   final db = AppDatabase();
   ref.onDispose(() {
     db.close();
@@ -23,55 +23,55 @@ AppDatabase appDatabase(AppDatabaseRef ref) {
 
 /// Auto-disposing provider for [KnownHostsDao].
 @riverpod
-KnownHostsDao knownHostsDao(KnownHostsDaoRef ref) {
+KnownHostsDao knownHostsDao(Ref ref) {
   final db = ref.watch(appDatabaseProvider);
   return db.knownHostsDao;
 }
 
 /// Auto-disposing provider for [HostsDao].
 @riverpod
-HostsDao hostsDao(HostsDaoRef ref) {
+HostsDao hostsDao(Ref ref) {
   final db = ref.watch(appDatabaseProvider);
   return db.hostsDao;
 }
 
 /// Auto-disposing provider for [IdentitiesDao].
 @riverpod
-IdentitiesDao identitiesDao(IdentitiesDaoRef ref) {
+IdentitiesDao identitiesDao(Ref ref) {
   final db = ref.watch(appDatabaseProvider);
   return db.identitiesDao;
 }
 
 /// Auto-disposing provider for [TunnelsDao].
 @riverpod
-TunnelsDao tunnelsDao(TunnelsDaoRef ref) {
+TunnelsDao tunnelsDao(Ref ref) {
   final db = ref.watch(appDatabaseProvider);
   return db.tunnelsDao;
 }
 
 /// Auto-disposing provider for [SnippetsDao].
 @riverpod
-SnippetsDao snippetsDao(SnippetsDaoRef ref) {
+SnippetsDao snippetsDao(Ref ref) {
   final db = ref.watch(appDatabaseProvider);
   return db.snippetsDao;
 }
 
 /// Auto-disposing provider for [RunbooksDao].
 @riverpod
-RunbooksDao runbooksDao(RunbooksDaoRef ref) {
+RunbooksDao runbooksDao(Ref ref) {
   final db = ref.watch(appDatabaseProvider);
   return db.runbooksDao;
 }
 
 /// Provider for [EncryptionEngine].
 @riverpod
-EncryptionEngine encryptionEngine(EncryptionEngineRef ref) {
+EncryptionEngine encryptionEngine(Ref ref) {
   return EncryptionEngine();
 }
 
 /// Provider for [SecureStorageService].
 @riverpod
-SecureStorageService secureStorageService(SecureStorageServiceRef ref) {
+SecureStorageService secureStorageService(Ref ref) {
   return SecureStorageService();
 }
 

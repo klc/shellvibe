@@ -6,85 +6,202 @@ part of 'identities_notifier.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$vaultKeyServiceHash() => r'0251518b091852e50a3f769d8741ac22a27983d2';
+// GENERATED CODE - DO NOT MODIFY BY HAND
+// ignore_for_file: type=lint, type=warning
+/// Single app-wide owner of the vault Data Encryption Key.
+///
+/// Must be [Riverpod(keepAlive: true)]: the unwrapped DEK lives in this
+/// instance's memory, so disposing it would silently re-lock the vault.
+
+@ProviderFor(vaultKeyService)
+final vaultKeyServiceProvider = VaultKeyServiceProvider._();
 
 /// Single app-wide owner of the vault Data Encryption Key.
 ///
 /// Must be [Riverpod(keepAlive: true)]: the unwrapped DEK lives in this
 /// instance's memory, so disposing it would silently re-lock the vault.
-///
-/// Copied from [vaultKeyService].
-@ProviderFor(vaultKeyService)
-final vaultKeyServiceProvider = Provider<VaultKeyService>.internal(
-  vaultKeyService,
-  name: r'vaultKeyServiceProvider',
-  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-      ? null
-      : _$vaultKeyServiceHash,
-  dependencies: null,
-  allTransitiveDependencies: null,
-);
 
-@Deprecated('Will be removed in 3.0. Use Ref instead')
-// ignore: unused_element
-typedef VaultKeyServiceRef = ProviderRef<VaultKeyService>;
-String _$e2eeCloudSyncServiceHash() =>
-    r'0955726e4637d33dca33e9f46be8173438123481';
+final class VaultKeyServiceProvider
+    extends
+        $FunctionalProvider<VaultKeyService, VaultKeyService, VaultKeyService>
+    with $Provider<VaultKeyService> {
+  /// Single app-wide owner of the vault Data Encryption Key.
+  ///
+  /// Must be [Riverpod(keepAlive: true)]: the unwrapped DEK lives in this
+  /// instance's memory, so disposing it would silently re-lock the vault.
+  VaultKeyServiceProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'vaultKeyServiceProvider',
+        isAutoDispose: false,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$vaultKeyServiceHash();
+
+  @$internal
+  @override
+  $ProviderElement<VaultKeyService> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  VaultKeyService create(Ref ref) {
+    return vaultKeyService(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(VaultKeyService value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<VaultKeyService>(value),
+    );
+  }
+}
+
+String _$vaultKeyServiceHash() => r'caadb88781a273b41c629f9b10b13975fbacfc9f';
 
 /// E2EE backup service. Needs the vault key to make backups self-contained.
-///
-/// Copied from [e2eeCloudSyncService].
+
 @ProviderFor(e2eeCloudSyncService)
-final e2eeCloudSyncServiceProvider =
-    AutoDisposeProvider<E2EECloudSyncService>.internal(
-      e2eeCloudSyncService,
-      name: r'e2eeCloudSyncServiceProvider',
-      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-          ? null
-          : _$e2eeCloudSyncServiceHash,
-      dependencies: null,
-      allTransitiveDependencies: null,
+final e2eeCloudSyncServiceProvider = E2eeCloudSyncServiceProvider._();
+
+/// E2EE backup service. Needs the vault key to make backups self-contained.
+
+final class E2eeCloudSyncServiceProvider
+    extends
+        $FunctionalProvider<
+          E2EECloudSyncService,
+          E2EECloudSyncService,
+          E2EECloudSyncService
+        >
+    with $Provider<E2EECloudSyncService> {
+  /// E2EE backup service. Needs the vault key to make backups self-contained.
+  E2eeCloudSyncServiceProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'e2eeCloudSyncServiceProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$e2eeCloudSyncServiceHash();
+
+  @$internal
+  @override
+  $ProviderElement<E2EECloudSyncService> $createElement(
+    $ProviderPointer pointer,
+  ) => $ProviderElement(pointer);
+
+  @override
+  E2EECloudSyncService create(Ref ref) {
+    return e2eeCloudSyncService(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(E2EECloudSyncService value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<E2EECloudSyncService>(value),
     );
+  }
+}
 
-@Deprecated('Will be removed in 3.0. Use Ref instead')
-// ignore: unused_element
-typedef E2eeCloudSyncServiceRef = AutoDisposeProviderRef<E2EECloudSyncService>;
-String _$vaultRepositoryHash() => r'957541caf7aa9309d22dcae761bd8eca46a433a2';
+String _$e2eeCloudSyncServiceHash() =>
+    r'bf2f1b5423f6687f6895a033da733ebf1df434c8';
 
-/// See also [vaultRepository].
 @ProviderFor(vaultRepository)
-final vaultRepositoryProvider = AutoDisposeProvider<VaultRepository>.internal(
-  vaultRepository,
-  name: r'vaultRepositoryProvider',
-  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-      ? null
-      : _$vaultRepositoryHash,
-  dependencies: null,
-  allTransitiveDependencies: null,
-);
+final vaultRepositoryProvider = VaultRepositoryProvider._();
 
-@Deprecated('Will be removed in 3.0. Use Ref instead')
-// ignore: unused_element
-typedef VaultRepositoryRef = AutoDisposeProviderRef<VaultRepository>;
-String _$identitiesNotifierHash() =>
-    r'1d0b1c80a728c3b09e68294d3ee86702ee33bd0e';
+final class VaultRepositoryProvider
+    extends
+        $FunctionalProvider<VaultRepository, VaultRepository, VaultRepository>
+    with $Provider<VaultRepository> {
+  VaultRepositoryProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'vaultRepositoryProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
 
-/// See also [IdentitiesNotifier].
-@ProviderFor(IdentitiesNotifier)
-final identitiesNotifierProvider =
-    AutoDisposeAsyncNotifierProvider<
-      IdentitiesNotifier,
-      List<IdentityModel>
-    >.internal(
-      IdentitiesNotifier.new,
-      name: r'identitiesNotifierProvider',
-      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-          ? null
-          : _$identitiesNotifierHash,
-      dependencies: null,
-      allTransitiveDependencies: null,
+  @override
+  String debugGetCreateSourceHash() => _$vaultRepositoryHash();
+
+  @$internal
+  @override
+  $ProviderElement<VaultRepository> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  VaultRepository create(Ref ref) {
+    return vaultRepository(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(VaultRepository value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<VaultRepository>(value),
     );
+  }
+}
 
-typedef _$IdentitiesNotifier = AutoDisposeAsyncNotifier<List<IdentityModel>>;
-// ignore_for_file: type=lint
-// ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package
+String _$vaultRepositoryHash() => r'cb4a8000132776b509d5cc80e3258f00d47d1523';
+
+@ProviderFor(IdentitiesNotifier)
+final identitiesProvider = IdentitiesNotifierProvider._();
+
+final class IdentitiesNotifierProvider
+    extends $AsyncNotifierProvider<IdentitiesNotifier, List<IdentityModel>> {
+  IdentitiesNotifierProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'identitiesProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$identitiesNotifierHash();
+
+  @$internal
+  @override
+  IdentitiesNotifier create() => IdentitiesNotifier();
+}
+
+String _$identitiesNotifierHash() =>
+    r'ed24a89c16bf960b4ccbc1010644b3a54889191c';
+
+abstract class _$IdentitiesNotifier
+    extends $AsyncNotifier<List<IdentityModel>> {
+  FutureOr<List<IdentityModel>> build();
+  @$mustCallSuper
+  @override
+  WhenComplete runBuild() {
+    final ref =
+        this.ref as $Ref<AsyncValue<List<IdentityModel>>, List<IdentityModel>>;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<AsyncValue<List<IdentityModel>>, List<IdentityModel>>,
+              AsyncValue<List<IdentityModel>>,
+              Object?,
+              Object?
+            >;
+    return element.handleCreate(ref, build);
+  }
+}

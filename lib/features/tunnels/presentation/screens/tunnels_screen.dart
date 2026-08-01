@@ -51,7 +51,7 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
 
     if (rule != null) {
       try {
-        await ref.read(tunnelsNotifierProvider.notifier).addRule(rule);
+        await ref.read(tunnelsProvider.notifier).addRule(rule);
       } catch (e) {
         if (mounted) {
           ShadToaster.of(context).show(
@@ -74,7 +74,7 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
     if (updatedRule != null) {
       try {
         await ref
-            .read(tunnelsNotifierProvider.notifier)
+            .read(tunnelsProvider.notifier)
             .updateRule(updatedRule);
       } catch (e) {
         if (mounted) {
@@ -91,7 +91,7 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(tunnelsNotifierProvider);
+    final state = ref.watch(tunnelsProvider);
     final activeTunnelsAsync = ref.watch(activeTunnelsStreamProvider);
     final colorScheme = ShadTheme.of(context).colorScheme;
 
@@ -122,7 +122,7 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh Rules',
             onPressed: () => ref
-                .read(tunnelsNotifierProvider.notifier)
+                .read(tunnelsProvider.notifier)
                 .loadRules(widget.filterHostId),
           ),
         ],
@@ -276,12 +276,12 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
                   value: isActive,
                   activeThumbColor: Colors.greenAccent,
                   onChanged: (value) async {
-                    final notifier = ref.read(tunnelsNotifierProvider.notifier);
+                    final notifier = ref.read(tunnelsProvider.notifier);
                     if (value) {
                       final activeClient =
                           widget.activeSshClient ??
                           ref
-                              .read(terminalTabsNotifierProvider)
+                              .read(terminalTabsProvider)
                               .activeTab
                               ?.sshSessionManager
                               ?.client;
@@ -307,7 +307,7 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
                     if (val == 'edit') _openEditRuleDialog(rule);
                     if (val == 'delete') {
                       ref
-                          .read(tunnelsNotifierProvider.notifier)
+                          .read(tunnelsProvider.notifier)
                           .deleteRule(rule.id);
                     }
                   },

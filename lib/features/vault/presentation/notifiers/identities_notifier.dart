@@ -13,7 +13,7 @@ part 'identities_notifier.g.dart';
 /// Must be [Riverpod(keepAlive: true)]: the unwrapped DEK lives in this
 /// instance's memory, so disposing it would silently re-lock the vault.
 @Riverpod(keepAlive: true)
-VaultKeyService vaultKeyService(VaultKeyServiceRef ref) {
+VaultKeyService vaultKeyService(Ref ref) {
   return VaultKeyService(
     encryptionEngine: ref.watch(encryptionEngineProvider),
     secureStorageService: ref.watch(secureStorageServiceProvider),
@@ -22,7 +22,7 @@ VaultKeyService vaultKeyService(VaultKeyServiceRef ref) {
 
 /// E2EE backup service. Needs the vault key to make backups self-contained.
 @riverpod
-E2EECloudSyncService e2eeCloudSyncService(E2eeCloudSyncServiceRef ref) {
+E2EECloudSyncService e2eeCloudSyncService(Ref ref) {
   return E2EECloudSyncService(
     vaultKeyService: ref.watch(vaultKeyServiceProvider),
     cryptoEngine: ref.watch(encryptionEngineProvider),
@@ -30,7 +30,7 @@ E2EECloudSyncService e2eeCloudSyncService(E2eeCloudSyncServiceRef ref) {
 }
 
 @riverpod
-VaultRepository vaultRepository(VaultRepositoryRef ref) {
+VaultRepository vaultRepository(Ref ref) {
   final dao = ref.watch(identitiesDaoProvider);
   final crypto = ref.watch(encryptionEngineProvider);
   return VaultRepository(
@@ -58,7 +58,6 @@ class IdentitiesNotifier extends _$IdentitiesNotifier {
     String? passphrase,
   }) async {
     final previousState = state;
-    state = AsyncLoading<List<IdentityModel>>().copyWithPrevious(previousState);
     try {
       final repo = ref.read(vaultRepositoryProvider);
       await repo.saveIdentity(
@@ -72,8 +71,8 @@ class IdentitiesNotifier extends _$IdentitiesNotifier {
       );
       final items = await repo.getAllIdentities(decryptSecrets: false);
       state = AsyncData(items);
-    } catch (e, st) {
-      state = AsyncError<List<IdentityModel>>(e, st).copyWithPrevious(previousState);
+    } catch (_) {
+      state = previousState;
       // Rethrow so the caller (e.g. the identity form) can tell the user the
       // save failed instead of closing as if it had succeeded.
       rethrow;
@@ -91,7 +90,6 @@ class IdentitiesNotifier extends _$IdentitiesNotifier {
     String? passphrase,
   }) async {
     final previousState = state;
-    state = AsyncLoading<List<IdentityModel>>().copyWithPrevious(previousState);
     try {
       final repo = ref.read(vaultRepositoryProvider);
       await repo.saveIdentity(
@@ -106,8 +104,8 @@ class IdentitiesNotifier extends _$IdentitiesNotifier {
       );
       final items = await repo.getAllIdentities(decryptSecrets: false);
       state = AsyncData(items);
-    } catch (e, st) {
-      state = AsyncError<List<IdentityModel>>(e, st).copyWithPrevious(previousState);
+    } catch (_) {
+      state = previousState;
       // Rethrow so the caller (e.g. the identity form) can tell the user the
       // save failed instead of closing as if it had succeeded.
       rethrow;
@@ -116,14 +114,13 @@ class IdentitiesNotifier extends _$IdentitiesNotifier {
 
   Future<void> deleteIdentity(String id) async {
     final previousState = state;
-    state = AsyncLoading<List<IdentityModel>>().copyWithPrevious(previousState);
     try {
       final repo = ref.read(vaultRepositoryProvider);
       await repo.deleteIdentity(id);
       final items = await repo.getAllIdentities(decryptSecrets: false);
       state = AsyncData(items);
-    } catch (e, st) {
-      state = AsyncError<List<IdentityModel>>(e, st).copyWithPrevious(previousState);
+    } catch (_) {
+      state = previousState;
       // Rethrow so the caller (e.g. the identity form) can tell the user the
       // save failed instead of closing as if it had succeeded.
       rethrow;

@@ -177,7 +177,7 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
     final workspaces = ref.watch(workspacesProvider);
 
     // Active SSH connections count
-    final terminalState = ref.watch(terminalTabsNotifierProvider);
+    final terminalState = ref.watch(terminalTabsProvider);
     final activeSshCount = terminalState.tabs.where((t) => t.isConnected).length;
 
     // Active Tunnels count
@@ -185,7 +185,7 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
     final activeTunnelsCount = activeTunnelsAsync.value?.length ?? 0;
 
     // Biometric lock status
-    final settingsAsync = ref.watch(settingsNotifierProvider);
+    final settingsAsync = ref.watch(settingsProvider);
     final isBiometricsEnabled = (settingsAsync.value?.autoLockTimerSeconds ?? 0) > 0;
 
     final isCompactHeader = MediaQuery.of(context).size.width < 600;
@@ -259,7 +259,7 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
                   style: TextStyle(color: colorScheme.foreground, fontSize: 11),
                   onChanged: (newVal) {
                     if (newVal != null) {
-                      ref.read(activeWorkspaceIdProvider.notifier).state = newVal;
+                      ref.read(activeWorkspaceIdProvider.notifier).select(newVal);
                     }
                   },
                   items: workspaces.map((ws) {

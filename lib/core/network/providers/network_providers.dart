@@ -14,14 +14,14 @@ part 'network_providers.g.dart';
 /// Note: [TerminalTabSession] instances instantiate dedicated [SSHSessionManager]
 /// instances per connection to ensure tabs do not share SSH clients/sockets.
 @riverpod
-SSHSessionManager sshSessionManager(SshSessionManagerRef ref) {
+SSHSessionManager sshSessionManager(Ref ref) {
   final dao = ref.watch(knownHostsDaoProvider);
   return SSHSessionManager(knownHostsDao: dao);
 }
 
 /// Auto-disposing provider for [LocalPtyManager].
 @riverpod
-LocalPtyManager localPtyManager(LocalPtyManagerRef ref) {
+LocalPtyManager localPtyManager(Ref ref) {
   return LocalPtyManager();
 }
 
@@ -51,7 +51,7 @@ class TerminalSSHBridgeParams {
 /// Cleanly disposes stream subscriptions and session resources when disposed.
 @riverpod
 TerminalSSHBridge terminalSSHBridge(
-  TerminalSSHBridgeRef ref,
+  Ref ref,
   TerminalSSHBridgeParams params,
 ) {
   final bridge = TerminalSSHBridge(
@@ -95,7 +95,7 @@ class TerminalPtyBridgeParams {
 /// Cleanly disposes PTY stream subscriptions and process resources when disposed.
 @riverpod
 TerminalLocalPtyBridge terminalPtyBridge(
-  TerminalPtyBridgeRef ref,
+  Ref ref,
   TerminalPtyBridgeParams params,
 ) {
   final bridge = TerminalLocalPtyBridge(

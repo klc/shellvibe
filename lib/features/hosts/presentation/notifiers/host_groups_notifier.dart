@@ -20,7 +20,6 @@ class HostGroupsNotifier extends _$HostGroupsNotifier {
     String? colorTag,
   }) async {
     final previousState = state;
-    state = AsyncLoading<List<HostGroupModel>>().copyWithPrevious(previousState);
     try {
       final repo = ref.read(hostsRepositoryProvider);
       await repo.saveHostGroup(
@@ -31,8 +30,8 @@ class HostGroupsNotifier extends _$HostGroupsNotifier {
       );
       final items = await repo.getAllHostGroups();
       state = AsyncData(items);
-    } catch (e, st) {
-      state = AsyncError<List<HostGroupModel>>(e, st).copyWithPrevious(previousState);
+    } catch (_) {
+      state = previousState;
       // Rethrow so the form dialog can report the failure instead of popping
       // "success" while the group was never persisted.
       rethrow;
@@ -47,7 +46,6 @@ class HostGroupsNotifier extends _$HostGroupsNotifier {
     String? colorTag,
   }) async {
     final previousState = state;
-    state = AsyncLoading<List<HostGroupModel>>().copyWithPrevious(previousState);
     try {
       final repo = ref.read(hostsRepositoryProvider);
       await repo.saveHostGroup(
@@ -59,18 +57,20 @@ class HostGroupsNotifier extends _$HostGroupsNotifier {
       );
       final items = await repo.getAllHostGroups();
       state = AsyncData(items);
-    } catch (e, st) {
-      state = AsyncError<List<HostGroupModel>>(e, st).copyWithPrevious(previousState);
+    } catch (_) {
+      state = previousState;
       rethrow;
     }
   }
 
   Future<void> deleteGroup(String id) async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() async {
+    final previousState = state;
+    try {
       final repo = ref.read(hostsRepositoryProvider);
       await repo.deleteHostGroup(id);
-      return await repo.getAllHostGroups();
-    });
+      state = AsyncData(await repo.getAllHostGroups());
+    } catch (_) {
+      state = previousState;
+    }
   }
 }

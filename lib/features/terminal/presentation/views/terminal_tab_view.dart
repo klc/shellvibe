@@ -39,7 +39,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
 
   @override
   Widget build(BuildContext context) {
-    final tabsState = ref.watch(terminalTabsNotifierProvider);
+    final tabsState = ref.watch(terminalTabsProvider);
     final activeTab = tabsState.activeTab;
 
     return Focus(
@@ -48,19 +48,19 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
       child: CallbackShortcuts(
         bindings: {
           const SingleActivator(LogicalKeyboardKey.keyT, meta: true): () {
-            ref.read(terminalTabsNotifierProvider.notifier).openLocalTab();
+            ref.read(terminalTabsProvider.notifier).openLocalTab();
           },
           const SingleActivator(LogicalKeyboardKey.keyT, control: true): () {
-            ref.read(terminalTabsNotifierProvider.notifier).openLocalTab();
+            ref.read(terminalTabsProvider.notifier).openLocalTab();
           },
           const SingleActivator(LogicalKeyboardKey.keyW, meta: true): () {
             if (activeTab != null) {
-              ref.read(terminalTabsNotifierProvider.notifier).closeTab(activeTab.id);
+              ref.read(terminalTabsProvider.notifier).closeTab(activeTab.id);
             }
           },
           const SingleActivator(LogicalKeyboardKey.keyW, control: true): () {
             if (activeTab != null) {
-              ref.read(terminalTabsNotifierProvider.notifier).closeTab(activeTab.id);
+              ref.read(terminalTabsProvider.notifier).closeTab(activeTab.id);
             }
           },
         },
@@ -114,7 +114,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
                   button: true,
                   child: GestureDetector(
                     onTap: () =>
-                        ref.read(terminalTabsNotifierProvider.notifier).setActiveTab(tab.id),
+                        ref.read(terminalTabsProvider.notifier).setActiveTab(tab.id),
                     child: Container(
                       key: Key('tab_header_${tab.id}'),
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -153,7 +153,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
                             child: InkWell(
                               key: Key('close_tab_${tab.id}'),
                               onTap: () => ref
-                                  .read(terminalTabsNotifierProvider.notifier)
+                                  .read(terminalTabsProvider.notifier)
                                   .closeTab(tab.id),
                               child: Icon(
                                 Icons.close,
@@ -178,7 +178,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
               tooltip: 'Split Pane',
               onPressed: () {
                 ref
-                    .read(terminalTabsNotifierProvider.notifier)
+                    .read(terminalTabsProvider.notifier)
                     .splitTab(tabsState.activeTabId!, direction: Axis.horizontal);
               },
             ),
@@ -259,7 +259,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
                 key: const Key('empty_open_local_button'),
                 leading: const Icon(Icons.computer, size: 18),
                 onPressed: () =>
-                    ref.read(terminalTabsNotifierProvider.notifier).openLocalTab(),
+                    ref.read(terminalTabsProvider.notifier).openLocalTab(),
                 child: const Text('Open Local Shell'),
               ),
               ShadButton.outline(
@@ -287,7 +287,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
             title: const Text('Local Shell'),
             onTap: () {
               Navigator.of(ctx).pop();
-              ref.read(terminalTabsNotifierProvider.notifier).openLocalTab();
+              ref.read(terminalTabsProvider.notifier).openLocalTab();
             },
           ),
           ListTile(
@@ -314,7 +314,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
     if (host.identityId != null) {
       try {
         identity = await ref
-            .read(identitiesNotifierProvider.notifier)
+            .read(identitiesProvider.notifier)
             .getDecryptedIdentity(host.identityId!);
       } catch (e) {
         if (!mounted) return;
@@ -327,7 +327,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
       }
     }
 
-    await ref.read(terminalTabsNotifierProvider.notifier).openTabForHost(
+    await ref.read(terminalTabsProvider.notifier).openTabForHost(
           host,
           identity: identity,
           onHostKeyPrompt: _promptHostKey,
@@ -359,7 +359,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
       builder: (ctx) {
         return Consumer(
           builder: (context, ref, _) {
-            final hostsAsync = ref.watch(hostsNotifierProvider);
+            final hostsAsync = ref.watch(hostsProvider);
             return hostsAsync.when(
               data: (hosts) {
                 if (hosts.isEmpty) {

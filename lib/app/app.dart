@@ -39,12 +39,12 @@ class _TerlyAppState extends ConsumerState<TerlyApp> {
   void _onLifecycleChange(AppLifecycleState state) {
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden) {
-      final settings = ref.read(settingsNotifierProvider).value;
+      final settings = ref.read(settingsProvider).value;
       final delaySeconds = settings?.autoLockTimerSeconds ?? 0;
       if (delaySeconds <= 0) return;
       _autoLockTimer?.cancel();
       _autoLockTimer = Timer(Duration(seconds: delaySeconds), () {
-        ref.read(vaultNotifierProvider.notifier).lock();
+        ref.read(vaultProvider.notifier).lock();
       });
     } else if (state == AppLifecycleState.resumed) {
       _autoLockTimer?.cancel();
@@ -62,7 +62,7 @@ class _TerlyAppState extends ConsumerState<TerlyApp> {
   @override
   Widget build(BuildContext context) {
     final router = ref.watch(appRouterProvider);
-    final settingsAsync = ref.watch(settingsNotifierProvider);
+    final settingsAsync = ref.watch(settingsProvider);
     final settings = settingsAsync.value ?? const AppSettingsModel();
 
     return ShadApp.router(

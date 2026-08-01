@@ -27,12 +27,12 @@ void main() {
     });
 
     test('Initial state loads empty host list', () async {
-      final hosts = await container.read(hostsNotifierProvider.future);
+      final hosts = await container.read(hostsProvider.future);
       expect(hosts, isEmpty);
     });
 
     test('addHost adds a host to repository and updates notifier state', () async {
-      final notifier = container.read(hostsNotifierProvider.notifier);
+      final notifier = container.read(hostsProvider.notifier);
 
       await notifier.addHost(
         workspaceId: 'default',
@@ -43,7 +43,7 @@ void main() {
         protocol: 'ssh',
       );
 
-      final hosts = container.read(hostsNotifierProvider).value!;
+      final hosts = container.read(hostsProvider).value!;
       expect(hosts.length, equals(1));
       expect(hosts.first.label, equals('Production Gateway'));
       expect(hosts.first.hostname, equals('gateway.prod.com'));
@@ -51,7 +51,7 @@ void main() {
     });
 
     test('updateHost edits existing host and updates notifier state', () async {
-      final notifier = container.read(hostsNotifierProvider.notifier);
+      final notifier = container.read(hostsProvider.notifier);
 
       await notifier.addHost(
         workspaceId: 'default',
@@ -60,7 +60,7 @@ void main() {
         username: 'deploy',
       );
 
-      final initialHosts = container.read(hostsNotifierProvider).value!;
+      final initialHosts = container.read(hostsProvider).value!;
       final hostId = initialHosts.first.id;
 
       await notifier.updateHost(
@@ -72,7 +72,7 @@ void main() {
         port: 22,
       );
 
-      final updatedHosts = container.read(hostsNotifierProvider).value!;
+      final updatedHosts = container.read(hostsProvider).value!;
       expect(updatedHosts.length, equals(1));
       expect(updatedHosts.first.id, equals(hostId));
       expect(updatedHosts.first.label, equals('Production App Server'));
@@ -80,7 +80,7 @@ void main() {
     });
 
     test('deleteHost removes host from database and notifier state', () async {
-      final notifier = container.read(hostsNotifierProvider.notifier);
+      final notifier = container.read(hostsProvider.notifier);
 
       await notifier.addHost(
         workspaceId: 'default',
@@ -88,13 +88,13 @@ void main() {
         hostname: 'temp.internal',
       );
 
-      final initialHosts = container.read(hostsNotifierProvider).value!;
+      final initialHosts = container.read(hostsProvider).value!;
       expect(initialHosts.length, equals(1));
       final hostId = initialHosts.first.id;
 
       await notifier.deleteHost(hostId);
 
-      final remainingHosts = container.read(hostsNotifierProvider).value!;
+      final remainingHosts = container.read(hostsProvider).value!;
       expect(remainingHosts, isEmpty);
     });
   });

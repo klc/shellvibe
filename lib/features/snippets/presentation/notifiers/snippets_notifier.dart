@@ -8,7 +8,7 @@ import '../../domain/models/snippet_model.dart';
 part 'snippets_notifier.g.dart';
 
 @riverpod
-SnippetsRepository snippetsRepository(SnippetsRepositoryRef ref) {
+SnippetsRepository snippetsRepository(Ref ref) {
   final dao = ref.watch(snippetsDaoProvider);
   return SnippetsRepository(dao);
 }

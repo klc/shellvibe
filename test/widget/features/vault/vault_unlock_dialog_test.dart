@@ -67,7 +67,7 @@ void main() {
       addTearDown(container.dispose);
 
       // Setup vault with password
-      final notifier = container.read(vaultNotifierProvider.notifier);
+      final notifier = container.read(vaultProvider.notifier);
       await notifier.setup('CorrectPassword123');
       notifier.lock();
 
@@ -88,7 +88,7 @@ void main() {
       final container = createContainer();
       addTearDown(container.dispose);
 
-      final notifier = container.read(vaultNotifierProvider.notifier);
+      final notifier = container.read(vaultProvider.notifier);
       await notifier.setup('CorrectPassword123');
       notifier.lock();
 

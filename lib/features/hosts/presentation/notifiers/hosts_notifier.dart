@@ -7,7 +7,7 @@ import '../../domain/models/host_model.dart';
 part 'hosts_notifier.g.dart';
 
 @riverpod
-HostsRepository hostsRepository(HostsRepositoryRef ref) {
+HostsRepository hostsRepository(Ref ref) {
   final dao = ref.watch(hostsDaoProvider);
   return HostsRepository(hostsDao: dao);
 }
@@ -33,7 +33,6 @@ class HostsNotifier extends _$HostsNotifier {
     String? jumpHostId,
   }) async {
     final previousState = state;
-    state = AsyncLoading<List<HostModel>>().copyWithPrevious(previousState);
     try {
       final repo = ref.read(hostsRepositoryProvider);
       await repo.saveHost(
@@ -50,8 +49,8 @@ class HostsNotifier extends _$HostsNotifier {
       );
       final items = await repo.getAllHosts();
       state = AsyncData(items);
-    } catch (e, st) {
-      state = AsyncError<List<HostModel>>(e, st).copyWithPrevious(previousState);
+    } catch (_) {
+      state = previousState;
       // Rethrow so form dialogs can surface the failure instead of popping
       // "success" while the host was never persisted.
       rethrow;
@@ -72,7 +71,6 @@ class HostsNotifier extends _$HostsNotifier {
     String? jumpHostId,
   }) async {
     final previousState = state;
-    state = AsyncLoading<List<HostModel>>().copyWithPrevious(previousState);
     try {
       final repo = ref.read(hostsRepositoryProvider);
       await repo.saveHost(
@@ -90,8 +88,8 @@ class HostsNotifier extends _$HostsNotifier {
       );
       final items = await repo.getAllHosts();
       state = AsyncData(items);
-    } catch (e, st) {
-      state = AsyncError<List<HostModel>>(e, st).copyWithPrevious(previousState);
+    } catch (_) {
+      state = previousState;
       // See addHost: rethrow so the edit dialog reports the failure.
       rethrow;
     }
@@ -99,14 +97,13 @@ class HostsNotifier extends _$HostsNotifier {
 
   Future<void> deleteHost(String id) async {
     final previousState = state;
-    state = AsyncLoading<List<HostModel>>().copyWithPrevious(previousState);
     try {
       final repo = ref.read(hostsRepositoryProvider);
       await repo.deleteHost(id);
       final items = await repo.getAllHosts();
       state = AsyncData(items);
-    } catch (e, st) {
-      state = AsyncError<List<HostModel>>(e, st).copyWithPrevious(previousState);
+    } catch (_) {
+      state = previousState;
     }
   }
 }

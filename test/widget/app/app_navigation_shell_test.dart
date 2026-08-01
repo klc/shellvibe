@@ -40,7 +40,7 @@ void main() {
     return ProviderScope(
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
-        vaultNotifierProvider.overrideWith(
+        vaultProvider.overrideWith(
           () => _UnlockedVaultNotifier(),
         ),
       ],

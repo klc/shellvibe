@@ -10,13 +10,13 @@ import '../../domain/services/runbook_executor.dart';
 part 'runbooks_notifier.g.dart';
 
 @riverpod
-RunbooksRepository runbooksRepository(RunbooksRepositoryRef ref) {
+RunbooksRepository runbooksRepository(Ref ref) {
   final dao = ref.watch(runbooksDaoProvider);
   return RunbooksRepository(dao);
 }
 
 @riverpod
-RunbookExecutor runbookExecutor(RunbookExecutorRef ref) {
+RunbookExecutor runbookExecutor(Ref ref) {
   return RunbookExecutor();
 }
 

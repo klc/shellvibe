@@ -28,8 +28,8 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final hostsAsync = ref.watch(hostsNotifierProvider);
-    final groupsAsync = ref.watch(hostGroupsNotifierProvider);
+    final hostsAsync = ref.watch(hostsProvider);
+    final groupsAsync = ref.watch(hostGroupsProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -182,7 +182,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
     if (host.identityId != null) {
       try {
         identity = await ref
-            .read(identitiesNotifierProvider.notifier)
+            .read(identitiesProvider.notifier)
             .getDecryptedIdentity(host.identityId!);
       } catch (e) {
         if (mounted) {
@@ -196,7 +196,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
       }
     }
 
-    await ref.read(terminalTabsNotifierProvider.notifier).openTabForHost(
+    await ref.read(terminalTabsProvider.notifier).openTabForHost(
           host,
           identity: identity,
           onHostKeyPrompt: (hostname, port, keyType, fingerprint, status) async {
@@ -260,7 +260,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
     );
 
     if (confirm == true && mounted) {
-      await ref.read(hostsNotifierProvider.notifier).deleteHost(host.id);
+      await ref.read(hostsProvider.notifier).deleteHost(host.id);
     }
   }
 
@@ -286,7 +286,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
     );
 
     if (confirm == true && mounted) {
-      await ref.read(hostGroupsNotifierProvider.notifier).deleteGroup(group.id);
+      await ref.read(hostGroupsProvider.notifier).deleteGroup(group.id);
     }
   }
 }

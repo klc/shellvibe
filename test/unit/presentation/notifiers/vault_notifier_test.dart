@@ -32,7 +32,7 @@ void main() {
     test(
       'Initial state is unconfigured when no master key exists in storage',
       () async {
-        final state = await container.read(vaultNotifierProvider.future);
+        final state = await container.read(vaultProvider.future);
         expect(state.status, equals(VaultStatus.unconfigured));
         expect(state.failedAttempts, equals(0));
         expect(state.isLockedOut, isFalse);
@@ -40,10 +40,10 @@ void main() {
     );
 
     test('setup creates master key and unlocks vault', () async {
-      final notifier = container.read(vaultNotifierProvider.notifier);
+      final notifier = container.read(vaultProvider.notifier);
       await notifier.setup('CorrectMasterPassword123!');
 
-      final state = container.read(vaultNotifierProvider).value;
+      final state = container.read(vaultProvider).value;
       expect(state, isNotNull);
       expect(state!.status, equals(VaultStatus.unlocked));
       expect(
@@ -53,17 +53,17 @@ void main() {
     });
 
     test('lock transitions vault status to locked and drops the key', () async {
-      final notifier = container.read(vaultNotifierProvider.notifier);
+      final notifier = container.read(vaultProvider.notifier);
       await notifier.setup('CorrectMasterPassword123!');
 
       expect(
-        container.read(vaultNotifierProvider).value!.status,
+        container.read(vaultProvider).value!.status,
         equals(VaultStatus.unlocked),
       );
 
       notifier.lock();
 
-      final lockedState = container.read(vaultNotifierProvider).value!;
+      final lockedState = container.read(vaultProvider).value!;
       expect(lockedState.status, equals(VaultStatus.locked));
       expect(
         container.read(vaultKeyServiceProvider).isUnlockedInMemory,
@@ -72,14 +72,14 @@ void main() {
     });
 
     test('unlock with correct password succeeds', () async {
-      final notifier = container.read(vaultNotifierProvider.notifier);
+      final notifier = container.read(vaultProvider.notifier);
       await notifier.setup('CorrectMasterPassword123!');
       notifier.lock();
 
       final success = await notifier.unlock('CorrectMasterPassword123!');
       expect(success, isTrue);
 
-      final state = container.read(vaultNotifierProvider).value!;
+      final state = container.read(vaultProvider).value!;
       expect(state.status, equals(VaultStatus.unlocked));
       expect(
         container.read(vaultKeyServiceProvider).isUnlockedInMemory,
@@ -90,14 +90,14 @@ void main() {
     test(
       'unlock with wrong password increments failedAttempts counter',
       () async {
-        final notifier = container.read(vaultNotifierProvider.notifier);
+        final notifier = container.read(vaultProvider.notifier);
         await notifier.setup('CorrectMasterPassword123!');
         notifier.lock();
 
         final success = await notifier.unlock('WrongPassword!');
         expect(success, isFalse);
 
-        final state = container.read(vaultNotifierProvider).value!;
+        final state = container.read(vaultProvider).value!;
         expect(state.status, equals(VaultStatus.locked));
         expect(state.failedAttempts, equals(1));
         expect(state.isLockedOut, isFalse);
@@ -107,7 +107,7 @@ void main() {
     test(
       'brute-force protection engages lockout after 5 failed attempts',
       () async {
-        final notifier = container.read(vaultNotifierProvider.notifier);
+        final notifier = container.read(vaultProvider.notifier);
         await notifier.setup('CorrectMasterPassword123!');
         notifier.lock();
 
@@ -116,7 +116,7 @@ void main() {
           await notifier.unlock('WrongPassword!');
         }
 
-        final stateAfter4 = container.read(vaultNotifierProvider).value!;
+        final stateAfter4 = container.read(vaultProvider).value!;
         expect(stateAfter4.failedAttempts, equals(4));
         expect(stateAfter4.isLockedOut, isFalse);
 
@@ -124,7 +124,7 @@ void main() {
         final success5 = await notifier.unlock('WrongPassword!');
         expect(success5, isFalse);
 
-        final stateAfter5 = container.read(vaultNotifierProvider).value!;
+        final stateAfter5 = container.read(vaultProvider).value!;
         expect(stateAfter5.failedAttempts, equals(5));
         expect(stateAfter5.isLockedOut, isTrue);
         expect(stateAfter5.lockoutUntil, isNotNull);
@@ -141,7 +141,7 @@ void main() {
     test(
       'serializes concurrent failed unlocks and persists every attempt',
       () async {
-        final notifier = container.read(vaultNotifierProvider.notifier);
+        final notifier = container.read(vaultProvider.notifier);
         await notifier.setup('CorrectMasterPassword123!');
         notifier.lock();
 
@@ -150,7 +150,7 @@ void main() {
         );
 
         expect(results.every((result) => result == false), isTrue);
-        final state = container.read(vaultNotifierProvider).value!;
+        final state = container.read(vaultProvider).value!;
         expect(state.failedAttempts, equals(5));
         expect(state.isLockedOut, isTrue);
 
@@ -166,7 +166,7 @@ void main() {
       'failed attempts and lockout survive a new notifier instance',
       () async {
         final firstContainer = container;
-        final notifier = firstContainer.read(vaultNotifierProvider.notifier);
+        final notifier = firstContainer.read(vaultProvider.notifier);
         await notifier.setup('CorrectMasterPassword123!');
         notifier.lock();
 
@@ -181,7 +181,7 @@ void main() {
         addTearDown(restartedContainer.dispose);
 
         final restored = await restartedContainer.read(
-          vaultNotifierProvider.future,
+          vaultProvider.future,
         );
         expect(restored.failedAttempts, equals(5));
         expect(restored.lockoutUntil, isNotNull);

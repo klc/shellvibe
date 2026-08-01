@@ -30,7 +30,7 @@ class _VaultUnlockDialogState extends ConsumerState<VaultUnlockDialog> {
     _lockoutTimer?.cancel();
     _lockoutTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
-      final vaultState = ref.read(vaultNotifierProvider).valueOrNull;
+      final vaultState = ref.read(vaultProvider).value;
       if (vaultState == null || !vaultState.isLockedOut) {
         _lockoutTimer?.cancel();
         _lockoutTimer = null;
@@ -42,8 +42,8 @@ class _VaultUnlockDialogState extends ConsumerState<VaultUnlockDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final vaultAsync = ref.watch(vaultNotifierProvider);
-    final vaultState = vaultAsync.valueOrNull;
+    final vaultAsync = ref.watch(vaultProvider);
+    final vaultState = vaultAsync.value;
     final isLockedOut = vaultState?.isLockedOut ?? false;
     final failedAttempts = vaultState?.failedAttempts ?? 0;
 
@@ -152,13 +152,13 @@ class _VaultUnlockDialogState extends ConsumerState<VaultUnlockDialog> {
   Future<void> _submit() async {
     setState(() => _error = null);
     final success = await ref
-        .read(vaultNotifierProvider.notifier)
+        .read(vaultProvider.notifier)
         .unlock(_passwordCtrl.text);
     if (success && mounted) {
       _passwordCtrl.clear();
     }
     if (!success && mounted) {
-      final vaultState = ref.read(vaultNotifierProvider).valueOrNull;
+      final vaultState = ref.read(vaultProvider).value;
       if (vaultState?.isLockedOut ?? false) {
         _startLockoutTimer();
         setState(() => _error = null);

@@ -59,7 +59,7 @@ class _IdentityFormDialogState extends ConsumerState<IdentityFormDialog> {
     setState(() => _isLoading = true);
 
     try {
-      final notifier = ref.read(identitiesNotifierProvider.notifier);
+      final notifier = ref.read(identitiesProvider.notifier);
       final isEditing = widget.initialIdentity != null;
 
       if (isEditing) {

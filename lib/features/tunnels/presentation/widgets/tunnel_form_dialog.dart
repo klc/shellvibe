@@ -303,7 +303,7 @@ class _TunnelFormDialogState extends ConsumerState<TunnelFormDialog> {
     if (!checkConflict || _selectedHostId == null) return null;
 
     final isLocalNamespace = _ruleType != 'remote';
-    final inUse = ref.read(tunnelsNotifierProvider).rules.any((rule) {
+    final inUse = ref.read(tunnelsProvider).rules.any((rule) {
       if (rule.hostId != _selectedHostId || rule.id == widget.rule?.id) {
         return false;
       }

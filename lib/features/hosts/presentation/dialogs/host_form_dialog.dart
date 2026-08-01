@@ -90,7 +90,7 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
     setState(() => _isLoading = true);
 
     try {
-      final notifier = ref.read(hostsNotifierProvider.notifier);
+      final notifier = ref.read(hostsProvider.notifier);
       final isEditing = widget.initialHost != null;
       final portVal = int.tryParse(_portController.text.trim()) ?? 22;
       final usernameVal = _usernameController.text.trim().isEmpty ? null : _usernameController.text.trim();
@@ -142,9 +142,9 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
   @override
   Widget build(BuildContext context) {
     final isEditing = widget.initialHost != null;
-    final groupsAsync = ref.watch(hostGroupsNotifierProvider);
-    final identitiesAsync = ref.watch(identitiesNotifierProvider);
-    final hostsAsync = ref.watch(hostsNotifierProvider);
+    final groupsAsync = ref.watch(hostGroupsProvider);
+    final identitiesAsync = ref.watch(identitiesProvider);
+    final hostsAsync = ref.watch(hostsProvider);
 
     return ShadDialog(
       title: Row(

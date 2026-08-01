@@ -9,11 +9,11 @@
 | Katman / İhtiyaç | Seçilen Teknoloji / Paket | Lisans / Tip | Neden Bu Seçildi? (Seçim Gerekçesi) |
 | :--- | :--- | :--- | :--- |
 | **Framework & Dili** | **Flutter SDK 3.x+ / Dart 3.x** | BSD-3 | Tek kod tabanından 5 platforma yerel performans ve tutarlı UI donanım ivmeli (Skia/Impeller) rendering. |
-| **State Management** | **`flutter_riverpod` (v2.x+) + `riverpod_annotation`** | MIT | `BuildContext` bağımlılığı olmadan async stream'leri (SSH/Socket) yönetebilme, üst düzey tip güvenliği ve kolay test edilebilirlik. |
+| **State Management** | **`flutter_riverpod` (v3.x+) + `riverpod_annotation`** | MIT | `BuildContext` bağımlılığı olmadan async stream'leri (SSH/Socket) yönetebilme, üst düzey tip güvenliği ve kolay test edilebilirlik. |
 | **Terminal UI / Render** | **`xterm2`** *(Forked & Maintained `xterm.dart`)* | MIT | Donanım ivmeli (60 FPS) ANSI/VT100 rendering, CJK/Emoji/IME desteği ve UI katmanından bağımsız terminal tamponu (buffer) yönetimi. |
 | **SSH & SFTP Engine** | **`dart_ssh2`** | MIT | Pure Dart ile yazıldığı için C/C++ native derleme karmaşası olmadan 5 platformda sıfır bağımlılıkla çalışır. KEX şifreleme yüklerini Dart Isolate'lerine devrederek UI donmalarını engeller. |
 | **Yerel PTY Motoru** | **`flutter_pty`** | MIT | macOS, Windows (ConPTY), Linux ve Android üzerinde yerel terminal (Local Shell: zsh/bash/pwsh) başlatabilme. |
-| **Yerel Veritabanı** | **`drift` + `sqlite3_flutter_libs`** | MIT | 2026 itibarıyla en güvenilir, sürdürülebilir, tip güvenli ve SQL tabanlı çözümdür. Relational şema yapısı (Host -> Vault -> Tunnel) için mükemmeldir. |
+| **Yerel Veritabanı** | **`drift` + `sqlite3` (native assets/hooks)** | MIT | 2026 itibarıyla en güvenilir, sürdürülebilir, tip güvenli ve SQL tabanlı çözümdür. Relational şema yapısı (Host -> Vault -> Tunnel) için mükemmeldir. |
 | **Güvenli Şifreleme** | **`flutter_secure_storage`** | MIT | Şifre ve private key'leri iOS/macOS Keychain, Android KeyStore ve Windows Credential Manager'da donanımsal korur. |
 | **Zero-Knowledge Crypto**| **`cryptography`** | Apache 2.0 | Pure Dart + OS WebCrypto/CommonCrypto ivmeli AES-256-GCM, Argon2id, Ed25519 şifreleme motoru. |
 | **Biyometrik Kilit** | **`local_auth`** | BSD-3 | FaceID, TouchID, Fingerprint ve Windows Hello donanımsal doğrulaması. |
@@ -45,7 +45,7 @@
 - **Kritik Karar & Analiz:**
   - **Isar:** 2026 itibarıyla ana geliştiricisi tarafından terk edilmiş durumdadır. C++ native kütüphaneleri masaüstü işletim sistemi güncellemelerinde çökme riski taşımaktadır. **Kesinlikle elenmiştir.**
   - **Hive / hive_ce:** Sadece anahtar-değer (Key-Value) saklama için iyidir. Ancak ilişkisel veri (bir Grubun altındaki Host'lar, her Host'un bağlandığı Tünel kuralları, Host'a atanan Identity) sorgulamasında yetersiz kalmaktadır.
-  - **Drift (SQLite):** SQL tabanlıdır, tip güvenlidir (compile-time type safety), reaktiftir (Stream tabanlı UI güncellemeleri), versiyon geçişlerini (migration) mükemmel yönetir ve SQLite gibi 40 yıllık endüstri standardı bir motoru kullanır. Masaüstü ve mobilde `sqlite3_flutter_libs` ile %100 stabil çalışır.
+  - **Drift (SQLite):** SQL tabanlıdır, tip güvenlidir (compile-time type safety), reaktiftir (Stream tabanlı UI güncellemeleri), versiyon geçişlerini (migration) mükemmel yönetir ve SQLite gibi 40 yıllık endüstri standardı bir motoru kullanır. Masaüstü ve mobilde `sqlite3` native assets/hooks ile platforma uygun SQLite binary'lerini otomatik paketler.
 
 ### 2.4. State Management: Neden `Riverpod`?
 - **Değerlendirilen Alternatifler:** `flutter_bloc`, `provider`, `signals`, `get`.

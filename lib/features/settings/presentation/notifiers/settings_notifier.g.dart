@@ -6,81 +6,194 @@ part of 'settings_notifier.dart';
 // RiverpodGenerator
 // **************************************************************************
 
+// GENERATED CODE - DO NOT MODIFY BY HAND
+// ignore_for_file: type=lint, type=warning
+
+@ProviderFor(settingsRepository)
+final settingsRepositoryProvider = SettingsRepositoryProvider._();
+
+final class SettingsRepositoryProvider
+    extends
+        $FunctionalProvider<
+          SettingsRepository,
+          SettingsRepository,
+          SettingsRepository
+        >
+    with $Provider<SettingsRepository> {
+  SettingsRepositoryProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'settingsRepositoryProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$settingsRepositoryHash();
+
+  @$internal
+  @override
+  $ProviderElement<SettingsRepository> $createElement(
+    $ProviderPointer pointer,
+  ) => $ProviderElement(pointer);
+
+  @override
+  SettingsRepository create(Ref ref) {
+    return settingsRepository(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(SettingsRepository value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<SettingsRepository>(value),
+    );
+  }
+}
+
 String _$settingsRepositoryHash() =>
     r'718b69644c76e869689bd7ec94b4a8e9b6251501';
 
-/// See also [settingsRepository].
-@ProviderFor(settingsRepository)
-final settingsRepositoryProvider =
-    AutoDisposeProvider<SettingsRepository>.internal(
-      settingsRepository,
-      name: r'settingsRepositoryProvider',
-      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-          ? null
-          : _$settingsRepositoryHash,
-      dependencies: null,
-      allTransitiveDependencies: null,
-    );
+@ProviderFor(biometricLockService)
+final biometricLockServiceProvider = BiometricLockServiceProvider._();
 
-@Deprecated('Will be removed in 3.0. Use Ref instead')
-// ignore: unused_element
-typedef SettingsRepositoryRef = AutoDisposeProviderRef<SettingsRepository>;
+final class BiometricLockServiceProvider
+    extends
+        $FunctionalProvider<
+          BiometricLockService,
+          BiometricLockService,
+          BiometricLockService
+        >
+    with $Provider<BiometricLockService> {
+  BiometricLockServiceProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'biometricLockServiceProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$biometricLockServiceHash();
+
+  @$internal
+  @override
+  $ProviderElement<BiometricLockService> $createElement(
+    $ProviderPointer pointer,
+  ) => $ProviderElement(pointer);
+
+  @override
+  BiometricLockService create(Ref ref) {
+    return biometricLockService(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(BiometricLockService value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<BiometricLockService>(value),
+    );
+  }
+}
+
 String _$biometricLockServiceHash() =>
     r'7da2795890f61cfe920aeaa39dbcbe6c90527c0b';
 
-/// See also [biometricLockService].
-@ProviderFor(biometricLockService)
-final biometricLockServiceProvider =
-    AutoDisposeProvider<BiometricLockService>.internal(
-      biometricLockService,
-      name: r'biometricLockServiceProvider',
-      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-          ? null
-          : _$biometricLockServiceHash,
-      dependencies: null,
-      allTransitiveDependencies: null,
-    );
+@ProviderFor(clipboardAutoClearService)
+final clipboardAutoClearServiceProvider = ClipboardAutoClearServiceProvider._();
 
-@Deprecated('Will be removed in 3.0. Use Ref instead')
-// ignore: unused_element
-typedef BiometricLockServiceRef = AutoDisposeProviderRef<BiometricLockService>;
+final class ClipboardAutoClearServiceProvider
+    extends
+        $FunctionalProvider<
+          ClipboardAutoClearService,
+          ClipboardAutoClearService,
+          ClipboardAutoClearService
+        >
+    with $Provider<ClipboardAutoClearService> {
+  ClipboardAutoClearServiceProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'clipboardAutoClearServiceProvider',
+        isAutoDispose: false,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$clipboardAutoClearServiceHash();
+
+  @$internal
+  @override
+  $ProviderElement<ClipboardAutoClearService> $createElement(
+    $ProviderPointer pointer,
+  ) => $ProviderElement(pointer);
+
+  @override
+  ClipboardAutoClearService create(Ref ref) {
+    return clipboardAutoClearService(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(ClipboardAutoClearService value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<ClipboardAutoClearService>(value),
+    );
+  }
+}
+
 String _$clipboardAutoClearServiceHash() =>
     r'5aa799948e4ea7cbd9c358a395de8ea57566ff2d';
 
-/// See also [clipboardAutoClearService].
-@ProviderFor(clipboardAutoClearService)
-final clipboardAutoClearServiceProvider =
-    Provider<ClipboardAutoClearService>.internal(
-      clipboardAutoClearService,
-      name: r'clipboardAutoClearServiceProvider',
-      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-          ? null
-          : _$clipboardAutoClearServiceHash,
-      dependencies: null,
-      allTransitiveDependencies: null,
-    );
+@ProviderFor(SettingsNotifier)
+final settingsProvider = SettingsNotifierProvider._();
 
-@Deprecated('Will be removed in 3.0. Use Ref instead')
-// ignore: unused_element
-typedef ClipboardAutoClearServiceRef = ProviderRef<ClipboardAutoClearService>;
+final class SettingsNotifierProvider
+    extends $AsyncNotifierProvider<SettingsNotifier, AppSettingsModel> {
+  SettingsNotifierProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'settingsProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$settingsNotifierHash();
+
+  @$internal
+  @override
+  SettingsNotifier create() => SettingsNotifier();
+}
+
 String _$settingsNotifierHash() => r'd1923bb4845d583c300b01e47578b8c87b9aa786';
 
-/// See also [SettingsNotifier].
-@ProviderFor(SettingsNotifier)
-final settingsNotifierProvider =
-    AutoDisposeAsyncNotifierProvider<
-      SettingsNotifier,
-      AppSettingsModel
-    >.internal(
-      SettingsNotifier.new,
-      name: r'settingsNotifierProvider',
-      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-          ? null
-          : _$settingsNotifierHash,
-      dependencies: null,
-      allTransitiveDependencies: null,
-    );
-
-typedef _$SettingsNotifier = AutoDisposeAsyncNotifier<AppSettingsModel>;
-// ignore_for_file: type=lint
-// ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package
+abstract class _$SettingsNotifier extends $AsyncNotifier<AppSettingsModel> {
+  FutureOr<AppSettingsModel> build();
+  @$mustCallSuper
+  @override
+  WhenComplete runBuild() {
+    final ref =
+        this.ref as $Ref<AsyncValue<AppSettingsModel>, AppSettingsModel>;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<AsyncValue<AppSettingsModel>, AppSettingsModel>,
+              AsyncValue<AppSettingsModel>,
+              Object?,
+              Object?
+            >;
+    return element.handleCreate(ref, build);
+  }
+}

@@ -44,19 +44,19 @@ void main() {
     test('stale session cleanup cannot clear a newer SFTP client', () async {
       final container = ProviderContainer();
       addTearDown(container.dispose);
-      final notifier = container.read(sftpNotifierProvider.notifier);
+      final notifier = container.read(sftpProvider.notifier);
       final client = _FakeSftpClient();
 
       await notifier.setRemoteClient(client, sessionId: 'tab-2');
       await notifier.setRemoteClient(null, sessionId: 'tab-1');
 
-      final state = container.read(sftpNotifierProvider);
+      final state = container.read(sftpProvider);
       expect(state.remoteClient, same(client));
       expect(state.remoteSessionId, equals('tab-2'));
 
       await notifier.setRemoteClient(null, sessionId: 'tab-2');
-      expect(container.read(sftpNotifierProvider).remoteClient, isNull);
-      expect(container.read(sftpNotifierProvider).remoteSessionId, isNull);
+      expect(container.read(sftpProvider).remoteClient, isNull);
+      expect(container.read(sftpProvider).remoteSessionId, isNull);
     });
   });
 }

@@ -18,6 +18,16 @@ const defaultWorkspaces = [
   WorkspaceItem(id: 'staging', name: 'Staging', description: 'Staging & test environments'),
 ];
 
-final activeWorkspaceIdProvider = StateProvider<String>((ref) => 'default');
+class ActiveWorkspaceIdNotifier extends Notifier<String> {
+  @override
+  String build() => 'default';
+
+  void select(String workspaceId) => state = workspaceId;
+}
+
+final activeWorkspaceIdProvider =
+    NotifierProvider<ActiveWorkspaceIdNotifier, String>(
+      ActiveWorkspaceIdNotifier.new,
+    );
 
 final workspacesProvider = Provider<List<WorkspaceItem>>((ref) => defaultWorkspaces);

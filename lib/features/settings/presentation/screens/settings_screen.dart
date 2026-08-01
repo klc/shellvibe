@@ -158,7 +158,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final settingsAsync = ref.watch(settingsNotifierProvider);
+    final settingsAsync = ref.watch(settingsProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -166,7 +166,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ),
       body: settingsAsync.when(
         data: (settings) {
-          final notifier = ref.read(settingsNotifierProvider.notifier);
+          final notifier = ref.read(settingsProvider.notifier);
 
           return ListView(
             padding: const EdgeInsets.all(16.0),
@@ -514,7 +514,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Widget _buildVaultMasterPasswordCard() {
-    final vaultStatus = ref.watch(vaultNotifierProvider).valueOrNull?.status;
+    final vaultStatus = ref.watch(vaultProvider).value?.status;
     final isConfigured = vaultStatus != null && vaultStatus != VaultStatus.unconfigured;
 
     return ShadCard(
@@ -539,7 +539,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     key: const Key('lock_vault_button'),
                     onPressed: vaultStatus == VaultStatus.locked
                         ? null
-                        : () => ref.read(vaultNotifierProvider.notifier).lock(),
+                        : () => ref.read(vaultProvider.notifier).lock(),
                     leading: const Icon(Icons.lock, size: 16),
                     child: Text(
                       vaultStatus == VaultStatus.locked
@@ -588,7 +588,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
 
     try {
-      await ref.read(vaultNotifierProvider.notifier).setup(password);
+      await ref.read(vaultProvider.notifier).setup(password);
       // The controller may already be disposed if the screen left the tree
       // while the (isolate-backed) setup was running.
       if (!mounted) return;

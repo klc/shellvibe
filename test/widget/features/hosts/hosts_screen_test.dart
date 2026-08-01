@@ -182,11 +182,11 @@ void main() {
       await tester.tap(connectButton);
       await tester.pump();
 
-      final tabsState = container.read(terminalTabsNotifierProvider);
+      final tabsState = container.read(terminalTabsProvider);
       expect(tabsState.tabs.length, equals(1));
       expect(tabsState.tabs.first.title, equals('Default Host Test'));
 
-      await container.read(terminalTabsNotifierProvider.notifier).closeTab(tabsState.tabs.first.id);
+      await container.read(terminalTabsProvider.notifier).closeTab(tabsState.tabs.first.id);
       await tester.pump(const Duration(seconds: 16));
     });
   });

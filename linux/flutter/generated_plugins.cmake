@@ -6,8 +6,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   desktop_drop
   flutter_secure_storage_linux
   hotkey_manager_linux
-  screen_retriever
-  sqlite3_flutter_libs
+  screen_retriever_linux
   tray_manager
   window_manager
 )

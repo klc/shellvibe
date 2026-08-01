@@ -18,7 +18,7 @@ const kUnlockRoute = '/unlock';
 
 /// Decides where the vault state forces navigation to, or null to stay put.
 ///
-/// [status] is null while [vaultNotifierProvider] is still resolving — which
+/// [status] is null while [vaultProvider] is still resolving — which
 /// also happens *during* an unlock attempt, so a null status must never bounce
 /// the user off the unlock screen mid-verification.
 String? resolveVaultRedirect(VaultStatus? status, String location) {
@@ -39,7 +39,7 @@ class _VaultRouterNotifier extends ChangeNotifier {
 final appRouterProvider = Provider<GoRouter>((ref) {
   final vaultRouterNotifier = _VaultRouterNotifier();
 
-  ref.listen(vaultNotifierProvider, (_, _) {
+  ref.listen(vaultProvider, (_, _) {
     vaultRouterNotifier.notify();
   });
   ref.onDispose(vaultRouterNotifier.dispose);
@@ -50,7 +50,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     // Gate the whole app behind the unlock screen while the vault is locked.
     // Without this the master password would never be asked for.
     redirect: (context, state) => resolveVaultRedirect(
-      ref.read(vaultNotifierProvider).valueOrNull?.status,
+      ref.read(vaultProvider).value?.status,
       state.matchedLocation,
     ),
     routes: [

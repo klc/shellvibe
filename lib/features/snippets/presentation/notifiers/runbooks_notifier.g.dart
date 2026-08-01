@@ -6,60 +6,140 @@ part of 'runbooks_notifier.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$runbooksRepositoryHash() =>
-    r'bd6aabd4597522d8931c8d5d05e0e553fbf69233';
+// GENERATED CODE - DO NOT MODIFY BY HAND
+// ignore_for_file: type=lint, type=warning
 
-/// See also [runbooksRepository].
 @ProviderFor(runbooksRepository)
-final runbooksRepositoryProvider =
-    AutoDisposeProvider<RunbooksRepository>.internal(
-      runbooksRepository,
-      name: r'runbooksRepositoryProvider',
-      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-          ? null
-          : _$runbooksRepositoryHash,
-      dependencies: null,
-      allTransitiveDependencies: null,
+final runbooksRepositoryProvider = RunbooksRepositoryProvider._();
+
+final class RunbooksRepositoryProvider
+    extends
+        $FunctionalProvider<
+          RunbooksRepository,
+          RunbooksRepository,
+          RunbooksRepository
+        >
+    with $Provider<RunbooksRepository> {
+  RunbooksRepositoryProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'runbooksRepositoryProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$runbooksRepositoryHash();
+
+  @$internal
+  @override
+  $ProviderElement<RunbooksRepository> $createElement(
+    $ProviderPointer pointer,
+  ) => $ProviderElement(pointer);
+
+  @override
+  RunbooksRepository create(Ref ref) {
+    return runbooksRepository(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(RunbooksRepository value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<RunbooksRepository>(value),
     );
+  }
+}
 
-@Deprecated('Will be removed in 3.0. Use Ref instead')
-// ignore: unused_element
-typedef RunbooksRepositoryRef = AutoDisposeProviderRef<RunbooksRepository>;
-String _$runbookExecutorHash() => r'ed5ace1faec5f025b7dbf98fedb9bde5e7a532e0';
+String _$runbooksRepositoryHash() =>
+    r'd7ba2bcba52eec919e5705e24a718fd1b2cb460e';
 
-/// See also [runbookExecutor].
 @ProviderFor(runbookExecutor)
-final runbookExecutorProvider = AutoDisposeProvider<RunbookExecutor>.internal(
-  runbookExecutor,
-  name: r'runbookExecutorProvider',
-  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-      ? null
-      : _$runbookExecutorHash,
-  dependencies: null,
-  allTransitiveDependencies: null,
-);
+final runbookExecutorProvider = RunbookExecutorProvider._();
 
-@Deprecated('Will be removed in 3.0. Use Ref instead')
-// ignore: unused_element
-typedef RunbookExecutorRef = AutoDisposeProviderRef<RunbookExecutor>;
+final class RunbookExecutorProvider
+    extends
+        $FunctionalProvider<RunbookExecutor, RunbookExecutor, RunbookExecutor>
+    with $Provider<RunbookExecutor> {
+  RunbookExecutorProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'runbookExecutorProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$runbookExecutorHash();
+
+  @$internal
+  @override
+  $ProviderElement<RunbookExecutor> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  RunbookExecutor create(Ref ref) {
+    return runbookExecutor(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(RunbookExecutor value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<RunbookExecutor>(value),
+    );
+  }
+}
+
+String _$runbookExecutorHash() => r'd6865abfa4f13e5e948c268e414839138b9065f1';
+
+@ProviderFor(RunbooksNotifier)
+final runbooksProvider = RunbooksNotifierProvider._();
+
+final class RunbooksNotifierProvider
+    extends $AsyncNotifierProvider<RunbooksNotifier, List<RunbookModel>> {
+  RunbooksNotifierProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'runbooksProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$runbooksNotifierHash();
+
+  @$internal
+  @override
+  RunbooksNotifier create() => RunbooksNotifier();
+}
+
 String _$runbooksNotifierHash() => r'1d3855e1d7ea9500b7c798bd45c09a94ecad9fbd';
 
-/// See also [RunbooksNotifier].
-@ProviderFor(RunbooksNotifier)
-final runbooksNotifierProvider =
-    AutoDisposeAsyncNotifierProvider<
-      RunbooksNotifier,
-      List<RunbookModel>
-    >.internal(
-      RunbooksNotifier.new,
-      name: r'runbooksNotifierProvider',
-      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-          ? null
-          : _$runbooksNotifierHash,
-      dependencies: null,
-      allTransitiveDependencies: null,
-    );
-
-typedef _$RunbooksNotifier = AutoDisposeAsyncNotifier<List<RunbookModel>>;
-// ignore_for_file: type=lint
-// ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package
+abstract class _$RunbooksNotifier extends $AsyncNotifier<List<RunbookModel>> {
+  FutureOr<List<RunbookModel>> build();
+  @$mustCallSuper
+  @override
+  WhenComplete runBuild() {
+    final ref =
+        this.ref as $Ref<AsyncValue<List<RunbookModel>>, List<RunbookModel>>;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<AsyncValue<List<RunbookModel>>, List<RunbookModel>>,
+              AsyncValue<List<RunbookModel>>,
+              Object?,
+              Object?
+            >;
+    return element.handleCreate(ref, build);
+  }
+}

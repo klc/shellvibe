@@ -1,5 +1,4 @@
 import 'package:dartssh2/dartssh2.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../core/network/tunnel_engine.dart';

@@ -93,8 +93,8 @@ dependencies:
   lucide_icons_flutter: ^0.4.0
 
   # State Management & Routing
-  flutter_riverpod: ^2.5.1
-  go_router: ^14.2.0
+  flutter_riverpod: ^3.3.1
+  go_router: ^17.3.0
 
   # Terminal Engine
   xterm2: ^5.2.0

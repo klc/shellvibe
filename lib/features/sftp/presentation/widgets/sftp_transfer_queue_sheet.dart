@@ -96,7 +96,7 @@ class _TransferTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isUpload = item.type == TransferType.upload;
     final worker = ref.watch(sftpTransferQueueWorkerProvider);
-    final sftpClient = ref.watch(sftpNotifierProvider.select((s) => s.remoteClient));
+    final sftpClient = ref.watch(sftpProvider.select((s) => s.remoteClient));
     final colorScheme = ShadTheme.of(context).colorScheme;
 
     IconData statusIcon;
@@ -223,4 +223,3 @@ class _TransferTile extends ConsumerWidget {
     );
   }
 }
-

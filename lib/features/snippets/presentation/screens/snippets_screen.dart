@@ -45,7 +45,7 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
     final finalCode = SnippetVariableParser.substituteVariables(snippet.code, values);
 
     if (copyOnly || widget.onExecuteCommand == null) {
-      final settings = ref.read(settingsNotifierProvider).value;
+      final settings = ref.read(settingsProvider).value;
       final clearSeconds = settings?.clipboardAutoClearSeconds ?? 30;
       final autoClearService = ref.read(clipboardAutoClearServiceProvider);
       await autoClearService.copyAndScheduleClear(
@@ -73,7 +73,7 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final snippetsAsync = ref.watch(snippetsNotifierProvider);
+    final snippetsAsync = ref.watch(snippetsProvider);
 
     return DefaultTabController(
       length: 2,
@@ -97,7 +97,7 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
                   workspaceId: widget.workspaceId,
                 );
                 if (newSnippet != null) {
-                  ref.read(snippetsNotifierProvider.notifier).addSnippet(
+                  ref.read(snippetsProvider.notifier).addSnippet(
                         workspaceId: newSnippet.workspaceId,
                         title: newSnippet.title,
                         code: newSnippet.code,
@@ -265,12 +265,12 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
                                                       );
                                                       if (updated != null) {
                                                         ref
-                                                            .read(snippetsNotifierProvider.notifier)
+                                                            .read(snippetsProvider.notifier)
                                                             .updateSnippet(updated);
                                                       }
                                                     } else if (val == 'delete') {
                                                       ref
-                                                          .read(snippetsNotifierProvider.notifier)
+                                                          .read(snippetsProvider.notifier)
                                                           .deleteSnippet(snippet.id);
                                                     }
                                                   },

@@ -45,12 +45,14 @@ class TerminalTabsState {
 
 @Riverpod(keepAlive: true)
 class TerminalTabsNotifier extends _$TerminalTabsNotifier {
+  final Set<TerminalTabSession> _ownedTabs = {};
   @override
   TerminalTabsState build() {
     ref.onDispose(() {
-      for (final tab in state.tabs) {
+      for (final tab in _ownedTabs.toList()) {
         tab.dispose();
       }
+      _ownedTabs.clear();
     });
     return const TerminalTabsState();
   }
@@ -72,6 +74,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       terminal: terminal,
       isConnecting: true,
     );
+    _ownedTabs.add(newTab);
 
     final updatedTabs = [...state.tabs, newTab];
     state = state.copyWith(
@@ -217,6 +220,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
 
     for (final tab in closingTabs) {
       await tab.dispose();
+      _ownedTabs.remove(tab);
     }
   }
 
@@ -242,6 +246,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       splitParentId: parentTabId,
       splitDirection: direction,
     );
+    _ownedTabs.add(splitTab);
 
     final manager = ref.read(localPtyManagerProvider);
     final bridge = manager.startAndBridge(terminal);

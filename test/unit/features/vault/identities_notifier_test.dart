@@ -25,9 +25,7 @@ void main() {
       ),
     );
     container = ProviderContainer(
-      overrides: [
-        appDatabaseProvider.overrideWithValue(db),
-      ],
+      overrides: [appDatabaseProvider.overrideWithValue(db)],
     );
   });
 
@@ -38,12 +36,12 @@ void main() {
 
   group('IdentitiesNotifier Unit Tests', () {
     test('Initial state is empty list', () async {
-      final state = await container.read(identitiesNotifierProvider.future);
+      final state = await container.read(identitiesProvider.future);
       expect(state, isEmpty);
     });
 
     test('addIdentity creates encrypted identity and updates state', () async {
-      final notifier = container.read(identitiesNotifierProvider.notifier);
+      final notifier = container.read(identitiesProvider.notifier);
 
       await notifier.addIdentity(
         workspaceId: 'default',
@@ -53,7 +51,7 @@ void main() {
         password: 'SecretPassword123',
       );
 
-      final state = await container.read(identitiesNotifierProvider.future);
+      final state = await container.read(identitiesProvider.future);
       expect(state.length, equals(1));
       expect(state.first.title, equals('Production Server Key'));
       expect(state.first.username, equals('ubuntu'));
@@ -65,7 +63,7 @@ void main() {
     });
 
     test('updateIdentity modifies existing record', () async {
-      final notifier = container.read(identitiesNotifierProvider.notifier);
+      final notifier = container.read(identitiesProvider.notifier);
 
       await notifier.addIdentity(
         workspaceId: 'default',
@@ -75,7 +73,7 @@ void main() {
         password: 'Pass1',
       );
 
-      var state = await container.read(identitiesNotifierProvider.future);
+      var state = await container.read(identitiesProvider.future);
       final id = state.first.id;
 
       await notifier.updateIdentity(
@@ -87,7 +85,7 @@ void main() {
         password: 'Pass2',
       );
 
-      state = await container.read(identitiesNotifierProvider.future);
+      state = await container.read(identitiesProvider.future);
       expect(state.length, equals(1));
       expect(state.first.title, equals('New Title'));
       expect(state.first.username, equals('admin'));
@@ -99,7 +97,7 @@ void main() {
     });
 
     test('deleteIdentity removes record from state', () async {
-      final notifier = container.read(identitiesNotifierProvider.notifier);
+      final notifier = container.read(identitiesProvider.notifier);
 
       await notifier.addIdentity(
         workspaceId: 'default',
@@ -109,14 +107,48 @@ void main() {
         privateKey: 'PEM_DATA',
       );
 
-      var state = await container.read(identitiesNotifierProvider.future);
+      var state = await container.read(identitiesProvider.future);
       expect(state.length, equals(1));
       final id = state.first.id;
 
       await notifier.deleteIdentity(id);
 
-      state = await container.read(identitiesNotifierProvider.future);
+      state = await container.read(identitiesProvider.future);
       expect(state, isEmpty);
     });
+
+    test(
+      'failed identity update preserves the previously loaded list',
+      () async {
+        final notifier = container.read(identitiesProvider.notifier);
+
+        await notifier.addIdentity(
+          workspaceId: 'default',
+          title: 'Stable Identity',
+          username: 'stable-user',
+          authType: 'password',
+          password: 'StablePassword123',
+        );
+        final previousIdentities = container
+            .read(identitiesProvider)
+            .requireValue;
+
+        await expectLater(
+          notifier.updateIdentity(
+            id: 'missing-identity',
+            workspaceId: 'default',
+            title: 'Missing Identity',
+            username: 'missing-user',
+            authType: 'password',
+            password: 'MissingPassword123',
+          ),
+          throwsA(isA<StateError>()),
+        );
+
+        final currentState = container.read(identitiesProvider);
+        expect(currentState.hasError, isFalse);
+        expect(currentState.requireValue, same(previousIdentities));
+      },
+    );
   });
 }

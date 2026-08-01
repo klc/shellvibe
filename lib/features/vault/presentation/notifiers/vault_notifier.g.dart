@@ -6,23 +6,54 @@ part of 'vault_notifier.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$vaultNotifierHash() => r'53303e19c84c89830735edbc3ded6c927cfa55b2';
+// GENERATED CODE - DO NOT MODIFY BY HAND
+// ignore_for_file: type=lint, type=warning
+/// Manages the vault lifecycle: setup, lock, unlock, brute-force protection.
+
+@ProviderFor(VaultNotifier)
+final vaultProvider = VaultNotifierProvider._();
 
 /// Manages the vault lifecycle: setup, lock, unlock, brute-force protection.
-///
-/// Copied from [VaultNotifier].
-@ProviderFor(VaultNotifier)
-final vaultNotifierProvider =
-    AsyncNotifierProvider<VaultNotifier, VaultState>.internal(
-      VaultNotifier.new,
-      name: r'vaultNotifierProvider',
-      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-          ? null
-          : _$vaultNotifierHash,
-      dependencies: null,
-      allTransitiveDependencies: null,
-    );
+final class VaultNotifierProvider
+    extends $AsyncNotifierProvider<VaultNotifier, VaultState> {
+  /// Manages the vault lifecycle: setup, lock, unlock, brute-force protection.
+  VaultNotifierProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'vaultProvider',
+        isAutoDispose: false,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
 
-typedef _$VaultNotifier = AsyncNotifier<VaultState>;
-// ignore_for_file: type=lint
-// ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package
+  @override
+  String debugGetCreateSourceHash() => _$vaultNotifierHash();
+
+  @$internal
+  @override
+  VaultNotifier create() => VaultNotifier();
+}
+
+String _$vaultNotifierHash() => r'4a85f88791349ada8e571ee0fd6f6651733162fb';
+
+/// Manages the vault lifecycle: setup, lock, unlock, brute-force protection.
+
+abstract class _$VaultNotifier extends $AsyncNotifier<VaultState> {
+  FutureOr<VaultState> build();
+  @$mustCallSuper
+  @override
+  WhenComplete runBuild() {
+    final ref = this.ref as $Ref<AsyncValue<VaultState>, VaultState>;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<AsyncValue<VaultState>, VaultState>,
+              AsyncValue<VaultState>,
+              Object?,
+              Object?
+            >;
+    return element.handleCreate(ref, build);
+  }
+}

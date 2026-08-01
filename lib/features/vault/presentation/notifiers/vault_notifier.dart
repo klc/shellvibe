@@ -138,7 +138,7 @@ class VaultNotifier extends _$VaultNotifier {
 
   Future<bool> _unlockInternal(String masterPassword) async {
     final generation = _lifecycleGeneration;
-    final currentState = state.valueOrNull;
+    final currentState = state.value;
 
     // Reject if currently in lockout period
     if (currentState != null && currentState.isLockedOut) {
@@ -195,7 +195,7 @@ class VaultNotifier extends _$VaultNotifier {
   void lock() {
     _lifecycleGeneration++;
     ref.read(vaultKeyServiceProvider).lock();
-    final current = state.valueOrNull;
+    final current = state.value;
     state = AsyncData(
       VaultState(
         status: VaultStatus.locked,
