@@ -61,7 +61,12 @@ class TerminalLocalPtyBridge {
 
   void _onStreamDone() {
     if (_isDisposed) return;
-    terminal.write('\r\n\x1b[1;33m[Session closed / Process exited]\x1b[0m\r\n');
+    try {
+      final code = pty.exitCode;
+      terminal.write('\r\n\x1b[1;33m[Process exited with code $code]\x1b[0m\r\n');
+    } catch (_) {
+      terminal.write('\r\n\x1b[1;33m[Session closed / Process exited]\x1b[0m\r\n');
+    }
     dispose();
   }
 

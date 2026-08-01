@@ -71,11 +71,12 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(sftpNotifierProvider);
     final notifier = ref.read(sftpNotifierProvider.notifier);
+    final colorScheme = ShadTheme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF181825),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1E1E2E),
+        backgroundColor: colorScheme.card,
         elevation: 0,
         title: Row(
           children: [
@@ -108,7 +109,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
           // Global Search & Control Bar
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            color: const Color(0xFF181825),
+            color: Theme.of(context).scaffoldBackgroundColor,
             child: Row(
               children: [
                 Expanded(
@@ -148,7 +149,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
                     ),
                   ),
                 ),
-                const VerticalDivider(width: 1, color: Colors.white12),
+                VerticalDivider(width: 1, color: colorScheme.border),
                 // Right Pane: Remote SFTP File System
                 Expanded(
                   child: DropTarget(
@@ -204,6 +205,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     VoidCallback? onCreateFile,
     Function(SftpFileItem)? onRename,
   }) {
+    final colorScheme = ShadTheme.of(context).colorScheme;
     final searchQuery = ref.watch(sftpNotifierProvider).searchQuery.toLowerCase();
     final filteredFiles = searchQuery.isEmpty
         ? files
@@ -214,7 +216,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
         // Pane Header
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          color: const Color(0xFF1E1E2E),
+          color: colorScheme.card,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -260,7 +262,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF313244),
+                        color: colorScheme.muted,
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
@@ -287,10 +289,10 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
                       ),
                     )
                   : filteredFiles.isEmpty
-                      ? const Center(child: Text('Empty Directory', style: TextStyle(color: Colors.white38)))
+                      ? Center(child: Text('Empty Directory', style: TextStyle(color: colorScheme.mutedForeground)))
                       : ListView.separated(
                           itemCount: filteredFiles.length,
-                          separatorBuilder: (_, _) => const Divider(height: 1, color: Colors.white10),
+                          separatorBuilder: (_, _) => Divider(height: 1, color: colorScheme.border),
                           itemBuilder: (context, index) {
                             final item = filteredFiles[index];
                             return _buildFileItemTile(
@@ -322,6 +324,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     VoidCallback? onEditContent,
     VoidCallback? onRename,
   }) {
+    final colorScheme = ShadTheme.of(context).colorScheme;
     IconData iconData;
     Color iconColor;
 
@@ -346,7 +349,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
       ),
       subtitle: Text(
         '${item.formattedSize} • ${item.permissions}',
-        style: const TextStyle(fontSize: 11, color: Colors.white54),
+        style: TextStyle(fontSize: 11, color: colorScheme.mutedForeground),
       ),
       onTap: onTap,
       trailing: PopupMenuButton<String>(

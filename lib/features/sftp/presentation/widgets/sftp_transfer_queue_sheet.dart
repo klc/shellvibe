@@ -12,13 +12,14 @@ class SftpTransferQueueSheet extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final queueAsync = ref.watch(transferQueueStreamProvider);
+    final colorScheme = ShadTheme.of(context).colorScheme;
 
     return Container(
       height: 320,
-      decoration: const BoxDecoration(
-        color: Color(0xFF1E1E2E),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-        boxShadow: [
+      decoration: BoxDecoration(
+        color: colorScheme.card,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+        boxShadow: const [
           BoxShadow(color: Colors.black54, blurRadius: 10, spreadRadius: 2),
         ],
       ),
@@ -50,23 +51,23 @@ class SftpTransferQueueSheet extends ConsumerWidget {
               ],
             ),
           ),
-          const Divider(height: 1),
+          Divider(height: 1, color: colorScheme.border),
           // Queue list
           Expanded(
             child: queueAsync.when(
               data: (queue) {
                 if (queue.isEmpty) {
-                  return const Center(
+                  return Center(
                     child: Text(
                       'No active or queued file transfers.',
-                      style: TextStyle(color: Colors.white54),
+                      style: TextStyle(color: colorScheme.mutedForeground),
                     ),
                   );
                 }
 
                 return ListView.separated(
                   itemCount: queue.length,
-                  separatorBuilder: (_, _) => const Divider(height: 1, color: Colors.white10),
+                  separatorBuilder: (_, _) => Divider(height: 1, color: colorScheme.border),
                   itemBuilder: (context, index) {
                     final item = queue[index];
                     return _TransferTile(item: item);
@@ -93,6 +94,7 @@ class _TransferTile extends ConsumerWidget {
     final isUpload = item.type == TransferType.upload;
     final worker = ref.watch(sftpTransferQueueWorkerProvider);
     final sftpClient = ref.watch(sftpNotifierProvider.select((s) => s.remoteClient));
+    final colorScheme = ShadTheme.of(context).colorScheme;
 
     IconData statusIcon;
     Color statusColor;
@@ -160,7 +162,7 @@ class _TransferTile extends ConsumerWidget {
               const SizedBox(width: 12),
               Text(
                 '${(item.progress * 100).toStringAsFixed(0)}%',
-                style: const TextStyle(fontSize: 12, color: Colors.white70),
+                style: TextStyle(fontSize: 12, color: colorScheme.mutedForeground),
               ),
             ],
           ),

@@ -106,6 +106,8 @@ class _RemoteFileEditorDialogState extends ConsumerState<RemoteFileEditorDialog>
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = ShadTheme.of(context).colorScheme;
+
     return ShadDialog(
       title: Row(
         children: [
@@ -127,7 +129,7 @@ class _RemoteFileEditorDialogState extends ConsumerState<RemoteFileEditorDialog>
                 ),
                 Text(
                   widget.fileItem.path,
-                  style: const TextStyle(fontSize: 12, color: Colors.white54),
+                  style: TextStyle(fontSize: 12, color: colorScheme.mutedForeground),
                   overflow: TextOverflow.ellipsis,
                 ),
               ],
@@ -136,6 +138,10 @@ class _RemoteFileEditorDialogState extends ConsumerState<RemoteFileEditorDialog>
         ],
       ),
       actions: [
+        ShadButton.outline(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
         if (_isSaving)
           const SizedBox(
             width: 20,
@@ -148,10 +154,6 @@ class _RemoteFileEditorDialogState extends ConsumerState<RemoteFileEditorDialog>
             leading: const Icon(Icons.save, size: 18),
             child: const Text('Save'),
           ),
-        ShadIconButton.ghost(
-          icon: const Icon(Icons.close, size: 18),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
       ],
       child: SizedBox(
         width: 850,
@@ -195,9 +197,9 @@ class _RemoteFileEditorDialogState extends ConsumerState<RemoteFileEditorDialog>
               Expanded(
                 child: Container(
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1E1E1E),
+                    color: colorScheme.muted,
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.white12),
+                    border: Border.all(color: colorScheme.border),
                   ),
                   child: TextField(
                     controller: _textController,
@@ -208,11 +210,11 @@ class _RemoteFileEditorDialogState extends ConsumerState<RemoteFileEditorDialog>
                         setState(() => _isModified = true);
                       }
                     },
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontFamily: 'monospace',
                       fontSize: 13,
                       height: 1.4,
-                      color: Color(0xFFD4D4D4),
+                      color: colorScheme.foreground,
                     ),
                     decoration: const InputDecoration(
                       contentPadding: EdgeInsets.all(12),
