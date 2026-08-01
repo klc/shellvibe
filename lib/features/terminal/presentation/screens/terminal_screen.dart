@@ -235,6 +235,11 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
               session.terminal,
               theme: theme,
               autofocus: true,
+              cursorType: switch (settings.cursorStyle) {
+                AppCursorStyle.block => TerminalCursorType.block,
+                AppCursorStyle.underline => TerminalCursorType.underline,
+                AppCursorStyle.bar => TerminalCursorType.verticalBar,
+              },
               textStyle: TerminalStyle(
                 fontSize: settings.fontSize,
                 fontFamily: settings.fontFamily,

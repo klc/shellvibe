@@ -195,7 +195,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     const Divider(),
                     ListTile(
                       title: const Text('App UI Color Palette'),
-                      subtitle: Text('Current: ${settings.palette.name.toUpperCase()}'),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Current: ${settings.palette.name.toUpperCase()}'),
+                          if (settings.themeMode == ThemeMode.light) ...[
+                            const SizedBox(height: 4),
+                            const ShadBadge.secondary(
+                              child: Text('Light mode uses default Light Slate theme'),
+                            ),
+                          ],
+                        ],
+                      ),
                       trailing: ShadSelect<AppPalette>(
                         key: const Key('settings_palette_dropdown'),
                         initialValue: settings.palette,
