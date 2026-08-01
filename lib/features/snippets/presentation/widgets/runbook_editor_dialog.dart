@@ -93,6 +93,15 @@ class _RunbookEditorDialogState extends State<RunbookEditorDialog> {
         ShadButton(
           key: const Key('runbook_save_button'),
           onPressed: () {
+            if (_steps.isEmpty) {
+              ShadToaster.of(context).show(
+                const ShadToast.destructive(
+                  title: Text('Validation Error'),
+                  description: Text('Runbook must have at least 1 step.'),
+                ),
+              );
+              return;
+            }
             if (_formKey.currentState!.validate()) {
               final result = RunbookModel(
                 id: widget.runbook?.id ?? const Uuid().v4(),
@@ -198,9 +207,18 @@ class _RunbookEditorDialogState extends State<RunbookEditorDialog> {
                                   initialValue: step.expectedExitCode.toString(),
                                   keyboardType: TextInputType.number,
                                   label: const Text('Exit Code'),
+                                  validator: (val) {
+                                    if (val.trim().isEmpty) return 'Required';
+                                    if (int.tryParse(val.trim()) == null) {
+                                      return 'Must be a valid integer';
+                                    }
+                                    return null;
+                                  },
                                   onChanged: (val) {
-                                    final code = int.tryParse(val) ?? 0;
-                                    _steps[idx] = step.copyWith(expectedExitCode: code);
+                                    final code = int.tryParse(val.trim());
+                                    if (code != null) {
+                                      _steps[idx] = step.copyWith(expectedExitCode: code);
+                                    }
                                   },
                                 ),
                               ),

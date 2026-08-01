@@ -105,6 +105,38 @@ class _RemoteFileEditorDialogState extends ConsumerState<RemoteFileEditorDialog>
     }
   }
 
+  Future<bool> _confirmDiscardChanges() async {
+    if (!_isModified) return true;
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => ShadDialog(
+        title: const Text('Unsaved Changes'),
+        description: const Text('You have unsaved changes. Are you sure you want to discard them?'),
+        actions: [
+          ShadButton.outline(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ShadButton.destructive(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Discard'),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
+  Future<void> _handleClose() async {
+    final confirm = await _confirmDiscardChanges();
+    if (confirm && mounted) {
+      setState(() {
+        _isModified = false;
+      });
+      Navigator.of(context).pop();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = ShadTheme.of(context).colorScheme;
@@ -112,40 +144,53 @@ class _RemoteFileEditorDialogState extends ConsumerState<RemoteFileEditorDialog>
     final dialogWidth = math.min(mediaQuery.size.width * 0.9, 850.0);
     final dialogHeight = math.min(mediaQuery.size.height * 0.8, 550.0);
 
-    return ShadDialog(
-      title: Row(
-        children: [
-          const Icon(Icons.edit_note, color: Colors.cyanAccent),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      widget.fileItem.name,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                    ),
-                    if (_isModified)
-                      const Text(' *', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold)),
-                  ],
-                ),
-                Text(
-                  widget.fileItem.path,
-                  style: TextStyle(fontSize: 12, color: colorScheme.mutedForeground),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
+    return PopScope(
+      canPop: !_isModified,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        final navigator = Navigator.of(context);
+        final confirm = await _confirmDiscardChanges();
+        if (confirm && mounted) {
+          setState(() {
+            _isModified = false;
+          });
+          navigator.pop();
+        }
+      },
+      child: ShadDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.edit_note, color: Colors.cyanAccent),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        widget.fileItem.name,
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                      if (_isModified)
+                        const Text(' *', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  Text(
+                    widget.fileItem.path,
+                    style: TextStyle(fontSize: 12, color: colorScheme.mutedForeground),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
-      ),
-      actions: [
-        ShadButton.outline(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          ],
         ),
+        actions: [
+          ShadButton.outline(
+            onPressed: _handleClose,
+            child: const Text('Cancel'),
+          ),
         if (_isSaving)
           const SizedBox(
             width: 20,
@@ -230,7 +275,8 @@ class _RemoteFileEditorDialogState extends ConsumerState<RemoteFileEditorDialog>
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }
 

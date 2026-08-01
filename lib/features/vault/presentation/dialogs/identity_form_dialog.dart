@@ -145,9 +145,8 @@ class _IdentityFormDialogState extends ConsumerState<IdentityFormDialog> {
                 ShadInputFormField(
                   key: const Key('identity_username_input'),
                   controller: _usernameController,
-                  label: const Text('Username'),
-                  placeholder: const Text('e.g. root, ubuntu'),
-                  validator: (v) => v.trim().isEmpty ? 'Username is required' : null,
+                  label: const Text('Username (Optional)'),
+                  placeholder: const Text('e.g. root, ubuntu (optional)'),
                 ),
                 const SizedBox(height: 12),
                 ShadSelectFormField<String>(
@@ -196,6 +195,7 @@ class _IdentityFormDialogState extends ConsumerState<IdentityFormDialog> {
                     maxLines: 4,
                     label: const Text('Private Key (PEM)'),
                     placeholder: const Text('-----BEGIN OPENSSH PRIVATE KEY-----...'),
+                    validator: (v) => v.trim().isEmpty ? 'Private key is required' : null,
                   ),
                   const SizedBox(height: 12),
                   ShadInputFormField(

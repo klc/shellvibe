@@ -238,7 +238,10 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                         label: const Text('Port'),
                         validator: (v) {
                           if (v.trim().isEmpty) return 'Required';
-                          if (int.tryParse(v) == null) return 'Invalid';
+                          final port = int.tryParse(v.trim());
+                          if (port == null || port < 1 || port > 65535) {
+                            return 'Must be between 1 and 65535';
+                          }
                           return null;
                         },
                       ),
