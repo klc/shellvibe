@@ -42,6 +42,7 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
         variables: allVars.toList(),
         title: 'Runbook Input Parameters',
       );
+      if (!mounted) return;
       if (inputs == null) return; // User cancelled
       variableValues = inputs;
     }

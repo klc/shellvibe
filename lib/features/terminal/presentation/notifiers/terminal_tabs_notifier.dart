@@ -170,8 +170,6 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     if (index == -1) return;
 
     final targetTab = state.tabs[index];
-    await targetTab.dispose();
-
     final remainingTabs = state.tabs.where((t) => t.id != tabId).toList();
     String? newActiveId = state.activeTabId;
 
@@ -188,6 +186,8 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       tabs: remainingTabs,
       activeTabId: newActiveId,
     );
+
+    await targetTab.dispose();
   }
 
   void setActiveTab(String tabId) {

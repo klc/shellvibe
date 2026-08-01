@@ -197,6 +197,13 @@ class TunnelEngine {
           );
           _subscriptions[ruleId]?.add(sub1);
 
+          if (cleanedUp) {
+            cleanupSubscriptions();
+            clientSocket.destroy();
+            sshChannel.close();
+            return;
+          }
+
           sub2 = sshChannel.stream.listen(
             (data) {
               clientSocket.add(data);
@@ -216,8 +223,9 @@ class TunnelEngine {
           _subscriptions[ruleId]?.add(sub2);
 
           if (cleanedUp) {
-            sub2.cancel();
-            _subscriptions[ruleId]?.remove(sub2);
+            cleanupSubscriptions();
+            clientSocket.destroy();
+            sshChannel.close();
           }
         } catch (_) {
           _activeSockets[ruleId]?.remove(clientSocket);
@@ -327,6 +335,13 @@ class TunnelEngine {
             );
             _subscriptions[ruleId]?.add(sub1);
 
+            if (cleanedUp) {
+              cleanupSubscriptions();
+              localSocket.destroy();
+              connection.close();
+              return;
+            }
+
             sub2 = connection.stream.listen(
               (data) {
                 localSocket?.add(data);
@@ -346,8 +361,9 @@ class TunnelEngine {
             _subscriptions[ruleId]?.add(sub2);
 
             if (cleanedUp) {
-              sub2.cancel();
-              _subscriptions[ruleId]?.remove(sub2);
+              cleanupSubscriptions();
+              localSocket.destroy();
+              connection.close();
             }
           } catch (_) {
             _activeChannels[ruleId]?.remove(connection);

@@ -45,6 +45,7 @@ class Socks5ProxyServer {
   Future<void> _handleClient(Socket clientSocket) async {
     _activeSockets.add(clientSocket);
     final reader = _BufferedSocketReader(clientSocket);
+    SSHForwardChannel? sshChannel;
     try {
       // Step 1: Handshake
       final handshakeData = await reader.readExact(2);
@@ -143,7 +144,6 @@ class Socks5ProxyServer {
       final targetPort = (portBytes[0] << 8) | portBytes[1];
 
       // Step 3: Open SSH channel to destination target
-      SSHForwardChannel sshChannel;
       try {
         sshChannel = await sshClient.forwardLocal(targetHost, targetPort);
       } catch (_) {
@@ -190,12 +190,14 @@ class Socks5ProxyServer {
           _activeSubscriptions.remove(sub2);
         }
         _activeSockets.remove(clientSocket);
-        _activeChannels.remove(sshChannel);
+        if (sshChannel != null) {
+          _activeChannels.remove(sshChannel);
+        }
       }
 
       sub1 = clientSocket.listen(
         (data) {
-          sshChannel.sink.add(data);
+          sshChannel?.sink.add(data);
           if (onBytesTransferred != null) {
             onBytesTransferred!(data.length);
           }
@@ -203,15 +205,22 @@ class Socks5ProxyServer {
         onError: (_) {
           cleanupSubscriptions();
           clientSocket.destroy();
-          sshChannel.close();
+          sshChannel?.close();
         },
         onDone: () {
           cleanupSubscriptions();
           clientSocket.destroy();
-          sshChannel.close();
+          sshChannel?.close();
         },
       );
       _activeSubscriptions.add(sub1);
+
+      if (cleanedUp) {
+        cleanupSubscriptions();
+        clientSocket.destroy();
+        sshChannel.close();
+        return;
+      }
 
       sub2 = sshChannel.stream.listen(
         (data) {
@@ -223,27 +232,25 @@ class Socks5ProxyServer {
         onError: (_) {
           cleanupSubscriptions();
           clientSocket.destroy();
-          sshChannel.close();
+          sshChannel?.close();
         },
         onDone: () {
           cleanupSubscriptions();
           clientSocket.destroy();
-          sshChannel.close();
+          sshChannel?.close();
         },
       );
       _activeSubscriptions.add(sub2);
 
       if (cleanedUp) {
-        sub2.cancel();
-        _activeSubscriptions.remove(sub2);
+        cleanupSubscriptions();
+        clientSocket.destroy();
+        sshChannel.close();
       }
     } catch (_) {
-      if (_activeChannels.isNotEmpty) {
-        // Find channels associated or close all remaining channels in exception
-        for (final ch in List<SSHForwardChannel>.from(_activeChannels)) {
-          ch.close();
-        }
-        _activeChannels.clear();
+      if (sshChannel != null) {
+        _activeChannels.remove(sshChannel);
+        sshChannel.close();
       }
       await reader.detach();
       _activeSockets.remove(clientSocket);
@@ -326,6 +333,10 @@ class _BufferedSocketReader {
   }
 
   Future<Uint8List> detach() async {
+    _isDone = true;
+    if (_dataCompleter != null && !_dataCompleter!.isCompleted) {
+      _dataCompleter!.complete();
+    }
     await _subscription?.cancel();
     _subscription = null;
     return _builder.takeBytes();
