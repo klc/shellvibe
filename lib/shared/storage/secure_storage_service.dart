@@ -12,6 +12,8 @@ abstract class SecureStorageKeys {
 
   /// DEK wrapped with the master-password-derived KEK.
   static const String wrappedDek = 'terly2_wrapped_dek';
+  static const String vaultFailedAttempts = 'terly2_vault_failed_attempts';
+  static const String vaultLockoutUntil = 'terly2_vault_lockout_until';
   static const String tokenPrefix = 'terly2_token_';
 }
 
@@ -23,12 +25,17 @@ class SecureStorageService {
   final Map<String, String> _inMemoryFallback = {};
 
   SecureStorageService({FlutterSecureStorage? storage})
-      : _storage = storage ??
-            const FlutterSecureStorage(
-              aOptions: AndroidOptions(encryptedSharedPreferences: true),
-              iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
-              mOptions: MacOsOptions(accessibility: KeychainAccessibility.first_unlock),
-            );
+    : _storage =
+          storage ??
+          const FlutterSecureStorage(
+            aOptions: AndroidOptions(encryptedSharedPreferences: true),
+            iOptions: IOSOptions(
+              accessibility: KeychainAccessibility.first_unlock,
+            ),
+            mOptions: MacOsOptions(
+              accessibility: KeychainAccessibility.first_unlock,
+            ),
+          );
 
   bool _isEntitlementError(Object e) {
     if (e is PlatformException) {

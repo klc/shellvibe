@@ -1,5 +1,7 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../../../shared/providers/database_providers.dart';
+import '../../../../shared/storage/secure_storage_service.dart';
 import 'identities_notifier.dart';
 
 part 'vault_notifier.g.dart';
@@ -72,13 +74,26 @@ class VaultNotifier extends _$VaultNotifier {
   @override
   Future<VaultState> build() async {
     final keyService = ref.watch(vaultKeyServiceProvider);
+    final storage = ref.watch(secureStorageServiceProvider);
     if (!await keyService.isMasterPasswordConfigured()) {
       return const VaultState(status: VaultStatus.unconfigured);
     }
+    final failedAttempts =
+        int.tryParse(
+          await storage.read(key: SecureStorageKeys.vaultFailedAttempts) ?? '',
+        ) ??
+        0;
+    final lockoutMillis = int.tryParse(
+      await storage.read(key: SecureStorageKeys.vaultLockoutUntil) ?? '',
+    );
     return VaultState(
       status: keyService.isUnlockedInMemory
           ? VaultStatus.unlocked
           : VaultStatus.locked,
+      failedAttempts: failedAttempts,
+      lockoutUntil: lockoutMillis == null
+          ? null
+          : DateTime.fromMillisecondsSinceEpoch(lockoutMillis),
     );
   }
 
@@ -95,6 +110,7 @@ class VaultNotifier extends _$VaultNotifier {
 
     state = await AsyncValue.guard(() async {
       await keyService.configureMasterPassword(masterPassword);
+      await _clearBruteForceState();
       if (generation != _lifecycleGeneration) {
         return const VaultState(status: VaultStatus.locked);
       }
@@ -131,6 +147,7 @@ class VaultNotifier extends _$VaultNotifier {
         // Locked while the Argon2id derivation was running? The DEK is gone;
         // publishing `unlocked` here would desync UI from [VaultKeyService].
         if (generation != _lifecycleGeneration) return false;
+        await _clearBruteForceState();
         state = const AsyncData(VaultState(status: VaultStatus.unlocked));
         return true;
       }
@@ -146,11 +163,14 @@ class VaultNotifier extends _$VaultNotifier {
         lockoutUntil = DateTime.now().add(Duration(seconds: lockoutSeconds));
       }
 
-      state = AsyncData(VaultState(
-        status: VaultStatus.locked,
-        failedAttempts: attempts,
-        lockoutUntil: lockoutUntil,
-      ));
+      state = AsyncData(
+        VaultState(
+          status: VaultStatus.locked,
+          failedAttempts: attempts,
+          lockoutUntil: lockoutUntil,
+        ),
+      );
+      await _persistBruteForceState(attempts, lockoutUntil);
       return false;
     } catch (e, st) {
       state = AsyncError(e, st);
@@ -162,6 +182,38 @@ class VaultNotifier extends _$VaultNotifier {
   void lock() {
     _lifecycleGeneration++;
     ref.read(vaultKeyServiceProvider).lock();
-    state = const AsyncData(VaultState(status: VaultStatus.locked));
+    final current = state.valueOrNull;
+    state = AsyncData(
+      VaultState(
+        status: VaultStatus.locked,
+        failedAttempts: current?.failedAttempts ?? 0,
+        lockoutUntil: current?.lockoutUntil,
+      ),
+    );
+  }
+
+  Future<void> _persistBruteForceState(
+    int failedAttempts,
+    DateTime? lockoutUntil,
+  ) async {
+    final storage = ref.read(secureStorageServiceProvider);
+    await storage.write(
+      key: SecureStorageKeys.vaultFailedAttempts,
+      value: '$failedAttempts',
+    );
+    if (lockoutUntil == null) {
+      await storage.delete(key: SecureStorageKeys.vaultLockoutUntil);
+    } else {
+      await storage.write(
+        key: SecureStorageKeys.vaultLockoutUntil,
+        value: '${lockoutUntil.millisecondsSinceEpoch}',
+      );
+    }
+  }
+
+  Future<void> _clearBruteForceState() async {
+    final storage = ref.read(secureStorageServiceProvider);
+    await storage.delete(key: SecureStorageKeys.vaultFailedAttempts);
+    await storage.delete(key: SecureStorageKeys.vaultLockoutUntil);
   }
 }

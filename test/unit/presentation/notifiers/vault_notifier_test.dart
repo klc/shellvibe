@@ -11,12 +11,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   final fastEngine = EncryptionEngine(
-    kdf: Argon2id(
-      parallelism: 1,
-      memory: 8,
-      iterations: 1,
-      hashLength: 32,
-    ),
+    kdf: Argon2id(parallelism: 1, memory: 8, iterations: 1, hashLength: 32),
   );
 
   group('VaultNotifier State Transition Unit Tests', () {
@@ -25,9 +20,7 @@ void main() {
     setUp(() {
       FlutterSecureStorage.setMockInitialValues({});
       container = ProviderContainer(
-        overrides: [
-          encryptionEngineProvider.overrideWithValue(fastEngine),
-        ],
+        overrides: [encryptionEngineProvider.overrideWithValue(fastEngine)],
       );
     });
 
@@ -35,12 +28,15 @@ void main() {
       container.dispose();
     });
 
-    test('Initial state is unconfigured when no master key exists in storage', () async {
-      final state = await container.read(vaultNotifierProvider.future);
-      expect(state.status, equals(VaultStatus.unconfigured));
-      expect(state.failedAttempts, equals(0));
-      expect(state.isLockedOut, isFalse);
-    });
+    test(
+      'Initial state is unconfigured when no master key exists in storage',
+      () async {
+        final state = await container.read(vaultNotifierProvider.future);
+        expect(state.status, equals(VaultStatus.unconfigured));
+        expect(state.failedAttempts, equals(0));
+        expect(state.isLockedOut, isFalse);
+      },
+    );
 
     test('setup creates master key and unlocks vault', () async {
       final notifier = container.read(vaultNotifierProvider.notifier);
@@ -59,7 +55,10 @@ void main() {
       final notifier = container.read(vaultNotifierProvider.notifier);
       await notifier.setup('CorrectMasterPassword123!');
 
-      expect(container.read(vaultNotifierProvider).value!.status, equals(VaultStatus.unlocked));
+      expect(
+        container.read(vaultNotifierProvider).value!.status,
+        equals(VaultStatus.unlocked),
+      );
 
       notifier.lock();
 
@@ -87,47 +86,82 @@ void main() {
       );
     });
 
-    test('unlock with wrong password increments failedAttempts counter', () async {
-      final notifier = container.read(vaultNotifierProvider.notifier);
-      await notifier.setup('CorrectMasterPassword123!');
-      notifier.lock();
+    test(
+      'unlock with wrong password increments failedAttempts counter',
+      () async {
+        final notifier = container.read(vaultNotifierProvider.notifier);
+        await notifier.setup('CorrectMasterPassword123!');
+        notifier.lock();
 
-      final success = await notifier.unlock('WrongPassword!');
-      expect(success, isFalse);
+        final success = await notifier.unlock('WrongPassword!');
+        expect(success, isFalse);
 
-      final state = container.read(vaultNotifierProvider).value!;
-      expect(state.status, equals(VaultStatus.locked));
-      expect(state.failedAttempts, equals(1));
-      expect(state.isLockedOut, isFalse);
-    });
+        final state = container.read(vaultNotifierProvider).value!;
+        expect(state.status, equals(VaultStatus.locked));
+        expect(state.failedAttempts, equals(1));
+        expect(state.isLockedOut, isFalse);
+      },
+    );
 
-    test('brute-force protection engages lockout after 5 failed attempts', () async {
-      final notifier = container.read(vaultNotifierProvider.notifier);
-      await notifier.setup('CorrectMasterPassword123!');
-      notifier.lock();
+    test(
+      'brute-force protection engages lockout after 5 failed attempts',
+      () async {
+        final notifier = container.read(vaultNotifierProvider.notifier);
+        await notifier.setup('CorrectMasterPassword123!');
+        notifier.lock();
 
-      // 4 failed attempts
-      for (int i = 0; i < 4; i++) {
-        await notifier.unlock('WrongPassword!');
-      }
+        // 4 failed attempts
+        for (int i = 0; i < 4; i++) {
+          await notifier.unlock('WrongPassword!');
+        }
 
-      final stateAfter4 = container.read(vaultNotifierProvider).value!;
-      expect(stateAfter4.failedAttempts, equals(4));
-      expect(stateAfter4.isLockedOut, isFalse);
+        final stateAfter4 = container.read(vaultNotifierProvider).value!;
+        expect(stateAfter4.failedAttempts, equals(4));
+        expect(stateAfter4.isLockedOut, isFalse);
 
-      // 5th failed attempt -> engage lockout
-      final success5 = await notifier.unlock('WrongPassword!');
-      expect(success5, isFalse);
+        // 5th failed attempt -> engage lockout
+        final success5 = await notifier.unlock('WrongPassword!');
+        expect(success5, isFalse);
 
-      final stateAfter5 = container.read(vaultNotifierProvider).value!;
-      expect(stateAfter5.failedAttempts, equals(5));
-      expect(stateAfter5.isLockedOut, isTrue);
-      expect(stateAfter5.lockoutUntil, isNotNull);
-      expect(stateAfter5.remainingLockout.inSeconds, greaterThan(0));
+        final stateAfter5 = container.read(vaultNotifierProvider).value!;
+        expect(stateAfter5.failedAttempts, equals(5));
+        expect(stateAfter5.isLockedOut, isTrue);
+        expect(stateAfter5.lockoutUntil, isNotNull);
+        expect(stateAfter5.remainingLockout.inSeconds, greaterThan(0));
 
-      // Attempting to unlock while locked out fails immediately
-      final attemptDuringLockout = await notifier.unlock('CorrectMasterPassword123!');
-      expect(attemptDuringLockout, isFalse);
-    });
+        // Attempting to unlock while locked out fails immediately
+        final attemptDuringLockout = await notifier.unlock(
+          'CorrectMasterPassword123!',
+        );
+        expect(attemptDuringLockout, isFalse);
+      },
+    );
+
+    test(
+      'failed attempts and lockout survive a new notifier instance',
+      () async {
+        final firstContainer = container;
+        final notifier = firstContainer.read(vaultNotifierProvider.notifier);
+        await notifier.setup('CorrectMasterPassword123!');
+        notifier.lock();
+
+        for (int i = 0; i < 5; i++) {
+          await notifier.unlock('WrongPassword!');
+        }
+        firstContainer.dispose();
+
+        final restartedContainer = ProviderContainer(
+          overrides: [encryptionEngineProvider.overrideWithValue(fastEngine)],
+        );
+        addTearDown(restartedContainer.dispose);
+
+        final restored = await restartedContainer.read(
+          vaultNotifierProvider.future,
+        );
+        expect(restored.failedAttempts, equals(5));
+        expect(restored.lockoutUntil, isNotNull);
+        expect(restored.isLockedOut, isTrue);
+      },
+    );
   });
 }

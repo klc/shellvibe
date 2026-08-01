@@ -7,8 +7,8 @@ import '../../../../core/network/ssh_session_manager.dart';
 /// Blocking prompt shown during the SSH handshake when a host key is unknown
 /// (Trust On First Use) or no longer matches the stored fingerprint.
 ///
-/// Returning `true` trusts the key and stores it in `known_hosts`; anything
-/// else aborts the connection.
+/// Returning `true` trusts an unknown key and stores it in `known_hosts`;
+/// changed keys cannot be accepted by this normal connection flow.
 class HostKeyPromptDialog extends StatelessWidget {
   final String hostname;
   final int port;
@@ -30,7 +30,9 @@ class HostKeyPromptDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final accent = _isMismatch ? theme.colorScheme.error : theme.colorScheme.primary;
+    final accent = _isMismatch
+        ? theme.colorScheme.error
+        : theme.colorScheme.primary;
 
     return ShadDialog.alert(
       title: Row(
@@ -51,13 +53,13 @@ class HostKeyPromptDialog extends StatelessWidget {
           Text(
             _isMismatch
                 ? 'The key presented by $hostname:$port does not match the key '
-                    'stored on this device. This can mean the server was '
-                    'reinstalled — or that someone is intercepting the '
-                    'connection (man-in-the-middle attack).'
+                      'stored on this device. This can mean the server was '
+                      'reinstalled — or that someone is intercepting the '
+                      'connection (man-in-the-middle attack).'
                 : 'The authenticity of $hostname:$port cannot be established. '
-                    'Verify the fingerprint below through a trusted channel '
-                    '(e.g. `ssh-keygen -lf /etc/ssh/ssh_host_${keyType}_key.pub` '
-                    'on the server) before trusting it.',
+                      'Verify the fingerprint below through a trusted channel '
+                      '(e.g. `ssh-keygen -lf /etc/ssh/ssh_host_${keyType}_key.pub` '
+                      'on the server) before trusting it.',
             style: theme.textTheme.bodySmall?.copyWith(
               color: _isMismatch ? theme.colorScheme.error : null,
             ),
@@ -89,12 +91,12 @@ class HostKeyPromptDialog extends StatelessWidget {
           onPressed: () => Navigator.of(context).pop(false),
           child: const Text('Cancel Connection'),
         ),
-        ShadButton(
-          key: const Key('host_key_accept_button'),
-          backgroundColor: _isMismatch ? Colors.red : null,
-          onPressed: () => Navigator.of(context).pop(true),
-          child: Text(_isMismatch ? 'Accept New Key' : 'Trust & Continue'),
-        ),
+        if (!_isMismatch)
+          ShadButton(
+            key: const Key('host_key_accept_button'),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Trust & Continue'),
+          ),
       ],
     );
   }

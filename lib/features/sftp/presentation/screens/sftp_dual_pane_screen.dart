@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../../domain/models/sftp_file_item.dart';
+import '../../../terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import '../providers/sftp_providers.dart';
 import '../widgets/file_permissions_dialog.dart';
 import '../widgets/remote_file_editor_dialog.dart';
@@ -16,11 +17,7 @@ class SftpDualPaneScreen extends ConsumerStatefulWidget {
   final SftpClient? sftpClient;
   final String? hostLabel;
 
-  const SftpDualPaneScreen({
-    super.key,
-    this.sftpClient,
-    this.hostLabel,
-  });
+  const SftpDualPaneScreen({super.key, this.sftpClient, this.hostLabel});
 
   @override
   ConsumerState<SftpDualPaneScreen> createState() => _SftpDualPaneScreenState();
@@ -35,8 +32,38 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     super.initState();
     if (widget.sftpClient != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        ref.read(sftpNotifierProvider.notifier).setRemoteClient(widget.sftpClient);
+        ref
+            .read(sftpNotifierProvider.notifier)
+            .setRemoteClient(widget.sftpClient);
       });
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _attachToActiveSshSession();
+      });
+    }
+  }
+
+  Future<void> _attachToActiveSshSession() async {
+    final sshClient = ref
+        .read(terminalTabsNotifierProvider)
+        .activeTab
+        ?.sshSessionManager
+        ?.client;
+    if (sshClient == null || sshClient.isClosed) {
+      await ref.read(sftpNotifierProvider.notifier).loadRemoteDirectory();
+      return;
+    }
+
+    try {
+      final client = await sshClient.sftp();
+      if (!mounted) {
+        await client.close();
+        return;
+      }
+      ref.read(sftpNotifierProvider.notifier).setRemoteClient(client);
+    } catch (error) {
+      if (!mounted) return;
+      ref.read(sftpNotifierProvider.notifier).setRemoteClient(null);
     }
   }
 
@@ -55,7 +82,10 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     );
   }
 
-  void _handleDragAndDropUpload(List<DropItem> droppedFiles, String remoteDirectoryPath) {
+  void _handleDragAndDropUpload(
+    List<DropItem> droppedFiles,
+    String remoteDirectoryPath,
+  ) {
     final notifier = ref.read(sftpNotifierProvider.notifier);
     for (final file in droppedFiles) {
       final item = SftpFileItem(
@@ -88,7 +118,9 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
             const Icon(Icons.folder_copy_outlined, color: Colors.cyanAccent),
             const SizedBox(width: 10),
             Text(
-              widget.hostLabel != null ? 'SFTP: ${widget.hostLabel}' : 'Dual-Pane SFTP Manager',
+              widget.hostLabel != null
+                  ? 'SFTP: ${widget.hostLabel}'
+                  : 'Dual-Pane SFTP Manager',
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
           ],
@@ -144,7 +176,9 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
                     ButtonSegment<int>(
                       value: 1,
                       label: Text(
-                        state.remoteClient != null ? 'Remote SFTP' : 'Remote (Disconnected)',
+                        state.remoteClient != null
+                            ? 'Remote SFTP'
+                            : 'Remote (Disconnected)',
                         overflow: TextOverflow.ellipsis,
                       ),
                       icon: const Icon(Icons.dns, size: 16),
@@ -163,8 +197,8 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
           Expanded(
             child: isMobile
                 ? (_selectedMobileTab == 0
-                    ? _buildLocalPane(state, notifier)
-                    : _buildRemotePane(state, notifier))
+                      ? _buildLocalPane(state, notifier)
+                      : _buildRemotePane(state, notifier))
                 : Row(
                     children: [
                       Expanded(child: _buildLocalPane(state, notifier)),
@@ -180,7 +214,8 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
 
   Widget _buildLocalPane(SftpState state, SftpNotifier notifier) {
     return DropTarget(
-      onDragDone: (details) => _handleDragAndDropUpload(details.files, state.remotePath),
+      onDragDone: (details) =>
+          _handleDragAndDropUpload(details.files, state.remotePath),
       child: _buildPane(
         title: 'Local Workstation',
         path: state.localPath,
@@ -202,9 +237,12 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
 
   Widget _buildRemotePane(SftpState state, SftpNotifier notifier) {
     return DropTarget(
-      onDragDone: (details) => _handleDragAndDropUpload(details.files, state.remotePath),
+      onDragDone: (details) =>
+          _handleDragAndDropUpload(details.files, state.remotePath),
       child: _buildPane(
-        title: state.remoteClient != null ? 'Remote SFTP Server' : 'Remote (Disconnected)',
+        title: state.remoteClient != null
+            ? 'Remote SFTP Server'
+            : 'Remote (Disconnected)',
         path: state.remotePath,
         files: state.remoteFiles,
         isLoading: state.isLoadingRemote,
@@ -248,10 +286,15 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     Function(SftpFileItem)? onRename,
   }) {
     final colorScheme = ShadTheme.of(context).colorScheme;
-    final searchQuery = ref.watch(sftpNotifierProvider).searchQuery.toLowerCase();
+    final searchQuery = ref
+        .watch(sftpNotifierProvider)
+        .searchQuery
+        .toLowerCase();
     final filteredFiles = searchQuery.isEmpty
         ? files
-        : files.where((f) => f.name.toLowerCase().contains(searchQuery)).toList();
+        : files
+              .where((f) => f.name.toLowerCase().contains(searchQuery))
+              .toList();
 
     return Column(
       children: [
@@ -273,13 +316,19 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
                   Expanded(
                     child: Text(
                       title,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   if (!isLocal && onCreateFolder != null)
                     IconButton(
-                      icon: const Icon(Icons.create_new_folder_outlined, size: 18),
+                      icon: const Icon(
+                        Icons.create_new_folder_outlined,
+                        size: 18,
+                      ),
                       tooltip: 'New Folder',
                       onPressed: onCreateFolder,
                     ),
@@ -302,14 +351,20 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
                   ),
                   Expanded(
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: colorScheme.muted,
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
                         path,
-                        style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                        style: const TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 12,
+                        ),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -324,32 +379,47 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
           child: isLoading
               ? const Center(child: CircularProgressIndicator())
               : error != null
-                  ? Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Text(error, style: const TextStyle(color: Colors.redAccent)),
-                      ),
-                    )
-                  : filteredFiles.isEmpty
-                      ? Center(child: Text('Empty Directory', style: TextStyle(color: colorScheme.mutedForeground)))
-                      : ListView.separated(
-                          itemCount: filteredFiles.length,
-                          separatorBuilder: (_, _) => Divider(height: 1, color: colorScheme.border),
-                          itemBuilder: (context, index) {
-                            final item = filteredFiles[index];
-                            return _buildFileItemTile(
-                              item: item,
-                              isLocal: isLocal,
-                              onTap: () => onItemTap(item),
-                              onDelete: () => onDelete(item),
-                              onUpload: onUpload != null ? () => onUpload(item) : null,
-                              onDownload: onDownload != null ? () => onDownload(item) : null,
-                              onEditPermissions: onEditPermissions != null ? () => onEditPermissions(item) : null,
-                              onEditContent: onEditContent != null ? () => onEditContent(item) : null,
-                              onRename: onRename != null ? () => onRename(item) : null,
-                            );
-                          },
-                        ),
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(
+                      error,
+                      style: const TextStyle(color: Colors.redAccent),
+                    ),
+                  ),
+                )
+              : filteredFiles.isEmpty
+              ? Center(
+                  child: Text(
+                    'Empty Directory',
+                    style: TextStyle(color: colorScheme.mutedForeground),
+                  ),
+                )
+              : ListView.separated(
+                  itemCount: filteredFiles.length,
+                  separatorBuilder: (_, _) =>
+                      Divider(height: 1, color: colorScheme.border),
+                  itemBuilder: (context, index) {
+                    final item = filteredFiles[index];
+                    return _buildFileItemTile(
+                      item: item,
+                      isLocal: isLocal,
+                      onTap: () => onItemTap(item),
+                      onDelete: () => onDelete(item),
+                      onUpload: onUpload != null ? () => onUpload(item) : null,
+                      onDownload: onDownload != null
+                          ? () => onDownload(item)
+                          : null,
+                      onEditPermissions: onEditPermissions != null
+                          ? () => onEditPermissions(item)
+                          : null,
+                      onEditContent: onEditContent != null
+                          ? () => onEditContent(item)
+                          : null,
+                      onRename: onRename != null ? () => onRename(item) : null,
+                    );
+                  },
+                ),
         ),
       ],
     );
@@ -406,16 +476,70 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
         },
         itemBuilder: (context) => [
           if (isLocal && onUpload != null)
-            const PopupMenuItem(value: 'upload', child: Row(children: [Icon(Icons.upload, size: 16), SizedBox(width: 8), Text('Upload to Remote')])),
+            const PopupMenuItem(
+              value: 'upload',
+              child: Row(
+                children: [
+                  Icon(Icons.upload, size: 16),
+                  SizedBox(width: 8),
+                  Text('Upload to Remote'),
+                ],
+              ),
+            ),
           if (!isLocal && onDownload != null)
-            const PopupMenuItem(value: 'download', child: Row(children: [Icon(Icons.download, size: 16), SizedBox(width: 8), Text('Download')])),
+            const PopupMenuItem(
+              value: 'download',
+              child: Row(
+                children: [
+                  Icon(Icons.download, size: 16),
+                  SizedBox(width: 8),
+                  Text('Download'),
+                ],
+              ),
+            ),
           if (!isLocal && !item.isDirectory && onEditContent != null)
-            const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit, size: 16), SizedBox(width: 8), Text('Edit Content')])),
+            const PopupMenuItem(
+              value: 'edit',
+              child: Row(
+                children: [
+                  Icon(Icons.edit, size: 16),
+                  SizedBox(width: 8),
+                  Text('Edit Content'),
+                ],
+              ),
+            ),
           if (!isLocal && onEditPermissions != null)
-            const PopupMenuItem(value: 'chmod', child: Row(children: [Icon(Icons.security, size: 16), SizedBox(width: 8), Text('Permissions (chmod)')])),
+            const PopupMenuItem(
+              value: 'chmod',
+              child: Row(
+                children: [
+                  Icon(Icons.security, size: 16),
+                  SizedBox(width: 8),
+                  Text('Permissions (chmod)'),
+                ],
+              ),
+            ),
           if (!isLocal && onRename != null)
-            const PopupMenuItem(value: 'rename', child: Row(children: [Icon(Icons.drive_file_rename_outline, size: 16), SizedBox(width: 8), Text('Rename')])),
-          const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete, color: Colors.redAccent, size: 16), SizedBox(width: 8), Text('Delete', style: TextStyle(color: Colors.redAccent))])),
+            const PopupMenuItem(
+              value: 'rename',
+              child: Row(
+                children: [
+                  Icon(Icons.drive_file_rename_outline, size: 16),
+                  SizedBox(width: 8),
+                  Text('Rename'),
+                ],
+              ),
+            ),
+          const PopupMenuItem(
+            value: 'delete',
+            child: Row(
+              children: [
+                Icon(Icons.delete, color: Colors.redAccent, size: 16),
+                SizedBox(width: 8),
+                Text('Delete', style: TextStyle(color: Colors.redAccent)),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -438,7 +562,11 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
       final notifier = ref.read(sftpNotifierProvider.notifier);
       await notifier.changeRemotePermissions(item, result.mode);
       if (result.uid != null || result.gid != null) {
-        await notifier.changeRemoteOwner(item, uid: result.uid, gid: result.gid);
+        await notifier.changeRemoteOwner(
+          item,
+          uid: result.uid,
+          gid: result.gid,
+        );
       }
     }
   }
@@ -451,7 +579,9 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     final name = await showDialog<String>(
       context: context,
       builder: (ctx) => ShadDialog(
-        title: Text(isFolder ? 'Create Remote Directory' : 'Create Remote File'),
+        title: Text(
+          isFolder ? 'Create Remote Directory' : 'Create Remote File',
+        ),
         description: SizedBox(
           width: dialogWidth,
           child: Column(
@@ -510,10 +640,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               const SizedBox(height: 8),
-              ShadInput(
-                controller: controller,
-                autofocus: true,
-              ),
+              ShadInput(controller: controller, autofocus: true),
             ],
           ),
         ),
@@ -541,4 +668,3 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     }
   }
 }
-

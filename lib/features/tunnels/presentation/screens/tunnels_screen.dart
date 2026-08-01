@@ -6,6 +6,7 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 import '../../../../core/network/tunnel_engine.dart';
 import '../../../hosts/domain/models/host_model.dart';
 import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
+import '../../../terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import '../../domain/models/tunnel_rule_model.dart';
 import '../providers/tunnels_providers.dart';
 import '../widgets/tunnel_form_dialog.dart';
@@ -14,11 +15,7 @@ class TunnelsScreen extends ConsumerStatefulWidget {
   final SSHClient? activeSshClient;
   final String? filterHostId;
 
-  const TunnelsScreen({
-    super.key,
-    this.activeSshClient,
-    this.filterHostId,
-  });
+  const TunnelsScreen({super.key, this.activeSshClient, this.filterHostId});
 
   @override
   ConsumerState<TunnelsScreen> createState() => _TunnelsScreenState();
@@ -71,15 +68,14 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
   void _openEditRuleDialog(TunnelRuleModel rule) async {
     final updatedRule = await showDialog<TunnelRuleModel>(
       context: context,
-      builder: (_) => TunnelFormDialog(
-        rule: rule,
-        defaultHostId: rule.hostId,
-      ),
+      builder: (_) => TunnelFormDialog(rule: rule, defaultHostId: rule.hostId),
     );
 
     if (updatedRule != null) {
       try {
-        await ref.read(tunnelsNotifierProvider.notifier).updateRule(updatedRule);
+        await ref
+            .read(tunnelsNotifierProvider.notifier)
+            .updateRule(updatedRule);
       } catch (e) {
         if (mounted) {
           ShadToaster.of(context).show(
@@ -125,7 +121,9 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh Rules',
-            onPressed: () => ref.read(tunnelsNotifierProvider.notifier).loadRules(widget.filterHostId),
+            onPressed: () => ref
+                .read(tunnelsNotifierProvider.notifier)
+                .loadRules(widget.filterHostId),
           ),
         ],
       ),
@@ -149,11 +147,18 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.hub_outlined, size: 64, color: colorScheme.mutedForeground),
+                  Icon(
+                    Icons.hub_outlined,
+                    size: 64,
+                    color: colorScheme.mutedForeground,
+                  ),
                   const SizedBox(height: 16),
                   Text(
                     'No Port Forwarding Rules configured.',
-                    style: TextStyle(color: colorScheme.mutedForeground, fontSize: 16),
+                    style: TextStyle(
+                      color: colorScheme.mutedForeground,
+                      fontSize: 16,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   ElevatedButton.icon(
@@ -184,7 +189,8 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, stack) => Center(child: Text('Error loading tunnels: $err')),
+        error: (err, stack) =>
+            Center(child: Text('Error loading tunnels: $err')),
       ),
     );
   }
@@ -235,7 +241,10 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
             Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: badgeColor.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(6),
@@ -253,8 +262,13 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    host != null ? '${host.label} (${host.hostname})' : 'Host ID: ${rule.hostId}',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                    host != null
+                        ? '${host.label} (${host.hostname})'
+                        : 'Host ID: ${rule.hostId}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -264,12 +278,21 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
                   onChanged: (value) async {
                     final notifier = ref.read(tunnelsNotifierProvider.notifier);
                     if (value) {
-                      if (widget.activeSshClient != null) {
-                        await notifier.startRule(rule, widget.activeSshClient!);
+                      final activeClient =
+                          widget.activeSshClient ??
+                          ref
+                              .read(terminalTabsNotifierProvider)
+                              .activeTab
+                              ?.sshSessionManager
+                              ?.client;
+                      if (activeClient != null && !activeClient.isClosed) {
+                        await notifier.startRule(rule, activeClient);
                       } else {
                         ShadToaster.of(context).show(
                           const ShadToast.destructive(
-                            description: Text('Active SSH Connection required to start tunnel'),
+                            description: Text(
+                              'Active SSH Connection required to start tunnel',
+                            ),
                           ),
                         );
                       }
@@ -283,17 +306,34 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
                   onSelected: (val) {
                     if (val == 'edit') _openEditRuleDialog(rule);
                     if (val == 'delete') {
-                      ref.read(tunnelsNotifierProvider.notifier).deleteRule(rule.id);
+                      ref
+                          .read(tunnelsNotifierProvider.notifier)
+                          .deleteRule(rule.id);
                     }
                   },
                   itemBuilder: (context) => [
                     const PopupMenuItem(
                       value: 'edit',
-                      child: Row(children: [Icon(Icons.edit, size: 16), SizedBox(width: 8), Text('Edit')]),
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit, size: 16),
+                          SizedBox(width: 8),
+                          Text('Edit'),
+                        ],
+                      ),
                     ),
                     const PopupMenuItem(
                       value: 'delete',
-                      child: Row(children: [Icon(Icons.delete, color: Colors.redAccent, size: 16), SizedBox(width: 8), Text('Delete', style: TextStyle(color: Colors.redAccent))]),
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete, color: Colors.redAccent, size: 16),
+                          SizedBox(width: 8),
+                          Text(
+                            'Delete',
+                            style: TextStyle(color: Colors.redAccent),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -311,22 +351,49 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
                 children: [
                   const Icon(Icons.computer, size: 18, color: Colors.white70),
                   const SizedBox(width: 6),
-                  Text('127.0.0.1:${rule.localPort}',
-                      style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold)),
+                  Text(
+                    '127.0.0.1:${rule.localPort}',
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                   const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 8),
-                    child: Icon(Icons.arrow_forward, size: 16, color: Colors.cyanAccent),
+                    child: Icon(
+                      Icons.arrow_forward,
+                      size: 16,
+                      color: Colors.cyanAccent,
+                    ),
                   ),
                   if (rule.type == 'dynamic') ...[
-                    const Icon(Icons.shield_outlined, size: 18, color: Colors.orangeAccent),
+                    const Icon(
+                      Icons.shield_outlined,
+                      size: 18,
+                      color: Colors.orangeAccent,
+                    ),
                     const SizedBox(width: 6),
-                    const Text('SOCKS5 Dynamic Bridge',
-                        style: TextStyle(fontFamily: 'monospace', color: Colors.orangeAccent)),
+                    const Text(
+                      'SOCKS5 Dynamic Bridge',
+                      style: TextStyle(
+                        fontFamily: 'monospace',
+                        color: Colors.orangeAccent,
+                      ),
+                    ),
                   ] else ...[
-                    const Icon(Icons.dns_outlined, size: 18, color: Colors.cyanAccent),
+                    const Icon(
+                      Icons.dns_outlined,
+                      size: 18,
+                      color: Colors.cyanAccent,
+                    ),
                     const SizedBox(width: 6),
-                    Text('${rule.remoteHost}:${rule.remotePort}',
-                        style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold)),
+                    Text(
+                      '${rule.remoteHost}:${rule.remotePort}',
+                      style: const TextStyle(
+                        fontFamily: 'monospace',
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ],
                 ],
               ),
@@ -339,14 +406,25 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
                   const SizedBox(width: 6),
                   Text(
                     'Speed: ${activeTunnel.formattedSpeed}',
-                    style: const TextStyle(color: Colors.greenAccent, fontSize: 12, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                      color: Colors.greenAccent,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   const Spacer(),
-                  Icon(Icons.data_usage, size: 16, color: colorScheme.mutedForeground),
+                  Icon(
+                    Icons.data_usage,
+                    size: 16,
+                    color: colorScheme.mutedForeground,
+                  ),
                   const SizedBox(width: 6),
                   Text(
                     'Total Transferred: ${activeTunnel.formattedBytes}',
-                    style: TextStyle(color: colorScheme.mutedForeground, fontSize: 12),
+                    style: TextStyle(
+                      color: colorScheme.mutedForeground,
+                      fontSize: 12,
+                    ),
                   ),
                 ],
               ),

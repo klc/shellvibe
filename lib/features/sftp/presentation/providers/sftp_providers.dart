@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:dartssh2/dartssh2.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -13,6 +13,33 @@ import '../../domain/models/sftp_file_item.dart';
 import '../../domain/models/transfer_item.dart';
 
 part 'sftp_providers.g.dart';
+
+/// Returns whether [name] is a single safe remote filename segment.
+///
+/// Remote paths always use POSIX separators, even when Terly2 itself runs on
+/// Windows. Rejecting separators, dot segments, NUL and absolute paths keeps
+/// create/rename/upload operations inside the selected remote directory.
+@visibleForTesting
+bool isSafeRemoteName(String name) {
+  return name.isNotEmpty &&
+      name != '.' &&
+      name != '..' &&
+      !name.contains('/') &&
+      !name.contains('\\') &&
+      !name.contains('\u0000') &&
+      !p.posix.isAbsolute(name);
+}
+
+/// Joins a validated filename to a remote POSIX directory.
+@visibleForTesting
+String buildSafeRemoteChildPath(String directory, String name) {
+  if (!isSafeRemoteName(name)) {
+    throw const FormatException(
+      'Remote name must be a single safe path segment',
+    );
+  }
+  return p.posix.join(directory, name);
+}
 
 /// Provider for [SftpService]
 @riverpod
@@ -136,12 +163,13 @@ class SftpNotifier extends _$SftpNotifier {
     }
   }
 
-  void setRemoteClient(SftpClient? client) {
+  Future<void> setRemoteClient(SftpClient? client) async {
     final old = state.remoteClient;
     if (identical(old, client)) return;
 
     if (client == null) {
       state = state.copyWith(clearRemoteClient: true);
+      await loadRemoteDirectory();
     } else {
       state = state.copyWith(remoteClient: client);
       loadRemoteDirectory(state.remotePath);
@@ -242,7 +270,7 @@ class SftpNotifier extends _$SftpNotifier {
 
   void navigateRemoteUp() {
     if (state.remotePath == '/') return;
-    final parent = p.dirname(state.remotePath);
+    final parent = p.posix.dirname(state.remotePath);
     loadRemoteDirectory(parent);
   }
 
@@ -255,8 +283,8 @@ class SftpNotifier extends _$SftpNotifier {
   Future<void> createRemoteFolder(String name) async {
     final client = state.remoteClient;
     if (client == null) return;
-    final fullPath = p.join(state.remotePath, name);
     try {
+      final fullPath = buildSafeRemoteChildPath(state.remotePath, name);
       await ref.read(sftpServiceProvider).createDirectory(client, fullPath);
       await loadRemoteDirectory();
     } catch (e) {
@@ -268,8 +296,8 @@ class SftpNotifier extends _$SftpNotifier {
   Future<void> createRemoteFile(String name) async {
     final client = state.remoteClient;
     if (client == null) return;
-    final fullPath = p.join(state.remotePath, name);
     try {
+      final fullPath = buildSafeRemoteChildPath(state.remotePath, name);
       await ref.read(sftpServiceProvider).createFile(client, fullPath);
       await loadRemoteDirectory();
     } catch (e) {
@@ -309,8 +337,11 @@ class SftpNotifier extends _$SftpNotifier {
   Future<void> renameRemoteItem(SftpFileItem item, String newName) async {
     final client = state.remoteClient;
     if (client == null) return;
-    final newPath = p.join(p.dirname(item.path), newName);
     try {
+      final newPath = buildSafeRemoteChildPath(
+        p.posix.dirname(item.path),
+        newName,
+      );
       await ref
           .read(sftpServiceProvider)
           .renameItem(client, item.path, newPath);
@@ -390,7 +421,13 @@ class SftpNotifier extends _$SftpNotifier {
   void uploadLocalItem(SftpFileItem item) {
     final client = state.remoteClient;
     if (client == null) return;
-    final remoteDest = p.join(state.remotePath, item.name);
+    String remoteDest;
+    try {
+      remoteDest = buildSafeRemoteChildPath(state.remotePath, item.name);
+    } on FormatException catch (e) {
+      state = state.copyWith(remoteError: 'Failed to upload: $e');
+      return;
+    }
 
     ref
         .read(sftpTransferQueueWorkerProvider)

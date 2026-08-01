@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -23,13 +25,36 @@ void main() {
 
   late AppDatabase db1;
   late AppDatabase db2;
+  late Directory databaseDirectory;
   late E2EECloudSyncService syncService;
   final engine = EncryptionEngine();
+  late bool previousMultipleDatabaseWarningSetting;
+
+  setUpAll(() {
+    previousMultipleDatabaseWarningSetting =
+        driftRuntimeOptions.dontWarnAboutMultipleDatabases;
+    // db1 and db2 intentionally represent separate devices and use separate
+    // temporary SQLite files. Drift's debug warning cannot distinguish this
+    // valid fixture from accidentally sharing an executor.
+    driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+  });
+
+  tearDownAll(() {
+    driftRuntimeOptions.dontWarnAboutMultipleDatabases =
+        previousMultipleDatabaseWarningSetting;
+  });
 
   setUp(() async {
     FlutterSecureStorage.setMockInitialValues({});
-    db1 = AppDatabase(NativeDatabase.memory());
-    db2 = AppDatabase(NativeDatabase.memory());
+    databaseDirectory = await Directory.systemTemp.createTemp(
+      'terly2-e2ee-test-',
+    );
+    db1 = AppDatabase(
+      NativeDatabase(File('${databaseDirectory.path}/device-1.sqlite')),
+    );
+    db2 = AppDatabase(
+      NativeDatabase(File('${databaseDirectory.path}/device-2.sqlite')),
+    );
     syncService = _buildService(engine);
 
     // Populate db1 with test data
@@ -85,80 +110,89 @@ void main() {
   tearDown(() async {
     await db1.close();
     await db2.close();
+    await databaseDirectory.delete(recursive: true);
   });
 
   group('E2EECloudSyncService Unit Tests', () {
-    test('exportEncryptedBackup generates valid Zero-Knowledge payload', () async {
-      const password = 'SuperSecretMasterPassword123!';
-      final backupJson = await syncService.exportEncryptedBackup(
-        db: db1,
-        masterPassword: password,
-      );
+    test(
+      'exportEncryptedBackup generates valid Zero-Knowledge payload',
+      () async {
+        const password = 'SuperSecretMasterPassword123!';
+        final backupJson = await syncService.exportEncryptedBackup(
+          db: db1,
+          masterPassword: password,
+        );
 
-      expect(backupJson, contains('schema_version'));
-      expect(backupJson, contains('salt'));
-      expect(backupJson, contains('payload'));
-      // The wrapped vault key is what makes the backup restorable elsewhere.
-      expect(backupJson, contains('dek_wrapped'));
-    });
+        expect(backupJson, contains('schema_version'));
+        expect(backupJson, contains('salt'));
+        expect(backupJson, contains('payload'));
+        // The wrapped vault key is what makes the backup restorable elsewhere.
+        expect(backupJson, contains('dek_wrapped'));
+      },
+    );
 
-    test('identity secrets survive a restore onto a different device', () async {
-      const password = 'SuperSecretMasterPassword123!';
+    test(
+      'identity secrets survive a restore onto a different device',
+      () async {
+        const password = 'SuperSecretMasterPassword123!';
 
-      // Encrypt a secret with device 1's vault key.
-      final device1Dek = await VaultKeyService(
-        encryptionEngine: engine,
-        secureStorageService: SecureStorageService(),
-      ).getDek();
-      final storedSecret = await engine.encrypt(
-        plaintext: 'hunter2',
-        secretKey: device1Dek,
-      );
-      await db1.into(db1.identities).insert(
-            IdentitiesCompanion.insert(
-              id: 'ident_sync',
-              workspaceId: 'ws_test',
-              title: 'Prod root',
-              username: 'root',
-              authType: 'password',
-              passwordEncrypted: Value(storedSecret),
-              createdAt: DateTime.now(),
-            ),
-          );
+        // Encrypt a secret with device 1's vault key.
+        final device1Dek = await VaultKeyService(
+          encryptionEngine: engine,
+          secureStorageService: SecureStorageService(),
+        ).getDek();
+        final storedSecret = await engine.encrypt(
+          plaintext: 'hunter2',
+          secretKey: device1Dek,
+        );
+        await db1
+            .into(db1.identities)
+            .insert(
+              IdentitiesCompanion.insert(
+                id: 'ident_sync',
+                workspaceId: 'ws_test',
+                title: 'Prod root',
+                username: 'root',
+                authType: 'password',
+                passwordEncrypted: Value(storedSecret),
+                createdAt: DateTime.now(),
+              ),
+            );
 
-      final backupJson = await syncService.exportEncryptedBackup(
-        db: db1,
-        masterPassword: password,
-      );
+        final backupJson = await syncService.exportEncryptedBackup(
+          db: db1,
+          masterPassword: password,
+        );
 
-      // Simulate a fresh device: empty keychain, hence a different vault key.
-      FlutterSecureStorage.setMockInitialValues({});
-      final device2KeyService = VaultKeyService(
-        encryptionEngine: engine,
-        secureStorageService: SecureStorageService(),
-      );
-      final device2Service = E2EECloudSyncService(
-        cryptoEngine: engine,
-        vaultKeyService: device2KeyService,
-      );
+        // Simulate a fresh device: empty keychain, hence a different vault key.
+        FlutterSecureStorage.setMockInitialValues({});
+        final device2KeyService = VaultKeyService(
+          encryptionEngine: engine,
+          secureStorageService: SecureStorageService(),
+        );
+        final device2Service = E2EECloudSyncService(
+          cryptoEngine: engine,
+          vaultKeyService: device2KeyService,
+        );
 
-      final result = await device2Service.importEncryptedBackup(
-        backupPackageJson: backupJson,
-        db: db2,
-        masterPassword: password,
-      );
+        final result = await device2Service.importEncryptedBackup(
+          backupPackageJson: backupJson,
+          db: db2,
+          masterPassword: password,
+        );
 
-      expect(result.secretsRecovered, isTrue);
+        expect(result.secretsRecovered, isTrue);
 
-      final restored = await (db2.select(db2.identities)
-            ..where((t) => t.id.equals('ident_sync')))
-          .getSingle();
-      final decrypted = await engine.decrypt(
-        encryptedBase64: restored.passwordEncrypted!,
-        secretKey: await device2KeyService.getDek(),
-      );
-      expect(decrypted, equals('hunter2'));
-    });
+        final restored = await (db2.select(
+          db2.identities,
+        )..where((t) => t.id.equals('ident_sync'))).getSingle();
+        final decrypted = await engine.decrypt(
+          encryptedBase64: restored.passwordEncrypted!,
+          secretKey: await device2KeyService.getDek(),
+        );
+        expect(decrypted, equals('hunter2'));
+      },
+    );
 
     test('importEncryptedBackup restores database state into db2', () async {
       const password = 'SuperSecretMasterPassword123!';
@@ -218,4 +252,3 @@ void main() {
     });
   });
 }
-

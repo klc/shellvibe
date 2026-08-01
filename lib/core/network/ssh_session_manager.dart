@@ -25,13 +25,14 @@ enum HostKeyVerificationStatus {
 }
 
 /// Signature for user prompt callback when host key verification needs confirmation.
-typedef HostKeyPromptCallback = FutureOr<bool> Function(
-  String hostname,
-  int port,
-  String keyType,
-  String fingerprint,
-  HostKeyVerificationStatus status,
-);
+typedef HostKeyPromptCallback =
+    FutureOr<bool> Function(
+      String hostname,
+      int port,
+      String keyType,
+      String fingerprint,
+      HostKeyVerificationStatus status,
+    );
 
 /// Configuration parameters for establishing an SSH connection.
 class SSHConnectConfig {
@@ -89,7 +90,8 @@ class SSHSessionManager {
 
     // 1. Parse Private Key if provided
     List<SSHKeyPair>? identities;
-    if (config.privateKeyPem != null && config.privateKeyPem!.trim().isNotEmpty) {
+    if (config.privateKeyPem != null &&
+        config.privateKeyPem!.trim().isNotEmpty) {
       try {
         identities = SSHKeyPair.fromPem(
           config.privateKeyPem!,
@@ -108,13 +110,17 @@ class SSHSessionManager {
         timeout: config.timeout,
       );
     } catch (e) {
-      throw Exception('Failed to connect to ${config.hostname}:${config.port}: $e');
+      throw Exception(
+        'Failed to connect to ${config.hostname}:${config.port}: $e',
+      );
     }
 
     if (_abortRequested) {
       _socket?.destroy();
       _socket = null;
-      throw StateError('SSH connection aborted: session was closed during connect.');
+      throw StateError(
+        'SSH connection aborted: session was closed during connect.',
+      );
     }
 
     // 3. Create SSH Client with Host Key Verification and Auth handlers
@@ -122,7 +128,9 @@ class SSHSessionManager {
       _socket!,
       username: config.username,
       identities: identities,
-      onPasswordRequest: config.password != null ? () => config.password! : null,
+      onPasswordRequest: config.password != null
+          ? () => config.password!
+          : null,
       keepAliveInterval: config.keepAliveInterval,
       onVerifyHostKey: (String type, Uint8List fingerprintBytes) async {
         // dartssh2 already hands us the ASCII "SHA256:<base64>" form, i.e. the
@@ -148,7 +156,9 @@ class SSHSessionManager {
         _client = null;
         _socket?.destroy();
         _socket = null;
-        throw StateError('SSH connection aborted: session was closed during connect.');
+        throw StateError(
+          'SSH connection aborted: session was closed during connect.',
+        );
       }
 
       _client = client;
@@ -161,7 +171,9 @@ class SSHSessionManager {
       return client;
     } catch (e) {
       await close();
-      throw Exception('SSH authentication failed for ${config.username}@${config.hostname}: $e');
+      throw Exception(
+        'SSH authentication failed for ${config.username}@${config.hostname}: $e',
+      );
     }
   }
 
@@ -171,7 +183,9 @@ class SSHSessionManager {
 
     while (true) {
       if (_abortRequested) {
-        throw StateError('SSH connection aborted: session was closed during connect.');
+        throw StateError(
+          'SSH connection aborted: session was closed during connect.',
+        );
       }
       if (_isPromptingHostKey) {
         if (DateTime.now().isAfter(promptDeadline)) {
@@ -245,36 +259,10 @@ class SSHSessionManager {
           // Trusted key matches database
           return true;
         } else {
-          // Host key mismatch! Prompt user via callback.
-          bool approve = false;
-          if (promptCallback != null) {
-            _isPromptingHostKey = true;
-            try {
-              approve = await promptCallback(
-                hostname,
-                port,
-                keyType,
-                fingerprint,
-                HostKeyVerificationStatus.mismatch,
-              );
-            } finally {
-              _isPromptingHostKey = false;
-            }
-          }
-
-          if (approve) {
-            await dao.insertOrUpdateKnownHost(
-              KnownHostsCompanion.insert(
-                id: existingHost.id,
-                hostname: hostname,
-                port: port,
-                keyType: keyType,
-                fingerprintSha256: fingerprint,
-                firstSeenAt: existingHost.firstSeenAt,
-              ),
-            );
-            return true;
-          }
+          // A changed key must never be accepted through the normal connect
+          // flow. Updating known_hosts requires a separate, explicitly
+          // verified key-rotation operation; a prompt alone cannot establish
+          // that the new key belongs to the intended server.
           return false;
         }
       } else {
