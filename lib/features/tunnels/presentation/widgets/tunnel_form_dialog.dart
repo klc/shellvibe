@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../shared/database/app_database.dart';
@@ -84,36 +85,48 @@ class _TunnelFormDialogState extends ConsumerState<TunnelFormDialog> {
   Widget build(BuildContext context) {
     final isEditing = widget.rule != null;
 
-    return AlertDialog(
+    return ShadDialog(
       title: Row(
         children: [
-          const Icon(Icons.hub_outlined, color: Colors.cyanAccent),
+          const Icon(LucideIcons.gitFork, size: 20),
           const SizedBox(width: 8),
           Text(isEditing ? 'Edit Port Forwarding Rule' : 'New Port Forwarding Rule'),
         ],
       ),
-      content: SingleChildScrollView(
-        child: SizedBox(
-          width: 440,
+      actions: [
+        ShadButton.outline(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ShadButton(
+          leading: const Icon(Icons.check, size: 16),
+          onPressed: _saveForm,
+          child: Text(isEditing ? 'Save Changes' : 'Create Rule'),
+        ),
+      ],
+      child: SizedBox(
+        width: 440,
+        child: SingleChildScrollView(
           child: Form(
             key: _formKey,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                const SizedBox(height: 8),
                 // Host Selector
                 if (_isLoadingHosts)
                   const LinearProgressIndicator()
                 else
-                  DropdownButtonFormField<String>(
+                  ShadSelectFormField<String>(
                     initialValue: _selectedHostId,
-                    decoration: const InputDecoration(
-                      labelText: 'SSH Target Host',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.dns),
-                    ),
-                    items: _hosts.map((host) {
-                      return DropdownMenuItem<String>(
+                    label: const Text('SSH Target Host'),
+                    selectedOptionBuilder: (context, value) {
+                      final host = _hosts.where((h) => h.id == value).firstOrNull;
+                      return Text(host != null ? '${host.label} (${host.hostname})' : value);
+                    },
+                    options: _hosts.map((host) {
+                      return ShadOption<String>(
                         value: host.id,
                         child: Text('${host.label} (${host.hostname})'),
                       );
@@ -152,17 +165,15 @@ class _TunnelFormDialogState extends ConsumerState<TunnelFormDialog> {
                 ),
                 const SizedBox(height: 16),
                 // Local Port
-                TextFormField(
+                ShadInputFormField(
                   controller: _localPortController,
                   keyboardType: TextInputType.number,
-                  decoration: InputDecoration(
-                    labelText: _ruleType == 'remote' ? 'Local Destination Port' : 'Local Listen Port',
-                    border: const OutlineInputBorder(),
-                    prefixIcon: const Icon(Icons.power_input),
-                    helperText: 'Port on localhost (e.g. 8080, 1080)',
-                  ),
+                  label: Text(_ruleType == 'remote' ? 'Local Destination Port' : 'Local Listen Port'),
+                  placeholder: const Text('e.g. 8080, 1080'),
+                  description: const Text('Port on localhost'),
+                  leading: const Icon(Icons.power_input, size: 16),
                   validator: (val) {
-                    final p = int.tryParse(val ?? '');
+                    final p = int.tryParse(val);
                     if (p == null || p < 1 || p > 65535) {
                       return 'Enter valid port (1-65535)';
                     }
@@ -172,16 +183,13 @@ class _TunnelFormDialogState extends ConsumerState<TunnelFormDialog> {
                 if (_ruleType != 'dynamic') ...[
                   const SizedBox(height: 16),
                   // Remote Host
-                  TextFormField(
+                  ShadInputFormField(
                     controller: _remoteHostController,
-                    decoration: InputDecoration(
-                      labelText: _ruleType == 'local' ? 'Remote Target Host' : 'Local Target IP/Host',
-                      border: const OutlineInputBorder(),
-                      prefixIcon: const Icon(Icons.computer),
-                      helperText: 'e.g. 127.0.0.1 or internal.db.net',
-                    ),
+                    label: Text(_ruleType == 'local' ? 'Remote Target Host' : 'Local Target IP/Host'),
+                    placeholder: const Text('e.g. 127.0.0.1 or internal.db.net'),
+                    leading: const Icon(Icons.computer, size: 16),
                     validator: (val) {
-                      if (_ruleType != 'dynamic' && (val == null || val.trim().isEmpty)) {
+                      if (_ruleType != 'dynamic' && val.trim().isEmpty) {
                         return 'Host address is required';
                       }
                       return null;
@@ -189,18 +197,15 @@ class _TunnelFormDialogState extends ConsumerState<TunnelFormDialog> {
                   ),
                   const SizedBox(height: 16),
                   // Remote Port
-                  TextFormField(
+                  ShadInputFormField(
                     controller: _remotePortController,
                     keyboardType: TextInputType.number,
-                    decoration: InputDecoration(
-                      labelText: _ruleType == 'local' ? 'Remote Target Port' : 'Remote Listen Port',
-                      border: const OutlineInputBorder(),
-                      prefixIcon: const Icon(Icons.settings_input_component),
-                      helperText: 'e.g. 80, 5432, 3306',
-                    ),
+                    label: Text(_ruleType == 'local' ? 'Remote Target Port' : 'Remote Listen Port'),
+                    placeholder: const Text('e.g. 80, 5432, 3306'),
+                    leading: const Icon(Icons.settings_input_component, size: 16),
                     validator: (val) {
                       if (_ruleType != 'dynamic') {
-                        final p = int.tryParse(val ?? '');
+                        final p = int.tryParse(val);
                         if (p == null || p < 1 || p > 65535) {
                           return 'Enter valid port (1-65535)';
                         }
@@ -211,29 +216,29 @@ class _TunnelFormDialogState extends ConsumerState<TunnelFormDialog> {
                 ],
                 const SizedBox(height: 16),
                 // Auto-start switch
-                SwitchListTile(
-                  title: const Text('Auto-start with SSH Connection'),
-                  subtitle: const Text('Automatically open tunnel when host connects'),
-                  value: _autoStart,
-                  onChanged: (val) => setState(() => _autoStart = val),
-                  contentPadding: EdgeInsets.zero,
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Auto-start with SSH Connection', style: TextStyle(fontWeight: FontWeight.w500)),
+                          Text('Automatically open tunnel when host connects', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                        ],
+                      ),
+                    ),
+                    ShadSwitch(
+                      value: _autoStart,
+                      onChanged: (val) => setState(() => _autoStart = val),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton.icon(
-          icon: const Icon(Icons.check),
-          label: Text(isEditing ? 'Save Changes' : 'Create Rule'),
-          onPressed: _saveForm,
-        ),
-      ],
     );
   }
 
@@ -257,3 +262,4 @@ class _TunnelFormDialogState extends ConsumerState<TunnelFormDialog> {
     Navigator.of(context).pop(rule);
   }
 }
+

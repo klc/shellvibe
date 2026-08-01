@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../notifiers/vault_notifier.dart';
 
@@ -57,7 +58,7 @@ class _VaultUnlockDialogState extends ConsumerState<VaultUnlockDialog> {
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 400),
-          child: Card(
+          child: ShadCard(
             child: Padding(
               padding: const EdgeInsets.all(32),
               child: Column(
@@ -95,28 +96,31 @@ class _VaultUnlockDialogState extends ConsumerState<VaultUnlockDialog> {
                     ),
                   ],
                   const SizedBox(height: 24),
-                  TextField(
+                  ShadInput(
                     controller: _passwordCtrl,
                     obscureText: _obscure,
-                    autocorrect: false,
                     enabled: !isLockedOut && !vaultAsync.isLoading,
-                    decoration: InputDecoration(
-                      labelText: 'Master Password',
-                      errorText: _error,
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscure ? Icons.visibility_off : Icons.visibility,
-                        ),
-                        onPressed: () =>
-                            setState(() => _obscure = !_obscure),
+                    placeholder: const Text('Master Password'),
+                    trailing: IconButton(
+                      icon: Icon(
+                        _obscure ? Icons.visibility_off : Icons.visibility,
                       ),
+                      onPressed: () =>
+                          setState(() => _obscure = !_obscure),
                     ),
                     onSubmitted: isLockedOut ? null : (_) => _submit(),
                   ),
+                  if (_error != null) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      _error!,
+                      style: TextStyle(color: theme.colorScheme.error, fontSize: 12),
+                    ),
+                  ],
                   const SizedBox(height: 24),
                   SizedBox(
                     width: double.infinity,
-                    child: FilledButton(
+                    child: ShadButton(
                       onPressed:
                           (isLockedOut || vaultAsync.isLoading) ? null : _submit,
                       child: vaultAsync.isLoading
@@ -152,3 +156,4 @@ class _VaultUnlockDialogState extends ConsumerState<VaultUnlockDialog> {
     }
   }
 }
+

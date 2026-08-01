@@ -2,6 +2,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'package:terly2/features/snippets/presentation/screens/snippets_screen.dart';
 import 'package:terly2/shared/database/app_database.dart';
@@ -34,8 +35,14 @@ void main() {
           overrides: [
             appDatabaseProvider.overrideWithValue(db),
           ],
-          child: const MaterialApp(
-            home: SnippetsScreen(),
+          child: ShadTheme(
+            data: ShadThemeData(
+              colorScheme: const ShadSlateColorScheme.light(),
+              brightness: Brightness.light,
+            ),
+            child: const MaterialApp(
+              home: SnippetsScreen(),
+            ),
           ),
         ),
       );
@@ -53,8 +60,14 @@ void main() {
           overrides: [
             appDatabaseProvider.overrideWithValue(db),
           ],
-          child: const MaterialApp(
-            home: SnippetsScreen(),
+          child: ShadTheme(
+            data: ShadThemeData(
+              colorScheme: const ShadSlateColorScheme.light(),
+              brightness: Brightness.light,
+            ),
+            child: const MaterialApp(
+              home: SnippetsScreen(),
+            ),
           ),
         ),
       );
@@ -70,3 +83,4 @@ void main() {
     });
   });
 }
+

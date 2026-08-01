@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../../../settings/presentation/notifiers/settings_notifier.dart';
 import '../dialogs/identity_form_dialog.dart';
@@ -36,14 +37,10 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
         children: [
           Padding(
             padding: const EdgeInsets.all(12.0),
-            child: TextField(
+            child: ShadInput(
               key: const Key('vault_search_input'),
-              decoration: const InputDecoration(
-                hintText: 'Search identities...',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
+              placeholder: const Text('Search identities...'),
+              leading: const Icon(Icons.search, size: 16),
               onChanged: (val) {
                 setState(() {
                   _searchQuery = val.toLowerCase();
@@ -108,16 +105,15 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
   Future<void> _deleteIdentity(BuildContext context, IdentityModel item) async {
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => ShadDialog.alert(
         title: const Text('Delete Identity'),
-        content: Text('Are you sure you want to delete "${item.title}"?'),
+        description: Text('Are you sure you want to delete "${item.title}"?'),
         actions: [
-          TextButton(
+          ShadButton.outline(
             onPressed: () => Navigator.of(ctx).pop(false),
             child: const Text('Cancel'),
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+          ShadButton.destructive(
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('Delete'),
           ),
@@ -175,67 +171,70 @@ class _IdentityTile extends ConsumerWidget {
     final isKey = identity.authType == 'key';
     final canCopy = isPassword || isKey;
 
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: _getBadgeColor(context).withValues(alpha: 0.2),
-          child: Icon(_getAuthTypeIcon(), color: _getBadgeColor(context)),
-        ),
-        title: Text(
-          identity.title,
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-        subtitle: Text('User: ${identity.username}  •  Auth: ${identity.authType.toUpperCase()}'),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (canCopy)
-              IconButton(
-                key: Key('copy_identity_button_${identity.id}'),
-                icon: const Icon(Icons.copy, size: 20),
-                tooltip: isPassword ? 'Copy Password' : 'Copy Key',
-                onPressed: () async {
-                  final decrypted = await ref
-                      .read(identitiesNotifierProvider.notifier)
-                      .getDecryptedIdentity(identity.id);
-                  final secret = isPassword ? decrypted?.password : decrypted?.privateKey;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: ShadCard(
+        child: ListTile(
+          leading: CircleAvatar(
+            backgroundColor: _getBadgeColor(context).withValues(alpha: 0.2),
+            child: Icon(_getAuthTypeIcon(), color: _getBadgeColor(context)),
+          ),
+          title: Text(
+            identity.title,
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          subtitle: Text('User: ${identity.username}  •  Auth: ${identity.authType.toUpperCase()}'),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (canCopy)
+                IconButton(
+                  key: Key('copy_identity_button_${identity.id}'),
+                  icon: const Icon(Icons.copy, size: 20),
+                  tooltip: isPassword ? 'Copy Password' : 'Copy Key',
+                  onPressed: () async {
+                    final decrypted = await ref
+                        .read(identitiesNotifierProvider.notifier)
+                        .getDecryptedIdentity(identity.id);
+                    final secret = isPassword ? decrypted?.password : decrypted?.privateKey;
 
-                  if (secret != null && secret.isNotEmpty) {
-                    final settings = ref.read(settingsNotifierProvider).value;
-                    final clearSeconds = settings?.clipboardAutoClearSeconds ?? 30;
-                    final autoClearService = ref.read(clipboardAutoClearServiceProvider);
-                    await autoClearService.copyAndScheduleClear(
-                      secret,
-                      duration: Duration(seconds: clearSeconds),
-                    );
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            isPassword
-                                ? 'Password copied to clipboard'
-                                : 'Key copied to clipboard',
-                          ),
-                        ),
+                    if (secret != null && secret.isNotEmpty) {
+                      final settings = ref.read(settingsNotifierProvider).value;
+                      final clearSeconds = settings?.clipboardAutoClearSeconds ?? 30;
+                      final autoClearService = ref.read(clipboardAutoClearServiceProvider);
+                      await autoClearService.copyAndScheduleClear(
+                        secret,
+                        duration: Duration(seconds: clearSeconds),
                       );
+                      if (context.mounted) {
+                        ShadToaster.of(context).show(
+                          ShadToast(
+                            description: Text(
+                              isPassword
+                                  ? 'Password copied to clipboard'
+                                  : 'Key copied to clipboard',
+                            ),
+                          ),
+                        );
+                      }
                     }
-                  }
-                },
+                  },
+                ),
+              IconButton(
+                icon: const Icon(Icons.edit, size: 20),
+                tooltip: 'Edit',
+                onPressed: onEdit,
               ),
-            IconButton(
-              icon: const Icon(Icons.edit, size: 20),
-              tooltip: 'Edit',
-              onPressed: onEdit,
-            ),
-            IconButton(
-              icon: const Icon(Icons.delete, size: 20, color: Colors.redAccent),
-              tooltip: 'Delete',
-              onPressed: onDelete,
-            ),
-          ],
+              IconButton(
+                icon: const Icon(Icons.delete, size: 20, color: Colors.redAccent),
+                tooltip: 'Delete',
+                onPressed: onDelete,
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
+

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 import '../notifiers/identities_notifier.dart';
 import '../../domain/models/identity_model.dart';
 
@@ -89,8 +90,11 @@ class _IdentityFormDialogState extends ConsumerState<IdentityFormDialog> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save identity: $e')),
+        ShadToaster.of(context).show(
+          ShadToast.destructive(
+            title: const Text('Save Identity Error'),
+            description: Text('$e'),
+          ),
         );
       }
     } finally {
@@ -102,111 +106,14 @@ class _IdentityFormDialogState extends ConsumerState<IdentityFormDialog> {
   Widget build(BuildContext context) {
     final isEditing = widget.initialIdentity != null;
 
-    return AlertDialog(
+    return ShadDialog(
       title: Text(isEditing ? 'Edit Identity' : 'Add New Identity'),
-      content: SingleChildScrollView(
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                key: const Key('identity_title_input'),
-                controller: _titleController,
-                decoration: const InputDecoration(
-                  labelText: 'Title / Label',
-                  hintText: 'e.g. Production Server Key',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (v) => v == null || v.trim().isEmpty ? 'Title is required' : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                key: const Key('identity_username_input'),
-                controller: _usernameController,
-                decoration: const InputDecoration(
-                  labelText: 'Username',
-                  hintText: 'e.g. root, ubuntu',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (v) => v == null || v.trim().isEmpty ? 'Username is required' : null,
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                key: const Key('identity_authtype_dropdown'),
-                initialValue: _authType,
-                decoration: const InputDecoration(
-                  labelText: 'Authentication Type',
-                  border: OutlineInputBorder(),
-                ),
-                items: const [
-                  DropdownMenuItem(value: 'password', child: Text('Password')),
-                  DropdownMenuItem(value: 'key', child: Text('SSH Private Key')),
-                  DropdownMenuItem(value: 'agent', child: Text('SSH Agent')),
-                ],
-                onChanged: (val) {
-                  if (val != null) {
-                    setState(() => _authType = val);
-                  }
-                },
-              ),
-              const SizedBox(height: 12),
-              if (_authType == 'password') ...[
-                TextFormField(
-                  key: const Key('identity_password_input'),
-                  controller: _passwordController,
-                  obscureText: _obscurePassword,
-                  decoration: InputDecoration(
-                    labelText: 'Password',
-                    border: const OutlineInputBorder(),
-                    suffixIcon: IconButton(
-                      icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off),
-                      onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-                    ),
-                  ),
-                ),
-              ],
-              if (_authType == 'key') ...[
-                TextFormField(
-                  key: const Key('identity_privatekey_input'),
-                  controller: _privateKeyController,
-                  maxLines: 4,
-                  decoration: const InputDecoration(
-                    labelText: 'Private Key (PEM)',
-                    hintText: '-----BEGIN OPENSSH PRIVATE KEY-----...',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  key: const Key('identity_passphrase_input'),
-                  controller: _passphraseController,
-                  obscureText: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Passphrase (Optional)',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              ],
-              if (_authType == 'agent') ...[
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8.0),
-                  child: Text(
-                    'Uses the local system SSH agent for authentication.',
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
       actions: [
-        TextButton(
+        ShadButton.outline(
           onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
         ),
-        ElevatedButton(
+        ShadButton(
           key: const Key('identity_save_button'),
           onPressed: _isLoading ? null : _save,
           child: _isLoading
@@ -218,6 +125,101 @@ class _IdentityFormDialogState extends ConsumerState<IdentityFormDialog> {
               : Text(isEditing ? 'Update' : 'Save'),
         ),
       ],
+      child: SizedBox(
+        width: 440,
+        child: SingleChildScrollView(
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 8),
+                ShadInputFormField(
+                  key: const Key('identity_title_input'),
+                  controller: _titleController,
+                  label: const Text('Title / Label'),
+                  placeholder: const Text('e.g. Production Server Key'),
+                  validator: (v) => v.trim().isEmpty ? 'Title is required' : null,
+                ),
+                const SizedBox(height: 12),
+                ShadInputFormField(
+                  key: const Key('identity_username_input'),
+                  controller: _usernameController,
+                  label: const Text('Username'),
+                  placeholder: const Text('e.g. root, ubuntu'),
+                  validator: (v) => v.trim().isEmpty ? 'Username is required' : null,
+                ),
+                const SizedBox(height: 12),
+                ShadSelectFormField<String>(
+                  key: const Key('identity_authtype_dropdown'),
+                  initialValue: _authType,
+                  label: const Text('Authentication Type'),
+                  selectedOptionBuilder: (context, value) {
+                    switch (value) {
+                      case 'key':
+                        return const Text('SSH Private Key');
+                      case 'agent':
+                        return const Text('SSH Agent');
+                      case 'password':
+                      default:
+                        return const Text('Password');
+                    }
+                  },
+                  options: const [
+                    ShadOption(value: 'password', child: Text('Password')),
+                    ShadOption(value: 'key', child: Text('SSH Private Key')),
+                    ShadOption(value: 'agent', child: Text('SSH Agent')),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) {
+                      setState(() => _authType = val);
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
+                if (_authType == 'password') ...[
+                  ShadInputFormField(
+                    key: const Key('identity_password_input'),
+                    controller: _passwordController,
+                    obscureText: _obscurePassword,
+                    label: const Text('Password'),
+                    trailing: IconButton(
+                      icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off),
+                      onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                    ),
+                  ),
+                ],
+                if (_authType == 'key') ...[
+                  ShadInputFormField(
+                    key: const Key('identity_privatekey_input'),
+                    controller: _privateKeyController,
+                    maxLines: 4,
+                    label: const Text('Private Key (PEM)'),
+                    placeholder: const Text('-----BEGIN OPENSSH PRIVATE KEY-----...'),
+                  ),
+                  const SizedBox(height: 12),
+                  ShadInputFormField(
+                    key: const Key('identity_passphrase_input'),
+                    controller: _passphraseController,
+                    obscureText: true,
+                    label: const Text('Passphrase (Optional)'),
+                  ),
+                ],
+                if (_authType == 'agent') ...[
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8.0),
+                    child: Text(
+                      'Uses the local system SSH agent for authentication.',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
+

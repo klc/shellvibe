@@ -2,6 +2,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:terly2/app/router/app_router.dart';
 import 'package:terly2/app/widgets/app_navigation_shell.dart';
 import 'package:terly2/features/hosts/presentation/screens/hosts_screen.dart';
@@ -46,8 +47,14 @@ void main() {
       child: Consumer(
         builder: (context, ref, _) {
           final router = ref.watch(appRouterProvider);
-          return MaterialApp.router(
-            routerConfig: router,
+          return ShadTheme(
+            data: ShadThemeData(
+              colorScheme: const ShadSlateColorScheme.light(),
+              brightness: Brightness.light,
+            ),
+            child: MaterialApp.router(
+              routerConfig: router,
+            ),
           );
         },
       ),

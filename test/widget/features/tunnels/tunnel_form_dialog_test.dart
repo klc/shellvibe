@@ -1,16 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:terly2/features/tunnels/presentation/widgets/tunnel_form_dialog.dart';
 
 void main() {
   group('TunnelFormDialog Widget Tests', () {
     testWidgets('renders form fields for creating new port forwarding rule', (WidgetTester tester) async {
       await tester.pumpWidget(
-        const ProviderScope(
-          child: MaterialApp(
-            home: Scaffold(
-              body: TunnelFormDialog(),
+        ProviderScope(
+          child: ShadTheme(
+            data: ShadThemeData(
+              colorScheme: const ShadSlateColorScheme.light(),
+              brightness: Brightness.light,
+            ),
+            child: const MaterialApp(
+              home: Scaffold(
+                body: TunnelFormDialog(),
+              ),
             ),
           ),
         ),
@@ -27,3 +34,4 @@ void main() {
     });
   });
 }
+

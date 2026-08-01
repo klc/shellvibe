@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../notifiers/host_groups_notifier.dart';
 import '../../domain/models/host_group_model.dart';
@@ -70,8 +71,11 @@ class _HostGroupFormDialogState extends ConsumerState<HostGroupFormDialog> {
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save group: $e')),
+        ShadToaster.of(context).show(
+          ShadToast.destructive(
+            title: const Text('Save Group Error'),
+            description: Text('$e'),
+          ),
         );
       }
     } finally {
@@ -84,76 +88,14 @@ class _HostGroupFormDialogState extends ConsumerState<HostGroupFormDialog> {
     final groupsAsync = ref.watch(hostGroupsNotifierProvider);
     final isEditing = widget.initialGroup != null;
 
-    return AlertDialog(
+    return ShadDialog(
       title: Text(isEditing ? 'Edit Folder / Group' : 'Add Folder / Group'),
-      content: SingleChildScrollView(
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                key: const Key('group_name_input'),
-                controller: _nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Group Name',
-                  hintText: 'e.g. Production Servers, Staging',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (v) => v == null || v.trim().isEmpty ? 'Group name is required' : null,
-              ),
-              const SizedBox(height: 12),
-              groupsAsync.when(
-                data: (groups) {
-                  final availableParents = groups
-                      .where((g) => isEditing ? g.id != widget.initialGroup!.id : true)
-                      .toList();
-
-                  return DropdownButtonFormField<String?>(
-                    key: const Key('group_parent_dropdown'),
-                    initialValue: _selectedParentId,
-                    decoration: const InputDecoration(
-                      labelText: 'Parent Group (Optional)',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: [
-                      const DropdownMenuItem<String?>(
-                        value: null,
-                        child: Text('(Root Level - No Parent)'),
-                      ),
-                      ...availableParents.map(
-                        (g) => DropdownMenuItem<String?>(
-                          value: g.id,
-                          child: Text(g.name),
-                        ),
-                      ),
-                    ],
-                    onChanged: (val) => setState(() => _selectedParentId = val),
-                  );
-                },
-                loading: () => const CircularProgressIndicator(),
-                error: (e, s) => Text('Error loading parent groups: $e'),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                key: const Key('group_colortag_input'),
-                controller: _colorTagController,
-                decoration: const InputDecoration(
-                  labelText: 'Color Tag (HEX / Name)',
-                  hintText: 'e.g. #FF5722 or blue',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
       actions: [
-        TextButton(
+        ShadButton.outline(
           onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
         ),
-        ElevatedButton(
+        ShadButton(
           key: const Key('group_save_button'),
           onPressed: _isLoading ? null : _save,
           child: _isLoading
@@ -165,6 +107,69 @@ class _HostGroupFormDialogState extends ConsumerState<HostGroupFormDialog> {
               : Text(isEditing ? 'Update' : 'Save'),
         ),
       ],
+      child: SizedBox(
+        width: 400,
+        child: SingleChildScrollView(
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 8),
+                ShadInputFormField(
+                  key: const Key('group_name_input'),
+                  controller: _nameController,
+                  label: const Text('Group Name'),
+                  placeholder: const Text('e.g. Production Servers, Staging'),
+                  validator: (v) => v.trim().isEmpty ? 'Group name is required' : null,
+                ),
+                const SizedBox(height: 12),
+                groupsAsync.when(
+                  data: (groups) {
+                    final availableParents = groups
+                        .where((g) => isEditing ? g.id != widget.initialGroup!.id : true)
+                        .toList();
+
+                    return ShadSelectFormField<String?>(
+                      key: const Key('group_parent_dropdown'),
+                      initialValue: _selectedParentId,
+                      label: const Text('Parent Group (Optional)'),
+                      selectedOptionBuilder: (context, value) {
+                        if (value == null) return const Text('(Root Level - No Parent)');
+                        final parent = availableParents.where((g) => g.id == value).firstOrNull;
+                        return Text(parent?.name ?? value);
+                      },
+                      options: [
+                        const ShadOption<String?>(
+                          value: null,
+                          child: Text('(Root Level - No Parent)'),
+                        ),
+                        ...availableParents.map(
+                          (g) => ShadOption<String?>(
+                            value: g.id,
+                            child: Text(g.name),
+                          ),
+                        ),
+                      ],
+                      onChanged: (val) => setState(() => _selectedParentId = val),
+                    );
+                  },
+                  loading: () => const LinearProgressIndicator(),
+                  error: (e, s) => Text('Error loading parent groups: $e'),
+                ),
+                const SizedBox(height: 12),
+                ShadInputFormField(
+                  key: const Key('group_colortag_input'),
+                  controller: _colorTagController,
+                  label: const Text('Color Tag (HEX / Name)'),
+                  placeholder: const Text('e.g. #FF5722 or blue'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
+

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../dialogs/host_form_dialog.dart';
 import '../dialogs/host_group_form_dialog.dart';
@@ -168,16 +169,15 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
   Future<void> _deleteHost(BuildContext context, HostModel host) async {
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => ShadDialog.alert(
         title: const Text('Delete Host'),
-        content: Text('Are you sure you want to delete "${host.label}"?'),
+        description: Text('Are you sure you want to delete "${host.label}"?'),
         actions: [
-          TextButton(
+          ShadButton.outline(
             onPressed: () => Navigator.of(ctx).pop(false),
             child: const Text('Cancel'),
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+          ShadButton.destructive(
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('Delete'),
           ),
@@ -193,16 +193,15 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
   Future<void> _deleteGroup(BuildContext context, HostGroupModel group) async {
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => ShadDialog.alert(
         title: const Text('Delete Group'),
-        content: Text('Are you sure you want to delete group "${group.name}"?'),
+        description: Text('Are you sure you want to delete group "${group.name}"?'),
         actions: [
-          TextButton(
+          ShadButton.outline(
             onPressed: () => Navigator.of(ctx).pop(false),
             child: const Text('Cancel'),
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+          ShadButton.destructive(
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('Delete'),
           ),
@@ -237,39 +236,41 @@ class _GroupExpansionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: ExpansionTile(
-        leading: Icon(Icons.folder, color: Colors.amber.shade700),
-        title: Text(
-          group.name,
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-        subtitle: Text('${hosts.length} hosts'),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.edit, size: 18),
-              onPressed: onEditGroup,
-            ),
-            IconButton(
-              icon: const Icon(Icons.delete, size: 18, color: Colors.redAccent),
-              onPressed: onDeleteGroup,
-            ),
-          ],
-        ),
-        children: hosts
-            .map(
-              (h) => _HostTile(
-                key: ValueKey(h.id),
-                host: h,
-                onEdit: () => onEditHost(h),
-                onDelete: () => onDeleteHost(h),
-                onConnect: () => onConnectHost?.call(h),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: ShadCard(
+        child: ExpansionTile(
+          leading: Icon(Icons.folder, color: Colors.amber.shade700),
+          title: Text(
+            group.name,
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          subtitle: Text('${hosts.length} hosts'),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.edit, size: 18),
+                onPressed: onEditGroup,
               ),
-            )
-            .toList(),
+              IconButton(
+                icon: const Icon(Icons.delete, size: 18, color: Colors.redAccent),
+                onPressed: onDeleteGroup,
+              ),
+            ],
+          ),
+          children: hosts
+              .map(
+                (h) => _HostTile(
+                  key: ValueKey(h.id),
+                  host: h,
+                  onEdit: () => onEditHost(h),
+                  onDelete: () => onDeleteHost(h),
+                  onConnect: () => onConnectHost?.call(h),
+                ),
+              )
+              .toList(),
+        ),
       ),
     );
   }
@@ -306,60 +307,63 @@ class _HostTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: Colors.blue.withValues(alpha: 0.15),
-          child: Icon(_getProtocolIcon(), color: Colors.blue),
-        ),
-        title: Row(
-          children: [
-            Text(
-              host.label,
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: Colors.blue.shade100,
-                borderRadius: BorderRadius.circular(4),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: ShadCard(
+        child: ListTile(
+          leading: CircleAvatar(
+            backgroundColor: Colors.blue.withValues(alpha: 0.15),
+            child: Icon(_getProtocolIcon(), color: Colors.blue),
+          ),
+          title: Row(
+            children: [
+              Text(
+                host.label,
+                style: const TextStyle(fontWeight: FontWeight.bold),
               ),
-              child: Text(
-                host.protocol.toUpperCase(),
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.blue.shade900,
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade100,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  host.protocol.toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue.shade900,
+                  ),
                 ),
               ),
-            ),
-          ],
-        ),
-        subtitle: Text('${host.username != null && host.username!.isNotEmpty ? '${host.username}@' : ''}${host.hostname}:${host.port}'),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              key: Key('connect_host_${host.id}'),
-              icon: const Icon(Icons.play_arrow, color: Colors.green),
-              tooltip: 'Connect Terminal',
-              onPressed: onConnect,
-            ),
-            IconButton(
-              icon: const Icon(Icons.edit, size: 20),
-              tooltip: 'Edit',
-              onPressed: onEdit,
-            ),
-            IconButton(
-              icon: const Icon(Icons.delete, size: 20, color: Colors.redAccent),
-              tooltip: 'Delete',
-              onPressed: onDelete,
-            ),
-          ],
+            ],
+          ),
+          subtitle: Text('${host.username != null && host.username!.isNotEmpty ? '${host.username}@' : ''}${host.hostname}:${host.port}'),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                key: Key('connect_host_${host.id}'),
+                icon: const Icon(Icons.play_arrow, color: Colors.green),
+                tooltip: 'Connect Terminal',
+                onPressed: onConnect,
+              ),
+              IconButton(
+                icon: const Icon(Icons.edit, size: 20),
+                tooltip: 'Edit',
+                onPressed: onEdit,
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete, size: 20, color: Colors.redAccent),
+                tooltip: 'Delete',
+                onPressed: onDelete,
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
+

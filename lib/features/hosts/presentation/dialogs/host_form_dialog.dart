@@ -181,59 +181,47 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 const SizedBox(height: 8),
-                TextFormField(
+                ShadInputFormField(
                   key: const Key('host_label_input'),
                   controller: _labelController,
-                  decoration: const InputDecoration(
-                    labelText: 'Label / Name',
-                    hintText: 'e.g. AWS Production Web',
-                    prefixIcon: Icon(LucideIcons.tag, size: 16),
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: (v) => v == null || v.trim().isEmpty ? 'Label is required' : null,
+                  label: const Text('Label / Name'),
+                  placeholder: const Text('e.g. AWS Production Web'),
+                  leading: const Icon(LucideIcons.tag, size: 16),
+                  validator: (v) => v.trim().isEmpty ? 'Label is required' : null,
                 ),
                 const SizedBox(height: 12),
-                TextFormField(
+                ShadInputFormField(
                   key: const Key('host_hostname_input'),
                   focusNode: _hostnameFocusNode,
                   controller: _hostnameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Hostname / IP Address',
-                    hintText: 'e.g. 192.168.1.10 or root@192.168.1.10',
-                    prefixIcon: Icon(LucideIcons.globe, size: 16),
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: (v) => v == null || v.trim().isEmpty ? 'Hostname is required' : null,
+                  label: const Text('Hostname / IP Address'),
+                  placeholder: const Text('e.g. 192.168.1.10 or root@192.168.1.10'),
+                  leading: const Icon(LucideIcons.globe, size: 16),
+                  validator: (v) => v.trim().isEmpty ? 'Hostname is required' : null,
                 ),
                 const SizedBox(height: 12),
-                TextFormField(
+                ShadInputFormField(
                   key: const Key('host_username_input'),
                   controller: _usernameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Username',
-                    hintText: 'e.g. root or admin',
-                    prefixIcon: Icon(LucideIcons.user, size: 16),
-                    border: OutlineInputBorder(),
-                  ),
+                  label: const Text('Username'),
+                  placeholder: const Text('e.g. root or admin'),
+                  leading: const Icon(LucideIcons.user, size: 16),
                 ),
                 const SizedBox(height: 12),
                 Row(
                   children: [
                     Expanded(
                       flex: 2,
-                      child: DropdownButtonFormField<String>(
+                      child: ShadSelectFormField<String>(
                         key: const Key('host_protocol_dropdown'),
                         initialValue: _protocol,
-                        decoration: const InputDecoration(
-                          labelText: 'Protocol',
-                          prefixIcon: Icon(LucideIcons.terminal, size: 16),
-                          border: OutlineInputBorder(),
-                        ),
-                        items: const [
-                          DropdownMenuItem(value: 'ssh', child: Text('SSH')),
-                          DropdownMenuItem(value: 'mosh', child: Text('Mosh')),
-                          DropdownMenuItem(value: 'local', child: Text('Local Shell')),
-                          DropdownMenuItem(value: 'serial', child: Text('Serial')),
+                        label: const Text('Protocol'),
+                        selectedOptionBuilder: (context, value) => Text(value.toUpperCase()),
+                        options: const [
+                          ShadOption(value: 'ssh', child: Text('SSH')),
+                          ShadOption(value: 'mosh', child: Text('Mosh')),
+                          ShadOption(value: 'local', child: Text('Local Shell')),
+                          ShadOption(value: 'serial', child: Text('Serial')),
                         ],
                         onChanged: (val) {
                           if (val != null) setState(() => _protocol = val);
@@ -243,16 +231,13 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                     const SizedBox(width: 12),
                     Expanded(
                       flex: 1,
-                      child: TextFormField(
+                      child: ShadInputFormField(
                         key: const Key('host_port_input'),
                         controller: _portController,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Port',
-                          border: OutlineInputBorder(),
-                        ),
+                        label: const Text('Port'),
                         validator: (v) {
-                          if (v == null || v.trim().isEmpty) return 'Required';
+                          if (v.trim().isEmpty) return 'Required';
                           if (int.tryParse(v) == null) return 'Invalid';
                           return null;
                         },
@@ -263,22 +248,22 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                 const SizedBox(height: 12),
                 // Group Selection
                 groupsAsync.when(
-                  data: (groups) => DropdownButtonFormField<String?>(
+                  data: (groups) => ShadSelectFormField<String?>(
                     key: const Key('host_group_dropdown'),
-                    isExpanded: true,
                     initialValue: _selectedGroupId,
-                    decoration: const InputDecoration(
-                      labelText: 'Group / Folder',
-                      prefixIcon: Icon(LucideIcons.folder, size: 16),
-                      border: OutlineInputBorder(),
-                    ),
-                    items: [
-                      const DropdownMenuItem<String?>(
+                    label: const Text('Group / Folder'),
+                    selectedOptionBuilder: (context, value) {
+                      if (value == null) return const Text('(None - Ungrouped)');
+                      final g = groups.where((item) => item.id == value).firstOrNull;
+                      return Text(g?.name ?? value);
+                    },
+                    options: [
+                      const ShadOption<String?>(
                         value: null,
                         child: Text('(None - Ungrouped)'),
                       ),
                       ...groups.map(
-                        (g) => DropdownMenuItem<String?>(
+                        (g) => ShadOption<String?>(
                           value: g.id,
                           child: Text(g.name),
                         ),
@@ -292,22 +277,22 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                 const SizedBox(height: 12),
                 // Identity Selection
                 identitiesAsync.when(
-                  data: (identities) => DropdownButtonFormField<String?>(
+                  data: (identities) => ShadSelectFormField<String?>(
                     key: const Key('host_identity_dropdown'),
-                    isExpanded: true,
                     initialValue: _selectedIdentityId,
-                    decoration: const InputDecoration(
-                      labelText: 'Identity / Credentials',
-                      prefixIcon: Icon(LucideIcons.keyRound, size: 16),
-                      border: OutlineInputBorder(),
-                    ),
-                    items: [
-                      const DropdownMenuItem<String?>(
+                    label: const Text('Identity / Credentials'),
+                    selectedOptionBuilder: (context, value) {
+                      if (value == null) return const Text('(None - Prompt on Connect)');
+                      final i = identities.where((item) => item.id == value).firstOrNull;
+                      return Text(i != null ? '${i.title} (${i.username})' : value);
+                    },
+                    options: [
+                      const ShadOption<String?>(
                         value: null,
                         child: Text('(None - Prompt on Connect)'),
                       ),
                       ...identities.map(
-                        (i) => DropdownMenuItem<String?>(
+                        (i) => ShadOption<String?>(
                           value: i.id,
                           child: Text('${i.title} (${i.username})'),
                         ),
@@ -326,22 +311,22 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                         .where((h) => isEditing ? h.id != widget.initialHost!.id : true)
                         .toList();
 
-                    return DropdownButtonFormField<String?>(
+                    return ShadSelectFormField<String?>(
                       key: const Key('host_jumphost_dropdown'),
-                      isExpanded: true,
                       initialValue: _selectedJumpHostId,
-                      decoration: const InputDecoration(
-                        labelText: 'Jump Host (Bastion)',
-                        prefixIcon: Icon(LucideIcons.route, size: 16),
-                        border: OutlineInputBorder(),
-                      ),
-                      items: [
-                        const DropdownMenuItem<String?>(
+                      label: const Text('Jump Host (Bastion)'),
+                      selectedOptionBuilder: (context, value) {
+                        if (value == null) return const Text('(Direct Connection)');
+                        final h = candidateJumpHosts.where((item) => item.id == value).firstOrNull;
+                        return Text(h != null ? '${h.label} (${h.hostname})' : value);
+                      },
+                      options: [
+                        const ShadOption<String?>(
                           value: null,
                           child: Text('(Direct Connection)'),
                         ),
                         ...candidateJumpHosts.map(
-                          (h) => DropdownMenuItem<String?>(
+                          (h) => ShadOption<String?>(
                             value: h.id,
                             child: Text('${h.label} (${h.hostname})'),
                           ),
@@ -354,15 +339,12 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                   error: (e, s) => Text('Error loading hosts: $e'),
                 ),
                 const SizedBox(height: 12),
-                TextFormField(
+                ShadInputFormField(
                   key: const Key('host_colortag_input'),
                   controller: _colorTagController,
-                  decoration: const InputDecoration(
-                    labelText: 'Color Tag (HEX / Name)',
-                    hintText: 'e.g. #4CAF50 or green',
-                    prefixIcon: Icon(LucideIcons.palette, size: 16),
-                    border: OutlineInputBorder(),
-                  ),
+                  label: const Text('Color Tag (HEX / Name)'),
+                  placeholder: const Text('e.g. #4CAF50 or green'),
+                  leading: const Icon(LucideIcons.palette, size: 16),
                 ),
               ],
             ),

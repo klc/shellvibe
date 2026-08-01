@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:terly2/core/crypto/encryption_engine.dart';
@@ -36,8 +37,14 @@ void main() {
   Widget createWidgetUnderTest(ProviderContainer container) {
     return UncontrolledProviderScope(
       container: container,
-      child: const MaterialApp(
-        home: VaultUnlockDialog(),
+      child: ShadTheme(
+        data: ShadThemeData(
+          colorScheme: const ShadSlateColorScheme.light(),
+          brightness: Brightness.light,
+        ),
+        child: const MaterialApp(
+          home: VaultUnlockDialog(),
+        ),
       ),
     );
   }
@@ -51,8 +58,8 @@ void main() {
       await tester.pump();
 
       expect(find.text('Unlock Vault'), findsOneWidget);
-      expect(find.byType(TextField), findsOneWidget);
-      expect(find.widgetWithText(FilledButton, 'Unlock'), findsOneWidget);
+      expect(find.byType(ShadInput), findsOneWidget);
+      expect(find.widgetWithText(ShadButton, 'Unlock'), findsOneWidget);
     });
 
     testWidgets('Displays error feedback when wrong password is submitted', (tester) async {
@@ -68,8 +75,8 @@ void main() {
       await tester.pump();
 
       // Enter wrong password
-      await tester.enterText(find.byType(TextField), 'WrongPassword');
-      await tester.tap(find.widgetWithText(FilledButton, 'Unlock'));
+      await tester.enterText(find.byType(ShadInput), 'WrongPassword');
+      await tester.tap(find.widgetWithText(ShadButton, 'Unlock'));
       await tester.idle();
       await tester.pump();
 
@@ -97,11 +104,13 @@ void main() {
       expect(find.textContaining('Please wait'), findsOneWidget);
 
       // Unlock button should be disabled when locked out
-      final filledButton = tester.widget<FilledButton>(find.byType(FilledButton));
-      expect(filledButton.onPressed, isNull);
+      final button = tester.widget<ShadButton>(find.byType(ShadButton));
+      expect(button.onPressed, isNull);
 
       // Advance time past lockout duration so periodic timer cancels before test teardown
       await tester.pump(const Duration(seconds: 31));
     });
   });
 }
+
+

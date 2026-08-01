@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 import '../../domain/models/snippet_model.dart';
 
 /// Form dialog for creating or editing a Snippet.
@@ -68,67 +69,14 @@ class _SnippetFormDialogState extends State<SnippetFormDialog> {
   Widget build(BuildContext context) {
     final isEditing = widget.snippet != null;
 
-    return AlertDialog(
+    return ShadDialog(
       title: Text(isEditing ? 'Edit Snippet' : 'New Snippet'),
-      content: SingleChildScrollView(
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                key: const Key('snippet_title_field'),
-                controller: _titleController,
-                decoration: const InputDecoration(
-                  labelText: 'Title',
-                  hintText: 'e.g. Restart Docker Container',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (val) => val == null || val.trim().isEmpty ? 'Title is required' : null,
-              ),
-              const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('Code Command', style: TextStyle(fontWeight: FontWeight.bold)),
-                  TextButton.icon(
-                    onPressed: _insertVariablePlaceholder,
-                    icon: const Icon(Icons.add_link, size: 16),
-                    label: const Text('+ Var'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              TextFormField(
-                key: const Key('snippet_code_field'),
-                controller: _codeController,
-                maxLines: 5,
-                decoration: const InputDecoration(
-                  hintText: 'docker restart \${INPUT:container_name}',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (val) => val == null || val.trim().isEmpty ? 'Code is required' : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                key: const Key('snippet_tags_field'),
-                controller: _tagsController,
-                decoration: const InputDecoration(
-                  labelText: 'Tags (comma separated)',
-                  hintText: 'docker, devops, production',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
       actions: [
-        TextButton(
+        ShadButton.outline(
           onPressed: () => Navigator.of(context).pop(null),
           child: const Text('Cancel'),
         ),
-        ElevatedButton(
+        ShadButton(
           key: const Key('snippet_save_button'),
           onPressed: () {
             if (_formKey.currentState!.validate()) {
@@ -151,6 +99,55 @@ class _SnippetFormDialogState extends State<SnippetFormDialog> {
           child: Text(isEditing ? 'Save' : 'Create'),
         ),
       ],
+      child: SizedBox(
+        width: 440,
+        child: SingleChildScrollView(
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 8),
+                ShadInputFormField(
+                  key: const Key('snippet_title_field'),
+                  controller: _titleController,
+                  label: const Text('Title'),
+                  placeholder: const Text('e.g. Restart Docker Container'),
+                  validator: (val) => val.trim().isEmpty ? 'Title is required' : null,
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Code Command', style: TextStyle(fontWeight: FontWeight.bold)),
+                    ShadButton.ghost(
+                      onPressed: _insertVariablePlaceholder,
+                      leading: const Icon(Icons.add_link, size: 16),
+                      child: const Text('+ Var'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                ShadInputFormField(
+                  key: const Key('snippet_code_field'),
+                  controller: _codeController,
+                  maxLines: 5,
+                  placeholder: const Text('docker restart \${INPUT:container_name}'),
+                  validator: (val) => val.trim().isEmpty ? 'Code is required' : null,
+                ),
+                const SizedBox(height: 12),
+                ShadInputFormField(
+                  key: const Key('snippet_tags_field'),
+                  controller: _tagsController,
+                  label: const Text('Tags (comma separated)'),
+                  placeholder: const Text('docker, devops, production'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
+

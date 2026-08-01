@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:terly2/core/crypto/encryption_engine.dart';
@@ -46,8 +47,14 @@ void main() {
         appDatabaseProvider.overrideWithValue(db),
         encryptionEngineProvider.overrideWithValue(fastEngine),
       ],
-      child: const MaterialApp(
-        home: VaultScreen(),
+      child: ShadTheme(
+        data: ShadThemeData(
+          colorScheme: const ShadSlateColorScheme.light(),
+          brightness: Brightness.light,
+        ),
+        child: const MaterialApp(
+          home: VaultScreen(),
+        ),
       ),
     );
   }
