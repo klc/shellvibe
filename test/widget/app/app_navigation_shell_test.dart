@@ -11,6 +11,7 @@ import 'package:terly2/features/snippets/presentation/screens/snippets_screen.da
 import 'package:terly2/features/terminal/presentation/views/terminal_tab_view.dart';
 import 'package:terly2/features/tunnels/presentation/screens/tunnels_screen.dart';
 import 'package:terly2/features/vault/presentation/notifiers/vault_notifier.dart';
+import 'package:terly2/features/vault/presentation/screens/vault_screen.dart';
 import 'package:terly2/shared/database/app_database.dart';
 import 'package:terly2/shared/providers/database_providers.dart';
 
@@ -38,7 +39,6 @@ void main() {
     return ProviderScope(
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
-        // Vault guard requires unlocked state to access shell routes
         vaultNotifierProvider.overrideWith(
           () => _UnlockedVaultNotifier(),
         ),
@@ -84,27 +84,32 @@ void main() {
       await pumpTabTransition(tester);
       expect(find.byType(TerminalTabView), findsOneWidget);
 
-      // 2. Switch to SFTP (/sftp - Index 2)
+      // 2. Switch to Vault (/vault - Index 2)
       await tester.tap(find.byKey(const Key('nav_item_2')));
+      await pumpTabTransition(tester);
+      expect(find.byType(VaultScreen), findsOneWidget);
+
+      // 3. Switch to SFTP (/sftp - Index 3)
+      await tester.tap(find.byKey(const Key('nav_item_3')));
       await pumpTabTransition(tester);
       expect(find.byType(SftpDualPaneScreen), findsOneWidget);
 
-      // 3. Switch to Tunnels (/tunnels - Index 3)
-      await tester.tap(find.byKey(const Key('nav_item_3')));
+      // 4. Switch to Tunnels (/tunnels - Index 4)
+      await tester.tap(find.byKey(const Key('nav_item_4')));
       await pumpTabTransition(tester);
       expect(find.byType(TunnelsScreen), findsOneWidget);
 
-      // 4. Switch to Snippets (/snippets - Index 4)
-      await tester.tap(find.byKey(const Key('nav_item_4')));
+      // 5. Switch to Snippets (/snippets - Index 5)
+      await tester.tap(find.byKey(const Key('nav_item_5')));
       await pumpTabTransition(tester);
       expect(find.byType(SnippetsScreen), findsOneWidget);
 
-      // 5. Switch to Settings (/settings - Index 5)
-      await tester.tap(find.byKey(const Key('nav_item_5')));
+      // 6. Switch to Settings (/settings - Index 6)
+      await tester.tap(find.byKey(const Key('nav_item_6')));
       await pumpTabTransition(tester);
       expect(find.byType(SettingsScreen), findsOneWidget);
 
-      // 6. Switch back to Hosts (/hosts - Index 0)
+      // 7. Switch back to Hosts (/hosts - Index 0)
       await tester.tap(find.byKey(const Key('nav_item_0')));
       await pumpTabTransition(tester);
       expect(find.byType(HostsScreen), findsOneWidget);

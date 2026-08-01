@@ -21,7 +21,6 @@ class _VaultRouterNotifier extends ChangeNotifier {
 final appRouterProvider = Provider<GoRouter>((ref) {
   final vaultRouterNotifier = _VaultRouterNotifier();
 
-  // Re-evaluate redirects whenever vault state changes
   ref.listen(vaultNotifierProvider, (_, _) {
     vaultRouterNotifier.notify();
   });
@@ -30,35 +29,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: '/hosts',
     refreshListenable: vaultRouterNotifier,
-    redirect: (context, state) {
-      final vaultAsync = ref.read(vaultNotifierProvider);
-      final vaultStatus = vaultAsync.valueOrNull?.status;
-      final isVaultRoute = state.matchedLocation == '/vault';
-
-      // Still loading vault state — don't redirect yet
-      if (vaultAsync.isLoading) return null;
-
-      // Vault is not unlocked and user is not on the vault page → force to vault
-      if (vaultStatus != VaultStatus.unlocked && !isVaultRoute) {
-        return '/vault';
-      }
-
-      // Vault is unlocked and user is on the vault page → go to hosts
-      if (vaultStatus == VaultStatus.unlocked && isVaultRoute) {
-        return '/hosts';
-      }
-
-      return null;
-    },
     routes: [
       GoRoute(
         path: '/',
         redirect: (context, state) => '/hosts',
-      ),
-      // Vault route lives outside the shell so it can be shown full-screen
-      GoRoute(
-        path: '/vault',
-        builder: (context, state) => const VaultScreen(),
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) {
@@ -83,7 +57,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               ),
             ],
           ),
-          // Index 2: SFTP
+          // Index 2: Vault
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/vault',
+                builder: (context, state) => const VaultScreen(),
+              ),
+            ],
+          ),
+          // Index 3: SFTP
           StatefulShellBranch(
             routes: [
               GoRoute(
@@ -92,7 +75,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               ),
             ],
           ),
-          // Index 3: Tunnels
+          // Index 4: Tunnels
           StatefulShellBranch(
             routes: [
               GoRoute(
@@ -101,7 +84,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               ),
             ],
           ),
-          // Index 4: Snippets
+          // Index 5: Snippets
           StatefulShellBranch(
             routes: [
               GoRoute(
@@ -110,7 +93,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               ),
             ],
           ),
-          // Index 5: Settings
+          // Index 6: Settings
           StatefulShellBranch(
             routes: [
               GoRoute(
