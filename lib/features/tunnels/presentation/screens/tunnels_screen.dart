@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
+import '../../../../app/theme/terly_tokens.dart';
+import '../../../../app/widgets/terly_ui.dart';
 import '../../../../core/network/tunnel_engine.dart';
 import '../../../hosts/domain/models/host_model.dart';
 import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
@@ -73,9 +75,7 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
 
     if (updatedRule != null) {
       try {
-        await ref
-            .read(tunnelsProvider.notifier)
-            .updateRule(updatedRule);
+        await ref.read(tunnelsProvider.notifier).updateRule(updatedRule);
       } catch (e) {
         if (mounted) {
           ShadToaster.of(context).show(
@@ -93,104 +93,85 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(tunnelsProvider);
     final activeTunnelsAsync = ref.watch(activeTunnelsStreamProvider);
-    final colorScheme = ShadTheme.of(context).colorScheme;
-
     final filteredRules = widget.filterHostId != null
         ? state.rules.where((r) => r.hostId == widget.filterHostId).toList()
         : state.rules;
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: AppBar(
-        backgroundColor: colorScheme.card,
-        elevation: 0,
-        title: const Row(
-          children: [
-            Icon(Icons.hub, color: Colors.cyanAccent),
-            SizedBox(width: 10),
-            Flexible(
-              child: Text(
-                'Port Forwarding & Tunnels Matrix',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                overflow: TextOverflow.ellipsis,
+      body: Column(
+        children: [
+          TerlyPageHeader(
+            icon: LucideIcons.network,
+            title: 'Port Forwarding & Tunnels Matrix',
+            description: 'Local, remote and SOCKS5 forwarding rules',
+            actions: [
+              IconButton(
+                icon: const Icon(LucideIcons.refreshCw, size: 17),
+                tooltip: 'Refresh Rules',
+                onPressed: () => ref
+                    .read(tunnelsProvider.notifier)
+                    .loadRules(widget.filterHostId),
+              ),
+              ShadButton(
+                size: ShadButtonSize.sm,
+                onPressed: _openCreateRuleDialog,
+                leading: const Icon(LucideIcons.plus, size: 16),
+                child: const Text('Add Tunnel Rule'),
+              ),
+            ],
+          ),
+          Expanded(
+            child: activeTunnelsAsync.when(
+              data: (activeTunnels) {
+                final activeMap = {for (var t in activeTunnels) t.ruleId: t};
+
+                if (state.isLoading) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                if (filteredRules.isEmpty) {
+                  return TerlyEmptyState(
+                    icon: LucideIcons.network,
+                    title: 'No Port Forwarding Rules configured.',
+                    description:
+                        'Create a rule to route traffic through an SSH session.',
+                    actions: [
+                      ShadButton(
+                        size: ShadButtonSize.sm,
+                        onPressed: _openCreateRuleDialog,
+                        child: const Text('Create Your First Rule'),
+                      ),
+                    ],
+                  );
+                }
+
+                return ListView.separated(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: filteredRules.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    final rule = filteredRules[index];
+                    final activeTunnel = activeMap[rule.id];
+                    final host = _hostsMap[rule.hostId];
+
+                    return _buildRuleCard(
+                      rule: rule,
+                      activeTunnel: activeTunnel,
+                      host: host,
+                    );
+                  },
+                );
+              },
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (err, stack) => TerlyEmptyState(
+                icon: LucideIcons.triangleAlert,
+                title: 'Tunnels could not be loaded',
+                description: '$err',
               ),
             ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh Rules',
-            onPressed: () => ref
-                .read(tunnelsProvider.notifier)
-                .loadRules(widget.filterHostId),
           ),
         ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: Colors.cyanAccent,
-        foregroundColor: Colors.black,
-        icon: const Icon(Icons.add),
-        label: const Text('Add Tunnel Rule'),
-        onPressed: _openCreateRuleDialog,
-      ),
-      body: activeTunnelsAsync.when(
-        data: (activeTunnels) {
-          final activeMap = {for (var t in activeTunnels) t.ruleId: t};
-
-          if (state.isLoading) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          if (filteredRules.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.hub_outlined,
-                    size: 64,
-                    color: colorScheme.mutedForeground,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'No Port Forwarding Rules configured.',
-                    style: TextStyle(
-                      color: colorScheme.mutedForeground,
-                      fontSize: 16,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.add),
-                    label: const Text('Create Your First Rule'),
-                    onPressed: _openCreateRuleDialog,
-                  ),
-                ],
-              ),
-            );
-          }
-
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: filteredRules.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 12),
-            itemBuilder: (context, index) {
-              final rule = filteredRules[index];
-              final activeTunnel = activeMap[rule.id];
-              final host = _hostsMap[rule.hostId];
-
-              return _buildRuleCard(
-                rule: rule,
-                activeTunnel: activeTunnel,
-                host: host,
-              );
-            },
-          );
-        },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, stack) =>
-            Center(child: Text('Error loading tunnels: $err')),
       ),
     );
   }
@@ -200,65 +181,40 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
     ActiveTunnel? activeTunnel,
     HostModel? host,
   }) {
-    final colorScheme = ShadTheme.of(context).colorScheme;
+    final tokens = TerlyTokens.resolve(context);
     final isActive = activeTunnel?.isActive ?? false;
 
-    Color badgeColor;
+    TerlyStatusTone badgeTone;
     String badgeText;
 
     switch (rule.type) {
       case 'local':
-        badgeColor = Colors.cyan;
+        badgeTone = TerlyStatusTone.info;
         badgeText = 'LOCAL (-L)';
         break;
       case 'remote':
-        badgeColor = Colors.purpleAccent;
+        badgeTone = TerlyStatusTone.neutral;
         badgeText = 'REMOTE (-R)';
         break;
       case 'dynamic':
-        badgeColor = Colors.orangeAccent;
+        badgeTone = TerlyStatusTone.warning;
         badgeText = 'DYNAMIC SOCKS5 (-D)';
         break;
       default:
-        badgeColor = Colors.blueGrey;
+        badgeTone = TerlyStatusTone.neutral;
         badgeText = rule.type.toUpperCase();
     }
 
-    return Card(
-      color: colorScheme.card,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: isActive ? Colors.greenAccent : colorScheme.border,
-          width: isActive ? 1.5 : 1,
-        ),
-      ),
+    return TerlySurface(
+      borderColor: isActive ? tokens.success.withValues(alpha: 0.55) : null,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: badgeColor.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: badgeColor, width: 1),
-                  ),
-                  child: Text(
-                    badgeText,
-                    style: TextStyle(
-                      color: badgeColor,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 11,
-                    ),
-                  ),
-                ),
+                TerlyStatusChip(label: badgeText, tone: badgeTone),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
@@ -274,7 +230,7 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
                 ),
                 Switch(
                   value: isActive,
-                  activeThumbColor: Colors.greenAccent,
+                  activeThumbColor: tokens.success,
                   onChanged: (value) async {
                     final notifier = ref.read(tunnelsProvider.notifier);
                     if (value) {
@@ -302,13 +258,11 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
                   },
                 ),
                 PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_vert),
+                  icon: const Icon(LucideIcons.ellipsis, size: 18),
                   onSelected: (val) {
                     if (val == 'edit') _openEditRuleDialog(rule);
                     if (val == 'delete') {
-                      ref
-                          .read(tunnelsProvider.notifier)
-                          .deleteRule(rule.id);
+                      ref.read(tunnelsProvider.notifier).deleteRule(rule.id);
                     }
                   },
                   itemBuilder: (context) => [
@@ -316,7 +270,7 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
                       value: 'edit',
                       child: Row(
                         children: [
-                          Icon(Icons.edit, size: 16),
+                          Icon(LucideIcons.pencil, size: 16),
                           SizedBox(width: 8),
                           Text('Edit'),
                         ],
@@ -326,12 +280,9 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
                       value: 'delete',
                       child: Row(
                         children: [
-                          Icon(Icons.delete, color: Colors.redAccent, size: 16),
+                          Icon(LucideIcons.trash2, size: 16),
                           SizedBox(width: 8),
-                          Text(
-                            'Delete',
-                            style: TextStyle(color: Colors.redAccent),
-                          ),
+                          Text('Delete', style: TextStyle()),
                         ],
                       ),
                     ),
@@ -344,12 +295,12 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: colorScheme.muted,
-                borderRadius: BorderRadius.circular(8),
+                color: tokens.canvas,
+                borderRadius: BorderRadius.circular(tokens.radiusSmall),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.computer, size: 18, color: Colors.white70),
+                  Icon(LucideIcons.monitor, size: 17, color: tokens.textMuted),
                   const SizedBox(width: 6),
                   Text(
                     '127.0.0.1:${rule.localPort}',
@@ -358,34 +309,26 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 8),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
                     child: Icon(
-                      Icons.arrow_forward,
+                      LucideIcons.arrowRight,
                       size: 16,
-                      color: Colors.cyanAccent,
+                      color: tokens.brand,
                     ),
                   ),
                   if (rule.type == 'dynamic') ...[
-                    const Icon(
-                      Icons.shield_outlined,
-                      size: 18,
-                      color: Colors.orangeAccent,
-                    ),
+                    Icon(LucideIcons.shield, size: 18, color: tokens.warning),
                     const SizedBox(width: 6),
-                    const Text(
+                    Text(
                       'SOCKS5 Dynamic Bridge',
                       style: TextStyle(
                         fontFamily: 'monospace',
-                        color: Colors.orangeAccent,
+                        color: tokens.warning,
                       ),
                     ),
                   ] else ...[
-                    const Icon(
-                      Icons.dns_outlined,
-                      size: 18,
-                      color: Colors.cyanAccent,
-                    ),
+                    Icon(LucideIcons.server, size: 18, color: tokens.brand),
                     const SizedBox(width: 6),
                     Text(
                       '${rule.remoteHost}:${rule.remotePort}',
@@ -402,29 +345,26 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
               const SizedBox(height: 12),
               Row(
                 children: [
-                  const Icon(Icons.speed, size: 16, color: Colors.greenAccent),
+                  Icon(LucideIcons.gauge, size: 16, color: tokens.success),
                   const SizedBox(width: 6),
                   Text(
                     'Speed: ${activeTunnel.formattedSpeed}',
-                    style: const TextStyle(
-                      color: Colors.greenAccent,
+                    style: TextStyle(
+                      color: tokens.success,
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                   const Spacer(),
                   Icon(
-                    Icons.data_usage,
+                    LucideIcons.chartNoAxesColumnIncreasing,
                     size: 16,
-                    color: colorScheme.mutedForeground,
+                    color: tokens.textMuted,
                   ),
                   const SizedBox(width: 6),
                   Text(
                     'Total Transferred: ${activeTunnel.formattedBytes}',
-                    style: TextStyle(
-                      color: colorScheme.mutedForeground,
-                      fontSize: 12,
-                    ),
+                    style: TextStyle(color: tokens.textMuted, fontSize: 12),
                   ),
                 ],
               ),
@@ -434,7 +374,7 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
                   'Error: ${activeTunnel!.error}',
-                  style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                  style: TextStyle(color: tokens.danger, fontSize: 12),
                 ),
               ),
           ],

@@ -12,15 +12,13 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [
-          appDatabaseProvider.overrideWithValue(db),
-        ],
+        overrides: [appDatabaseProvider.overrideWithValue(db)],
         child: const TerlyApp(),
       ),
     );
 
     await tester.pumpAndSettle();
 
-    expect(find.text('Terly2'), findsWidgets);
+    expect(find.text('Terly'), findsWidgets);
   });
 }

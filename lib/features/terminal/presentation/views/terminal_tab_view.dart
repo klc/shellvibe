@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
+import '../../../../app/theme/terly_tokens.dart';
+import '../../../../app/widgets/terly_ui.dart';
 import '../../../../core/network/ssh_session_manager.dart';
 import '../../../../core/utils/platform_capabilities.dart';
 import '../../../hosts/domain/models/host_model.dart';
@@ -86,20 +88,18 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
     );
   }
 
-  Widget _buildTabBar(BuildContext context, WidgetRef ref, TerminalTabsState tabsState) {
-    final shadTheme = ShadTheme.of(context);
-    final colorScheme = shadTheme.colorScheme;
+  Widget _buildTabBar(
+    BuildContext context,
+    WidgetRef ref,
+    TerminalTabsState tabsState,
+  ) {
+    final tokens = TerlyTokens.resolve(context);
 
     return Container(
-      height: 40,
+      height: 42,
       decoration: BoxDecoration(
-        color: colorScheme.card,
-        border: Border(
-          bottom: BorderSide(
-            color: colorScheme.border,
-            width: 1,
-          ),
-        ),
+        color: tokens.surface,
+        border: Border(bottom: BorderSide(color: tokens.border)),
       ),
       child: Row(
         children: [
@@ -110,22 +110,44 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
               itemBuilder: (context, index) {
                 final tab = tabsState.tabs[index];
                 final isActive = tab.id == tabsState.activeTabId;
+                final isProduction = tab.title.toLowerCase().contains('prod');
+                final statusColor = tab.errorMessage != null
+                    ? tokens.danger
+                    : tab.isConnecting
+                    ? tokens.warning
+                    : tab.isConnected
+                    ? tokens.success
+                    : tokens.textMuted;
 
                 return Semantics(
                   label: 'Tab ${tab.title}',
                   selected: isActive,
                   button: true,
-                  child: GestureDetector(
-                    onTap: () =>
-                        ref.read(terminalTabsProvider.notifier).setActiveTab(tab.id),
-                    child: Container(
+                  child: InkWell(
+                    onTap: () => ref
+                        .read(terminalTabsProvider.notifier)
+                        .setActiveTab(tab.id),
+                    child: AnimatedContainer(
+                      duration: tokens.motionFast,
                       key: Key('tab_header_${tab.id}'),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      constraints: const BoxConstraints(
+                        minWidth: 120,
+                        maxWidth: 230,
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
                       decoration: BoxDecoration(
-                        color: isActive ? colorScheme.muted : Colors.transparent,
+                        color: isActive
+                            ? tokens.surfaceRaised
+                            : Colors.transparent,
                         border: Border(
                           bottom: BorderSide(
-                            color: isActive ? colorScheme.primary : Colors.transparent,
+                            color: isActive ? tokens.brand : Colors.transparent,
+                            width: 2,
+                          ),
+                          left: BorderSide(
+                            color: isProduction
+                                ? tokens.danger
+                                : Colors.transparent,
                             width: 2,
                           ),
                         ),
@@ -133,20 +155,37 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: statusColor,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 7),
                           Icon(
                             tab.sessionType == TerminalSessionType.ssh
-                                ? Icons.terminal
-                                : Icons.computer,
-                            size: 16,
-                            color: isActive ? colorScheme.primary : colorScheme.mutedForeground,
+                                ? LucideIcons.terminal
+                                : LucideIcons.monitor,
+                            size: 15,
+                            color: isActive ? tokens.brand : tokens.textMuted,
                           ),
                           const SizedBox(width: 6),
-                          Text(
-                            tab.title,
-                            style: TextStyle(
-                              color: isActive ? colorScheme.foreground : colorScheme.mutedForeground,
-                              fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-                              fontSize: 13,
+                          Flexible(
+                            child: Text(
+                              tab.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: isActive
+                                    ? tokens.textPrimary
+                                    : tokens.textMuted,
+                                fontWeight: isActive
+                                    ? FontWeight.w600
+                                    : FontWeight.w500,
+                                fontSize: 12,
+                              ),
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -159,9 +198,9 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
                                   .read(terminalTabsProvider.notifier)
                                   .closeTab(tab.id),
                               child: Icon(
-                                Icons.close,
-                                size: 14,
-                                color: colorScheme.mutedForeground,
+                                LucideIcons.x,
+                                size: 13,
+                                color: tokens.textMuted,
                               ),
                             ),
                           ),
@@ -177,18 +216,21 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
           if (tabsState.activeTabId != null)
             IconButton(
               key: const Key('split_tab_button'),
-              icon: Icon(Icons.vertical_split, size: 18, color: colorScheme.mutedForeground),
+              icon: const Icon(LucideIcons.columns2, size: 17),
               tooltip: 'Split Pane',
               onPressed: () {
                 ref
                     .read(terminalTabsProvider.notifier)
-                    .splitTab(tabsState.activeTabId!, direction: Axis.horizontal);
+                    .splitTab(
+                      tabsState.activeTabId!,
+                      direction: Axis.horizontal,
+                    );
               },
             ),
           // New Tab Button
           IconButton(
             key: const Key('new_tab_button'),
-            icon: Icon(Icons.add, size: 20, color: colorScheme.foreground),
+            icon: Icon(LucideIcons.plus, size: 18, color: tokens.textPrimary),
             tooltip: 'New Tab',
             onPressed: () => _showNewTabMenu(context, ref),
           ),
@@ -203,10 +245,12 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
     TerminalTabsState tabsState,
     TerminalTabSession activeTab,
   ) {
-    final colorScheme = ShadTheme.of(context).colorScheme;
+    final tokens = TerlyTokens.resolve(context);
 
     // Check if active tab has split children
-    final splits = tabsState.tabs.where((t) => t.splitParentId == activeTab.id).toList();
+    final splits = tabsState.tabs
+        .where((t) => t.splitParentId == activeTab.id)
+        .toList();
 
     if (splits.isEmpty) {
       return TerminalScreen(session: activeTab);
@@ -216,81 +260,53 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
     return Row(
       children: [
         Expanded(child: TerminalScreen(session: activeTab)),
-        VerticalDivider(width: 2, color: colorScheme.border),
+        VerticalDivider(width: 2, color: tokens.border),
         ...splits.map(
-          (splitTab) => Expanded(
-            child: TerminalScreen(session: splitTab),
-          ),
+          (splitTab) => Expanded(child: TerminalScreen(session: splitTab)),
         ),
       ],
     );
   }
 
   Widget _buildEmptyState(BuildContext context, WidgetRef ref) {
-    final colorScheme = ShadTheme.of(context).colorScheme;
-
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.terminal,
-            size: 64,
-            color: colorScheme.mutedForeground,
+    return TerlyEmptyState(
+      icon: LucideIcons.squareTerminal,
+      title: 'No Active Terminal Sessions',
+      description: isMobilePlatform
+          ? 'Select a remote SSH server to connect.'
+          : 'Open a local shell or select a remote SSH server to connect.',
+      actions: [
+        if (supportsLocalShell)
+          ShadButton(
+            key: const Key('empty_open_local_button'),
+            leading: const Icon(LucideIcons.monitor, size: 16),
+            onPressed: () =>
+                ref.read(terminalTabsProvider.notifier).openLocalTab(),
+            child: const Text('Open Local Shell'),
           ),
-          const SizedBox(height: 16),
-          Text(
-            'No Active Terminal Sessions',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: colorScheme.foreground,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            isMobilePlatform
-                ? 'Select a remote SSH server to connect.'
-                : 'Open a local shell or select a remote SSH server to connect.',
-            style: TextStyle(color: colorScheme.mutedForeground),
-          ),
-          const SizedBox(height: 24),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            alignment: WrapAlignment.center,
-            children: [
-              if (supportsLocalShell)
-                ShadButton(
-                  key: const Key('empty_open_local_button'),
-                  leading: const Icon(Icons.computer, size: 18),
-                  onPressed: () =>
-                      ref.read(terminalTabsProvider.notifier).openLocalTab(),
-                  child: const Text('Open Local Shell'),
-                ),
-              ShadButton.outline(
-                key: const Key('empty_select_host_button'),
-                leading: const Icon(Icons.dns, size: 18),
-                onPressed: () => _showSelectHostModal(context, ref),
-                child: const Text('Connect to Host'),
-              ),
-            ],
-          ),
-        ],
-      ),
+        ShadButton.outline(
+          key: const Key('empty_select_host_button'),
+          leading: const Icon(LucideIcons.server, size: 16),
+          onPressed: () => _showSelectHostModal(context, ref),
+          child: const Text('Connect to Host'),
+        ),
+      ],
     );
   }
 
   void _showNewTabMenu(BuildContext context, WidgetRef ref) {
+    final tokens = TerlyTokens.resolve(context);
     showModalBottomSheet(
       context: context,
+      showDragHandle: true,
+      backgroundColor: tokens.surface,
       builder: (ctx) => Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (supportsLocalShell)
             ListTile(
               key: const Key('new_tab_menu_local'),
-              leading: const Icon(Icons.computer),
+              leading: const Icon(LucideIcons.monitor, size: 18),
               title: const Text('Local Shell'),
               onTap: () {
                 Navigator.of(ctx).pop();
@@ -299,7 +315,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
             ),
           ListTile(
             key: const Key('new_tab_menu_host'),
-            leading: const Icon(Icons.dns),
+            leading: const Icon(LucideIcons.server, size: 18),
             title: const Text('Connect to Host...'),
             onTap: () {
               Navigator.of(ctx).pop();
@@ -334,7 +350,9 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
       }
     }
 
-    await ref.read(terminalTabsProvider.notifier).openTabForHost(
+    await ref
+        .read(terminalTabsProvider.notifier)
+        .openTabForHost(
           host,
           identity: identity,
           onHostKeyPrompt: _promptHostKey,
@@ -361,8 +379,11 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
   }
 
   void _showSelectHostModal(BuildContext context, WidgetRef ref) {
+    final tokens = TerlyTokens.resolve(context);
     showModalBottomSheet(
       context: context,
+      showDragHandle: true,
+      backgroundColor: tokens.surface,
       builder: (ctx) {
         return Consumer(
           builder: (context, ref, _) {
@@ -372,7 +393,9 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
                 if (hosts.isEmpty) {
                   return const Padding(
                     padding: EdgeInsets.all(24.0),
-                    child: Center(child: Text('No hosts available. Create one first.')),
+                    child: Center(
+                      child: Text('No hosts available. Create one first.'),
+                    ),
                   );
                 }
                 return ListView.builder(
@@ -380,7 +403,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
                   itemBuilder: (context, index) {
                     final host = hosts[index];
                     return ListTile(
-                      leading: const Icon(Icons.dns),
+                      leading: const Icon(LucideIcons.server, size: 18),
                       title: Text(host.label),
                       subtitle: Text('${host.hostname}:${host.port}'),
                       onTap: () async {

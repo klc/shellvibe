@@ -27,17 +27,13 @@ void main() {
 
   Widget createWidgetUnderTest() {
     return ProviderScope(
-      overrides: [
-        appDatabaseProvider.overrideWithValue(db),
-      ],
+      overrides: [appDatabaseProvider.overrideWithValue(db)],
       child: ShadTheme(
         data: ShadThemeData(
           colorScheme: const ShadSlateColorScheme.dark(),
           brightness: Brightness.dark,
         ),
-        child: const MaterialApp(
-          home: TerminalTabView(),
-        ),
+        child: const MaterialApp(home: TerminalTabView()),
       ),
     );
   }
@@ -53,9 +49,13 @@ void main() {
       expect(find.byKey(const Key('empty_select_host_button')), findsOneWidget);
     });
 
-    testWidgets('Does not expose or trigger a local shell on mobile', (tester) async {
+    testWidgets('Does not expose or trigger a local shell on mobile', (
+      tester,
+    ) async {
       debugPlatformCapabilitiesOverride = TargetPlatform.android;
-      final container = ProviderContainer(overrides: [appDatabaseProvider.overrideWithValue(db)]);
+      final container = ProviderContainer(
+        overrides: [appDatabaseProvider.overrideWithValue(db)],
+      );
       addTearDown(container.dispose);
 
       await tester.pumpWidget(
@@ -74,7 +74,10 @@ void main() {
       await tester.pump(const Duration(milliseconds: 200));
 
       expect(find.byKey(const Key('empty_open_local_button')), findsNothing);
-      expect(find.text('Select a remote SSH server to connect.'), findsOneWidget);
+      expect(
+        find.text('Select a remote SSH server to connect.'),
+        findsOneWidget,
+      );
 
       await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
       await tester.sendKeyEvent(LogicalKeyboardKey.keyT);
@@ -84,7 +87,9 @@ void main() {
       expect(container.read(terminalTabsProvider).tabs, isEmpty);
     });
 
-    testWidgets('Opens local shell tab on Open Local Shell button tap', (tester) async {
+    testWidgets('Opens local shell tab on Open Local Shell button tap', (
+      tester,
+    ) async {
       await tester.pumpWidget(createWidgetUnderTest());
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
@@ -119,7 +124,7 @@ void main() {
 
       expect(find.text('Local Shell'), findsWidgets);
 
-      final closeIcon = find.byIcon(Icons.close).first;
+      final closeIcon = find.byIcon(LucideIcons.x).first;
       await tester.tap(closeIcon);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));

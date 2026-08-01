@@ -1,4 +1,5 @@
 import 'dart:io' show Platform;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +11,8 @@ import '../../features/settings/presentation/notifiers/settings_notifier.dart';
 import '../../features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import '../../features/tunnels/presentation/providers/tunnels_providers.dart';
 import '../../shared/providers/workspace_provider.dart';
+import '../theme/terly_tokens.dart';
+import 'terly_ui.dart';
 
 class NavigationItemData {
   final String label;
@@ -91,10 +94,7 @@ const List<NavigationItemData> appNavigationItems = [
 class AppNavigationShell extends ConsumerStatefulWidget {
   final StatefulNavigationShell navigationShell;
 
-  const AppNavigationShell({
-    super.key,
-    required this.navigationShell,
-  });
+  const AppNavigationShell({super.key, required this.navigationShell});
 
   @override
   ConsumerState<AppNavigationShell> createState() => _AppNavigationShellState();
@@ -111,443 +111,344 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
   }
 
   bool _isDesktopPlatform(BuildContext context) {
-    if (kIsWeb) return MediaQuery.of(context).size.width >= 800;
+    final width = MediaQuery.sizeOf(context).width;
+    if (kIsWeb) return width >= 800;
     try {
       if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
-        return MediaQuery.of(context).size.width >= 600;
+        return width >= 720;
       }
-    } catch (_) {}
-    return MediaQuery.of(context).size.width >= 800;
+    } catch (_) {
+      // Web and unsupported platforms fall back to the width contract.
+    }
+    return width >= 800;
   }
 
   @override
   Widget build(BuildContext context) {
     final isDesktop = _isDesktopPlatform(context);
-    final colorScheme = ShadTheme.of(context).colorScheme;
+    final tokens = TerlyTokens.resolve(context);
 
     return CallbackShortcuts(
       bindings: {
-        const SingleActivator(LogicalKeyboardKey.digit1, meta: true): () => _onTabSelected(0),
-        const SingleActivator(LogicalKeyboardKey.digit1, control: true): () => _onTabSelected(0),
-        const SingleActivator(LogicalKeyboardKey.digit2, meta: true): () => _onTabSelected(1),
-        const SingleActivator(LogicalKeyboardKey.digit2, control: true): () => _onTabSelected(1),
-        const SingleActivator(LogicalKeyboardKey.digit3, meta: true): () => _onTabSelected(2),
-        const SingleActivator(LogicalKeyboardKey.digit3, control: true): () => _onTabSelected(2),
-        const SingleActivator(LogicalKeyboardKey.digit4, meta: true): () => _onTabSelected(3),
-        const SingleActivator(LogicalKeyboardKey.digit4, control: true): () => _onTabSelected(3),
-        const SingleActivator(LogicalKeyboardKey.digit5, meta: true): () => _onTabSelected(4),
-        const SingleActivator(LogicalKeyboardKey.digit5, control: true): () => _onTabSelected(4),
-        const SingleActivator(LogicalKeyboardKey.digit6, meta: true): () => _onTabSelected(5),
-        const SingleActivator(LogicalKeyboardKey.digit6, control: true): () => _onTabSelected(5),
-        const SingleActivator(LogicalKeyboardKey.digit7, meta: true): () => _onTabSelected(6),
-        const SingleActivator(LogicalKeyboardKey.digit7, control: true): () => _onTabSelected(6),
+        for (var index = 0; index < appNavigationItems.length; index++) ...{
+          SingleActivator(
+            LogicalKeyboardKey.findKeyByKeyId(0x00000031 + index)!,
+            meta: true,
+          ): () =>
+              _onTabSelected(index),
+          SingleActivator(
+            LogicalKeyboardKey.findKeyByKeyId(0x00000031 + index)!,
+            control: true,
+          ): () =>
+              _onTabSelected(index),
+        },
+        const SingleActivator(LogicalKeyboardKey.keyK, meta: true):
+            _showCommandPalette,
+        const SingleActivator(LogicalKeyboardKey.keyK, control: true):
+            _showCommandPalette,
       },
-      child: Scaffold(
-        body: SafeArea(
-          top: true,
-          bottom: false,
-          child: Column(
-            children: [
-              // Top Application Header Bar
-              _buildTopHeader(context),
-              // Main Body Area with Sidebar / BottomNav
-              Expanded(
-                child: isDesktop
-                    ? Row(
-                        children: [
-                          _buildDesktopSidebar(context),
-                          VerticalDivider(width: 1, thickness: 1, color: colorScheme.border),
-                          Expanded(child: widget.navigationShell),
-                        ],
-                      )
-                    : Column(
-                        children: [
-                          Expanded(child: widget.navigationShell),
-                        ],
-                      ),
-              ),
-            ],
+      child: Focus(
+        autofocus: true,
+        child: Scaffold(
+          body: SafeArea(
+            top: true,
+            bottom: false,
+            child: Column(
+              children: [
+                _buildTopHeader(context, isDesktop: isDesktop),
+                Expanded(
+                  child: isDesktop
+                      ? Row(
+                          children: [
+                            _buildDesktopDock(context),
+                            VerticalDivider(width: 1, color: tokens.border),
+                            Expanded(child: widget.navigationShell),
+                          ],
+                        )
+                      : widget.navigationShell,
+                ),
+              ],
+            ),
           ),
+          bottomNavigationBar: isDesktop
+              ? null
+              : _buildMobileBottomBar(context),
         ),
-        bottomNavigationBar: isDesktop ? null : _buildMobileBottomBar(context),
       ),
     );
   }
 
-  Widget _buildTopHeader(BuildContext context) {
-    final colorScheme = ShadTheme.of(context).colorScheme;
-
+  Widget _buildTopHeader(BuildContext context, {required bool isDesktop}) {
+    final tokens = TerlyTokens.resolve(context);
     final activeWorkspaceId = ref.watch(activeWorkspaceIdProvider);
     final workspaces = ref.watch(workspacesProvider);
-
-    // Active SSH connections count
     final terminalState = ref.watch(terminalTabsProvider);
-    final activeSshCount = terminalState.tabs.where((t) => t.isConnected).length;
-
-    // Active Tunnels count
-    final activeTunnelsAsync = ref.watch(activeTunnelsStreamProvider);
-    final activeTunnelsCount = activeTunnelsAsync.value?.length ?? 0;
-
-    // Biometric lock status
-    final settingsAsync = ref.watch(settingsProvider);
-    final isBiometricsEnabled = (settingsAsync.value?.autoLockTimerSeconds ?? 0) > 0;
-
-    final isCompactHeader = MediaQuery.of(context).size.width < 600;
+    final activeSshCount = terminalState.tabs
+        .where((tab) => tab.isConnected)
+        .length;
+    final activeTunnels =
+        ref.watch(activeTunnelsStreamProvider).value ?? const [];
+    final settings = ref.watch(settingsProvider).value;
+    final isSecured = (settings?.autoLockTimerSeconds ?? 0) > 0;
+    final transferOrNetworkActivity = activeSshCount + activeTunnels.length;
 
     return Container(
-      height: 48,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      height: 52,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color: colorScheme.card,
-        border: Border(
-          bottom: BorderSide(color: colorScheme.border, width: 1),
-        ),
+        color: tokens.surface,
+        border: Border(bottom: BorderSide(color: tokens.border)),
       ),
       child: Row(
         children: [
-          // App Logo & Brand
-          Row(
-            key: const Key('header_brand_logo'),
-            children: [
-              Container(
-                width: 24,
-                height: 24,
-                decoration: BoxDecoration(
-                  color: colorScheme.primary,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Center(
-                  child: Text(
-                    '>_',
-                    style: TextStyle(
-                      color: colorScheme.primaryForeground,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
+          Semantics(
+            label: 'Terly application home',
+            child: Row(
+              key: const Key('header_brand_logo'),
+              children: [
+                Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: tokens.brand.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(tokens.radiusMedium),
+                    border: Border.all(
+                      color: tokens.brand.withValues(alpha: 0.30),
                     ),
                   ),
-                ),
-              ),
-              if (!isCompactHeader) ...[
-                const SizedBox(width: 8),
-                Text(
-                  'Terly2',
-                  style: TextStyle(
-                    color: colorScheme.foreground,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                    letterSpacing: 0.5,
+                  child: Icon(
+                    LucideIcons.squareTerminal,
+                    size: 16,
+                    color: tokens.brand,
                   ),
                 ),
+                if (isDesktop) ...[
+                  const SizedBox(width: 9),
+                  Text(
+                    'Terly',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
-          const SizedBox(width: 8),
-
-          // Active Workspace Selector Dropdown
-          Flexible(
+          const SizedBox(width: 12),
+          ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: isDesktop ? 210 : 140),
             child: Container(
               key: const Key('workspace_selector_dropdown'),
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              height: 34,
+              padding: const EdgeInsets.only(left: 9, right: 5),
               decoration: BoxDecoration(
-                color: colorScheme.muted.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: colorScheme.border),
+                color: tokens.surfaceRaised,
+                borderRadius: BorderRadius.circular(tokens.radiusMedium),
+                border: Border.all(color: tokens.border),
               ),
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<String>(
                   value: activeWorkspaceId,
-                  dropdownColor: colorScheme.card,
-                  icon: Icon(Icons.keyboard_arrow_down, color: colorScheme.primary, size: 14),
                   isDense: true,
                   isExpanded: true,
-                  style: TextStyle(color: colorScheme.foreground, fontSize: 11),
-                  onChanged: (newVal) {
-                    if (newVal != null) {
-                      ref.read(activeWorkspaceIdProvider.notifier).select(newVal);
+                  dropdownColor: tokens.surfaceRaised,
+                  icon: Icon(
+                    LucideIcons.chevronsUpDown,
+                    size: 13,
+                    color: tokens.textMuted,
+                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.labelMedium?.copyWith(color: tokens.textPrimary),
+                  onChanged: (value) {
+                    if (value != null) {
+                      ref
+                          .read(activeWorkspaceIdProvider.notifier)
+                          .select(value);
                     }
                   },
-                  items: workspaces.map((ws) {
-                    return DropdownMenuItem<String>(
-                      value: ws.id,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.workspaces_outline, size: 12, color: colorScheme.primary),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              ws.name,
-                              overflow: TextOverflow.ellipsis,
-                              maxLines: 1,
-                            ),
+                  items: workspaces
+                      .map(
+                        (workspace) => DropdownMenuItem<String>(
+                          value: workspace.id,
+                          child: Text(
+                            workspace.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                        ],
-                      ),
-                    );
-                  }).toList(),
+                        ),
+                      )
+                      .toList(),
                 ),
               ),
             ),
           ),
-
-          const SizedBox(width: 6),
-
-          // Status Badges & Biometric Indicator
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // SSH Connections Badge
-              Tooltip(
-                message: 'Active SSH Connections: $activeSshCount',
-                child: Container(
-                  key: const Key('ssh_status_badge'),
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: activeSshCount > 0
-                        ? Colors.green.withValues(alpha: 0.15)
-                        : colorScheme.muted.withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(
-                      color: activeSshCount > 0 ? Colors.green : colorScheme.border,
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.terminal,
-                        size: 13,
-                        color: activeSshCount > 0 ? Colors.green : colorScheme.mutedForeground,
-                      ),
-                      if (!isCompactHeader) ...[
-                        const SizedBox(width: 4),
-                        Text(
-                          'SSH: $activeSshCount',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: activeSshCount > 0 ? Colors.green : colorScheme.mutedForeground,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
+          const Spacer(),
+          if (isDesktop)
+            OutlinedButton.icon(
+              key: const Key('command_palette_button'),
+              onPressed: _showCommandPalette,
+              icon: const Icon(LucideIcons.search, size: 15),
+              label: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [Text('Jump to…'), SizedBox(width: 18), Text('⌘K')],
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: tokens.textMuted,
+                side: BorderSide(color: tokens.border),
+                minimumSize: const Size(190, 34),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(tokens.radiusMedium),
                 ),
               ),
-              const SizedBox(width: 4),
-
-              // Active Tunnels Badge
-              Tooltip(
-                message: 'Active Port Tunnels: $activeTunnelsCount',
-                child: Container(
-                  key: const Key('tunnels_status_badge'),
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: activeTunnelsCount > 0
-                        ? Colors.amber.withValues(alpha: 0.15)
-                        : colorScheme.muted.withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(
-                      color: activeTunnelsCount > 0
-                          ? Colors.amber
-                          : colorScheme.border,
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.alt_route,
-                        size: 13,
-                        color: activeTunnelsCount > 0 ? Colors.amber : colorScheme.mutedForeground,
-                      ),
-                      if (!isCompactHeader) ...[
-                        const SizedBox(width: 4),
-                        Text(
-                          'Tunnels: $activeTunnelsCount',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: activeTunnelsCount > 0 ? Colors.amber : colorScheme.mutedForeground,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 4),
-
-              // Biometric Lock Indicator
-              Tooltip(
-                message: isBiometricsEnabled ? 'Vault Biometric Security Active' : 'Biometrics Disabled',
-                child: Container(
-                  key: const Key('biometric_status_indicator'),
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: isBiometricsEnabled
-                        ? colorScheme.primary.withValues(alpha: 0.15)
-                        : colorScheme.muted.withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(
-                      color: isBiometricsEnabled
-                          ? colorScheme.primary
-                          : colorScheme.border,
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        isBiometricsEnabled ? Icons.fingerprint : Icons.lock_open,
-                        size: 13,
-                        color: isBiometricsEnabled ? colorScheme.primary : colorScheme.mutedForeground,
-                      ),
-                      if (!isCompactHeader) ...[
-                        const SizedBox(width: 4),
-                        Text(
-                          isBiometricsEnabled ? 'Secured' : 'Unlocked',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: isBiometricsEnabled ? colorScheme.primary : colorScheme.mutedForeground,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-            ],
+            ),
+          const SizedBox(width: 8),
+          _HeaderAction(
+            actionKey: const Key('ssh_status_badge'),
+            tooltip: '$activeSshCount active SSH sessions',
+            icon: LucideIcons.terminal,
+            count: activeSshCount,
+            active: activeSshCount > 0,
+            onPressed: () => _onTabSelected(1),
+          ),
+          _HeaderAction(
+            actionKey: const Key('tunnels_status_badge'),
+            tooltip: '${activeTunnels.length} active tunnels',
+            icon: LucideIcons.activity,
+            count: transferOrNetworkActivity,
+            active: transferOrNetworkActivity > 0,
+            onPressed: () => _showActivityCenter(
+              activeSshCount: activeSshCount,
+              activeTunnelsCount: activeTunnels.length,
+            ),
+          ),
+          _HeaderAction(
+            actionKey: const Key('biometric_status_indicator'),
+            tooltip: isSecured
+                ? 'Vault auto-lock active'
+                : 'Vault auto-lock disabled',
+            icon: isSecured ? LucideIcons.shieldCheck : LucideIcons.shield,
+            active: isSecured,
+            onPressed: () => _onTabSelected(2),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildDesktopSidebar(BuildContext context) {
+  Widget _buildDesktopDock(BuildContext context) {
     final currentIndex = widget.navigationShell.currentIndex;
-    final sidebarWidth = _isSidebarCollapsed ? 68.0 : 240.0;
-    final colorScheme = ShadTheme.of(context).colorScheme;
+    final tokens = TerlyTokens.resolve(context);
+    final width = _isSidebarCollapsed ? 64.0 : 208.0;
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      width: sidebarWidth,
-      color: colorScheme.card,
+    return Container(
+      width: width,
+      color: tokens.surface,
       child: Column(
         children: [
-          const SizedBox(height: 8),
-
-          // Collapse / Expand Toggle Button
-          Align(
-            alignment: _isSidebarCollapsed ? Alignment.center : Alignment.centerRight,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 10, 8, 6),
+            child: Align(
+              alignment: _isSidebarCollapsed
+                  ? Alignment.center
+                  : Alignment.centerRight,
               child: IconButton(
                 key: const Key('sidebar_toggle_button'),
+                tooltip: _isSidebarCollapsed
+                    ? 'Expand navigation'
+                    : 'Collapse navigation',
                 icon: Icon(
-                  _isSidebarCollapsed ? Icons.chevron_right : Icons.chevron_left,
-                  color: colorScheme.mutedForeground,
+                  _isSidebarCollapsed
+                      ? LucideIcons.panelLeftOpen
+                      : LucideIcons.panelLeftClose,
+                  size: 17,
                 ),
-                tooltip: _isSidebarCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar',
-                onPressed: () {
-                  setState(() {
-                    _isSidebarCollapsed = !_isSidebarCollapsed;
-                  });
-                },
+                onPressed: () =>
+                    setState(() => _isSidebarCollapsed = !_isSidebarCollapsed),
               ),
             ),
           ),
-          Divider(color: colorScheme.border, height: 1),
-          const SizedBox(height: 8),
-
-          // Navigation List Items
           Expanded(
             child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 7),
               itemCount: appNavigationItems.length,
               itemBuilder: (context, index) {
                 final item = appNavigationItems[index];
-                final isSelected = index == currentIndex;
-
-                return Tooltip(
-                  message: _isSidebarCollapsed ? '${item.label} (${item.shortcut})' : item.tooltip,
-                  waitDuration: const Duration(milliseconds: 400),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    child: InkWell(
-                      key: Key('nav_item_$index'),
-                      onTap: () => _onTabSelected(index),
-                      borderRadius: BorderRadius.circular(8),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 150),
-                        padding: EdgeInsets.symmetric(
-                          horizontal: _isSidebarCollapsed ? 8 : 12,
-                          vertical: 10,
+                final selected = currentIndex == index;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Tooltip(
+                    message: _isSidebarCollapsed ? item.tooltip : '',
+                    child: Semantics(
+                      selected: selected,
+                      button: true,
+                      label: item.tooltip,
+                      child: InkWell(
+                        key: Key('nav_item_$index'),
+                        onTap: () => _onTabSelected(index),
+                        borderRadius: BorderRadius.circular(
+                          tokens.radiusMedium,
                         ),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? colorScheme.primary.withValues(alpha: 0.15)
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(8),
-                          border: isSelected
-                              ? Border.all(color: colorScheme.primary.withValues(alpha: 0.4))
-                              : null,
-                        ),
-                        child: _isSidebarCollapsed
-                            ? Center(
-                                child: Icon(
-                                  isSelected ? item.selectedIcon : item.icon,
-                                  size: 20,
-                                  color: isSelected ? colorScheme.primary : colorScheme.mutedForeground,
-                                ),
-                              )
-                            : SingleChildScrollView(
-                                scrollDirection: Axis.horizontal,
-                                physics: const NeverScrollableScrollPhysics(),
-                                child: SizedBox(
-                                  width: 204,
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        isSelected ? item.selectedIcon : item.icon,
-                                        size: 20,
-                                        color: isSelected ? colorScheme.primary : colorScheme.mutedForeground,
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Text(
-                                          item.label,
-                                          overflow: TextOverflow.ellipsis,
-                                          maxLines: 1,
-                                          style: TextStyle(
-                                            fontSize: 14,
-                                            fontWeight:
-                                                isSelected ? FontWeight.bold : FontWeight.w500,
-                                            color: isSelected ? colorScheme.foreground : colorScheme.mutedForeground,
-                                          ),
+                        child: Container(
+                          height: 42,
+                          padding: EdgeInsets.symmetric(
+                            horizontal: _isSidebarCollapsed ? 0 : 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: selected
+                                ? tokens.brand.withValues(alpha: 0.10)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(
+                              tokens.radiusMedium,
+                            ),
+                            border: Border.all(
+                              color: selected
+                                  ? tokens.brand.withValues(alpha: 0.24)
+                                  : Colors.transparent,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: _isSidebarCollapsed
+                                ? MainAxisAlignment.center
+                                : MainAxisAlignment.start,
+                            children: [
+                              Icon(
+                                selected ? item.selectedIcon : item.icon,
+                                size: 18,
+                                color: selected
+                                    ? tokens.brand
+                                    : tokens.textMuted,
+                              ),
+                              if (!_isSidebarCollapsed) ...[
+                                const SizedBox(width: 11),
+                                Expanded(
+                                  child: Text(
+                                    item.label,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelLarge
+                                        ?.copyWith(
+                                          color: selected
+                                              ? tokens.textPrimary
+                                              : tokens.textMuted,
                                         ),
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 6, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: colorScheme.muted.withValues(alpha: 0.5),
-                                          borderRadius: BorderRadius.circular(4),
-                                        ),
-                                        child: Text(
-                                          item.shortcut,
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            color: colorScheme.mutedForeground,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
                                   ),
                                 ),
-                              ),
+                                Text(
+                                  item.shortcut,
+                                  style: Theme.of(context).textTheme.labelSmall
+                                      ?.copyWith(
+                                        color: tokens.textMuted.withValues(
+                                          alpha: 0.72,
+                                        ),
+                                      ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -555,35 +456,321 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
               },
             ),
           ),
+          if (!_isSidebarCollapsed)
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  Container(
+                    width: 7,
+                    height: 7,
+                    decoration: BoxDecoration(
+                      color: tokens.success,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Quiet Ops ready',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );
   }
 
   Widget _buildMobileBottomBar(BuildContext context) {
+    const branchIndexes = [0, 1, 3];
     final currentIndex = widget.navigationShell.currentIndex;
-    final colorScheme = ShadTheme.of(context).colorScheme;
+    final selectedIndex = switch (currentIndex) {
+      0 => 0,
+      1 => 1,
+      3 => 2,
+      _ => 3,
+    };
 
-    return Container(
-      decoration: BoxDecoration(
-        color: colorScheme.card,
-        border: Border(top: BorderSide(color: colorScheme.border, width: 1)),
+    return NavigationBar(
+      key: const Key('mobile_bottom_navigation_bar'),
+      selectedIndex: selectedIndex,
+      onDestinationSelected: (index) {
+        if (index < branchIndexes.length) {
+          _onTabSelected(branchIndexes[index]);
+        } else {
+          _showMobileTools();
+        }
+      },
+      destinations: const [
+        NavigationDestination(
+          key: Key('mobile_nav_destination_hosts'),
+          icon: Icon(LucideIcons.server),
+          label: 'Connect',
+        ),
+        NavigationDestination(
+          key: Key('mobile_nav_destination_terminal'),
+          icon: Icon(LucideIcons.terminal),
+          label: 'Sessions',
+        ),
+        NavigationDestination(
+          key: Key('mobile_nav_destination_sftp'),
+          icon: Icon(LucideIcons.folderSync),
+          label: 'Files',
+        ),
+        NavigationDestination(
+          key: Key('mobile_nav_destination_tools'),
+          icon: Icon(LucideIcons.blocks),
+          label: 'Tools',
+        ),
+      ],
+    );
+  }
+
+  void _showCommandPalette() {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => _CommandPalette(
+        onSelected: (index) {
+          Navigator.of(dialogContext).pop();
+          _onTabSelected(index);
+        },
       ),
-      child: NavigationBar(
-        key: const Key('mobile_bottom_navigation_bar'),
-        selectedIndex: currentIndex,
-        onDestinationSelected: _onTabSelected,
-        backgroundColor: colorScheme.card,
-        indicatorColor: colorScheme.primary.withValues(alpha: 0.25),
-        destinations: appNavigationItems.map((item) {
-          return NavigationDestination(
-            key: Key('mobile_nav_destination_${item.label.toLowerCase()}'),
-            icon: Icon(item.icon, color: colorScheme.mutedForeground),
-            selectedIcon: Icon(item.selectedIcon, color: colorScheme.primary),
-            label: item.label,
-            tooltip: item.tooltip,
-          );
-        }).toList(),
+    );
+  }
+
+  void _showMobileTools() {
+    final tokens = TerlyTokens.resolve(context);
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: tokens.surface,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 4, 8, 10),
+                child: Text(
+                  'Tools',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              for (final index in [2, 4, 5, 6])
+                ListTile(
+                  key: Key(
+                    'mobile_tool_${appNavigationItems[index].label.toLowerCase()}',
+                  ),
+                  leading: Icon(appNavigationItems[index].icon, size: 18),
+                  title: Text(appNavigationItems[index].label),
+                  subtitle: Text(
+                    appNavigationItems[index].tooltip.split(' (').first,
+                  ),
+                  trailing: const Icon(LucideIcons.chevronRight, size: 16),
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    _onTabSelected(index);
+                  },
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showActivityCenter({
+    required int activeSshCount,
+    required int activeTunnelsCount,
+  }) {
+    final tokens = TerlyTokens.resolve(context);
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: tokens.surface,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Activity Center',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 16),
+              TerlySurface(
+                padding: const EdgeInsets.all(14),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _ActivityMetric(
+                        icon: LucideIcons.terminal,
+                        value: activeSshCount,
+                        label: 'SSH sessions',
+                      ),
+                    ),
+                    SizedBox(
+                      height: 42,
+                      child: VerticalDivider(color: tokens.border),
+                    ),
+                    Expanded(
+                      child: _ActivityMetric(
+                        icon: LucideIcons.network,
+                        value: activeTunnelsCount,
+                        label: 'Tunnels',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HeaderAction extends StatelessWidget {
+  final Key actionKey;
+  final String tooltip;
+  final IconData icon;
+  final int? count;
+  final bool active;
+  final VoidCallback onPressed;
+
+  const _HeaderAction({
+    required this.actionKey,
+    required this.tooltip,
+    required this.icon,
+    this.count,
+    required this.active,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = TerlyTokens.resolve(context);
+    return Tooltip(
+      message: tooltip,
+      child: IconButton(
+        key: actionKey,
+        onPressed: onPressed,
+        icon: Badge(
+          isLabelVisible: count != null && count! > 0,
+          label: Text('${count ?? 0}'),
+          backgroundColor: tokens.brand,
+          textColor: const Color(0xFF06211E),
+          child: Icon(
+            icon,
+            size: 17,
+            color: active ? tokens.brand : tokens.textMuted,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ActivityMetric extends StatelessWidget {
+  final IconData icon;
+  final int value;
+  final String label;
+
+  const _ActivityMetric({
+    required this.icon,
+    required this.value,
+    required this.label,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = TerlyTokens.resolve(context);
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: tokens.brand),
+        const SizedBox(width: 10),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('$value', style: Theme.of(context).textTheme.titleMedium),
+            Text(label, style: Theme.of(context).textTheme.bodySmall),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _CommandPalette extends StatefulWidget {
+  final ValueChanged<int> onSelected;
+
+  const _CommandPalette({required this.onSelected});
+
+  @override
+  State<_CommandPalette> createState() => _CommandPaletteState();
+}
+
+class _CommandPaletteState extends State<_CommandPalette> {
+  String query = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = TerlyTokens.resolve(context);
+    final filtered = appNavigationItems.indexed.where((entry) {
+      final item = entry.$2;
+      final value = query.toLowerCase();
+      return item.label.toLowerCase().contains(value) ||
+          item.tooltip.toLowerCase().contains(value);
+    }).toList();
+
+    return Dialog(
+      alignment: const Alignment(0, -0.55),
+      insetPadding: const EdgeInsets.all(20),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 540, maxHeight: 520),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: TerlySearchField(
+                fieldKey: const Key('command_palette_search'),
+                hintText: 'Search hosts, sessions, files and tools…',
+                onChanged: (value) => setState(() => query = value),
+              ),
+            ),
+            Divider(color: tokens.border),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                padding: const EdgeInsets.all(8),
+                itemCount: filtered.length,
+                itemBuilder: (context, index) {
+                  final entry = filtered[index];
+                  final item = entry.$2;
+                  return ListTile(
+                    leading: Icon(item.icon, size: 18),
+                    title: Text(item.label),
+                    subtitle: Text(item.tooltip.split(' (').first),
+                    trailing: Text(
+                      item.shortcut,
+                      style: Theme.of(context).textTheme.labelSmall,
+                    ),
+                    onTap: () => widget.onSelected(entry.$1),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

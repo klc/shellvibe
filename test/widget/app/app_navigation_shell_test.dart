@@ -40,9 +40,7 @@ void main() {
     return ProviderScope(
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
-        vaultProvider.overrideWith(
-          () => _UnlockedVaultNotifier(),
-        ),
+        vaultProvider.overrideWith(() => _UnlockedVaultNotifier()),
       ],
       child: Consumer(
         builder: (context, ref, _) {
@@ -52,9 +50,7 @@ void main() {
               colorScheme: const ShadSlateColorScheme.light(),
               brightness: Brightness.light,
             ),
-            child: MaterialApp.router(
-              routerConfig: router,
-            ),
+            child: MaterialApp.router(routerConfig: router),
           );
         },
       ),
@@ -67,62 +63,75 @@ void main() {
   }
 
   group('AppNavigationShell & GoRouter Integration Tests', () {
-    testWidgets('Renders AppNavigationShell header and initial Hosts screen', (tester) async {
+    testWidgets('Renders AppNavigationShell header and initial Hosts screen', (
+      tester,
+    ) async {
       await tester.pumpWidget(createTestWidget());
       await pumpTabTransition(tester);
 
       // Header components
       expect(find.byKey(const Key('header_brand_logo')), findsOneWidget);
-      expect(find.byKey(const Key('workspace_selector_dropdown')), findsOneWidget);
+      expect(
+        find.byKey(const Key('workspace_selector_dropdown')),
+        findsOneWidget,
+      );
       expect(find.byKey(const Key('ssh_status_badge')), findsOneWidget);
       expect(find.byKey(const Key('tunnels_status_badge')), findsOneWidget);
-      expect(find.byKey(const Key('biometric_status_indicator')), findsOneWidget);
+      expect(
+        find.byKey(const Key('biometric_status_indicator')),
+        findsOneWidget,
+      );
 
       // Default initial tab should be HostsScreen
       expect(find.byType(HostsScreen), findsOneWidget);
     });
 
-    testWidgets('Switching tabs via desktop navigation shell loads corresponding screens', (tester) async {
-      await tester.pumpWidget(createTestWidget());
-      await pumpTabTransition(tester);
+    testWidgets(
+      'Switching tabs via desktop navigation shell loads corresponding screens',
+      (tester) async {
+        await tester.pumpWidget(createTestWidget());
+        await pumpTabTransition(tester);
 
-      // 1. Switch to Terminal (/terminal - Index 1)
-      await tester.tap(find.byKey(const Key('nav_item_1')));
-      await pumpTabTransition(tester);
-      expect(find.byType(TerminalTabView), findsOneWidget);
+        // 1. Switch to Terminal (/terminal - Index 1)
+        await tester.tap(find.byKey(const Key('nav_item_1')));
+        await pumpTabTransition(tester);
+        expect(find.byType(TerminalTabView), findsOneWidget);
 
-      // 2. Switch to Vault (/vault - Index 2)
-      await tester.tap(find.byKey(const Key('nav_item_2')));
-      await pumpTabTransition(tester);
-      expect(find.byType(VaultScreen), findsOneWidget);
+        // 2. Switch to Vault (/vault - Index 2)
+        await tester.tap(find.byKey(const Key('nav_item_2')));
+        await pumpTabTransition(tester);
+        expect(find.byType(VaultScreen), findsOneWidget);
 
-      // 3. Switch to SFTP (/sftp - Index 3)
-      await tester.tap(find.byKey(const Key('nav_item_3')));
-      await pumpTabTransition(tester);
-      expect(find.byType(SftpDualPaneScreen), findsOneWidget);
+        // 3. Switch to SFTP (/sftp - Index 3)
+        await tester.tap(find.byKey(const Key('nav_item_3')));
+        await pumpTabTransition(tester);
+        expect(find.byType(SftpDualPaneScreen), findsOneWidget);
 
-      // 4. Switch to Tunnels (/tunnels - Index 4)
-      await tester.tap(find.byKey(const Key('nav_item_4')));
-      await pumpTabTransition(tester);
-      expect(find.byType(TunnelsScreen), findsOneWidget);
+        // 4. Switch to Tunnels (/tunnels - Index 4)
+        await tester.tap(find.byKey(const Key('nav_item_4')));
+        await pumpTabTransition(tester);
+        expect(find.byType(TunnelsScreen), findsOneWidget);
 
-      // 5. Switch to Snippets (/snippets - Index 5)
-      await tester.tap(find.byKey(const Key('nav_item_5')));
-      await pumpTabTransition(tester);
-      expect(find.byType(SnippetsScreen), findsOneWidget);
+        // 5. Switch to Snippets (/snippets - Index 5)
+        await tester.tap(find.byKey(const Key('nav_item_5')));
+        await pumpTabTransition(tester);
+        expect(find.byType(SnippetsScreen), findsOneWidget);
 
-      // 6. Switch to Settings (/settings - Index 6)
-      await tester.tap(find.byKey(const Key('nav_item_6')));
-      await pumpTabTransition(tester);
-      expect(find.byType(SettingsScreen), findsOneWidget);
+        // 6. Switch to Settings (/settings - Index 6)
+        await tester.tap(find.byKey(const Key('nav_item_6')));
+        await pumpTabTransition(tester);
+        expect(find.byType(SettingsScreen), findsOneWidget);
 
-      // 7. Switch back to Hosts (/hosts - Index 0)
-      await tester.tap(find.byKey(const Key('nav_item_0')));
-      await pumpTabTransition(tester);
-      expect(find.byType(HostsScreen), findsOneWidget);
-    });
+        // 7. Switch back to Hosts (/hosts - Index 0)
+        await tester.tap(find.byKey(const Key('nav_item_0')));
+        await pumpTabTransition(tester);
+        expect(find.byType(HostsScreen), findsOneWidget);
+      },
+    );
 
-    testWidgets('Toggles sidebar collapse state on toggle button tap', (tester) async {
+    testWidgets('Toggles sidebar collapse state on toggle button tap', (
+      tester,
+    ) async {
       await tester.pumpWidget(createTestWidget());
       await pumpTabTransition(tester);
 
@@ -145,22 +154,81 @@ void main() {
       expect(find.text('Hosts'), findsWidgets);
     });
 
-    testWidgets('Renders mobile bottom navigation bar on compact screen sizes', (tester) async {
-      // Set small physical screen size for mobile view test
-      tester.view.physicalSize = const Size(400, 800);
+    testWidgets(
+      'Renders mobile bottom navigation bar on compact screen sizes',
+      (tester) async {
+        // Set small physical screen size for mobile view test
+        tester.view.physicalSize = const Size(400, 800);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() => tester.view.resetPhysicalSize());
+
+        await tester.pumpWidget(createTestWidget());
+        await pumpTabTransition(tester);
+
+        expect(
+          find.byKey(const Key('mobile_bottom_navigation_bar')),
+          findsOneWidget,
+        );
+
+        // Tap mobile navigation item (Terminal)
+        await tester.tap(
+          find.byKey(const Key('mobile_nav_destination_terminal')),
+        );
+        await pumpTabTransition(tester);
+        expect(find.byType(TerminalTabView), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Mobile navigation exposes four roots and groups secondary tools',
+      (tester) async {
+        tester.view.physicalSize = const Size(375, 812);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() => tester.view.resetPhysicalSize());
+
+        await tester.pumpWidget(createTestWidget());
+        await pumpTabTransition(tester);
+
+        expect(find.byType(NavigationDestination), findsNWidgets(4));
+        await tester.tap(find.byKey(const Key('mobile_nav_destination_tools')));
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(const Key('mobile_tool_vault')), findsOneWidget);
+        expect(find.byKey(const Key('mobile_tool_tunnels')), findsOneWidget);
+        expect(find.byKey(const Key('mobile_tool_snippets')), findsOneWidget);
+        expect(find.byKey(const Key('mobile_tool_settings')), findsOneWidget);
+      },
+    );
+
+    testWidgets('Command palette opens from desktop shell', (tester) async {
+      tester.view.physicalSize = const Size(1440, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
 
       await tester.pumpWidget(createTestWidget());
       await pumpTabTransition(tester);
 
-      expect(find.byKey(const Key('mobile_bottom_navigation_bar')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('command_palette_button')));
+      await tester.pumpAndSettle();
 
-      // Tap mobile navigation item (Terminal)
-      await tester.tap(find.byKey(const Key('mobile_nav_destination_terminal')));
-      await pumpTabTransition(tester);
-      expect(find.byType(TerminalTabView), findsOneWidget);
+      expect(find.byKey(const Key('command_palette_search')), findsOneWidget);
+      expect(find.byType(Dialog), findsOneWidget);
     });
+
+    for (final width in [375.0, 768.0, 1024.0, 1440.0]) {
+      testWidgets('Shell has no layout exceptions at ${width.toInt()} px', (
+        tester,
+      ) async {
+        tester.view.physicalSize = Size(width, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() => tester.view.resetPhysicalSize());
+
+        await tester.pumpWidget(createTestWidget());
+        await pumpTabTransition(tester);
+
+        expect(tester.takeException(), isNull);
+      });
+    }
   });
 }
 

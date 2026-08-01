@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
+import '../../../../app/theme/terly_tokens.dart';
+import '../../../../app/widgets/terly_ui.dart';
 import '../../../terminal/presentation/dialogs/host_key_prompt_dialog.dart';
 import '../../../terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import '../../../vault/domain/models/identity_model.dart';
@@ -31,57 +33,98 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
   Widget build(BuildContext context) {
     final hostsAsync = ref.watch(hostsProvider);
     final groupsAsync = ref.watch(hostGroupsProvider);
+    final tokens = TerlyTokens.resolve(context);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Hosts & Servers'),
-        actions: [
-          IconButton(
-            key: const Key('add_group_button'),
-            icon: const Icon(Icons.create_new_folder),
-            tooltip: 'Add Group',
-            onPressed: () => _openGroupForm(context),
-          ),
-          IconButton(
-            key: const Key('add_host_button'),
-            icon: const Icon(Icons.add),
-            tooltip: 'Add Host',
-            onPressed: () => _openHostForm(context),
-          ),
-        ],
-      ),
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: TextField(
-              key: const Key('hosts_search_input'),
-              decoration: const InputDecoration(
-                hintText: 'Search hosts by label, hostname, protocol...',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
-                isDense: true,
+          TerlyPageHeader(
+            icon: LucideIcons.server,
+            title: 'Hosts & Servers',
+            description: 'Connect to infrastructure without losing context.',
+            actions: [
+              IconButton(
+                key: const Key('add_group_button'),
+                icon: const Icon(LucideIcons.folderPlus, size: 17),
+                tooltip: 'Add Group',
+                onPressed: () => _openGroupForm(context),
               ),
-              onChanged: (val) {
-                setState(() => _searchQuery = val.toLowerCase());
-              },
+              ShadButton(
+                key: const Key('add_host_button'),
+                size: ShadButtonSize.sm,
+                leading: const Icon(LucideIcons.plus, size: 16),
+                onPressed: () => _openHostForm(context),
+                child: const Text('Add Host'),
+              ),
+            ],
+          ),
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              tokens.pagePadding,
+              14,
+              tokens.pagePadding,
+              10,
             ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TerlySearchField(
+                    fieldKey: const Key('hosts_search_input'),
+                    hintText: 'Search hosts, addresses and protocols…',
+                    onChanged: (value) =>
+                        setState(() => _searchQuery = value.toLowerCase()),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                groupsAsync.maybeWhen(
+                  data: (groups) => TerlyStatusChip(
+                    label: '${groups.length} groups',
+                    icon: LucideIcons.folders,
+                  ),
+                  orElse: () => const SizedBox.shrink(),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: tokens.pagePadding),
+            child: Divider(color: tokens.border),
           ),
           Expanded(
             child: hostsAsync.when(
               data: (hosts) {
-                final filtered = hosts.where((h) {
-                  return h.label.toLowerCase().contains(_searchQuery) ||
-                      h.hostname.toLowerCase().contains(_searchQuery) ||
-                      (h.username ?? '').toLowerCase().contains(_searchQuery) ||
-                      h.protocol.toLowerCase().contains(_searchQuery);
+                final filtered = hosts.where((host) {
+                  return host.label.toLowerCase().contains(_searchQuery) ||
+                      host.hostname.toLowerCase().contains(_searchQuery) ||
+                      (host.username ?? '').toLowerCase().contains(
+                        _searchQuery,
+                      ) ||
+                      host.protocol.toLowerCase().contains(_searchQuery);
                 }).toList();
 
                 return groupsAsync.when(
                   data: (groups) {
                     if (hosts.isEmpty && groups.isEmpty) {
-                      return const Center(
-                        child: Text('No hosts or groups configured.'),
+                      return TerlyEmptyState(
+                        icon: LucideIcons.server,
+                        title: 'No hosts or groups configured.',
+                        description:
+                            'Add your first server to connect in one click. You can organize infrastructure into groups at any time.',
+                        actions: [
+                          ShadButton(
+                            onPressed: () => _openHostForm(context),
+                            leading: const Icon(LucideIcons.plus, size: 16),
+                            child: const Text('Add your first host'),
+                          ),
+                          ShadButton.outline(
+                            onPressed: () => _openGroupForm(context),
+                            leading: const Icon(
+                              LucideIcons.folderPlus,
+                              size: 16,
+                            ),
+                            child: const Text('Create group'),
+                          ),
+                        ],
                       );
                     }
 
@@ -93,12 +136,21 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
                     final items = categorized.items;
 
                     if (items.isEmpty) {
-                      return const Center(
-                        child: Text('No hosts match your search.'),
+                      return const TerlyEmptyState(
+                        icon: LucideIcons.searchX,
+                        title: 'No hosts match your search.',
+                        description:
+                            'Try a label, hostname, username or protocol.',
                       );
                     }
 
                     return ListView.builder(
+                      padding: EdgeInsets.fromLTRB(
+                        tokens.pagePadding,
+                        4,
+                        tokens.pagePadding,
+                        20,
+                      ),
                       itemCount: items.length,
                       itemBuilder: (context, index) {
                         final item = items[index];
@@ -110,16 +162,18 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
                             key: ValueKey('group_${item.id}'),
                             group: item,
                             hosts: groupHosts,
-                            onEditHost: (h) =>
-                                _openHostForm(context, initialHost: h),
-                            onDeleteHost: (h) => _deleteHost(context, h),
+                            onEditHost: (host) =>
+                                _openHostForm(context, initialHost: host),
+                            onDeleteHost: (host) => _deleteHost(context, host),
                             onConnectHost: _onConnectHost,
-                            onEditGroup: (g) =>
-                                _openGroupForm(context, initialGroup: g),
-                            onDeleteGroup: (g) => _deleteGroup(context, g),
+                            onEditGroup: (group) =>
+                                _openGroupForm(context, initialGroup: group),
+                            onDeleteGroup: (group) =>
+                                _deleteGroup(context, group),
                             connectingHostIds: _connectingHostIds,
                           );
-                        } else if (item is HostModel) {
+                        }
+                        if (item is HostModel) {
                           return _HostTile(
                             key: ValueKey(item.id),
                             host: item,
@@ -137,12 +191,19 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
                   },
                   loading: () =>
                       const Center(child: CircularProgressIndicator()),
-                  error: (e, s) =>
-                      Center(child: Text('Error loading groups: $e')),
+                  error: (error, stackTrace) => TerlyEmptyState(
+                    icon: LucideIcons.triangleAlert,
+                    title: 'Could not load host groups',
+                    description: '$error',
+                  ),
                 );
               },
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, s) => Center(child: Text('Error loading hosts: $e')),
+              error: (error, stackTrace) => TerlyEmptyState(
+                icon: LucideIcons.triangleAlert,
+                title: 'Could not load hosts',
+                description: '$error',
+              ),
             ),
           ),
         ],
@@ -169,21 +230,24 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
       }
     }
 
-    await ref.read(terminalTabsProvider.notifier).openTabForHost(
+    await ref
+        .read(terminalTabsProvider.notifier)
+        .openTabForHost(
           host,
           identity: identity,
-          onHostKeyPrompt: (hostname, port, keyType, fingerprint, status) async {
-            if (!mounted) return false;
-            final approved = await HostKeyPromptDialog.show(
-              context,
-              hostname: hostname,
-              port: port,
-              keyType: keyType,
-              fingerprint: fingerprint,
-              status: status,
-            );
-            return approved ?? false;
-          },
+          onHostKeyPrompt:
+              (hostname, port, keyType, fingerprint, status) async {
+                if (!mounted) return false;
+                final approved = await HostKeyPromptDialog.show(
+                  context,
+                  hostname: hostname,
+                  port: port,
+                  keyType: keyType,
+                  fingerprint: fingerprint,
+                  status: status,
+                );
+                return approved ?? false;
+              },
         );
 
     if (mounted) {
@@ -271,7 +335,8 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
     }
   }
 
-  ({List<Object> items, Map<String, List<HostModel>> groupedHosts}) _buildCategorizedItems(
+  ({List<Object> items, Map<String, List<HostModel>> groupedHosts})
+  _buildCategorizedItems(
     List<HostModel> filteredHosts,
     List<HostGroupModel> groups, {
     required bool includeEmptyGroups,
@@ -325,34 +390,35 @@ class _GroupExpansionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = ShadTheme.of(context);
-    final primaryColor = theme.colorScheme.primary;
+    final tokens = TerlyTokens.resolve(context);
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-      child: Card(
-        clipBehavior: Clip.antiAlias,
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-          side: BorderSide(color: theme.colorScheme.border),
-          borderRadius: BorderRadius.circular(8),
-        ),
+      padding: const EdgeInsets.only(bottom: 8),
+      child: TerlySurface(
         child: ExpansionTile(
-          leading: Icon(Icons.folder, color: primaryColor),
+          tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+          childrenPadding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+          shape: const Border(),
+          collapsedShape: const Border(),
+          leading: Icon(LucideIcons.folder, size: 18, color: tokens.brand),
           title: Text(
             group.name,
-            style: const TextStyle(fontWeight: FontWeight.bold),
+            style: const TextStyle(fontWeight: FontWeight.w600),
           ),
-          subtitle: Text('${hosts.length} server(s)'),
+          subtitle: Text(
+            '${hosts.length} ${hosts.length == 1 ? 'server' : 'servers'}',
+          ),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               IconButton(
-                icon: const Icon(Icons.edit, size: 18),
+                icon: const Icon(LucideIcons.pencil, size: 16),
+                tooltip: 'Edit group',
                 onPressed: () => onEditGroup(group),
               ),
               IconButton(
-                icon: const Icon(Icons.delete, size: 18, color: Colors.redAccent),
+                icon: Icon(LucideIcons.trash2, size: 16, color: tokens.danger),
+                tooltip: 'Delete group',
                 onPressed: () => onDeleteGroup(group),
               ),
             ],
@@ -394,103 +460,124 @@ class _HostTile extends StatelessWidget {
   IconData _getProtocolIcon() {
     switch (host.protocol) {
       case 'ssh':
-        return Icons.terminal;
+        return LucideIcons.terminal;
       case 'mosh':
-        return Icons.cell_tower;
+        return LucideIcons.radioTower;
       case 'local':
-        return Icons.computer;
+        return LucideIcons.monitor;
       case 'serial':
-        return Icons.usb;
+        return LucideIcons.usb;
       default:
-        return Icons.dns;
+        return LucideIcons.server;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = ShadTheme.of(context);
-    final primaryColor = theme.colorScheme.primary;
+    final tokens = TerlyTokens.resolve(context);
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: Card(
-        clipBehavior: Clip.antiAlias,
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-          side: BorderSide(color: theme.colorScheme.border),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: ListTile(
-          leading: CircleAvatar(
-            backgroundColor: primaryColor.withValues(alpha: 0.15),
-            child: Icon(_getProtocolIcon(), color: primaryColor),
-          ),
-          title: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  host.label,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                  overflow: TextOverflow.ellipsis,
-                ),
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Semantics(
+        button: onConnect != null,
+        label: '${host.label}, ${host.protocol} host at ${host.hostname}',
+        child: TerlySurface(
+          child: ListTile(
+            minTileHeight: 62,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 3,
+            ),
+            leading: Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: tokens.brand.withValues(alpha: 0.09),
+                borderRadius: BorderRadius.circular(tokens.radiusMedium),
+                border: Border.all(color: tokens.brand.withValues(alpha: 0.20)),
               ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: primaryColor.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  host.protocol.toUpperCase(),
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: primaryColor,
+              child: Icon(_getProtocolIcon(), size: 17, color: tokens.brand),
+            ),
+            title: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    host.label,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-              ),
-            ],
-          ),
-          subtitle: Text(
-            '${host.username != null && host.username!.isNotEmpty ? '${host.username}@' : ''}${host.hostname}:${host.port}',
-          ),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              isConnecting
-                  ? const Padding(
-                      padding: EdgeInsets.all(8.0),
-                      child: SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.green,
-                        ),
-                      ),
-                    )
-                  : IconButton(
-                      key: Key('connect_host_${host.id}'),
-                      icon: const Icon(Icons.play_arrow, color: Colors.green),
-                      tooltip: 'Connect Terminal',
-                      onPressed: onConnect,
-                    ),
-              IconButton(
-                icon: const Icon(Icons.edit, size: 20),
-                tooltip: 'Edit',
-                onPressed: onEdit,
-              ),
-              IconButton(
-                icon: const Icon(
-                  Icons.delete,
-                  size: 20,
-                  color: Colors.redAccent,
+                const SizedBox(width: 8),
+                TerlyStatusChip(
+                  label: host.protocol.toUpperCase(),
+                  tone: TerlyStatusTone.brand,
                 ),
-                tooltip: 'Delete',
-                onPressed: onDelete,
-              ),
-            ],
+              ],
+            ),
+            subtitle: Text(
+              '${host.username != null && host.username!.isNotEmpty ? '${host.username}@' : ''}${host.hostname}:${host.port}',
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                isConnecting
+                    ? const Padding(
+                        padding: EdgeInsets.all(8.0),
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      )
+                    : IconButton(
+                        key: Key('connect_host_${host.id}'),
+                        icon: Icon(
+                          LucideIcons.play,
+                          size: 17,
+                          color: tokens.success,
+                        ),
+                        tooltip: 'Connect Terminal',
+                        onPressed: onConnect,
+                      ),
+                PopupMenuButton<String>(
+                  tooltip: 'Host actions',
+                  icon: const Icon(LucideIcons.ellipsis, size: 17),
+                  onSelected: (value) {
+                    if (value == 'edit') onEdit();
+                    if (value == 'delete') onDelete();
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'edit',
+                      child: Row(
+                        children: [
+                          Icon(LucideIcons.pencil, size: 16),
+                          SizedBox(width: 8),
+                          Text('Edit host'),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(
+                            LucideIcons.trash2,
+                            size: 16,
+                            color: tokens.danger,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Delete host',
+                            style: TextStyle(color: tokens.danger),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

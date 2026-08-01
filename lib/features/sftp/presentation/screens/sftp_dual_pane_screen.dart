@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
+import '../../../../app/theme/terly_tokens.dart';
+import '../../../../app/widgets/terly_ui.dart';
 import '../../../../core/network/ssh_session_manager.dart';
 import '../../domain/models/sftp_file_item.dart';
 import '../../../terminal/domain/models/terminal_tab_session.dart';
@@ -44,9 +46,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     _usesProvidedClient = widget.sftpClient != null;
     if (widget.sftpClient != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        ref
-            .read(sftpProvider.notifier)
-            .setRemoteClient(widget.sftpClient);
+        ref.read(sftpProvider.notifier).setRemoteClient(widget.sftpClient);
       });
     } else {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -146,9 +146,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
       _usesProvidedClient = widget.sftpClient != null;
       if (_usesProvidedClient) {
         unawaited(
-          ref
-              .read(sftpProvider.notifier)
-              .setRemoteClient(widget.sftpClient),
+          ref.read(sftpProvider.notifier).setRemoteClient(widget.sftpClient),
         );
       } else {
         unawaited(_syncActiveSshSession());
@@ -198,60 +196,47 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     });
     final state = ref.watch(sftpProvider);
     final notifier = ref.read(sftpProvider.notifier);
-    final colorScheme = ShadTheme.of(context).colorScheme;
-    final screenWidth = MediaQuery.of(context).size.width;
+    final tokens = TerlyTokens.resolve(context);
+    final screenWidth = MediaQuery.sizeOf(context).width;
     final isMobile = screenWidth < 600;
 
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: AppBar(
-        backgroundColor: colorScheme.card,
-        elevation: 0,
-        title: Row(
-          children: [
-            const Icon(Icons.folder_copy_outlined, color: Colors.cyanAccent),
-            const SizedBox(width: 10),
-            Text(
-              widget.hostLabel != null
-                  ? 'SFTP: ${widget.hostLabel}'
-                  : 'Dual-Pane SFTP Manager',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.sync_alt, color: Colors.cyanAccent),
-            tooltip: 'Transfer Queue',
-            onPressed: _showQueueSheet,
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh All',
-            onPressed: () {
-              notifier.loadLocalDirectory();
-              notifier.loadRemoteDirectory();
-            },
-          ),
-        ],
-      ),
       body: Column(
         children: [
-          // Global Search & Control Bar
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            color: Theme.of(context).scaffoldBackgroundColor,
-            child: Row(
-              children: [
-                Expanded(
-                  child: ShadInput(
-                    controller: _searchController,
-                    onChanged: notifier.setSearchQuery,
-                    placeholder: const Text('Filter files...'),
-                    leading: const Icon(Icons.search, size: 18),
-                  ),
-                ),
-              ],
+          TerlyPageHeader(
+            icon: LucideIcons.folderSync,
+            title: widget.hostLabel != null
+                ? 'SFTP: ${widget.hostLabel}'
+                : 'Dual-Pane SFTP Manager',
+            description:
+                'Move files between local and remote systems with a visible queue.',
+            actions: [
+              IconButton(
+                icon: const Icon(LucideIcons.listTodo, size: 17),
+                tooltip: 'Transfer Queue',
+                onPressed: _showQueueSheet,
+              ),
+              IconButton(
+                icon: const Icon(LucideIcons.refreshCw, size: 17),
+                tooltip: 'Refresh All',
+                onPressed: () {
+                  notifier.loadLocalDirectory();
+                  notifier.loadRemoteDirectory();
+                },
+              ),
+            ],
+          ),
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              tokens.pagePadding,
+              12,
+              tokens.pagePadding,
+              8,
+            ),
+            child: TerlySearchField(
+              controller: _searchController,
+              hintText: 'Filter files in both panes…',
+              onChanged: notifier.setSearchQuery,
             ),
           ),
           // Responsive Segmented Tab Switcher for Mobile / Narrow screens (< 600px)
@@ -265,7 +250,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
                     const ButtonSegment<int>(
                       value: 0,
                       label: Text('Local Workstation'),
-                      icon: Icon(Icons.laptop, size: 16),
+                      icon: Icon(LucideIcons.laptop, size: 16),
                     ),
                     ButtonSegment<int>(
                       value: 1,
@@ -275,7 +260,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
                             : 'Remote (Disconnected)',
                         overflow: TextOverflow.ellipsis,
                       ),
-                      icon: const Icon(Icons.dns, size: 16),
+                      icon: const Icon(LucideIcons.server, size: 16),
                     ),
                   ],
                   selected: {_selectedMobileTab},
@@ -296,7 +281,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
                 : Row(
                     children: [
                       Expanded(child: _buildLocalPane(state, notifier)),
-                      VerticalDivider(width: 1, color: colorScheme.border),
+                      VerticalDivider(width: 1, color: tokens.border),
                       Expanded(child: _buildRemotePane(state, notifier)),
                     ],
                   ),
@@ -379,11 +364,8 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     VoidCallback? onCreateFile,
     Function(SftpFileItem)? onRename,
   }) {
-    final colorScheme = ShadTheme.of(context).colorScheme;
-    final searchQuery = ref
-        .watch(sftpProvider)
-        .searchQuery
-        .toLowerCase();
+    final tokens = TerlyTokens.resolve(context);
+    final searchQuery = ref.watch(sftpProvider).searchQuery.toLowerCase();
     final filteredFiles = searchQuery.isEmpty
         ? files
         : files
@@ -395,23 +377,26 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
         // Pane Header
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          color: colorScheme.card,
+          decoration: BoxDecoration(
+            color: tokens.surface,
+            border: Border(bottom: BorderSide(color: tokens.border)),
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
                   Icon(
-                    isLocal ? Icons.laptop : Icons.dns,
+                    isLocal ? LucideIcons.laptop : LucideIcons.server,
                     size: 18,
-                    color: isLocal ? Colors.greenAccent : Colors.cyanAccent,
+                    color: isLocal ? tokens.success : tokens.info,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       title,
                       style: const TextStyle(
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w600,
                         fontSize: 13,
                       ),
                       overflow: TextOverflow.ellipsis,
@@ -419,16 +404,13 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
                   ),
                   if (!isLocal && onCreateFolder != null)
                     IconButton(
-                      icon: const Icon(
-                        Icons.create_new_folder_outlined,
-                        size: 18,
-                      ),
+                      icon: const Icon(LucideIcons.folderPlus, size: 17),
                       tooltip: 'New Folder',
                       onPressed: onCreateFolder,
                     ),
                   if (!isLocal && onCreateFile != null)
                     IconButton(
-                      icon: const Icon(Icons.note_add_outlined, size: 18),
+                      icon: const Icon(LucideIcons.filePlus, size: 17),
                       tooltip: 'New File',
                       onPressed: onCreateFile,
                     ),
@@ -439,7 +421,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
               Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.arrow_upward, size: 16),
+                    icon: const Icon(LucideIcons.cornerLeftUp, size: 16),
                     tooltip: 'Parent Directory',
                     onPressed: onNavigateUp,
                   ),
@@ -450,8 +432,9 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: colorScheme.muted,
-                        borderRadius: BorderRadius.circular(4),
+                        color: tokens.surfaceRaised,
+                        border: Border.all(color: tokens.border),
+                        borderRadius: BorderRadius.circular(tokens.radiusSmall),
                       ),
                       child: Text(
                         path,
@@ -476,23 +459,20 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
               ? Center(
                   child: Padding(
                     padding: const EdgeInsets.all(16),
-                    child: Text(
-                      error,
-                      style: const TextStyle(color: Colors.redAccent),
-                    ),
+                    child: Text(error, style: TextStyle(color: tokens.danger)),
                   ),
                 )
               : filteredFiles.isEmpty
               ? Center(
                   child: Text(
                     'Empty Directory',
-                    style: TextStyle(color: colorScheme.mutedForeground),
+                    style: TextStyle(color: tokens.textMuted),
                   ),
                 )
               : ListView.separated(
                   itemCount: filteredFiles.length,
                   separatorBuilder: (_, _) =>
-                      Divider(height: 1, color: colorScheme.border),
+                      Divider(height: 1, color: tokens.border),
                   itemBuilder: (context, index) {
                     final item = filteredFiles[index];
                     return _buildFileItemTile(
@@ -530,19 +510,19 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     VoidCallback? onEditContent,
     VoidCallback? onRename,
   }) {
-    final colorScheme = ShadTheme.of(context).colorScheme;
+    final tokens = TerlyTokens.resolve(context);
     IconData iconData;
     Color iconColor;
 
     if (item.isDirectory) {
-      iconData = Icons.folder;
-      iconColor = Colors.amber;
+      iconData = LucideIcons.folder;
+      iconColor = tokens.warning;
     } else if (item.isSymlink) {
-      iconData = Icons.link;
-      iconColor = Colors.purpleAccent;
+      iconData = LucideIcons.link;
+      iconColor = tokens.info;
     } else {
-      iconData = Icons.insert_drive_file;
-      iconColor = Colors.blueGrey;
+      iconData = LucideIcons.file;
+      iconColor = tokens.textMuted;
     }
 
     return ListTile(
@@ -555,11 +535,11 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
       ),
       subtitle: Text(
         '${item.formattedSize} • ${item.permissions}',
-        style: TextStyle(fontSize: 11, color: colorScheme.mutedForeground),
+        style: TextStyle(fontSize: 11, color: tokens.textMuted),
       ),
       onTap: onTap,
       trailing: PopupMenuButton<String>(
-        icon: const Icon(Icons.more_vert, size: 18),
+        icon: const Icon(LucideIcons.ellipsisVertical, size: 17),
         onSelected: (val) {
           if (val == 'upload' && onUpload != null) onUpload();
           if (val == 'download' && onDownload != null) onDownload();
@@ -574,7 +554,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
               value: 'upload',
               child: Row(
                 children: [
-                  Icon(Icons.upload, size: 16),
+                  Icon(LucideIcons.upload, size: 16),
                   SizedBox(width: 8),
                   Text('Upload to Remote'),
                 ],
@@ -585,7 +565,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
               value: 'download',
               child: Row(
                 children: [
-                  Icon(Icons.download, size: 16),
+                  Icon(LucideIcons.download, size: 16),
                   SizedBox(width: 8),
                   Text('Download'),
                 ],
@@ -596,7 +576,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
               value: 'edit',
               child: Row(
                 children: [
-                  Icon(Icons.edit, size: 16),
+                  Icon(LucideIcons.filePenLine, size: 16),
                   SizedBox(width: 8),
                   Text('Edit Content'),
                 ],
@@ -607,7 +587,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
               value: 'chmod',
               child: Row(
                 children: [
-                  Icon(Icons.security, size: 16),
+                  Icon(LucideIcons.shieldCheck, size: 16),
                   SizedBox(width: 8),
                   Text('Permissions (chmod)'),
                 ],
@@ -618,7 +598,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
               value: 'rename',
               child: Row(
                 children: [
-                  Icon(Icons.drive_file_rename_outline, size: 16),
+                  Icon(LucideIcons.pencil, size: 16),
                   SizedBox(width: 8),
                   Text('Rename'),
                 ],
@@ -628,9 +608,9 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
             value: 'delete',
             child: Row(
               children: [
-                Icon(Icons.delete, color: Colors.redAccent, size: 16),
+                Icon(LucideIcons.trash2, size: 16),
                 SizedBox(width: 8),
-                Text('Delete', style: TextStyle(color: Colors.redAccent)),
+                Text('Delete'),
               ],
             ),
           ),
