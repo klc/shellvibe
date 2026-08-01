@@ -120,12 +120,18 @@ class LocalPtyManager {
     }
 
     final exec = executable ?? getDefaultShell();
+    final env = <String, String>{
+      ...Platform.environment,
+      'TERM': 'xterm-256color',
+      ...?environment,
+    };
+    final workDir = workingDirectory ?? Platform.environment['HOME'];
 
     return Pty.start(
       exec,
       arguments: arguments,
-      workingDirectory: workingDirectory,
-      environment: environment,
+      workingDirectory: workDir,
+      environment: env,
       rows: rows,
       columns: columns,
     );

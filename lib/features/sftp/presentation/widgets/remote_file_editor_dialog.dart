@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 import '../../domain/models/sftp_file_item.dart';
 import '../providers/sftp_providers.dart';
 
@@ -41,6 +42,19 @@ class _RemoteFileEditorDialogState extends ConsumerState<RemoteFileEditorDialog>
       _errorMessage = null;
     });
 
+    // Check size to prevent memory lock (> 5MB)
+    const maxSizeBytes = 5 * 1024 * 1024;
+    if (widget.fileItem.size > maxSizeBytes) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage =
+              'File is too large to edit directly (${widget.fileItem.formattedSize}). Maximum supported size is 5 MB.';
+        });
+      }
+      return;
+    }
+
     try {
       final content = await ref.read(sftpNotifierProvider.notifier).readRemoteFileContent(widget.fileItem.path);
       if (mounted) {
@@ -74,11 +88,9 @@ class _RemoteFileEditorDialogState extends ConsumerState<RemoteFileEditorDialog>
           _isSaving = false;
           _isModified = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('File saved successfully'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
+        ShadToaster.of(context).show(
+          const ShadToast(
+            title: Text('File saved successfully'),
           ),
         );
       }
@@ -94,65 +106,59 @@ class _RemoteFileEditorDialogState extends ConsumerState<RemoteFileEditorDialog>
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      insetPadding: const EdgeInsets.all(24),
-      child: Container(
-        width: 900,
-        height: 700,
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            // Header bar
-            Row(
+    return ShadDialog(
+      title: Row(
+        children: [
+          const Icon(Icons.edit_note, color: Colors.cyanAccent),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.edit_note, color: Colors.cyanAccent),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            widget.fileItem.name,
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                          ),
-                          if (_isModified)
-                            const Text(' *', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                      Text(
-                        widget.fileItem.path,
-                        style: const TextStyle(fontSize: 12, color: Colors.white54),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-                if (_isSaving)
-                  const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                else
-                  ElevatedButton.icon(
-                    onPressed: _isModified && !_isLoading ? _saveFileContent : null,
-                    icon: const Icon(Icons.save, size: 18),
-                    label: const Text('Save'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.cyan,
-                      foregroundColor: Colors.black,
+                Row(
+                  children: [
+                    Text(
+                      widget.fileItem.name,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                     ),
-                  ),
-                const SizedBox(width: 8),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () => Navigator.of(context).pop(),
+                    if (_isModified)
+                      const Text(' *', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                Text(
+                  widget.fileItem.path,
+                  style: const TextStyle(fontSize: 12, color: Colors.white54),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
-            const Divider(height: 24),
+          ),
+        ],
+      ),
+      actions: [
+        if (_isSaving)
+          const SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          )
+        else
+          ShadButton(
+            onPressed: _isModified && !_isLoading ? _saveFileContent : null,
+            leading: const Icon(Icons.save, size: 18),
+            child: const Text('Save'),
+          ),
+        ShadIconButton.ghost(
+          icon: const Icon(Icons.close, size: 18),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ],
+      child: SizedBox(
+        width: 850,
+        height: 550,
+        child: Column(
+          children: [
+            const SizedBox(height: 12),
             // Body
             if (_isLoading)
               const Expanded(
@@ -177,7 +183,7 @@ class _RemoteFileEditorDialogState extends ConsumerState<RemoteFileEditorDialog>
                       const SizedBox(height: 12),
                       Text(_errorMessage!, style: const TextStyle(color: Colors.redAccent)),
                       const SizedBox(height: 16),
-                      ElevatedButton(
+                      ShadButton(
                         onPressed: _loadFileContent,
                         child: const Text('Retry'),
                       ),
@@ -221,3 +227,4 @@ class _RemoteFileEditorDialogState extends ConsumerState<RemoteFileEditorDialog>
     );
   }
 }
+

@@ -1,6 +1,7 @@
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 import '../../data/sftp_transfer_queue_worker.dart';
 import '../../domain/models/transfer_item.dart';
 import '../providers/sftp_providers.dart';
@@ -35,15 +36,15 @@ class SftpTransferQueueSheet extends ConsumerWidget {
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
                 const Spacer(),
-                TextButton.icon(
-                  icon: const Icon(Icons.clear_all, size: 18),
-                  label: const Text('Clear Finished'),
+                ShadButton.ghost(
+                  leading: const Icon(Icons.clear_all, size: 18),
                   onPressed: () {
                     ref.read(sftpTransferQueueWorkerProvider).clearFinished();
                   },
+                  child: const Text('Clear Finished'),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.close),
+                ShadIconButton.ghost(
+                  icon: const Icon(Icons.close, size: 18),
                   onPressed: () => Navigator.of(context).pop(),
                 ),
               ],
@@ -72,7 +73,7 @@ class SftpTransferQueueSheet extends ConsumerWidget {
                   },
                 );
               },
-              loading: () => const Center(child: CircularProgressIndicator()),
+              loading: () => const Center(child: ShadProgress()),
               error: (err, stack) => Center(child: Text('Error loading queue: $err')),
             ),
           ),
@@ -91,7 +92,7 @@ class _TransferTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isUpload = item.type == TransferType.upload;
     final worker = ref.watch(sftpTransferQueueWorkerProvider);
-    final sftpClient = ref.watch(sftpNotifierProvider).remoteClient;
+    final sftpClient = ref.watch(sftpNotifierProvider.select((s) => s.remoteClient));
 
     IconData statusIcon;
     Color statusColor;
@@ -152,10 +153,8 @@ class _TransferTile extends ConsumerWidget {
           Row(
             children: [
               Expanded(
-                child: LinearProgressIndicator(
+                child: ShadProgress(
                   value: item.progress,
-                  backgroundColor: Colors.white12,
-                  valueColor: AlwaysStoppedAnimation<Color>(statusColor),
                 ),
               ),
               const SizedBox(width: 12),
@@ -183,23 +182,23 @@ class _TransferTile extends ConsumerWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         if (item.status == TransferStatus.inProgress)
-          IconButton(
+          ShadIconButton.ghost(
             icon: const Icon(Icons.pause, size: 18),
             onPressed: () => worker.pauseTransfer(item.id),
           )
         else if (item.status == TransferStatus.paused && client != null)
-          IconButton(
+          ShadIconButton.ghost(
             icon: const Icon(Icons.play_arrow, size: 18),
             onPressed: () => worker.resumeTransfer(client, item.id),
           )
         else if ((item.status == TransferStatus.failed || item.status == TransferStatus.cancelled) &&
             client != null)
-          IconButton(
+          ShadIconButton.ghost(
             icon: const Icon(Icons.refresh, size: 18),
             onPressed: () => worker.retryTransfer(client, item.id),
           ),
         if (item.status == TransferStatus.inProgress || item.status == TransferStatus.pending || item.status == TransferStatus.paused)
-          IconButton(
+          ShadIconButton.ghost(
             icon: const Icon(Icons.close, size: 18),
             onPressed: () => worker.cancelTransfer(item.id),
           ),
@@ -207,3 +206,4 @@ class _TransferTile extends ConsumerWidget {
     );
   }
 }
+
