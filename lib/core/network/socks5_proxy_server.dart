@@ -223,8 +223,10 @@ class Socks5ProxyServer {
       if (cleanedUp) {
         cleanupSubscriptions();
         clientSocket.destroy();
-        // ignore: invalid_null_aware_operator
-        sshChannel?.close();
+        // sub1/sub2 were torn down above; the channel may still be open if
+        // cleanup fired while building sub1, so close it exactly once here.
+        _activeChannels.remove(sshChannel);
+        sshChannel.close();
         return;
       }
 
@@ -254,8 +256,10 @@ class Socks5ProxyServer {
       if (cleanedUp) {
         cleanupSubscriptions();
         clientSocket.destroy();
-        // ignore: invalid_null_aware_operator
-        sshChannel?.close();
+        // sub2 was torn down above; the channel may still be open if cleanup
+        // fired while building sub2, so close it exactly once here.
+        _activeChannels.remove(sshChannel);
+        sshChannel.close();
       }
     } catch (_) {
       try {

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -41,6 +42,10 @@ class SecureStorageService {
           );
 
   bool _isEntitlementError(Object e) {
+    // In release builds an entitlement failure means provisioning is broken:
+    // silently falling back to an in-memory map would leave secrets in plain
+    // RAM for the whole session. Only tolerate the fallback in debug/profile.
+    if (kReleaseMode) return false;
     if (e is PlatformException) {
       return e.code == '-34018' ||
           (e.message != null && e.message!.contains('-34018')) ||

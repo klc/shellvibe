@@ -54,7 +54,12 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
       }
     });
 
-    _protocol = init?.protocol ?? 'ssh';
+    // Mosh transport and Serial are not yet implemented (see tech_spec §6.3).
+    // The form only offers SSH and, on shell-capable platforms, Local. Any
+    // other stored protocol (e.g. a legacy 'mosh' host) falls back to SSH so
+    // the dropdown always holds a value with a matching option.
+    final proto = init?.protocol;
+    _protocol = (proto == 'local') ? proto! : 'ssh';
     _selectedGroupId = init?.groupId;
     _selectedIdentityId = init?.identityId;
     _selectedJumpHostId = init?.jumpHostId;
@@ -233,7 +238,6 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                             Text(value.toUpperCase()),
                         options: [
                           const ShadOption(value: 'ssh', child: Text('SSH')),
-                          const ShadOption(value: 'mosh', child: Text('Mosh')),
                           if (supportsLocalShell)
                             const ShadOption(
                               value: 'local',

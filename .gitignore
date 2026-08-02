@@ -43,3 +43,8 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Agent context scratchpads — kept local, not project state
+/memory-bank/
+/.Jules/
+.flutter-plugins
