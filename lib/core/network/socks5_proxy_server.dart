@@ -223,7 +223,8 @@ class Socks5ProxyServer {
       if (cleanedUp) {
         cleanupSubscriptions();
         clientSocket.destroy();
-        sshChannel.close();
+        // ignore: invalid_null_aware_operator
+        sshChannel?.close();
         return;
       }
 
@@ -253,7 +254,8 @@ class Socks5ProxyServer {
       if (cleanedUp) {
         cleanupSubscriptions();
         clientSocket.destroy();
-        sshChannel.close();
+        // ignore: invalid_null_aware_operator
+        sshChannel?.close();
       }
     } catch (_) {
       try {

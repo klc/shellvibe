@@ -167,12 +167,21 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       activeTabId: tabId,
     );
 
-    final manager = ref.read(localPtyManagerProvider);
-    final bridge = manager.startAndBridge(terminal);
+    try {
+      final manager = ref.read(localPtyManagerProvider);
+      final bridge = manager.startAndBridge(terminal);
 
-    newTab.ptyBridge = bridge;
-    newTab.isConnecting = false;
-    newTab.isConnected = bridge != null;
+      newTab.ptyBridge = bridge;
+      newTab.isConnecting = false;
+      newTab.isConnected = bridge != null;
+      if (bridge == null) {
+        newTab.errorMessage = 'Failed to start local terminal session';
+      }
+    } catch (e) {
+      newTab.isConnecting = false;
+      newTab.isConnected = false;
+      newTab.errorMessage = e.toString();
+    }
 
     state = state.copyWith(tabs: [...state.tabs]);
   }
@@ -248,10 +257,18 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     );
     _ownedTabs.add(splitTab);
 
-    final manager = ref.read(localPtyManagerProvider);
-    final bridge = manager.startAndBridge(terminal);
-    splitTab.ptyBridge = bridge;
-    splitTab.isConnected = bridge != null;
+    try {
+      final manager = ref.read(localPtyManagerProvider);
+      final bridge = manager.startAndBridge(terminal);
+      splitTab.ptyBridge = bridge;
+      splitTab.isConnected = bridge != null;
+      if (bridge == null) {
+        splitTab.errorMessage = 'Failed to start local terminal session';
+      }
+    } catch (e) {
+      splitTab.isConnected = false;
+      splitTab.errorMessage = e.toString();
+    }
 
     state = state.copyWith(
       tabs: [...state.tabs, splitTab],
