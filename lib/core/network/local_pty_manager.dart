@@ -59,12 +59,16 @@ class TerminalLocalPtyBridge {
     };
   }
 
-  void _onStreamDone() {
+  Future<void> _onStreamDone() async {
     if (_isDisposed) return;
     try {
-      final code = pty.exitCode;
+      // Note: `Pty.exitCode` is a `Future<int>`, so it must be awaited before
+      // interpolating the value into the message.
+      final code = await pty.exitCode;
+      if (_isDisposed) return;
       terminal.write('\r\n\x1b[1;33m[Process exited with code $code]\x1b[0m\r\n');
     } catch (_) {
+      if (_isDisposed) return;
       terminal.write('\r\n\x1b[1;33m[Session closed / Process exited]\x1b[0m\r\n');
     }
     dispose();
