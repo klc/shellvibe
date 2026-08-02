@@ -1,4 +1,0 @@
-## 2024-05-18 - SFTP Client Path Traversal (Slip Attack)
-**Vulnerability:** The SFTP client `listDirectory` method did not properly sanitize the `filename` returned by the SFTP server. A malicious or compromised SFTP server could return filenames containing directory traversal sequences (like `../` or absolute paths). If these names are used to construct local paths during file download, it could result in the client writing files outside the intended destination directory (a Slip Attack), potentially overwriting sensitive files on the user's system.
-**Learning:** We must not implicitly trust filenames or paths returned by remote file servers, even in established protocols like SFTP. They act as untrusted external inputs.
-**Prevention:** Always validate and sanitize file names received from remote servers before using them in file system operations. Reject any names containing path separators (`/` or `\`).

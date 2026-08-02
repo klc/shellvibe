@@ -11,11 +11,13 @@ import '../../../../app/theme/terly_tokens.dart';
 import '../../../../app/widgets/terly_ui.dart';
 import '../../../../core/network/ssh_session_manager.dart';
 import '../../domain/models/sftp_file_item.dart';
+import '../../domain/models/transfer_item.dart';
 import '../../../terminal/domain/models/terminal_tab_session.dart';
 import '../../../terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import '../providers/sftp_providers.dart';
 import '../widgets/file_permissions_dialog.dart';
 import '../widgets/remote_file_editor_dialog.dart';
+import '../widgets/sftp_transfer_queue_panel.dart';
 import '../widgets/sftp_transfer_queue_sheet.dart';
 
 class SftpDualPaneScreen extends ConsumerStatefulWidget {
@@ -286,8 +288,46 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
                     ],
                   ),
           ),
+          // Docked rather than a sheet: progress stays visible while browsing.
+          // Narrow screens cannot spare the height and keep the sheet.
+          if (!isMobile) const SftpTransferQueuePanel(),
+          _buildStatusBar(context, state),
         ],
       ),
+    );
+  }
+
+  Widget _buildStatusBar(BuildContext context, SftpState state) {
+    final connected = state.remoteClient != null;
+    final queue =
+        ref.watch(transferQueueStreamProvider).value ?? const <TransferItem>[];
+    final active = queue
+        .where((item) => item.status == TransferStatus.inProgress)
+        .length;
+
+    return TerlyStatusBar(
+      segments: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TerlyStatusDot(
+              state: connected ? TerlyDotState.online : TerlyDotState.offline,
+            ),
+            const SizedBox(width: 7),
+            Text(connected ? 'remote connected' : 'remote disconnected'),
+          ],
+        ),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 320),
+          child: Text(
+            state.remotePath.isEmpty ? '—' : state.remotePath,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        Text('$active transferring'),
+        Text('${queue.length} in queue'),
+      ],
     );
   }
 

@@ -21,8 +21,25 @@ class TerlyTokens extends ThemeExtension<TerlyTokens> {
   final double radiusSmall;
   final double radiusMedium;
   final double radiusLarge;
+  final double radiusPill;
   final double pagePadding;
   final double controlHeight;
+
+  /// Fixed icon rail width — the wireframe's persistent skeleton column.
+  final double railWidth;
+
+  /// Per-module context column between the rail and the work area.
+  final double contextColumnWidth;
+
+  /// Inline right-hand detail panel that replaces detail modals.
+  final double detailDrawerWidth;
+
+  /// Section navigation inside a work area (settings).
+  final double sectionNavWidth;
+
+  /// Minimum interactive size on touch platforms.
+  final double touchTarget;
+
   final Duration motionFast;
   final Duration motionNormal;
 
@@ -38,11 +55,17 @@ class TerlyTokens extends ThemeExtension<TerlyTokens> {
     required this.success,
     required this.warning,
     required this.danger,
-    this.radiusSmall = 4,
-    this.radiusMedium = 6,
-    this.radiusLarge = 8,
-    this.pagePadding = 20,
-    this.controlHeight = 40,
+    this.radiusSmall = 8,
+    this.radiusMedium = 10,
+    this.radiusLarge = 16,
+    this.radiusPill = 999,
+    this.pagePadding = 16,
+    this.controlHeight = 34,
+    this.railWidth = 56,
+    this.contextColumnWidth = 232,
+    this.detailDrawerWidth = 268,
+    this.sectionNavWidth = 190,
+    this.touchTarget = 44,
     this.motionFast = const Duration(milliseconds: 120),
     this.motionNormal = const Duration(milliseconds: 180),
   });
@@ -96,8 +119,14 @@ class TerlyTokens extends ThemeExtension<TerlyTokens> {
     double? radiusSmall,
     double? radiusMedium,
     double? radiusLarge,
+    double? radiusPill,
     double? pagePadding,
     double? controlHeight,
+    double? railWidth,
+    double? contextColumnWidth,
+    double? detailDrawerWidth,
+    double? sectionNavWidth,
+    double? touchTarget,
     Duration? motionFast,
     Duration? motionNormal,
   }) {
@@ -116,8 +145,14 @@ class TerlyTokens extends ThemeExtension<TerlyTokens> {
       radiusSmall: radiusSmall ?? this.radiusSmall,
       radiusMedium: radiusMedium ?? this.radiusMedium,
       radiusLarge: radiusLarge ?? this.radiusLarge,
+      radiusPill: radiusPill ?? this.radiusPill,
       pagePadding: pagePadding ?? this.pagePadding,
       controlHeight: controlHeight ?? this.controlHeight,
+      railWidth: railWidth ?? this.railWidth,
+      contextColumnWidth: contextColumnWidth ?? this.contextColumnWidth,
+      detailDrawerWidth: detailDrawerWidth ?? this.detailDrawerWidth,
+      sectionNavWidth: sectionNavWidth ?? this.sectionNavWidth,
+      touchTarget: touchTarget ?? this.touchTarget,
       motionFast: motionFast ?? this.motionFast,
       motionNormal: motionNormal ?? this.motionNormal,
     );
@@ -141,8 +176,22 @@ class TerlyTokens extends ThemeExtension<TerlyTokens> {
       radiusSmall: _lerpDouble(radiusSmall, other.radiusSmall, t),
       radiusMedium: _lerpDouble(radiusMedium, other.radiusMedium, t),
       radiusLarge: _lerpDouble(radiusLarge, other.radiusLarge, t),
+      radiusPill: _lerpDouble(radiusPill, other.radiusPill, t),
       pagePadding: _lerpDouble(pagePadding, other.pagePadding, t),
       controlHeight: _lerpDouble(controlHeight, other.controlHeight, t),
+      railWidth: _lerpDouble(railWidth, other.railWidth, t),
+      contextColumnWidth: _lerpDouble(
+        contextColumnWidth,
+        other.contextColumnWidth,
+        t,
+      ),
+      detailDrawerWidth: _lerpDouble(
+        detailDrawerWidth,
+        other.detailDrawerWidth,
+        t,
+      ),
+      sectionNavWidth: _lerpDouble(sectionNavWidth, other.sectionNavWidth, t),
+      touchTarget: _lerpDouble(touchTarget, other.touchTarget, t),
       motionFast: t < 0.5 ? motionFast : other.motionFast,
       motionNormal: t < 0.5 ? motionNormal : other.motionNormal,
     );

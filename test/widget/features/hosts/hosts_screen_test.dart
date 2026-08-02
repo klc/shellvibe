@@ -34,9 +34,7 @@ void main() {
 
   Widget createWidgetUnderTest({void Function(HostModel host)? onConnectHost}) {
     return ProviderScope(
-      overrides: [
-        appDatabaseProvider.overrideWithValue(db),
-      ],
+      overrides: [appDatabaseProvider.overrideWithValue(db)],
       child: ShadTheme(
         data: ShadThemeData(
           colorScheme: const ShadSlateColorScheme.light(),
@@ -70,9 +68,15 @@ void main() {
       expect(find.text('No hosts or groups configured.'), findsOneWidget);
     });
 
-    testWidgets('Renders an empty group so it can still be managed', (tester) async {
+    testWidgets('Renders an empty group so it can still be managed', (
+      tester,
+    ) async {
       await db.hostsDao.insertHostGroup(
-        HostGroupsCompanion.insert(id: 'empty-group', workspaceId: 'default', name: 'Empty Group'),
+        HostGroupsCompanion.insert(
+          id: 'empty-group',
+          workspaceId: 'default',
+          name: 'Empty Group',
+        ),
       );
 
       await tester.pumpWidget(createWidgetUnderTest());
@@ -154,19 +158,32 @@ void main() {
       await tester.pumpWidget(createWidgetUnderTest());
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
-      await tester.enterText(find.byKey(const Key('hosts_search_input')), 'ubuntu');
+      await tester.enterText(
+        find.byKey(const Key('hosts_search_input')),
+        'ubuntu',
+      );
       await tester.pump();
 
       expect(find.text('Production Server'), findsOneWidget);
       expect(find.text('Database Server'), findsNothing);
     });
 
-    testWidgets('Does not transfer expansion state between filtered groups', (tester) async {
+    testWidgets('Scopes the flat host list to the selected group filter', (
+      tester,
+    ) async {
       await db.hostsDao.insertHostGroup(
-        HostGroupsCompanion.insert(id: 'group-a', workspaceId: 'default', name: 'Group A'),
+        HostGroupsCompanion.insert(
+          id: 'group-a',
+          workspaceId: 'default',
+          name: 'Group A',
+        ),
       );
       await db.hostsDao.insertHostGroup(
-        HostGroupsCompanion.insert(id: 'group-b', workspaceId: 'default', name: 'Group B'),
+        HostGroupsCompanion.insert(
+          id: 'group-b',
+          workspaceId: 'default',
+          name: 'Group B',
+        ),
       );
       await db.hostsDao.insertHost(
         HostsCompanion.insert(
@@ -192,19 +209,65 @@ void main() {
       await tester.pumpWidget(createWidgetUnderTest());
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
-      await tester.tap(find.text('Group A'));
+      // Groups are filters in the context column / chip bar, not expandable
+      // sections: selecting one scopes the single flat list.
+      await tester.tap(find.byKey(const Key('group_group-a')));
       await tester.pumpAndSettle();
       expect(find.text('Alpha Server'), findsOneWidget);
-
-      await tester.enterText(find.byKey(const Key('hosts_search_input')), 'beta');
-      await tester.pumpAndSettle();
-
-      expect(find.text('Group A'), findsNothing);
-      expect(find.text('Group B'), findsOneWidget);
       expect(find.text('Beta Server'), findsNothing);
+
+      await tester.tap(find.byKey(const Key('group_group-b')));
+      await tester.pumpAndSettle();
+      expect(find.text('Beta Server'), findsOneWidget);
+      expect(find.text('Alpha Server'), findsNothing);
+
+      // A search inside a scoped group narrows further rather than escaping it.
+      await tester.enterText(
+        find.byKey(const Key('hosts_search_input')),
+        'alpha',
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Beta Server'), findsNothing);
+      expect(find.text('Alpha Server'), findsNothing);
+      expect(find.text('No hosts match your search.'), findsOneWidget);
     });
 
-    testWidgets('Opens HostGroupFormDialog when add_group_button is tapped', (tester) async {
+    testWidgets('Host row and its action menu fit a phone width', (
+      tester,
+    ) async {
+      await db.hostsDao.insertHost(
+        HostsCompanion.insert(
+          id: 'host-phone',
+          workspaceId: 'default',
+          label: 'contabo',
+          hostname: '173.249.100.100',
+          username: const Value('root'),
+          createdAt: DateTime.now(),
+        ),
+      );
+
+      tester.view.physicalSize = const Size(411, 915);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(tester.takeException(), isNull, reason: 'row layout');
+
+      // The popup menu is laid out separately from the row; pinning the
+      // button's `constraints` used to squeeze the menu itself.
+      await tester.tap(find.byIcon(LucideIcons.ellipsis));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Edit host'), findsOneWidget);
+      expect(find.text('Delete host'), findsOneWidget);
+      expect(tester.takeException(), isNull, reason: 'action menu layout');
+    });
+
+    testWidgets('Opens HostGroupFormDialog when add_group_button is tapped', (
+      tester,
+    ) async {
       await tester.pumpWidget(createWidgetUnderTest());
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
@@ -217,7 +280,9 @@ void main() {
       expect(find.byKey(const Key('group_name_input')), findsOneWidget);
     });
 
-    testWidgets('Opens HostFormDialog and displays username field', (tester) async {
+    testWidgets('Opens HostFormDialog and displays username field', (
+      tester,
+    ) async {
       await tester.pumpWidget(createWidgetUnderTest());
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
@@ -232,54 +297,55 @@ void main() {
       expect(find.byKey(const Key('host_username_input')), findsOneWidget);
     });
 
-    testWidgets('Triggers defaultConnectHost opening tab when onConnectHost is null', (tester) async {
-      await db.hostsDao.insertHost(
-        HostsCompanion.insert(
-          id: 'host-2',
-          workspaceId: 'default',
-          label: 'Default Host Test',
-          hostname: '192.168.1.101',
-          username: const Value('root'),
-          port: const Value(22),
-          createdAt: DateTime.now(),
-        ),
-      );
+    testWidgets(
+      'Triggers defaultConnectHost opening tab when onConnectHost is null',
+      (tester) async {
+        await db.hostsDao.insertHost(
+          HostsCompanion.insert(
+            id: 'host-2',
+            workspaceId: 'default',
+            label: 'Default Host Test',
+            hostname: '192.168.1.101',
+            username: const Value('root'),
+            port: const Value(22),
+            createdAt: DateTime.now(),
+          ),
+        );
 
-      final container = ProviderContainer(
-        overrides: [
-          appDatabaseProvider.overrideWithValue(db),
-        ],
-      );
+        final container = ProviderContainer(
+          overrides: [appDatabaseProvider.overrideWithValue(db)],
+        );
 
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: ShadTheme(
-            data: ShadThemeData(
-              colorScheme: const ShadSlateColorScheme.light(),
-              brightness: Brightness.light,
-            ),
-            child: const MaterialApp(
-              home: HostsScreen(),
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: ShadTheme(
+              data: ShadThemeData(
+                colorScheme: const ShadSlateColorScheme.light(),
+                brightness: Brightness.light,
+              ),
+              child: const MaterialApp(home: HostsScreen()),
             ),
           ),
-        ),
-      );
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 200));
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 200));
 
-      final connectButton = find.byKey(const Key('connect_host_host-2'));
-      expect(connectButton, findsOneWidget);
+        final connectButton = find.byKey(const Key('connect_host_host-2'));
+        expect(connectButton, findsOneWidget);
 
-      await tester.tap(connectButton);
-      await tester.pump();
+        await tester.tap(connectButton);
+        await tester.pump();
 
-      final tabsState = container.read(terminalTabsProvider);
-      expect(tabsState.tabs.length, equals(1));
-      expect(tabsState.tabs.first.title, equals('Default Host Test'));
+        final tabsState = container.read(terminalTabsProvider);
+        expect(tabsState.tabs.length, equals(1));
+        expect(tabsState.tabs.first.title, equals('Default Host Test'));
 
-      await container.read(terminalTabsProvider.notifier).closeTab(tabsState.tabs.first.id);
-      await tester.pump(const Duration(seconds: 16));
-    });
+        await container
+            .read(terminalTabsProvider.notifier)
+            .closeTab(tabsState.tabs.first.id);
+        await tester.pump(const Duration(seconds: 16));
+      },
+    );
   });
 }

@@ -9,6 +9,11 @@ import '../../../../core/network/ssh_session_manager.dart';
 import '../../../../core/utils/platform_capabilities.dart';
 import '../../../hosts/domain/models/host_model.dart';
 import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
+import '../../../snippets/domain/models/snippet_model.dart';
+import '../../../snippets/domain/services/snippet_variable_parser.dart';
+import '../../../snippets/presentation/notifiers/snippets_notifier.dart';
+import '../../../snippets/presentation/widgets/variable_input_dialog.dart';
+import '../../../tunnels/presentation/providers/tunnels_providers.dart';
 import '../../../vault/domain/models/identity_model.dart';
 import '../../../vault/presentation/notifiers/identities_notifier.dart';
 import '../dialogs/host_key_prompt_dialog.dart';
@@ -100,6 +105,12 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
                     ? _buildEmptyState(context, ref)
                     : _buildTabBody(context, ref, tabsState, activeRootTab),
               ),
+              if (activeRootTab != null) ...[
+                _SnippetDrawer(
+                  onSend: (code) => _sendToActivePane(tabsState, code),
+                ),
+                _buildStatusBar(context, tabsState, activeRootTab),
+              ],
             ],
           ),
         ),
@@ -114,8 +125,9 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
     TerminalTabSession? activeRootTab,
   ) {
     final tokens = TerlyTokens.resolve(context);
-    final rootTabs =
-        tabsState.tabs.where((t) => t.splitParentId == null).toList();
+    final rootTabs = tabsState.tabs
+        .where((t) => t.splitParentId == null)
+        .toList();
 
     return Container(
       height: 42,
@@ -132,14 +144,16 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
               itemBuilder: (context, index) {
                 final tab = rootTabs[index];
                 final isActive = tab.id == activeRootTab?.id;
-                final isProduction = tab.title.toLowerCase().contains('prod');
-                final statusColor = tab.errorMessage != null
-                    ? tokens.danger
+                // Tab identity is the host name plus a state dot. The old
+                // colour-coded tab edge is gone: the wireframe wants text to
+                // do the distinguishing so eight tabs stay readable.
+                final dotState = tab.errorMessage != null
+                    ? TerlyDotState.error
                     : tab.isConnecting
-                    ? tokens.warning
+                    ? TerlyDotState.idle
                     : tab.isConnected
-                    ? tokens.success
-                    : tokens.textMuted;
+                    ? TerlyDotState.online
+                    : TerlyDotState.offline;
 
                 return Semantics(
                   label: 'Tab ${tab.title}',
@@ -166,25 +180,12 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
                             color: isActive ? tokens.brand : Colors.transparent,
                             width: 2,
                           ),
-                          left: BorderSide(
-                            color: isProduction
-                                ? tokens.danger
-                                : Colors.transparent,
-                            width: 2,
-                          ),
                         ),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Container(
-                            width: 6,
-                            height: 6,
-                            decoration: BoxDecoration(
-                              color: statusColor,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
+                          TerlyStatusDot(state: dotState, size: 6),
                           const SizedBox(width: 7),
                           Icon(
                             tab.sessionType == TerminalSessionType.ssh
@@ -242,10 +243,9 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
               tooltip: 'Split Vertically (Side by Side)',
               onPressed: () {
                 final targetId = tabsState.activeTabId ?? activeRootTab.id;
-                ref.read(terminalTabsProvider.notifier).splitTab(
-                      targetId,
-                      direction: Axis.horizontal,
-                    );
+                ref
+                    .read(terminalTabsProvider.notifier)
+                    .splitTab(targetId, direction: Axis.horizontal);
               },
             ),
             IconButton(
@@ -254,10 +254,9 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
               tooltip: 'Split Horizontally (Top/Bottom)',
               onPressed: () {
                 final targetId = tabsState.activeTabId ?? activeRootTab.id;
-                ref.read(terminalTabsProvider.notifier).splitTab(
-                      targetId,
-                      direction: Axis.vertical,
-                    );
+                ref
+                    .read(terminalTabsProvider.notifier)
+                    .splitTab(targetId, direction: Axis.vertical);
               },
             ),
           ],
@@ -286,6 +285,93 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
       activeRootTab,
       tabsState.tabs,
       tokens,
+      paneOrder: _paneOrder(tabsState, activeRootTab),
+      activePaneId: tabsState.activeTabId,
+    );
+  }
+
+  /// Depth-first pane ids of the active tab, so pane headers can be numbered
+  /// the same way they are laid out.
+  List<String> _paneOrder(
+    TerminalTabsState tabsState,
+    TerminalTabSession root,
+  ) {
+    final order = <String>[];
+    void walk(TerminalTabSession session) {
+      order.add(session.id);
+      for (final child in tabsState.tabs.where(
+        (tab) => tab.splitParentId == session.id,
+      )) {
+        walk(child);
+      }
+    }
+
+    walk(root);
+    return order;
+  }
+
+  /// Sends snippet text to whichever pane is currently focused.
+  ///
+  /// The pane header states which one that is, so this never has to be
+  /// guessed by the user.
+  void _sendToActivePane(TerminalTabsState tabsState, String code) {
+    final target =
+        tabsState.activeTab ??
+        (tabsState.tabs.isEmpty ? null : tabsState.tabs.first);
+    if (target == null) return;
+    target.terminal.paste(code);
+  }
+
+  Widget _buildStatusBar(
+    BuildContext context,
+    TerminalTabsState tabsState,
+    TerminalTabSession activeRootTab,
+  ) {
+    final pane = tabsState.activeTab ?? activeRootTab;
+    final activeTunnels =
+        ref.watch(activeTunnelsStreamProvider).value ?? const [];
+    final host = pane.host;
+    final connectionLabel = pane.errorMessage != null
+        ? 'error'
+        : pane.isConnecting
+        ? 'connecting'
+        : pane.isConnected
+        ? 'connected'
+        : 'disconnected';
+
+    return TerlyStatusBar(
+      segments: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TerlyStatusDot(
+              state: pane.errorMessage != null
+                  ? TerlyDotState.error
+                  : pane.isConnected
+                  ? TerlyDotState.online
+                  : TerlyDotState.offline,
+            ),
+            const SizedBox(width: 7),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 220),
+              child: Text(
+                pane.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        Text(connectionLabel),
+        if (host != null) Text('${host.hostname}:${host.port}'),
+        Text('${pane.terminal.viewWidth}×${pane.terminal.viewHeight}'),
+        Text('tunnels ${activeTunnels.length}'),
+      ],
+      trailing: Text(
+        pane.sessionType == TerminalSessionType.ssh
+            ? 'UTF-8 · ssh'
+            : 'UTF-8 · local',
+      ),
     );
   }
 
@@ -294,15 +380,22 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
     WidgetRef ref,
     TerminalTabSession session,
     List<TerminalTabSession> allTabs,
-    TerlyTokens tokens,
-  ) {
-    final children =
-        allTabs.where((t) => t.splitParentId == session.id).toList();
+    TerlyTokens tokens, {
+    required List<String> paneOrder,
+    required String? activePaneId,
+  }) {
+    final children = allTabs
+        .where((t) => t.splitParentId == session.id)
+        .toList();
 
     Widget buildSinglePane(TerminalTabSession paneSession) {
-      if (paneSession.splitParentId == null) {
+      // A single-pane tab needs no header; once the tab is split every pane
+      // gets one, because the header is what names the snippet target.
+      if (paneOrder.length < 2) {
         return TerminalScreen(session: paneSession);
       }
+      final paneNumber = paneOrder.indexOf(paneSession.id) + 1;
+      final isActivePane = paneSession.id == activePaneId;
       return Column(
         children: [
           Container(
@@ -333,24 +426,36 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                Semantics(
-                  label: 'Close split pane ${paneSession.title}',
-                  button: true,
-                  child: InkWell(
-                    key: Key('close_split_${paneSession.id}'),
-                    onTap: () => ref
-                        .read(terminalTabsProvider.notifier)
-                        .closeTab(paneSession.id),
-                    child: Padding(
-                      padding: const EdgeInsets.all(2.0),
-                      child: Icon(
-                        LucideIcons.x,
-                        size: 13,
-                        color: tokens.textMuted,
+                Text(
+                  isActivePane
+                      ? 'pane $paneNumber · active'
+                      : 'pane $paneNumber',
+                  key: Key('pane_label_${paneSession.id}'),
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: isActivePane ? tokens.brand : tokens.textMuted,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                if (paneSession.splitParentId != null)
+                  Semantics(
+                    label: 'Close split pane ${paneSession.title}',
+                    button: true,
+                    child: InkWell(
+                      key: Key('close_split_${paneSession.id}'),
+                      onTap: () => ref
+                          .read(terminalTabsProvider.notifier)
+                          .closeTab(paneSession.id),
+                      child: Padding(
+                        padding: const EdgeInsets.all(2.0),
+                        child: Icon(
+                          LucideIcons.x,
+                          size: 13,
+                          color: tokens.textMuted,
+                        ),
                       ),
                     ),
                   ),
-                ),
               ],
             ),
           ),
@@ -366,7 +471,15 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
     }
 
     for (final child in children) {
-      final childTree = _buildSessionTree(context, ref, child, allTabs, tokens);
+      final childTree = _buildSessionTree(
+        context,
+        ref,
+        child,
+        allTabs,
+        tokens,
+        paneOrder: paneOrder,
+        activePaneId: activePaneId,
+      );
       final direction = child.splitDirection ?? Axis.horizontal;
       if (direction == Axis.vertical) {
         // Yatay bölme (Horizontal split line): Panes stacked top-to-bottom in a Column
@@ -544,6 +657,98 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
           },
         );
       },
+    );
+  }
+}
+
+/// Persistent one-row snippet strip under the panes.
+///
+/// The wireframe keeps it visible rather than behind a menu, and shows the
+/// `${INPUT:…}` placeholders inline so a parameterised command is recognisable
+/// before it is sent.
+class _SnippetDrawer extends ConsumerWidget {
+  final void Function(String code) onSend;
+
+  const _SnippetDrawer({required this.onSend});
+
+  Future<void> _run(BuildContext context, SnippetModel snippet) async {
+    final variables = SnippetVariableParser.extractVariables(snippet.code);
+    var values = <String, String>{};
+    if (variables.isNotEmpty) {
+      final entered = await VariableInputDialog.show(
+        context,
+        variables: variables,
+        title: 'Fill variables for "${snippet.title}"',
+      );
+      if (entered == null) return;
+      values = entered;
+    }
+    onSend(SnippetVariableParser.substituteVariables(snippet.code, values));
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = TerlyTokens.resolve(context);
+    final snippets =
+        ref.watch(snippetsProvider).value ?? const <SnippetModel>[];
+    if (snippets.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      key: const Key('terminal_snippet_drawer'),
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
+      decoration: BoxDecoration(
+        color: tokens.surface,
+        border: Border(top: BorderSide(color: tokens.border)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                'SNIPPET · SEND TO ACTIVE PANE',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  fontSize: 10,
+                  letterSpacing: 0.8,
+                  color: tokens.textMuted,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 7),
+          SizedBox(
+            height: 26,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: snippets.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 6),
+              itemBuilder: (context, index) {
+                final snippet = snippets[index];
+                final firstLine = snippet.code.split('\n').first.trim();
+                return InkWell(
+                  key: Key('snippet_chip_${snippet.id}'),
+                  onTap: () => _run(context, snippet),
+                  borderRadius: BorderRadius.circular(tokens.radiusPill),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(tokens.radiusPill),
+                      border: Border.all(color: tokens.border),
+                    ),
+                    child: Text(
+                      firstLine.isEmpty ? snippet.title : firstLine,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: tokens.textPrimary,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

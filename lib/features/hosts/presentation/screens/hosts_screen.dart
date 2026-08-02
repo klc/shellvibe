@@ -5,6 +5,7 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../../../../app/theme/terly_tokens.dart';
 import '../../../../app/widgets/terly_ui.dart';
+import '../../../../app/widgets/workspace_switcher.dart';
 import '../../../terminal/presentation/dialogs/host_key_prompt_dialog.dart';
 import '../../../terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import '../../../vault/domain/models/identity_model.dart';
@@ -16,6 +17,15 @@ import '../notifiers/host_groups_notifier.dart';
 import '../notifiers/hosts_notifier.dart';
 import '../../domain/models/host_group_model.dart';
 import '../../domain/models/host_model.dart';
+
+/// Width at which the module's context column fits alongside the list.
+const double _kContextColumnBreakpoint = 900;
+
+/// Width at which the inline detail drawer fits as well.
+const double _kDetailDrawerBreakpoint = 1180;
+
+/// Pseudo-group selections that sit above the real groups in the column.
+enum _HostFilter { all, connected, ungrouped }
 
 class HostsScreen extends ConsumerStatefulWidget {
   final void Function(HostModel host)? onConnectHost;
@@ -30,187 +40,456 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
   String _searchQuery = '';
   final Set<String> _connectingHostIds = {};
 
+  _HostFilter _filter = _HostFilter.all;
+
+  /// Non-null when a real group (rather than a pseudo-filter) is selected.
+  String? _selectedGroupId;
+  String? _selectedHostId;
+
   @override
   Widget build(BuildContext context) {
     final hostsAsync = ref.watch(hostsProvider);
     final groupsAsync = ref.watch(hostGroupsProvider);
-    final tokens = TerlyTokens.resolve(context);
 
-    return Scaffold(
-      body: Column(
-        children: [
-          TerlyPageHeader(
-            icon: LucideIcons.server,
-            title: 'Hosts & Servers',
-            description: 'Connect to infrastructure without losing context.',
-            actions: [
-              IconButton(
-                key: const Key('add_group_button'),
-                icon: const Icon(LucideIcons.folderPlus, size: 17),
-                tooltip: 'Add Group',
-                onPressed: () => _openGroupForm(context),
-              ),
-              ShadButton(
-                key: const Key('add_host_button'),
-                size: ShadButtonSize.sm,
-                leading: const Icon(LucideIcons.plus, size: 16),
-                onPressed: () => _openHostForm(context),
-                child: const Text('Add Host'),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final showContextColumn =
+            constraints.maxWidth >= _kContextColumnBreakpoint;
+        final showDetailDrawer =
+            constraints.maxWidth >= _kDetailDrawerBreakpoint;
+
+        return Scaffold(
+          body: Row(
+            children: [
+              if (showContextColumn)
+                _buildContextColumn(context, groupsAsync, hostsAsync),
+              Expanded(
+                child: _buildWorkArea(
+                  context,
+                  hostsAsync: hostsAsync,
+                  groupsAsync: groupsAsync,
+                  showContextColumn: showContextColumn,
+                  showDetailDrawer: showDetailDrawer,
+                ),
               ),
             ],
           ),
-          Padding(
-            padding: EdgeInsets.fromLTRB(
-              tokens.pagePadding,
-              14,
-              tokens.pagePadding,
-              10,
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TerlySearchField(
-                    fieldKey: const Key('hosts_search_input'),
-                    hintText: 'Search hosts, addresses and protocols…',
-                    onChanged: (value) =>
-                        setState(() => _searchQuery = value.toLowerCase()),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                groupsAsync.maybeWhen(
-                  data: (groups) => TerlyStatusChip(
-                    label: '${groups.length} groups',
-                    icon: LucideIcons.folders,
-                  ),
-                  orElse: () => const SizedBox.shrink(),
-                ),
-              ],
-            ),
+        );
+      },
+    );
+  }
+
+  // ── context column ──────────────────────────────────────────────────────
+
+  Widget _buildContextColumn(
+    BuildContext context,
+    AsyncValue<List<HostGroupModel>> groupsAsync,
+    AsyncValue<List<HostModel>> hostsAsync,
+  ) {
+    final hosts = hostsAsync.value ?? const <HostModel>[];
+    final groups = groupsAsync.value ?? const <HostGroupModel>[];
+    final connectedIds = _connectedHostIds();
+
+    return TerlyContextColumn(
+      head: TerlyWorkspaceSwitcher(
+        onManageWorkspaces: () => GoRouter.maybeOf(context)?.go('/workspaces'),
+      ),
+      search: TerlySearchField(
+        fieldKey: const Key('hosts_search_input'),
+        hintText: 'Search hosts…',
+        onChanged: (value) =>
+            setState(() => _searchQuery = value.toLowerCase()),
+      ),
+      children: [
+        const TerlySectionLabel(label: 'Groups'),
+        TerlyNavItem(
+          itemKey: const Key('hosts_filter_all'),
+          icon: LucideIcons.layoutGrid,
+          label: 'All',
+          count: hosts.length,
+          selected: _selectedGroupId == null && _filter == _HostFilter.all,
+          onTap: () => _selectFilter(_HostFilter.all),
+        ),
+        TerlyNavItem(
+          itemKey: const Key('hosts_filter_connected'),
+          icon: LucideIcons.radio,
+          label: 'Connected',
+          count: connectedIds.length,
+          selected:
+              _selectedGroupId == null && _filter == _HostFilter.connected,
+          onTap: () => _selectFilter(_HostFilter.connected),
+        ),
+        TerlyNavItem(
+          itemKey: const Key('hosts_filter_ungrouped'),
+          icon: LucideIcons.inbox,
+          label: 'Ungrouped',
+          count: hosts.where((host) => host.groupId == null).length,
+          selected:
+              _selectedGroupId == null && _filter == _HostFilter.ungrouped,
+          onTap: () => _selectFilter(_HostFilter.ungrouped),
+        ),
+        if (groups.isNotEmpty) const TerlySectionLabel(label: 'Tags'),
+        for (final group in groups)
+          TerlyNavItem(
+            itemKey: Key('group_${group.id}'),
+            icon: LucideIcons.hash,
+            label: group.name,
+            count: hosts.where((host) => host.groupId == group.id).length,
+            selected: _selectedGroupId == group.id,
+            onTap: () => setState(() {
+              _selectedGroupId = group.id;
+              _filter = _HostFilter.all;
+            }),
           ),
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: tokens.pagePadding),
-            child: Divider(color: tokens.border),
+      ],
+    );
+  }
+
+  void _selectFilter(_HostFilter filter) {
+    setState(() {
+      _filter = filter;
+      _selectedGroupId = null;
+    });
+  }
+
+  // ── work area ───────────────────────────────────────────────────────────
+
+  Widget _buildWorkArea(
+    BuildContext context, {
+    required AsyncValue<List<HostModel>> hostsAsync,
+    required AsyncValue<List<HostGroupModel>> groupsAsync,
+    required bool showContextColumn,
+    required bool showDetailDrawer,
+  }) {
+    final tokens = TerlyTokens.resolve(context);
+    final groups = groupsAsync.value ?? const <HostGroupModel>[];
+    final connectedIds = _connectedHostIds();
+
+    final actions = <Widget>[
+      IconButton(
+        key: const Key('add_group_button'),
+        icon: const Icon(LucideIcons.folderPlus, size: 17),
+        tooltip: 'Add Group',
+        onPressed: () => _openGroupForm(context),
+      ),
+      ShadButton(
+        key: const Key('add_host_button'),
+        size: ShadButtonSize.sm,
+        leading: const Icon(LucideIcons.plus, size: 16),
+        onPressed: () => _openHostForm(context),
+        child: const Text('Add Host'),
+      ),
+    ];
+
+    return Column(
+      children: [
+        // Without the context column there is no home for the workspace
+        // switcher, so the compact title bar carries it instead.
+        if (!showContextColumn)
+          TerlyPageHeader(
+            icon: LucideIcons.server,
+            title: 'Hosts & Servers',
+            actions: [
+              TerlyWorkspaceSwitcher(
+                compact: true,
+                onManageWorkspaces: () =>
+                    GoRouter.maybeOf(context)?.go('/workspaces'),
+              ),
+              ...actions,
+            ],
+          )
+        else
+          TerlyWorkToolbar(
+            title: _activeScopeLabel(groups),
+            meta: hostsAsync.maybeWhen(
+              data: (hosts) =>
+                  '${_scopedHosts(hosts).length} hosts · ${connectedIds.length} connected',
+              orElse: () => null,
+            ),
+            actions: actions,
           ),
-          Expanded(
-            child: hostsAsync.when(
-              data: (hosts) {
-                final filtered = hosts.where((host) {
-                  return host.label.toLowerCase().contains(_searchQuery) ||
-                      host.hostname.toLowerCase().contains(_searchQuery) ||
-                      (host.username ?? '').toLowerCase().contains(
-                        _searchQuery,
-                      ) ||
-                      host.protocol.toLowerCase().contains(_searchQuery);
-                }).toList();
-
-                return groupsAsync.when(
-                  data: (groups) {
-                    if (hosts.isEmpty && groups.isEmpty) {
-                      return TerlyEmptyState(
-                        icon: LucideIcons.server,
-                        title: 'No hosts or groups configured.',
-                        description:
-                            'Add your first server to connect in one click. You can organize infrastructure into groups at any time.',
-                        actions: [
-                          ShadButton(
-                            onPressed: () => _openHostForm(context),
-                            leading: const Icon(LucideIcons.plus, size: 16),
-                            child: const Text('Add your first host'),
-                          ),
-                          ShadButton.outline(
-                            onPressed: () => _openGroupForm(context),
-                            leading: const Icon(
-                              LucideIcons.folderPlus,
-                              size: 16,
-                            ),
-                            child: const Text('Create group'),
-                          ),
-                        ],
-                      );
-                    }
-
-                    final categorized = _buildCategorizedItems(
-                      filtered,
-                      groups,
-                      includeEmptyGroups: _searchQuery.isEmpty,
-                    );
-                    final items = categorized.items;
-
-                    if (items.isEmpty) {
-                      return const TerlyEmptyState(
-                        icon: LucideIcons.searchX,
-                        title: 'No hosts match your search.',
-                        description:
-                            'Try a label, hostname, username or protocol.',
-                      );
-                    }
-
-                    return ListView.builder(
-                      padding: EdgeInsets.fromLTRB(
-                        tokens.pagePadding,
-                        4,
-                        tokens.pagePadding,
-                        20,
-                      ),
-                      itemCount: items.length,
-                      itemBuilder: (context, index) {
-                        final item = items[index];
-
-                        if (item is HostGroupModel) {
-                          final groupHosts =
-                              categorized.groupedHosts[item.id] ?? const [];
-                          return _GroupExpansionTile(
-                            key: ValueKey('group_${item.id}'),
-                            group: item,
-                            hosts: groupHosts,
-                            onEditHost: (host) =>
-                                _openHostForm(context, initialHost: host),
-                            onDeleteHost: (host) => _deleteHost(context, host),
-                            onConnectHost: _onConnectHost,
-                            onEditGroup: (group) =>
-                                _openGroupForm(context, initialGroup: group),
-                            onDeleteGroup: (group) =>
-                                _deleteGroup(context, group),
-                            connectingHostIds: _connectingHostIds,
-                          );
-                        }
-                        if (item is HostModel) {
-                          return _HostTile(
-                            key: ValueKey(item.id),
-                            host: item,
-                            isConnecting: _connectingHostIds.contains(item.id),
-                            onEdit: () =>
-                                _openHostForm(context, initialHost: item),
-                            onDelete: () => _deleteHost(context, item),
-                            onConnect: () => _onConnectHost(item),
-                          );
-                        }
-
-                        return const SizedBox.shrink();
-                      },
-                    );
-                  },
-                  loading: () =>
-                      const Center(child: CircularProgressIndicator()),
-                  error: (error, stackTrace) => TerlyEmptyState(
-                    icon: LucideIcons.triangleAlert,
-                    title: 'Could not load host groups',
-                    description: '$error',
-                  ),
-                );
-              },
+        if (!showContextColumn)
+          _buildCompactFilterBar(context, groups, hostsAsync.value ?? const []),
+        Expanded(
+          child: hostsAsync.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (error, stackTrace) => TerlyEmptyState(
+              icon: LucideIcons.triangleAlert,
+              title: 'Could not load hosts',
+              description: '$error',
+            ),
+            data: (hosts) => groupsAsync.when(
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (error, stackTrace) => TerlyEmptyState(
                 icon: LucideIcons.triangleAlert,
-                title: 'Could not load hosts',
+                title: 'Could not load host groups',
                 description: '$error',
               ),
+              data: (groups) {
+                if (hosts.isEmpty && groups.isEmpty) {
+                  return _buildFirstRunEmptyState(context);
+                }
+
+                final visible = _visibleHosts(hosts);
+                if (visible.isEmpty) {
+                  return const TerlyEmptyState(
+                    icon: LucideIcons.searchX,
+                    title: 'No hosts match your search.',
+                    description: 'Try a label, hostname, username or protocol.',
+                  );
+                }
+
+                final selected = visible
+                    .where((host) => host.id == _selectedHostId)
+                    .firstOrNull;
+
+                return Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        children: [
+                          _HostListHeader(
+                            tokens: tokens,
+                            compact: !showContextColumn,
+                          ),
+                          Expanded(
+                            child: ListView.builder(
+                              itemCount: visible.length,
+                              itemBuilder: (context, index) {
+                                final host = visible[index];
+                                return _HostRow(
+                                  key: ValueKey(host.id),
+                                  host: host,
+                                  groups: groups,
+                                  connected: connectedIds.contains(host.id),
+                                  isConnecting: _connectingHostIds.contains(
+                                    host.id,
+                                  ),
+                                  selected: host.id == _selectedHostId,
+                                  compact: !showContextColumn,
+                                  onSelect: () {
+                                    setState(() => _selectedHostId = host.id);
+                                    // Too narrow for the inline drawer, so the
+                                    // detail becomes a sheet rather than a
+                                    // selection that leads nowhere.
+                                    if (!showDetailDrawer) {
+                                      _showHostDetailSheet(
+                                        host: host,
+                                        hosts: hosts,
+                                        groups: groups,
+                                        connected: connectedIds.contains(
+                                          host.id,
+                                        ),
+                                      );
+                                    }
+                                  },
+                                  onConnect: () => _onConnectHost(host),
+                                  onEdit: () =>
+                                      _openHostForm(context, initialHost: host),
+                                  onDelete: () => _deleteHost(context, host),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (showDetailDrawer && selected != null)
+                      TerlyDetailDrawer(
+                        child: _HostDetailPanel(
+                          host: selected,
+                          hosts: hosts,
+                          groups: groups,
+                          connected: connectedIds.contains(selected.id),
+                          onConnect: () => _onConnectHost(selected),
+                          onEdit: () =>
+                              _openHostForm(context, initialHost: selected),
+                          onDelete: () => _deleteHost(context, selected),
+                          onClose: () => setState(() => _selectedHostId = null),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCompactFilterBar(
+    BuildContext context,
+    List<HostGroupModel> groups,
+    List<HostModel> hosts,
+  ) {
+    final tokens = TerlyTokens.resolve(context);
+    return Container(
+      padding: EdgeInsets.fromLTRB(
+        tokens.pagePadding,
+        10,
+        tokens.pagePadding,
+        8,
+      ),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: tokens.border)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TerlySearchField(
+            fieldKey: const Key('hosts_search_input'),
+            hintText: 'Search hosts, addresses and protocols…',
+            onChanged: (value) =>
+                setState(() => _searchQuery = value.toLowerCase()),
+          ),
+          const SizedBox(height: 8),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _FilterChip(
+                  label: 'All',
+                  selected:
+                      _selectedGroupId == null && _filter == _HostFilter.all,
+                  onTap: () => _selectFilter(_HostFilter.all),
+                ),
+                _FilterChip(
+                  label: 'Connected',
+                  selected:
+                      _selectedGroupId == null &&
+                      _filter == _HostFilter.connected,
+                  onTap: () => _selectFilter(_HostFilter.connected),
+                ),
+                for (final group in groups)
+                  _FilterChip(
+                    chipKey: Key('group_${group.id}'),
+                    label: group.name,
+                    selected: _selectedGroupId == group.id,
+                    onTap: () => setState(() {
+                      _selectedGroupId = group.id;
+                      _filter = _HostFilter.all;
+                    }),
+                  ),
+              ],
             ),
           ),
         ],
       ),
     );
   }
+
+  /// The narrow-width form of the detail drawer.
+  void _showHostDetailSheet({
+    required HostModel host,
+    required List<HostModel> hosts,
+    required List<HostGroupModel> groups,
+    required bool connected,
+  }) {
+    final tokens = TerlyTokens.resolve(context);
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: tokens.surface,
+      builder: (sheetContext) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.sizeOf(sheetContext).height * 0.72,
+          child: _HostDetailPanel(
+            host: host,
+            hosts: hosts,
+            groups: groups,
+            connected: connected,
+            onConnect: () {
+              Navigator.of(sheetContext).pop();
+              _onConnectHost(host);
+            },
+            onEdit: () {
+              Navigator.of(sheetContext).pop();
+              _openHostForm(context, initialHost: host);
+            },
+            onDelete: () {
+              Navigator.of(sheetContext).pop();
+              _deleteHost(context, host);
+            },
+            onClose: () => Navigator.of(sheetContext).pop(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFirstRunEmptyState(BuildContext context) {
+    return TerlyEmptyState(
+      icon: LucideIcons.server,
+      title: 'No hosts or groups configured.',
+      description:
+          'Add your first server to connect in one click. You can organize infrastructure into groups at any time.',
+      actions: [
+        ShadButton(
+          onPressed: () => _openHostForm(context),
+          leading: const Icon(LucideIcons.plus, size: 16),
+          child: const Text('Add your first host'),
+        ),
+        ShadButton.outline(
+          onPressed: () => _openGroupForm(context),
+          leading: const Icon(LucideIcons.folderPlus, size: 16),
+          child: const Text('Create group'),
+        ),
+      ],
+    );
+  }
+
+  // ── filtering ───────────────────────────────────────────────────────────
+
+  Set<String> _connectedHostIds() {
+    final tabs = ref.watch(terminalTabsProvider).tabs;
+    return {
+      for (final tab in tabs)
+        if (tab.isConnected && tab.host != null) tab.host!.id,
+    };
+  }
+
+  String _activeScopeLabel(List<HostGroupModel> groups) {
+    if (_selectedGroupId != null) {
+      return groups
+              .where((group) => group.id == _selectedGroupId)
+              .firstOrNull
+              ?.name ??
+          'Group';
+    }
+    return switch (_filter) {
+      _HostFilter.all => 'All',
+      _HostFilter.connected => 'Connected',
+      _HostFilter.ungrouped => 'Ungrouped',
+    };
+  }
+
+  /// Hosts in the selected group/filter, before the search query is applied.
+  List<HostModel> _scopedHosts(List<HostModel> hosts) {
+    if (_selectedGroupId != null) {
+      return hosts.where((host) => host.groupId == _selectedGroupId).toList();
+    }
+    return switch (_filter) {
+      _HostFilter.all => hosts,
+      _HostFilter.connected =>
+        hosts.where((host) => _connectedHostIds().contains(host.id)).toList(),
+      _HostFilter.ungrouped =>
+        hosts.where((host) => host.groupId == null).toList(),
+    };
+  }
+
+  List<HostModel> _visibleHosts(List<HostModel> hosts) {
+    return _scopedHosts(hosts).where((host) {
+      if (_searchQuery.isEmpty) return true;
+      return host.label.toLowerCase().contains(_searchQuery) ||
+          host.hostname.toLowerCase().contains(_searchQuery) ||
+          (host.username ?? '').toLowerCase().contains(_searchQuery) ||
+          host.protocol.toLowerCase().contains(_searchQuery);
+    }).toList();
+  }
+
+  // ── actions ─────────────────────────────────────────────────────────────
 
   Future<void> _defaultConnectHost(HostModel host) async {
     IdentityModel? identity;
@@ -312,281 +591,478 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
     );
 
     if (confirm == true) {
+      if (_selectedHostId == host.id) {
+        setState(() => _selectedHostId = null);
+      }
       await ref.read(hostsProvider.notifier).deleteHost(host.id);
     }
   }
+}
 
-  Future<void> _deleteGroup(BuildContext context, HostGroupModel group) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => ShadDialog.alert(
-        title: const Text('Delete Group'),
-        description: Text(
-          'Are you sure you want to delete group "${group.name}"? Hosts inside will be unassigned.',
-        ),
-        actions: [
-          ShadButton.outline(
-            child: const Text('Cancel'),
-            onPressed: () => Navigator.of(ctx).pop(false),
+// ── list primitives ───────────────────────────────────────────────────────
+
+/// Column widths shared by the header and every row so they stay aligned.
+const List<int> _kHostColumnFlex = [4, 4, 3, 2];
+
+/// Rendered width of the row's trailing controls.
+///
+/// Measured, not guessed: a compact [IconButton] still occupies 40px and a
+/// [PopupMenuButton] 48px once Material's minimum tap target is applied.
+const double _kHostActionsWidth = 92;
+
+class _HostListHeader extends StatelessWidget {
+  final TerlyTokens tokens;
+  final bool compact;
+
+  const _HostListHeader({required this.tokens, required this.compact});
+
+  @override
+  Widget build(BuildContext context) {
+    final style = Theme.of(context).textTheme.labelSmall?.copyWith(
+      fontSize: 10,
+      letterSpacing: 0.8,
+      color: tokens.textMuted,
+    );
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: tokens.border)),
+      ),
+      child: Row(
+        children: [
+          const SizedBox(width: 18),
+          Expanded(
+            flex: _kHostColumnFlex[0],
+            child: Text('NAME', style: style, maxLines: 1),
           ),
-          ShadButton.destructive(
-            child: const Text('Delete'),
-            onPressed: () => Navigator.of(ctx).pop(true),
+          Expanded(
+            flex: _kHostColumnFlex[1],
+            child: Text('ADDRESS', style: style, maxLines: 1),
           ),
+          if (!compact) ...[
+            Expanded(
+              flex: _kHostColumnFlex[2],
+              child: Text('TAGS', style: style, maxLines: 1),
+            ),
+            Expanded(
+              flex: _kHostColumnFlex[3],
+              child: Text('PROTOCOL', style: style, maxLines: 1),
+            ),
+          ],
+          const SizedBox(width: _kHostActionsWidth),
         ],
       ),
     );
-
-    if (confirm == true) {
-      await ref.read(hostGroupsProvider.notifier).deleteGroup(group.id);
-    }
-  }
-
-  ({List<Object> items, Map<String, List<HostModel>> groupedHosts})
-  _buildCategorizedItems(
-    List<HostModel> filteredHosts,
-    List<HostGroupModel> groups, {
-    required bool includeEmptyGroups,
-  }) {
-    final items = <Object>[];
-    final groupedHosts = <String, List<HostModel>>{};
-    final ungroupedHosts = <HostModel>[];
-
-    for (final host in filteredHosts) {
-      final groupId = host.groupId;
-      if (groupId == null) {
-        ungroupedHosts.add(host);
-      } else {
-        groupedHosts.putIfAbsent(groupId, () => []).add(host);
-      }
-    }
-
-    for (final group in groups) {
-      if (includeEmptyGroups || groupedHosts.containsKey(group.id)) {
-        items.add(group);
-      }
-    }
-
-    items.addAll(ungroupedHosts);
-
-    return (items: items, groupedHosts: groupedHosts);
   }
 }
 
-class _GroupExpansionTile extends StatelessWidget {
-  final HostGroupModel group;
-  final List<HostModel> hosts;
-  final void Function(HostModel) onEditHost;
-  final void Function(HostModel) onDeleteHost;
-  final void Function(HostModel) onConnectHost;
-  final void Function(HostGroupModel) onEditGroup;
-  final void Function(HostGroupModel) onDeleteGroup;
-  final Set<String> connectingHostIds;
-
-  const _GroupExpansionTile({
-    super.key,
-    required this.group,
-    required this.hosts,
-    required this.onEditHost,
-    required this.onDeleteHost,
-    required this.onConnectHost,
-    required this.onEditGroup,
-    required this.onDeleteGroup,
-    required this.connectingHostIds,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = TerlyTokens.resolve(context);
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: TerlySurface(
-        child: ExpansionTile(
-          tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-          childrenPadding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-          shape: const Border(),
-          collapsedShape: const Border(),
-          leading: Icon(LucideIcons.folder, size: 18, color: tokens.brand),
-          title: Text(
-            group.name,
-            style: const TextStyle(fontWeight: FontWeight.w600),
-          ),
-          subtitle: Text(
-            '${hosts.length} ${hosts.length == 1 ? 'server' : 'servers'}',
-          ),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                icon: const Icon(LucideIcons.pencil, size: 16),
-                tooltip: 'Edit group',
-                onPressed: () => onEditGroup(group),
-              ),
-              IconButton(
-                icon: Icon(LucideIcons.trash2, size: 16, color: tokens.danger),
-                tooltip: 'Delete group',
-                onPressed: () => onDeleteGroup(group),
-              ),
-            ],
-          ),
-          children: hosts
-              .map(
-                (h) => _HostTile(
-                  key: ValueKey(h.id),
-                  host: h,
-                  isConnecting: connectingHostIds.contains(h.id),
-                  onEdit: () => onEditHost(h),
-                  onDelete: () => onDeleteHost(h),
-                  onConnect: () => onConnectHost(h),
-                ),
-              )
-              .toList(),
-        ),
-      ),
-    );
-  }
-}
-
-class _HostTile extends StatelessWidget {
+/// Single-line dense host row.
+///
+/// The wireframe replaces the card grid with this so ~9 hosts fit where 6 did,
+/// and status reads as dot + text rather than colour alone.
+class _HostRow extends StatelessWidget {
   final HostModel host;
+  final List<HostGroupModel> groups;
+  final bool connected;
   final bool isConnecting;
+  final bool selected;
+  final bool compact;
+  final VoidCallback onSelect;
+  final VoidCallback onConnect;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
-  final VoidCallback? onConnect;
 
-  const _HostTile({
+  const _HostRow({
     super.key,
     required this.host,
-    this.isConnecting = false,
+    required this.groups,
+    required this.connected,
+    required this.isConnecting,
+    required this.selected,
+    required this.compact,
+    required this.onSelect,
+    required this.onConnect,
     required this.onEdit,
     required this.onDelete,
-    this.onConnect,
   });
-
-  IconData _getProtocolIcon() {
-    switch (host.protocol) {
-      case 'ssh':
-        return LucideIcons.terminal;
-      case 'mosh':
-        return LucideIcons.radioTower;
-      case 'local':
-        return LucideIcons.monitor;
-      case 'serial':
-        return LucideIcons.usb;
-      default:
-        return LucideIcons.server;
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
     final tokens = TerlyTokens.resolve(context);
+    final address =
+        '${host.username != null && host.username!.isNotEmpty ? '${host.username}@' : ''}'
+        '${host.hostname}:${host.port}';
+    final groupName = groups
+        .where((group) => group.id == host.groupId)
+        .firstOrNull
+        ?.name;
+    final monoStyle = Theme.of(
+      context,
+    ).textTheme.bodySmall?.copyWith(color: tokens.textMuted, fontSize: 12);
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Semantics(
-        button: onConnect != null,
-        label: '${host.label}, ${host.protocol} host at ${host.hostname}',
-        child: TerlySurface(
-          child: ListTile(
-            minTileHeight: 62,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 12,
-              vertical: 3,
-            ),
-            leading: Container(
-              width: 34,
-              height: 34,
-              decoration: BoxDecoration(
-                color: tokens.brand.withValues(alpha: 0.09),
-                borderRadius: BorderRadius.circular(tokens.radiusMedium),
-                border: Border.all(color: tokens.brand.withValues(alpha: 0.20)),
+    return Semantics(
+      button: true,
+      selected: selected,
+      label:
+          '${host.label}, ${host.protocol} host at ${host.hostname}, '
+          '${connected ? 'connected' : 'not connected'}',
+      child: InkWell(
+        onTap: onSelect,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 0, 8, 0),
+          constraints: const BoxConstraints(minHeight: 42),
+          decoration: BoxDecoration(
+            color: selected
+                ? tokens.textPrimary.withValues(alpha: 0.06)
+                : Colors.transparent,
+            border: Border(
+              bottom: BorderSide(color: tokens.border),
+              left: BorderSide(
+                color: selected ? tokens.brand : Colors.transparent,
+                width: 2,
               ),
-              child: Icon(_getProtocolIcon(), size: 17, color: tokens.brand),
             ),
-            title: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    host.label,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                    overflow: TextOverflow.ellipsis,
+          ),
+          child: Row(
+            children: [
+              TerlyStatusDot(
+                state: connected ? TerlyDotState.online : TerlyDotState.offline,
+              ),
+              const SizedBox(width: 11),
+              Expanded(
+                flex: _kHostColumnFlex[0],
+                child: Text(
+                  host.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
                   ),
                 ),
-                const SizedBox(width: 8),
-                TerlyStatusChip(
-                  label: host.protocol.toUpperCase(),
-                  tone: TerlyStatusTone.brand,
+              ),
+              Expanded(
+                flex: _kHostColumnFlex[1],
+                child: Text(
+                  // Compact drops the protocol column, so the state text that
+                  // pairs with the dot moves onto the address line.
+                  compact && connected ? '$address · connected' : address,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: monoStyle,
+                ),
+              ),
+              if (!compact) ...[
+                Expanded(
+                  flex: _kHostColumnFlex[2],
+                  child: groupName == null
+                      ? const SizedBox.shrink()
+                      : Align(
+                          alignment: Alignment.centerLeft,
+                          child: TerlyStatusChip(label: groupName),
+                        ),
+                ),
+                Expanded(
+                  flex: _kHostColumnFlex[3],
+                  child: Text(
+                    // Status is never carried by colour alone: the dot is
+                    // paired with this text so the row still reads without hue.
+                    connected ? 'connected' : host.protocol,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: monoStyle,
+                  ),
                 ),
               ],
-            ),
-            subtitle: Text(
-              '${host.username != null && host.username!.isNotEmpty ? '${host.username}@' : ''}${host.hostname}:${host.port}',
-            ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                isConnecting
-                    ? const Padding(
-                        padding: EdgeInsets.all(8.0),
+              SizedBox(
+                width: _kHostActionsWidth,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    if (isConnecting)
+                      const Padding(
+                        padding: EdgeInsets.all(8),
                         child: SizedBox(
-                          width: 20,
-                          height: 20,
+                          width: 16,
+                          height: 16,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         ),
                       )
-                    : IconButton(
+                    else
+                      IconButton(
                         key: Key('connect_host_${host.id}'),
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints.tightFor(
+                          width: 34,
+                          height: 34,
+                        ),
                         icon: Icon(
                           LucideIcons.play,
-                          size: 17,
+                          size: 16,
                           color: tokens.success,
                         ),
                         tooltip: 'Connect Terminal',
                         onPressed: onConnect,
                       ),
-                PopupMenuButton<String>(
-                  tooltip: 'Host actions',
-                  icon: const Icon(LucideIcons.ellipsis, size: 17),
-                  onSelected: (value) {
-                    if (value == 'edit') onEdit();
-                    if (value == 'delete') onDelete();
-                  },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(
-                      value: 'edit',
-                      child: Row(
-                        children: [
-                          Icon(LucideIcons.pencil, size: 16),
-                          SizedBox(width: 8),
-                          Text('Edit host'),
-                        ],
-                      ),
-                    ),
-                    PopupMenuItem(
-                      value: 'delete',
-                      child: Row(
-                        children: [
-                          Icon(
-                            LucideIcons.trash2,
-                            size: 16,
-                            color: tokens.danger,
+                    PopupMenuButton<String>(
+                      tooltip: 'Host actions',
+                      // No `constraints` here: that property sizes the popup
+                      // menu, not the button, and pinning it clipped the menu
+                      // items.
+                      padding: EdgeInsets.zero,
+                      iconSize: 16,
+                      icon: const Icon(LucideIcons.ellipsis, size: 16),
+                      onSelected: (value) {
+                        if (value == 'edit') onEdit();
+                        if (value == 'delete') onDelete();
+                      },
+                      itemBuilder: (context) => [
+                        const PopupMenuItem(
+                          value: 'edit',
+                          child: Row(
+                            children: [
+                              Icon(LucideIcons.pencil, size: 16),
+                              SizedBox(width: 8),
+                              Text('Edit host'),
+                            ],
                           ),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Delete host',
-                            style: TextStyle(color: tokens.danger),
+                        ),
+                        PopupMenuItem(
+                          value: 'delete',
+                          child: Row(
+                            children: [
+                              Icon(
+                                LucideIcons.trash2,
+                                size: 16,
+                                color: tokens.danger,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Delete host',
+                                style: TextStyle(color: tokens.danger),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FilterChip extends StatelessWidget {
+  final Key? chipKey;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _FilterChip({
+    this.chipKey,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = TerlyTokens.resolve(context);
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: InkWell(
+        key: chipKey,
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(tokens.radiusPill),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          decoration: BoxDecoration(
+            color: selected
+                ? tokens.brand.withValues(alpha: 0.12)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(tokens.radiusPill),
+            border: Border.all(
+              color: selected
+                  ? tokens.brand.withValues(alpha: 0.34)
+                  : tokens.border,
+            ),
+          ),
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: selected ? tokens.brand : tokens.textMuted,
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Inline right-hand detail panel — the wireframe's replacement for a modal.
+class _HostDetailPanel extends StatelessWidget {
+  final HostModel host;
+  final List<HostModel> hosts;
+  final List<HostGroupModel> groups;
+  final bool connected;
+  final VoidCallback onConnect;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+  final VoidCallback onClose;
+
+  const _HostDetailPanel({
+    required this.host,
+    required this.hosts,
+    required this.groups,
+    required this.connected,
+    required this.onConnect,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onClose,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = TerlyTokens.resolve(context);
+    final jumpHost = hosts
+        .where((candidate) => candidate.id == host.jumpHostId)
+        .firstOrNull;
+    final group = groups
+        .where((candidate) => candidate.id == host.groupId)
+        .firstOrNull;
+
+    return ListView(
+      key: const Key('host_detail_drawer'),
+      padding: const EdgeInsets.all(14),
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    host.label,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    host.hostname,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.labelSmall?.copyWith(color: tokens.textMuted),
+                  ),
+                ],
+              ),
+            ),
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(LucideIcons.x, size: 15),
+              tooltip: 'Close details',
+              onPressed: onClose,
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        TerlyStatusChip(
+          label: connected ? 'connected' : 'not connected',
+          tone: connected ? TerlyStatusTone.brand : TerlyStatusTone.neutral,
+        ),
+        const SizedBox(height: 12),
+        ShadButton(
+          key: const Key('detail_open_terminal'),
+          width: double.infinity,
+          onPressed: onConnect,
+          child: const Text('Open terminal'),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: ShadButton.outline(
+                size: ShadButtonSize.sm,
+                onPressed: () => GoRouter.maybeOf(context)?.go('/sftp'),
+                child: const Text('SFTP'),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: ShadButton.outline(
+                size: ShadButtonSize.sm,
+                onPressed: () => GoRouter.maybeOf(context)?.go('/tunnels'),
+                child: const Text('Tunnel'),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: ShadButton.outline(
+                size: ShadButtonSize.sm,
+                onPressed: onEdit,
+                child: const Text('Edit'),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        _DetailRow(label: 'protocol', value: host.protocol),
+        _DetailRow(label: 'port', value: '${host.port}'),
+        _DetailRow(label: 'user', value: host.username ?? '—'),
+        _DetailRow(label: 'group', value: group?.name ?? '—'),
+        _DetailRow(label: 'jump host', value: jumpHost?.label ?? '—'),
+        _DetailRow(
+          label: 'identity',
+          value: host.identityId == null ? 'none' : 'from vault',
+        ),
+        const SizedBox(height: 14),
+        ShadButton.destructive(
+          size: ShadButtonSize.sm,
+          width: double.infinity,
+          onPressed: onDelete,
+          child: const Text('Delete host'),
+        ),
+      ],
+    );
+  }
+}
+
+class _DetailRow extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _DetailRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = TerlyTokens.resolve(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 78,
+            child: Text(
+              label.toUpperCase(),
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                fontSize: 9,
+                letterSpacing: 0.8,
+                color: tokens.textMuted,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(value, style: Theme.of(context).textTheme.bodySmall),
+          ),
+        ],
       ),
     );
   }

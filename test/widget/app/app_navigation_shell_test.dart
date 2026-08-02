@@ -64,27 +64,62 @@ void main() {
   }
 
   group('AppNavigationShell & GoRouter Integration Tests', () {
-    testWidgets('Renders AppNavigationShell header and initial Hosts screen', (
+    testWidgets('Renders the persistent rail and the initial Hosts screen', (
       tester,
     ) async {
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
       await tester.pumpWidget(createTestWidget());
       await pumpTabTransition(tester);
 
-      // Header components
+      // The rail is the whole desktop chrome: brand, command palette entry,
+      // live status badges and the workspace avatar all live on it.
       expect(find.byKey(const Key('header_brand_logo')), findsOneWidget);
-      expect(
-        find.byKey(const Key('workspace_selector_dropdown')),
-        findsOneWidget,
-      );
+      expect(find.byKey(const Key('command_palette_button')), findsOneWidget);
       expect(find.byKey(const Key('ssh_status_badge')), findsOneWidget);
       expect(find.byKey(const Key('tunnels_status_badge')), findsOneWidget);
       expect(
         find.byKey(const Key('biometric_status_indicator')),
         findsOneWidget,
       );
+      expect(find.byKey(const Key('workspace_avatar_button')), findsOneWidget);
+
+      // The workspace switcher moved into the module's context column.
+      expect(
+        find.byKey(const Key('workspace_selector_dropdown')),
+        findsOneWidget,
+      );
 
       // Default initial tab should be HostsScreen
       expect(find.byType(HostsScreen), findsOneWidget);
+    });
+
+    testWidgets('Rail renders the wireframe module order', (tester) async {
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(createTestWidget());
+      await pumpTabTransition(tester);
+
+      final railPaths = kRailLayout.whereType<String>().toList();
+      final renderedOrder = railPaths
+          .map(
+            (path) => tester.getTopLeft(
+              find.byKey(Key('nav_item_${navigationIndexForPath(path)}')),
+            ),
+          )
+          .toList();
+
+      for (var i = 1; i < renderedOrder.length; i++) {
+        expect(
+          renderedOrder[i].dy,
+          greaterThan(renderedOrder[i - 1].dy),
+          reason: 'rail order must follow kRailLayout',
+        );
+      }
     });
 
     testWidgets(
@@ -135,29 +170,22 @@ void main() {
       },
     );
 
-    testWidgets('Toggles sidebar collapse state on toggle button tap', (
-      tester,
-    ) async {
+    testWidgets('Rail is icon-only and has no collapse toggle', (tester) async {
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
       await tester.pumpWidget(createTestWidget());
       await pumpTabTransition(tester);
 
-      final toggleBtn = find.byKey(const Key('sidebar_toggle_button'));
-      expect(toggleBtn, findsOneWidget);
-
-      // Initial state: expanded, label "Hosts" should be visible
-      expect(find.text('Hosts'), findsWidgets);
-
-      // Tap toggle button to collapse
-      await tester.tap(toggleBtn);
-      await pumpTabTransition(tester);
-
-      // Expanded text labels hidden in collapsed mode
+      // Labels live in the context column now, so the rail has a fixed width
+      // and the collapse affordance is gone.
+      expect(find.byKey(const Key('sidebar_toggle_button')), findsNothing);
       expect(find.byType(AppNavigationShell), findsOneWidget);
-
-      // Tap toggle button to expand again
-      await tester.tap(toggleBtn);
-      await pumpTabTransition(tester);
-      expect(find.text('Hosts'), findsWidgets);
+      expect(
+        tester.getSize(find.byKey(const Key('nav_item_0'))).width,
+        lessThan(56),
+      );
     });
 
     testWidgets(
@@ -186,7 +214,7 @@ void main() {
     );
 
     testWidgets(
-      'Mobile navigation exposes four roots and groups secondary tools',
+      'Mobile navigation exposes the five wireframe tabs in rail order',
       (tester) async {
         tester.view.physicalSize = const Size(375, 812);
         tester.view.devicePixelRatio = 1.0;
@@ -195,14 +223,18 @@ void main() {
         await tester.pumpWidget(createTestWidget());
         await pumpTabTransition(tester);
 
-        expect(find.byType(NavigationDestination), findsNWidgets(4));
-        await tester.tap(find.byKey(const Key('mobile_nav_destination_tools')));
-        await tester.pumpAndSettle();
+        // Vault and Settings are first-class tabs rather than sheet entries.
+        expect(find.byType(NavigationDestination), findsNWidgets(5));
+        for (final path in kMobileTabPaths) {
+          expect(
+            find.byKey(Key('mobile_nav_destination_${path.substring(1)}')),
+            findsOneWidget,
+          );
+        }
 
-        expect(find.byKey(const Key('mobile_tool_vault')), findsOneWidget);
-        expect(find.byKey(const Key('mobile_tool_tunnels')), findsOneWidget);
-        expect(find.byKey(const Key('mobile_tool_snippets')), findsOneWidget);
-        expect(find.byKey(const Key('mobile_tool_settings')), findsOneWidget);
+        await tester.tap(find.byKey(const Key('mobile_nav_destination_vault')));
+        await pumpTabTransition(tester);
+        expect(find.byType(VaultScreen), findsOneWidget);
       },
     );
 
@@ -221,8 +253,10 @@ void main() {
       expect(find.byType(Dialog), findsOneWidget);
     });
 
+    // Every module at every breakpoint. The initial route alone used to be
+    // covered, which is exactly where the layout overflows were not.
     for (final width in [375.0, 768.0, 1024.0, 1440.0]) {
-      testWidgets('Shell has no layout exceptions at ${width.toInt()} px', (
+      testWidgets('Every module lays out cleanly at ${width.toInt()} px', (
         tester,
       ) async {
         tester.view.physicalSize = Size(width, 900);
@@ -231,8 +265,28 @@ void main() {
 
         await tester.pumpWidget(createTestWidget());
         await pumpTabTransition(tester);
+        expect(tester.takeException(), isNull, reason: 'initial route');
 
-        expect(tester.takeException(), isNull);
+        final isCompact =
+            find.byKey(const Key('mobile_bottom_navigation_bar')).evaluate().isNotEmpty;
+
+        if (isCompact) {
+          for (final path in kMobileTabPaths) {
+            await tester.tap(
+              find.byKey(Key('mobile_nav_destination_${path.substring(1)}')),
+            );
+            await pumpTabTransition(tester);
+            expect(tester.takeException(), isNull, reason: path);
+          }
+        } else {
+          for (final path in kRailLayout.whereType<String>()) {
+            await tester.tap(
+              find.byKey(Key('nav_item_${navigationIndexForPath(path)}')),
+            );
+            await pumpTabTransition(tester);
+            expect(tester.takeException(), isNull, reason: path);
+          }
+        }
       });
     }
   });

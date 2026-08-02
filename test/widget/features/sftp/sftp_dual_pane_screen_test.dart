@@ -53,5 +53,39 @@ void main() {
 
       expect(find.byType(SegmentedButton<int>), findsOneWidget);
     });
+
+    testWidgets('transfer queue sheet header fits a phone width', (
+      WidgetTester tester,
+    ) async {
+      tester.view.physicalSize = const Size(411, 915);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        ProviderScope(
+          child: ShadTheme(
+            data: ShadThemeData(
+              colorScheme: const ShadSlateColorScheme.light(),
+              brightness: Brightness.light,
+            ),
+            child: const MaterialApp(
+              home: SftpDualPaneScreen(hostLabel: 'Test Server'),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(tester.takeException(), isNull, reason: 'screen layout');
+
+      await tester.tap(find.byTooltip('Transfer Queue'));
+      // Not pumpAndSettle: the queue's loading indicator animates forever
+      // while no worker stream is attached.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(find.text('SFTP Transfer Queue'), findsOneWidget);
+      expect(tester.takeException(), isNull, reason: 'queue sheet header');
+    });
   });
 }

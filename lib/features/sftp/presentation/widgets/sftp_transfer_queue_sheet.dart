@@ -28,30 +28,55 @@ class SftpTransferQueueSheet extends ConsumerWidget {
           // Header
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
-              children: [
-                const Icon(Icons.sync_alt, color: Colors.cyanAccent),
-                const SizedBox(width: 8),
-                const Text(
-                  'SFTP Transfer Queue',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                ),
-                const Spacer(),
-                ShadButton.ghost(
-                  leading: const Icon(Icons.clear_all, size: 18),
-                  onPressed: () {
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                // On a phone the title plus a labelled action plus the close
+                // button are wider than the sheet, and a ShadButton will not
+                // shrink its own label — so the action drops to icon-only.
+                final labelClearAction = constraints.maxWidth >= 480;
+                void clearFinished() =>
                     ref.read(sftpTransferQueueWorkerProvider).clearFinished();
-                  },
-                  child: const Text('Clear Finished'),
-                ),
-                Tooltip(
-                  message: 'Close Queue',
-                  child: ShadIconButton.ghost(
-                    icon: const Icon(Icons.close, size: 18),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ),
-              ],
+
+                return Row(
+                  children: [
+                    const Icon(Icons.sync_alt, color: Colors.cyanAccent),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'SFTP Transfer Queue',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    if (labelClearAction)
+                      ShadButton.ghost(
+                        leading: const Icon(Icons.clear_all, size: 18),
+                        onPressed: clearFinished,
+                        child: const Text('Clear Finished'),
+                      )
+                    else
+                      Tooltip(
+                        message: 'Clear Finished',
+                        child: ShadIconButton.ghost(
+                          icon: const Icon(Icons.clear_all, size: 18),
+                          onPressed: clearFinished,
+                        ),
+                      ),
+                    Tooltip(
+                      message: 'Close Queue',
+                      child: ShadIconButton.ghost(
+                        icon: const Icon(Icons.close, size: 18),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
           Divider(height: 1, color: colorScheme.border),

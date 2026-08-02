@@ -1,4 +1,5 @@
 import 'package:drift/native.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:terly2/app/app.dart';
@@ -19,6 +20,7 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    expect(find.text('Terly'), findsWidgets);
+    // The rail is icon-only, so the brand is a mark rather than a wordmark.
+    expect(find.byKey(const Key('header_brand_logo')), findsOneWidget);
   });
 }

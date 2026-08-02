@@ -84,5 +84,37 @@ void main() {
       expect(find.byKey(const Key('identity_username_input')), findsOneWidget);
       expect(find.byKey(const Key('identity_save_button')), findsOneWidget);
     });
+
+    testWidgets('Identity row fits a phone width with all three controls', (
+      tester,
+    ) async {
+      // A key identity shows copy + edit + delete; each control renders 40px
+      // wide regardless of the constraints passed to it.
+      await db.identitiesDao.insertIdentity(
+        IdentitiesCompanion.insert(
+          id: 'identity-1',
+          workspaceId: 'default',
+          title: 'testttt',
+          username: 'root',
+          authType: 'key',
+          createdAt: DateTime.now(),
+        ),
+      );
+
+      tester.view.physicalSize = const Size(411, 915);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.text('testttt'), findsOneWidget);
+      expect(
+        find.byKey(const Key('copy_identity_button_identity-1')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    });
   });
 }
