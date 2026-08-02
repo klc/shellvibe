@@ -42,7 +42,10 @@ dependencies:
   go_router: ^17.3.0
 
   # Terminal & SSH Engine
-  xterm2: ^5.2.0
+  # Kept in-tree until the Android IME action/composition ordering fix is
+  # released upstream. See third_party/xterm2/README.md.
+  xterm2:
+    path: third_party/xterm2
   dartssh2: ^2.22.5
   flutter_pty: ^0.4.2
 
