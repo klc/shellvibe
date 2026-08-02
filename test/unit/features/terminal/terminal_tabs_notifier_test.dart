@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:terly2/features/hosts/domain/models/host_model.dart';
+import 'package:terly2/features/terminal/domain/models/terminal_tab_session.dart';
 import 'package:terly2/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 
 void main() {
@@ -79,6 +80,36 @@ void main() {
       expect(state.tabs.length, equals(2));
       final splitTab = state.tabs.last;
       expect(splitTab.splitParentId, equals(mainId));
+      expect(splitTab.sessionType, equals(TerminalSessionType.local));
+    });
+
+    test('splitTab on an SSH host tab creates an SSH split inheriting host and identity', () async {
+      final notifier = container.read(terminalTabsProvider.notifier);
+      final host = HostModel(
+        id: 'host-split',
+        workspaceId: 'ws-1',
+        label: 'Split Host',
+        hostname: '127.0.0.1',
+        port: 1,
+        createdAt: DateTime.now(),
+      );
+
+      final openFuture = notifier.openTabForHost(host);
+      final mainId = container.read(terminalTabsProvider).activeTabId!;
+
+      final splitFuture = notifier.splitTab(mainId);
+      final state = container.read(terminalTabsProvider);
+      final splitTab = state.tabs.last;
+
+      // The split mirrors the parent: an SSH session to the same host.
+      expect(splitTab.splitParentId, equals(mainId));
+      expect(splitTab.sessionType, equals(TerminalSessionType.ssh));
+      expect(splitTab.host?.id, equals(host.id));
+      expect(splitTab.isConnecting, isTrue);
+
+      // Await both connection attempts so no in-flight SSH work leaks into
+      // teardown (the connection to port 1 fails and is caught internally).
+      await Future.wait([openFuture, splitFuture ?? Future<void>.value()]);
     });
 
     test('openTabForHost assigns dedicated SSHSessionManager instance per tab', () async {

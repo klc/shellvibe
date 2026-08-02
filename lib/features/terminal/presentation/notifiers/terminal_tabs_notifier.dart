@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:uuid/uuid.dart';
@@ -82,11 +84,27 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       activeTabId: tabId,
     );
 
+    await _connectSshTab(newTab, host, identity, onHostKeyPrompt);
+  }
+
+  /// Opens an SSH shell on [tab] against [host] and wires the resulting
+  /// session into the tab's terminal and bridge.
+  ///
+  /// Shared by [openTabForHost] and by `splitTab` so that splitting an SSH
+  /// host session opens a second SSH session to the same host (and keeps
+  /// splits working on mobile, where a local PTY is not available).
+  Future<void> _connectSshTab(
+    TerminalTabSession tab,
+    HostModel host,
+    IdentityModel? identity,
+    HostKeyPromptCallback? onHostKeyPrompt,
+  ) async {
+    final terminal = tab.terminal;
     try {
       final sessionManager = SSHSessionManager(
         knownHostsDao: ref.read(knownHostsDaoProvider),
       );
-      newTab.sshSessionManager = sessionManager;
+      tab.sshSessionManager = sessionManager;
 
       String cleanHostname = host.hostname.trim();
       String? parsedUser;
@@ -128,9 +146,9 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
           session: sshSession,
         );
 
-        newTab.sshBridge = bridge;
-        newTab.isConnecting = false;
-        newTab.isConnected = true;
+        tab.sshBridge = bridge;
+        tab.isConnecting = false;
+        tab.isConnected = true;
 
         state = state.copyWith(tabs: [...state.tabs]);
       } catch (e) {
@@ -141,9 +159,9 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
         rethrow;
       }
     } catch (e) {
-      newTab.isConnecting = false;
-      newTab.isConnected = false;
-      newTab.errorMessage = e.toString();
+      tab.isConnecting = false;
+      tab.isConnected = false;
+      tab.errorMessage = e.toString();
       terminal.write('\r\n\x1b[1;31m[Connection Error]\x1b[0m Failed to connect: $e\r\n');
       state = state.copyWith(tabs: [...state.tabs]);
     }
@@ -239,23 +257,54 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     }
   }
 
-  void splitTab(String parentTabId, {Axis direction = Axis.horizontal}) {
+  Future<void>? splitTab(
+    String parentTabId, {
+    Axis direction = Axis.horizontal,
+    HostKeyPromptCallback? onHostKeyPrompt,
+  }) {
     final parentIndex = state.tabs.indexWhere((t) => t.id == parentTabId);
-    if (parentIndex == -1) return;
+    if (parentIndex == -1) return null;
 
     final parentTab = state.tabs[parentIndex];
     final splitId = const Uuid().v4();
     final terminal = Terminal(maxLines: 10000);
 
+    // A split pane mirrors the session type of the pane it was created from.
+    // Splitting an SSH host session opens a second SSH session to the same
+    // host rather than a local shell; this also keeps splits working on
+    // mobile, where a local PTY is not available.
+    final isSshSplit = parentTab.sessionType == TerminalSessionType.ssh &&
+        parentTab.host != null;
+
     final splitTab = TerminalTabSession(
       id: splitId,
       title: '${parentTab.title} (Split)',
-      sessionType: TerminalSessionType.local,
+      sessionType: isSshSplit
+          ? TerminalSessionType.ssh
+          : TerminalSessionType.local,
+      host: parentTab.host,
+      identity: parentTab.identity,
       terminal: terminal,
       splitParentId: parentTabId,
       splitDirection: direction,
+      isConnecting: isSshSplit,
     );
     _ownedTabs.add(splitTab);
+
+    if (isSshSplit) {
+      state = state.copyWith(
+        tabs: [...state.tabs, splitTab],
+        activeTabId: splitId,
+      );
+      // Returning the connection future lets callers (and tests) await the
+      // SSH handshake; UI call sites fire-and-forget via unawaited(...).
+      return _connectSshTab(
+        splitTab,
+        parentTab.host!,
+        parentTab.identity,
+        onHostKeyPrompt,
+      );
+    }
 
     try {
       final manager = ref.read(localPtyManagerProvider);
@@ -274,5 +323,6 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       tabs: [...state.tabs, splitTab],
       activeTabId: splitId,
     );
+    return null;
   }
 }

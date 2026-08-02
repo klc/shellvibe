@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -243,9 +245,15 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
               tooltip: 'Split Vertically (Side by Side)',
               onPressed: () {
                 final targetId = tabsState.activeTabId ?? activeRootTab.id;
-                ref
-                    .read(terminalTabsProvider.notifier)
-                    .splitTab(targetId, direction: Axis.horizontal);
+                unawaited(
+                  ref
+                      .read(terminalTabsProvider.notifier)
+                      .splitTab(
+                        targetId,
+                        direction: Axis.horizontal,
+                        onHostKeyPrompt: _promptHostKey,
+                      ),
+                );
               },
             ),
             IconButton(
@@ -254,9 +262,15 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
               tooltip: 'Split Horizontally (Top/Bottom)',
               onPressed: () {
                 final targetId = tabsState.activeTabId ?? activeRootTab.id;
-                ref
-                    .read(terminalTabsProvider.notifier)
-                    .splitTab(targetId, direction: Axis.vertical);
+                unawaited(
+                  ref
+                      .read(terminalTabsProvider.notifier)
+                      .splitTab(
+                        targetId,
+                        direction: Axis.vertical,
+                        onHostKeyPrompt: _promptHostKey,
+                      ),
+                );
               },
             ),
           ],
