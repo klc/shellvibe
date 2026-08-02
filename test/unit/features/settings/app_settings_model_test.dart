@@ -12,6 +12,7 @@ void main() {
       expect(settings.fontFamily, equals('RobotoMono'));
       expect(settings.fontSize, equals(14.0));
       expect(settings.cursorStyle, equals(AppCursorStyle.block));
+      expect(settings.enableLigatures, isTrue);
       expect(settings.autoLockTimerSeconds, equals(0));
       expect(settings.clipboardAutoClearSeconds, equals(30));
       expect(settings.activeWorkspaceId, equals('default'));
@@ -22,6 +23,7 @@ void main() {
       final updated = settings.copyWith(
         palette: AppPalette.catppuccin,
         terminalPalette: TerminalPalette.dracula,
+        enableLigatures: false,
         fontSize: 16.0,
         autoLockTimerSeconds: 60,
         activeWorkspaceId: 'client-ops',
@@ -29,6 +31,7 @@ void main() {
 
       expect(updated.palette, equals(AppPalette.catppuccin));
       expect(updated.terminalPalette, equals(TerminalPalette.dracula));
+      expect(updated.enableLigatures, isFalse);
       expect(updated.fontSize, equals(16.0));
       expect(updated.autoLockTimerSeconds, equals(60));
       expect(updated.fontFamily, equals('RobotoMono'));
@@ -69,6 +72,23 @@ void main() {
       });
 
       expect(restored.activeWorkspaceId, equals('default'));
+    });
+
+    test('serializes and deserializes all new palettes and fonts correctly', () {
+      for (final palette in AppPalette.values) {
+        for (final termPalette in TerminalPalette.values) {
+          final settings = AppSettingsModel(
+            palette: palette,
+            terminalPalette: termPalette,
+            fontFamily: 'JetBrainsMono',
+          );
+
+          final restored = AppSettingsModel.fromJson(settings.toJson());
+          expect(restored.palette, equals(palette));
+          expect(restored.terminalPalette, equals(termPalette));
+          expect(restored.fontFamily, equals('JetBrainsMono'));
+        }
+      }
     });
   });
 }

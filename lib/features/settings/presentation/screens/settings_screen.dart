@@ -273,6 +273,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                         return const Text('Catppuccin');
                                       case AppPalette.nord:
                                         return const Text('Nord');
+                                      case AppPalette.dracula:
+                                        return const Text('Dracula');
+                                      case AppPalette.solarizedDark:
+                                        return const Text('Solarized Dark');
+                                      case AppPalette.tokyoNight:
+                                        return const Text('Tokyo Night');
+                                      case AppPalette.gruvbox:
+                                        return const Text('Gruvbox');
+                                      case AppPalette.oneDark:
+                                        return const Text('One Dark');
                                     }
                                   },
                                   options: const [
@@ -291,6 +301,26 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                     ShadOption(
                                       value: AppPalette.nord,
                                       child: Text('Nord'),
+                                    ),
+                                    ShadOption(
+                                      value: AppPalette.dracula,
+                                      child: Text('Dracula'),
+                                    ),
+                                    ShadOption(
+                                      value: AppPalette.solarizedDark,
+                                      child: Text('Solarized Dark'),
+                                    ),
+                                    ShadOption(
+                                      value: AppPalette.tokyoNight,
+                                      child: Text('Tokyo Night'),
+                                    ),
+                                    ShadOption(
+                                      value: AppPalette.gruvbox,
+                                      child: Text('Gruvbox'),
+                                    ),
+                                    ShadOption(
+                                      value: AppPalette.oneDark,
+                                      child: Text('One Dark'),
                                     ),
                                   ],
                                   onChanged: (palette) {
@@ -339,6 +369,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                         return const Text('Dracula');
                                       case TerminalPalette.solarizedDark:
                                         return const Text('Solarized Dark');
+                                      case TerminalPalette.tokyoNight:
+                                        return const Text('Tokyo Night');
+                                      case TerminalPalette.gruvboxDark:
+                                        return const Text('Gruvbox Dark');
+                                      case TerminalPalette.oneDark:
+                                        return const Text('One Dark');
+                                      case TerminalPalette.monokai:
+                                        return const Text('Monokai Pro');
+                                      case TerminalPalette.cyberpunk:
+                                        return const Text('Cyberpunk');
                                     }
                                   },
                                   options: const [
@@ -366,6 +406,26 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                       value: TerminalPalette.solarizedDark,
                                       child: Text('Solarized Dark'),
                                     ),
+                                    ShadOption(
+                                      value: TerminalPalette.tokyoNight,
+                                      child: Text('Tokyo Night'),
+                                    ),
+                                    ShadOption(
+                                      value: TerminalPalette.gruvboxDark,
+                                      child: Text('Gruvbox Dark'),
+                                    ),
+                                    ShadOption(
+                                      value: TerminalPalette.oneDark,
+                                      child: Text('One Dark'),
+                                    ),
+                                    ShadOption(
+                                      value: TerminalPalette.monokai,
+                                      child: Text('Monokai Pro'),
+                                    ),
+                                    ShadOption(
+                                      value: TerminalPalette.cyberpunk,
+                                      child: Text('Cyberpunk'),
+                                    ),
                                   ],
                                   onChanged: (palette) {
                                     if (palette != null) {
@@ -385,8 +445,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                   initialValue: settings.fontFamily,
                                   selectedOptionBuilder: (context, value) {
                                     switch (value) {
+                                      case 'JetBrainsMono':
+                                        return const Text('JetBrains Mono');
                                       case 'FiraCode':
                                         return const Text('Fira Code');
+                                      case 'SourceCodePro':
+                                        return const Text('Source Code Pro');
+                                      case 'Inconsolata':
+                                        return const Text('Inconsolata');
+                                      case 'Hack':
+                                        return const Text('Hack');
+                                      case 'CascadiaCode':
+                                        return const Text('Cascadia Code');
+                                      case 'SpaceMono':
+                                        return const Text('Space Mono');
                                       case 'Inter':
                                         return const Text('Inter');
                                       case 'Courier':
@@ -402,8 +474,32 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                       child: Text('Roboto Mono'),
                                     ),
                                     ShadOption(
+                                      value: 'JetBrainsMono',
+                                      child: Text('JetBrains Mono'),
+                                    ),
+                                    ShadOption(
                                       value: 'FiraCode',
                                       child: Text('Fira Code'),
+                                    ),
+                                    ShadOption(
+                                      value: 'SourceCodePro',
+                                      child: Text('Source Code Pro'),
+                                    ),
+                                    ShadOption(
+                                      value: 'Inconsolata',
+                                      child: Text('Inconsolata'),
+                                    ),
+                                    ShadOption(
+                                      value: 'Hack',
+                                      child: Text('Hack'),
+                                    ),
+                                    ShadOption(
+                                      value: 'CascadiaCode',
+                                      child: Text('Cascadia Code'),
+                                    ),
+                                    ShadOption(
+                                      value: 'SpaceMono',
+                                      child: Text('Space Mono'),
                                     ),
                                     ShadOption(
                                       value: 'Inter',
@@ -422,6 +518,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                 ),
                               ),
                               const Divider(),
+                               Material(
+                                 color: Colors.transparent,
+                                 child: SwitchListTile(
+                                   key: const Key('settings_font_ligatures_switch'),
+                                   title: const Text('Font Ligatures'),
+                                   subtitle: const Text(
+                                     'Enable programming ligatures (e.g. ->, ==, !=, =>)',
+                                   ),
+                                   value: settings.enableLigatures,
+                                   onChanged: (val) => notifier.setEnableLigatures(val),
+                                 ),
+                               ),
+                               const Divider(),
                               ListTile(
                                 title: const Text('Font Size'),
                                 subtitle: Slider(

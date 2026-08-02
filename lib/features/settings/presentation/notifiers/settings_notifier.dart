@@ -95,6 +95,11 @@ class SettingsNotifier extends _$SettingsNotifier {
     await updateSettings(current.copyWith(cursorStyle: cursorStyle));
   }
 
+  Future<void> setEnableLigatures(bool enabled) async {
+    final current = _base;
+    await updateSettings(current.copyWith(enableLigatures: enabled));
+  }
+
   Future<void> setAutoLockTimer(int seconds) async {
     final current = _base;
     await updateSettings(current.copyWith(autoLockTimerSeconds: seconds));

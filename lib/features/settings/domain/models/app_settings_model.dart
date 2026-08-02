@@ -1,8 +1,31 @@
 import 'package:flutter/material.dart';
 
-enum AppPalette { dark, oled, catppuccin, nord }
+enum AppPalette {
+  dark,
+  oled,
+  catppuccin,
+  nord,
+  dracula,
+  solarizedDark,
+  tokyoNight,
+  gruvbox,
+  oneDark,
+}
 
-enum TerminalPalette { dark, oled, catppuccin, nord, dracula, solarizedDark }
+enum TerminalPalette {
+  dark,
+  oled,
+  catppuccin,
+  nord,
+  dracula,
+  solarizedDark,
+  tokyoNight,
+  gruvboxDark,
+  oneDark,
+  monokai,
+  cyberpunk,
+}
+
 
 enum AppCursorStyle { block, underline, bar }
 
@@ -14,6 +37,7 @@ class AppSettingsModel {
   final String fontFamily;
   final double fontSize;
   final AppCursorStyle cursorStyle;
+  final bool enableLigatures;
   final int autoLockTimerSeconds;
   final int clipboardAutoClearSeconds;
   final String activeWorkspaceId;
@@ -25,6 +49,7 @@ class AppSettingsModel {
     this.fontFamily = 'RobotoMono',
     this.fontSize = 14.0,
     this.cursorStyle = AppCursorStyle.block,
+    this.enableLigatures = true,
     this.autoLockTimerSeconds = 0,
     this.clipboardAutoClearSeconds = 30,
     this.activeWorkspaceId = 'default',
@@ -37,6 +62,7 @@ class AppSettingsModel {
     String? fontFamily,
     double? fontSize,
     AppCursorStyle? cursorStyle,
+    bool? enableLigatures,
     int? autoLockTimerSeconds,
     int? clipboardAutoClearSeconds,
     String? activeWorkspaceId,
@@ -48,6 +74,7 @@ class AppSettingsModel {
       fontFamily: fontFamily ?? this.fontFamily,
       fontSize: fontSize ?? this.fontSize,
       cursorStyle: cursorStyle ?? this.cursorStyle,
+      enableLigatures: enableLigatures ?? this.enableLigatures,
       autoLockTimerSeconds: autoLockTimerSeconds ?? this.autoLockTimerSeconds,
       clipboardAutoClearSeconds:
           clipboardAutoClearSeconds ?? this.clipboardAutoClearSeconds,
@@ -62,6 +89,7 @@ class AppSettingsModel {
     'fontFamily': fontFamily,
     'fontSize': fontSize,
     'cursorStyle': cursorStyle.name,
+    'enableLigatures': enableLigatures,
     'autoLockTimerSeconds': autoLockTimerSeconds,
     'clipboardAutoClearSeconds': clipboardAutoClearSeconds,
     'activeWorkspaceId': activeWorkspaceId,
@@ -87,6 +115,7 @@ class AppSettingsModel {
         (e) => e.name == json['cursorStyle'],
         orElse: () => AppCursorStyle.block,
       ),
+      enableLigatures: (json['enableLigatures'] as bool?) ?? true,
       autoLockTimerSeconds: (json['autoLockTimerSeconds'] as int?) ?? 0,
       clipboardAutoClearSeconds:
           (json['clipboardAutoClearSeconds'] as int?) ?? 30,

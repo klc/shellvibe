@@ -63,6 +63,46 @@ class AppTheme {
             border: Color(0xFF4C566A),
           );
           break;
+        case AppPalette.dracula:
+          colorScheme = const ShadSlateColorScheme.dark(
+            background: Color(0xFF282A36),
+            card: Color(0xFF343746),
+            primary: Color(0xFFBD93F9),
+            border: Color(0xFF44475A),
+          );
+          break;
+        case AppPalette.solarizedDark:
+          colorScheme = const ShadSlateColorScheme.dark(
+            background: Color(0xFF002B36),
+            card: Color(0xFF073642),
+            primary: Color(0xFF2AA198),
+            border: Color(0xFF586E75),
+          );
+          break;
+        case AppPalette.tokyoNight:
+          colorScheme = const ShadSlateColorScheme.dark(
+            background: Color(0xFF1A1B26),
+            card: Color(0xFF24283B),
+            primary: Color(0xFF7AA2F7),
+            border: Color(0xFF414868),
+          );
+          break;
+        case AppPalette.gruvbox:
+          colorScheme = const ShadSlateColorScheme.dark(
+            background: Color(0xFF282828),
+            card: Color(0xFF3C3836),
+            primary: Color(0xFFFE8019),
+            border: Color(0xFF504945),
+          );
+          break;
+        case AppPalette.oneDark:
+          colorScheme = const ShadSlateColorScheme.dark(
+            background: Color(0xFF21252B),
+            card: Color(0xFF282C34),
+            primary: Color(0xFF61AFEF),
+            border: Color(0xFF3E4451),
+          );
+          break;
         case AppPalette.dark:
           colorScheme = const ShadSlateColorScheme.dark(
             background: Color(0xFF0B0E12),
@@ -137,6 +177,61 @@ class AppTheme {
             canvas: scaffoldBg,
             surface: cardBg,
             surfaceRaised: const Color(0xFF434C5E),
+          );
+          break;
+        case AppPalette.dracula:
+          scaffoldBg = const Color(0xFF282A36);
+          cardBg = const Color(0xFF343746);
+          primaryColor = const Color(0xFFBD93F9);
+          accentColor = const Color(0xFFFF79C6);
+          tokens = TerlyTokens.dark.copyWith(
+            canvas: scaffoldBg,
+            surface: cardBg,
+            surfaceRaised: const Color(0xFF44475A),
+          );
+          break;
+        case AppPalette.solarizedDark:
+          scaffoldBg = const Color(0xFF002B36);
+          cardBg = const Color(0xFF073642);
+          primaryColor = const Color(0xFF2AA198);
+          accentColor = const Color(0xFF268BD2);
+          tokens = TerlyTokens.dark.copyWith(
+            canvas: scaffoldBg,
+            surface: cardBg,
+            surfaceRaised: const Color(0xFF586E75),
+          );
+          break;
+        case AppPalette.tokyoNight:
+          scaffoldBg = const Color(0xFF1A1B26);
+          cardBg = const Color(0xFF24283B);
+          primaryColor = const Color(0xFF7AA2F7);
+          accentColor = const Color(0xFFBB9AF7);
+          tokens = TerlyTokens.dark.copyWith(
+            canvas: scaffoldBg,
+            surface: cardBg,
+            surfaceRaised: const Color(0xFF414868),
+          );
+          break;
+        case AppPalette.gruvbox:
+          scaffoldBg = const Color(0xFF282828);
+          cardBg = const Color(0xFF3C3836);
+          primaryColor = const Color(0xFFFE8019);
+          accentColor = const Color(0xFFFABD2F);
+          tokens = TerlyTokens.dark.copyWith(
+            canvas: scaffoldBg,
+            surface: cardBg,
+            surfaceRaised: const Color(0xFF504945),
+          );
+          break;
+        case AppPalette.oneDark:
+          scaffoldBg = const Color(0xFF21252B);
+          cardBg = const Color(0xFF282C34);
+          primaryColor = const Color(0xFF61AFEF);
+          accentColor = const Color(0xFFC678DD);
+          tokens = TerlyTokens.dark.copyWith(
+            canvas: scaffoldBg,
+            surface: cardBg,
+            surfaceRaised: const Color(0xFF3E4451),
           );
           break;
         case AppPalette.dark:

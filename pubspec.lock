@@ -493,6 +493,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "17.3.0"
+  google_fonts:
+    dependency: "direct main"
+    description:
+      name: google_fonts
+      sha256: ba03d03bcaa2f6cb7bd920e3b5027181db75ab524f8891c8bc3aa603885b8055
+      url: "https://pub.dev"
+    source: hosted
+    version: "6.3.3"
   graphs:
     dependency: transitive
     description:
@@ -1413,10 +1421,12 @@ packages:
   xterm2:
     dependency: "direct main"
     description:
-      path: "third_party/xterm2"
-      relative: true
-    source: path
-    version: "5.2.0"
+      path: "."
+      ref: HEAD
+      resolved-ref: "5a4a920cc4f163210d59bf7732e789092c56c32b"
+      url: "https://github.com/klc/xterm2.git"
+    source: git
+    version: "5.3.0"
   yaml:
     dependency: transitive
     description:

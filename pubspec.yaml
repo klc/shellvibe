@@ -45,7 +45,8 @@ dependencies:
   # Kept in-tree until the Android IME action/composition ordering fix is
   # released upstream. See third_party/xterm2/README.md.
   xterm2:
-    path: third_party/xterm2
+    git:
+      url: https://github.com/klc/xterm2.git
   dartssh2: ^2.22.5
   flutter_pty: ^0.4.2
 
@@ -72,6 +73,7 @@ dependencies:
   uuid: ^4.6.0
   shadcn_ui: ^0.56.0
   lucide_icons_flutter: ^3.1.15
+  google_fonts: ^6.2.1
 
 dev_dependencies:
   flutter_test:
