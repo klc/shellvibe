@@ -105,7 +105,17 @@ class _IdentityFormDialogState extends ConsumerState<IdentityFormDialog> {
     final isEditing = widget.initialIdentity != null;
 
     return ShadDialog(
-      title: Text(isEditing ? 'Edit Identity' : 'Add New Identity'),
+      title: Row(
+        children: [
+          const Icon(LucideIcons.keyRound, size: 20),
+          const SizedBox(width: 8),
+          Text(isEditing ? 'Edit Identity' : 'Add New Identity'),
+        ],
+      ),
+      description: const Text(
+        'Credentials used for SSH authentication. Secrets are encrypted '
+        'and stored securely in the Vault.',
+      ),
       actions: [
         ShadButton.outline(
           onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
@@ -124,19 +134,27 @@ class _IdentityFormDialogState extends ConsumerState<IdentityFormDialog> {
         ),
       ],
       child: SizedBox(
-        width: 440,
+        width: 460,
         child: SingleChildScrollView(
           child: Form(
             key: _formKey,
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SizedBox(height: 8),
+                // ---- Basic details ----
+                const _FormSectionHeader(
+                  icon: LucideIcons.user,
+                  title: 'Basic Details',
+                ),
+                const SizedBox(height: 12),
                 ShadInputFormField(
                   key: const Key('identity_title_input'),
                   controller: _titleController,
                   label: const Text('Title / Label'),
                   placeholder: const Text('e.g. Production Server Key'),
+                  leading: const Icon(LucideIcons.tag, size: 16),
                   validator: (v) =>
                       v.trim().isEmpty ? 'Title is required' : null,
                 ),
@@ -146,6 +164,7 @@ class _IdentityFormDialogState extends ConsumerState<IdentityFormDialog> {
                   controller: _usernameController,
                   label: const Text('Username (Optional)'),
                   placeholder: const Text('e.g. root, ubuntu (optional)'),
+                  leading: const Icon(LucideIcons.user, size: 16),
                 ),
                 const SizedBox(height: 12),
                 ShadSelectFormField<String>(
@@ -174,6 +193,12 @@ class _IdentityFormDialogState extends ConsumerState<IdentityFormDialog> {
                     }
                   },
                 ),
+                const SizedBox(height: 20),
+                // ---- Credentials ----
+                const _FormSectionHeader(
+                  icon: LucideIcons.lockKeyhole,
+                  title: 'Credentials',
+                ),
                 const SizedBox(height: 12),
                 if (_authType == 'password') ...[
                   ShadInputFormField(
@@ -181,6 +206,7 @@ class _IdentityFormDialogState extends ConsumerState<IdentityFormDialog> {
                     controller: _passwordController,
                     obscureText: _obscurePassword,
                     label: const Text('Password'),
+                    leading: const Icon(LucideIcons.lock, size: 16),
                     validator: (v) =>
                         v.trim().isEmpty ? 'Password is required' : null,
                     trailing: IconButton(
@@ -206,6 +232,7 @@ class _IdentityFormDialogState extends ConsumerState<IdentityFormDialog> {
                     placeholder: const Text(
                       '-----BEGIN OPENSSH PRIVATE KEY-----...',
                     ),
+                    leading: const Icon(LucideIcons.file, size: 16),
                     validator: (v) =>
                         v.trim().isEmpty ? 'Private key is required' : null,
                   ),
@@ -215,15 +242,17 @@ class _IdentityFormDialogState extends ConsumerState<IdentityFormDialog> {
                     controller: _passphraseController,
                     obscureText: true,
                     label: const Text('Passphrase (Optional)'),
+                    leading: const Icon(LucideIcons.lockOpen, size: 16),
+                    placeholder: const Text('Key passphrase, if any'),
                   ),
                 ],
                 if (_authType == 'agent') ...[
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8.0),
-                    child: Text(
-                      'Uses the local system SSH agent for authentication.',
-                      style: TextStyle(color: Colors.grey),
-                    ),
+                  _InfoNote(
+                    icon: LucideIcons.shieldCheck,
+                    text:
+                        'No secret is stored. The local system SSH agent is '
+                        'used for authentication at connect time.',
+                    color: Theme.of(context).colorScheme.primary,
                   ),
                 ],
               ],
@@ -234,3 +263,76 @@ class _IdentityFormDialogState extends ConsumerState<IdentityFormDialog> {
     );
   }
 }
+
+/// Small section title used to group related form fields.
+class _FormSectionHeader extends StatelessWidget {
+  final IconData icon;
+  final String title;
+
+  const _FormSectionHeader({required this.icon, required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      children: [
+        Icon(icon, size: 15, color: theme.colorScheme.primary),
+        const SizedBox(width: 8),
+        Text(
+          title,
+          style: theme.textTheme.labelLarge?.copyWith(
+            color: theme.colorScheme.primary,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Divider(
+            height: 1,
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Informational callout used for hint/note style content.
+class _InfoNote extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  final Color color;
+
+  const _InfoNote({
+    required this.icon,
+    required this.text,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              text,
+              style: theme.textTheme.bodySmall,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+

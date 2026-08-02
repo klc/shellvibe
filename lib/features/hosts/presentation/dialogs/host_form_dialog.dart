@@ -193,37 +193,73 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
             key: _formKey,
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SizedBox(height: 8),
-                ShadInputFormField(
-                  key: const Key('host_label_input'),
-                  controller: _labelController,
-                  label: const Text('Label / Name'),
-                  placeholder: const Text('e.g. AWS Production Web'),
-                  leading: const Icon(LucideIcons.tag, size: 16),
-                  validator: (v) =>
-                      v.trim().isEmpty ? 'Label is required' : null,
+                const _FormSectionHeader(
+                  icon: LucideIcons.server,
+                  title: 'Connection',
                 ),
                 const SizedBox(height: 12),
-                ShadInputFormField(
-                  key: const Key('host_hostname_input'),
-                  focusNode: _hostnameFocusNode,
-                  controller: _hostnameController,
-                  label: const Text('Hostname / IP Address'),
-                  placeholder: const Text(
-                    'e.g. 192.168.1.10 or root@192.168.1.10',
-                  ),
-                  leading: const Icon(LucideIcons.globe, size: 16),
-                  validator: (v) =>
-                      v.trim().isEmpty ? 'Hostname is required' : null,
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: ShadInputFormField(
+                        key: const Key('host_label_input'),
+                        controller: _labelController,
+                        label: const Text('Label / Name'),
+                        placeholder: const Text('e.g. AWS Production Web'),
+                        leading: const Icon(LucideIcons.tag, size: 16),
+                        validator: (v) =>
+                            v.trim().isEmpty ? 'Label is required' : null,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 2,
+                      child: ShadInputFormField(
+                        key: const Key('host_colortag_input'),
+                        controller: _colorTagController,
+                        label: const Text('Color Tag'),
+                        placeholder: const Text('#4CAF50 or green'),
+                        leading: const Icon(LucideIcons.palette, size: 16),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 12),
-                ShadInputFormField(
-                  key: const Key('host_username_input'),
-                  controller: _usernameController,
-                  label: const Text('Username'),
-                  placeholder: const Text('e.g. root or admin'),
-                  leading: const Icon(LucideIcons.user, size: 16),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: ShadInputFormField(
+                        key: const Key('host_hostname_input'),
+                        focusNode: _hostnameFocusNode,
+                        controller: _hostnameController,
+                        label: const Text('Hostname / IP Address'),
+                        placeholder: const Text(
+                          'e.g. 192.168.1.10 or root@192.168.1.10',
+                        ),
+                        leading: const Icon(LucideIcons.globe, size: 16),
+                        validator: (v) =>
+                            v.trim().isEmpty ? 'Hostname is required' : null,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 1,
+                      child: ShadInputFormField(
+                        key: const Key('host_username_input'),
+                        controller: _usernameController,
+                        label: const Text('Username'),
+                        placeholder: const Text('e.g. root'),
+                        leading: const Icon(LucideIcons.user, size: 16),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 12),
                 Row(
@@ -273,38 +309,10 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                // Group Selection
-                groupsAsync.when(
-                  data: (groups) => ShadSelectFormField<String?>(
-                    key: const Key('host_group_dropdown'),
-                    initialValue: _selectedGroupId,
-                    label: const Text('Group / Folder'),
-                    selectedOptionBuilder: (context, value) {
-                      if (value == null) {
-                        return const Text('(None - Ungrouped)');
-                      }
-                      final g = groups
-                          .where((item) => item.id == value)
-                          .firstOrNull;
-                      return Text(g?.name ?? value);
-                    },
-                    options: [
-                      const ShadOption<String?>(
-                        value: null,
-                        child: Text('(None - Ungrouped)'),
-                      ),
-                      ...groups.map(
-                        (g) => ShadOption<String?>(
-                          value: g.id,
-                          child: Text(g.name),
-                        ),
-                      ),
-                    ],
-                    onChanged: (val) => setState(() => _selectedGroupId = val),
-                  ),
-                  loading: () => const LinearProgressIndicator(),
-                  error: (e, s) => Text('Error loading groups: $e'),
+                const SizedBox(height: 20),
+                const _FormSectionHeader(
+                  icon: LucideIcons.lockKeyhole,
+                  title: 'Authentication',
                 ),
                 const SizedBox(height: 12),
                 // Identity Selection
@@ -343,8 +351,58 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                     onChanged: (val) =>
                         setState(() => _selectedIdentityId = val),
                   ),
-                  loading: () => const LinearProgressIndicator(),
-                  error: (e, s) => Text('Error loading identities: $e'),
+                  loading: () => const _SelectStatus(
+                    icon: LucideIcons.loaderCircle,
+                    text: 'Loading identities…',
+                  ),
+                  error: (e, s) => const _SelectStatus(
+                    icon: LucideIcons.triangleAlert,
+                    text: 'Failed to load identities',
+                  ),
+                ),
+                const SizedBox(height: 20),
+                const _FormSectionHeader(
+                  icon: LucideIcons.network,
+                  title: 'Routing & Organization',
+                ),
+                const SizedBox(height: 12),
+                // Group Selection
+                groupsAsync.when(
+                  data: (groups) => ShadSelectFormField<String?>(
+                    key: const Key('host_group_dropdown'),
+                    initialValue: _selectedGroupId,
+                    label: const Text('Group / Folder'),
+                    selectedOptionBuilder: (context, value) {
+                      if (value == null) {
+                        return const Text('(None - Ungrouped)');
+                      }
+                      final g = groups
+                          .where((item) => item.id == value)
+                          .firstOrNull;
+                      return Text(g?.name ?? value);
+                    },
+                    options: [
+                      const ShadOption<String?>(
+                        value: null,
+                        child: Text('(None - Ungrouped)'),
+                      ),
+                      ...groups.map(
+                        (g) => ShadOption<String?>(
+                          value: g.id,
+                          child: Text(g.name),
+                        ),
+                      ),
+                    ],
+                    onChanged: (val) => setState(() => _selectedGroupId = val),
+                  ),
+                  loading: () => const _SelectStatus(
+                    icon: LucideIcons.loaderCircle,
+                    text: 'Loading groups…',
+                  ),
+                  error: (e, s) => const _SelectStatus(
+                    icon: LucideIcons.triangleAlert,
+                    text: 'Failed to load groups',
+                  ),
                 ),
                 const SizedBox(height: 12),
                 // Jump Host Selection
@@ -404,16 +462,14 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                           setState(() => _selectedJumpHostId = val),
                     );
                   },
-                  loading: () => const LinearProgressIndicator(),
-                  error: (e, s) => Text('Error loading hosts: $e'),
-                ),
-                const SizedBox(height: 12),
-                ShadInputFormField(
-                  key: const Key('host_colortag_input'),
-                  controller: _colorTagController,
-                  label: const Text('Color Tag (HEX / Name)'),
-                  placeholder: const Text('e.g. #4CAF50 or green'),
-                  leading: const Icon(LucideIcons.palette, size: 16),
+                  loading: () => const _SelectStatus(
+                    icon: LucideIcons.loaderCircle,
+                    text: 'Loading jump hosts…',
+                  ),
+                  error: (e, s) => const _SelectStatus(
+                    icon: LucideIcons.triangleAlert,
+                    text: 'Failed to load jump hosts',
+                  ),
                 ),
               ],
             ),
@@ -423,3 +479,65 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
     );
   }
 }
+
+/// Small section title used to group related form fields.
+class _FormSectionHeader extends StatelessWidget {
+  final IconData icon;
+  final String title;
+
+  const _FormSectionHeader({required this.icon, required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      children: [
+        Icon(icon, size: 15, color: theme.colorScheme.primary),
+        const SizedBox(width: 8),
+        Text(
+          title,
+          style: theme.textTheme.labelLarge?.copyWith(
+            color: theme.colorScheme.primary,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Divider(
+            height: 1,
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Slight placeholder shown while an async select is loading or failed.
+class _SelectStatus extends StatelessWidget {
+  final IconData icon;
+  final String text;
+
+  const _SelectStatus({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest
+            .withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 15, color: theme.colorScheme.outline),
+          const SizedBox(width: 8),
+          Text(text, style: theme.textTheme.bodySmall),
+        ],
+      ),
+    );
+  }
+}
+
