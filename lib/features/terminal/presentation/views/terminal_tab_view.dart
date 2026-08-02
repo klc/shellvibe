@@ -40,10 +40,25 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
     super.dispose();
   }
 
+  TerminalTabSession? _resolveRootTab(TerminalTabsState tabsState) {
+    final activeTab = tabsState.activeTab;
+    if (activeTab == null) return null;
+    var current = activeTab;
+    while (current.splitParentId != null) {
+      final parent = tabsState.tabs.firstWhere(
+        (t) => t.id == current.splitParentId,
+        orElse: () => current,
+      );
+      if (parent.id == current.id) break;
+      current = parent;
+    }
+    return current;
+  }
+
   @override
   Widget build(BuildContext context) {
     final tabsState = ref.watch(terminalTabsProvider);
-    final activeTab = tabsState.activeTab;
+    final activeRootTab = _resolveRootTab(tabsState);
 
     return Focus(
       focusNode: _focusNode,
@@ -59,13 +74,17 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
             },
           },
           const SingleActivator(LogicalKeyboardKey.keyW, meta: true): () {
-            if (activeTab != null) {
-              ref.read(terminalTabsProvider.notifier).closeTab(activeTab.id);
+            if (activeRootTab != null) {
+              ref
+                  .read(terminalTabsProvider.notifier)
+                  .closeTab(activeRootTab.id);
             }
           },
           const SingleActivator(LogicalKeyboardKey.keyW, control: true): () {
-            if (activeTab != null) {
-              ref.read(terminalTabsProvider.notifier).closeTab(activeTab.id);
+            if (activeRootTab != null) {
+              ref
+                  .read(terminalTabsProvider.notifier)
+                  .closeTab(activeRootTab.id);
             }
           },
         },
@@ -74,12 +93,12 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
           body: Column(
             children: [
               // Top Tab Bar
-              _buildTabBar(context, ref, tabsState),
+              _buildTabBar(context, ref, tabsState, activeRootTab),
               // Tab Content / Body
               Expanded(
-                child: activeTab == null
+                child: activeRootTab == null
                     ? _buildEmptyState(context, ref)
-                    : _buildTabBody(context, ref, tabsState, activeTab),
+                    : _buildTabBody(context, ref, tabsState, activeRootTab),
               ),
             ],
           ),
@@ -92,8 +111,11 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
     BuildContext context,
     WidgetRef ref,
     TerminalTabsState tabsState,
+    TerminalTabSession? activeRootTab,
   ) {
     final tokens = TerlyTokens.resolve(context);
+    final rootTabs =
+        tabsState.tabs.where((t) => t.splitParentId == null).toList();
 
     return Container(
       height: 42,
@@ -106,10 +128,10 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
           Expanded(
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
-              itemCount: tabsState.tabs.length,
+              itemCount: rootTabs.length,
               itemBuilder: (context, index) {
-                final tab = tabsState.tabs[index];
-                final isActive = tab.id == tabsState.activeTabId;
+                final tab = rootTabs[index];
+                final isActive = tab.id == activeRootTab?.id;
                 final isProduction = tab.title.toLowerCase().contains('prod');
                 final statusColor = tab.errorMessage != null
                     ? tokens.danger
@@ -212,21 +234,33 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
               },
             ),
           ),
-          // Split Pane Action Button
-          if (tabsState.activeTabId != null)
+          // Split Pane Action Buttons (Vertical & Horizontal Split)
+          if (activeRootTab != null) ...[
             IconButton(
-              key: const Key('split_tab_button'),
+              key: const Key('split_vertical_button'),
               icon: const Icon(LucideIcons.columns2, size: 17),
-              tooltip: 'Split Pane',
+              tooltip: 'Split Vertically (Side by Side)',
               onPressed: () {
-                ref
-                    .read(terminalTabsProvider.notifier)
-                    .splitTab(
-                      tabsState.activeTabId!,
+                final targetId = tabsState.activeTabId ?? activeRootTab.id;
+                ref.read(terminalTabsProvider.notifier).splitTab(
+                      targetId,
                       direction: Axis.horizontal,
                     );
               },
             ),
+            IconButton(
+              key: const Key('split_horizontal_button'),
+              icon: const Icon(LucideIcons.rows2, size: 17),
+              tooltip: 'Split Horizontally (Top/Bottom)',
+              onPressed: () {
+                final targetId = tabsState.activeTabId ?? activeRootTab.id;
+                ref.read(terminalTabsProvider.notifier).splitTab(
+                      targetId,
+                      direction: Axis.vertical,
+                    );
+              },
+            ),
+          ],
           // New Tab Button
           IconButton(
             key: const Key('new_tab_button'),
@@ -243,29 +277,119 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
     BuildContext context,
     WidgetRef ref,
     TerminalTabsState tabsState,
-    TerminalTabSession activeTab,
+    TerminalTabSession activeRootTab,
   ) {
     final tokens = TerlyTokens.resolve(context);
+    return _buildSessionTree(
+      context,
+      ref,
+      activeRootTab,
+      tabsState.tabs,
+      tokens,
+    );
+  }
 
-    // Check if active tab has split children
-    final splits = tabsState.tabs
-        .where((t) => t.splitParentId == activeTab.id)
-        .toList();
+  Widget _buildSessionTree(
+    BuildContext context,
+    WidgetRef ref,
+    TerminalTabSession session,
+    List<TerminalTabSession> allTabs,
+    TerlyTokens tokens,
+  ) {
+    final children =
+        allTabs.where((t) => t.splitParentId == session.id).toList();
 
-    if (splits.isEmpty) {
-      return TerminalScreen(session: activeTab);
+    Widget buildSinglePane(TerminalTabSession paneSession) {
+      if (paneSession.splitParentId == null) {
+        return TerminalScreen(session: paneSession);
+      }
+      return Column(
+        children: [
+          Container(
+            height: 28,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            decoration: BoxDecoration(
+              color: tokens.surfaceRaised,
+              border: Border(bottom: BorderSide(color: tokens.border)),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  paneSession.sessionType == TerminalSessionType.ssh
+                      ? LucideIcons.terminal
+                      : LucideIcons.monitor,
+                  size: 13,
+                  color: tokens.textMuted,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    paneSession.title,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: tokens.textMuted,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Semantics(
+                  label: 'Close split pane ${paneSession.title}',
+                  button: true,
+                  child: InkWell(
+                    key: Key('close_split_${paneSession.id}'),
+                    onTap: () => ref
+                        .read(terminalTabsProvider.notifier)
+                        .closeTab(paneSession.id),
+                    child: Padding(
+                      padding: const EdgeInsets.all(2.0),
+                      child: Icon(
+                        LucideIcons.x,
+                        size: 13,
+                        color: tokens.textMuted,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(child: TerminalScreen(session: paneSession)),
+        ],
+      );
     }
 
-    // Render Side-by-Side Split View
-    return Row(
-      children: [
-        Expanded(child: TerminalScreen(session: activeTab)),
-        VerticalDivider(width: 2, color: tokens.border),
-        ...splits.map(
-          (splitTab) => Expanded(child: TerminalScreen(session: splitTab)),
-        ),
-      ],
-    );
+    Widget resultWidget = buildSinglePane(session);
+
+    if (children.isEmpty) {
+      return resultWidget;
+    }
+
+    for (final child in children) {
+      final childTree = _buildSessionTree(context, ref, child, allTabs, tokens);
+      final direction = child.splitDirection ?? Axis.horizontal;
+      if (direction == Axis.vertical) {
+        // Yatay bölme (Horizontal split line): Panes stacked top-to-bottom in a Column
+        resultWidget = Column(
+          children: [
+            Expanded(child: resultWidget),
+            Container(height: 2, color: tokens.border),
+            Expanded(child: childTree),
+          ],
+        );
+      } else {
+        // Dikey bölme (Vertical split line): Panes side-by-side in a Row
+        resultWidget = Row(
+          children: [
+            Expanded(child: resultWidget),
+            VerticalDivider(width: 2, color: tokens.border),
+            Expanded(child: childTree),
+          ],
+        );
+      }
+    }
+
+    return resultWidget;
   }
 
   Widget _buildEmptyState(BuildContext context, WidgetRef ref) {

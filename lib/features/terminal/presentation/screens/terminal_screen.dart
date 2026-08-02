@@ -405,6 +405,7 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
               session.terminal,
               theme: theme,
               autofocus: true,
+              deleteDetection: shouldShowExtraKeys,
               cursorType: switch (settings.cursorStyle) {
                 AppCursorStyle.block => TerminalCursorType.block,
                 AppCursorStyle.underline => TerminalCursorType.underline,

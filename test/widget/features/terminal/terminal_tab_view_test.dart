@@ -131,5 +131,34 @@ void main() {
 
       expect(find.byKey(const Key('empty_open_local_button')), findsOneWidget);
     });
+
+    testWidgets('Vertical and Horizontal split buttons create split sessions without extra top tab bar entries', (tester) async {
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      // Open initial local tab
+      await tester.tap(find.byKey(const Key('empty_open_local_button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.byKey(const Key('split_vertical_button')), findsOneWidget);
+      expect(find.byKey(const Key('split_horizontal_button')), findsOneWidget);
+
+      // Tap vertical split
+      await tester.tap(find.byKey(const Key('split_vertical_button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      // Tap horizontal split
+      await tester.tap(find.byKey(const Key('split_horizontal_button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      // Top tab bar should only have 1 tab header (the root tab)
+      expect(find.byKey(const Key('tab_header_local_shell'), skipOffstage: false), findsNothing);
+      expect(find.byIcon(LucideIcons.columns2), findsOneWidget);
+      expect(find.byIcon(LucideIcons.rows2), findsOneWidget);
+    });
   });
 }

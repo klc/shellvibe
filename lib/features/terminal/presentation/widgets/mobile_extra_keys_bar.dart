@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:xterm2/xterm.dart';
 
 class MobileExtraKeysBar extends StatefulWidget {
@@ -84,6 +85,17 @@ class _MobileExtraKeysBarState extends State<MobileExtraKeysBar> {
     } else if (widget.terminal != null) {
       widget.terminal!.onOutput?.call(output);
     }
+
+    // Reset Android/iOS IME state after extra key press to prevent composition corruption
+    try {
+      SystemChannels.textInput.invokeMethod(
+        'TextInput.setEditingState',
+        const TextEditingValue(
+          text: '  ',
+          selection: TextSelection.collapsed(offset: 2),
+        ).toJSON(),
+      );
+    } catch (_) {}
 
     // Reset sticky keys after next keypress
     if (_ctrlActive || _altActive) {
