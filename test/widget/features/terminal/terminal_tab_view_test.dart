@@ -10,6 +10,7 @@ import 'package:terly2/features/terminal/presentation/notifiers/terminal_tabs_no
 import 'package:terly2/features/terminal/presentation/views/terminal_tab_view.dart';
 import 'package:terly2/shared/database/app_database.dart';
 import 'package:terly2/shared/providers/database_providers.dart';
+import 'package:xterm2/xterm.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -197,6 +198,49 @@ void main() {
       expect(find.byKey(const Key('tab_header_local_shell'), skipOffstage: false), findsNothing);
       expect(find.byIcon(LucideIcons.columns2), findsOneWidget);
       expect(find.byIcon(LucideIcons.rows2), findsOneWidget);
+    });
+
+    testWidgets('⌘+click selects panes for broadcast; plain click clears it', (
+      tester,
+    ) async {
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      // Open one local shell, then split twice -> three panes (headers appear).
+      await tester.tap(find.byKey(const Key('empty_open_local_button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.tap(find.byKey(const Key('split_vertical_button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.tap(find.byKey(const Key('split_horizontal_button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.byType(TerminalView), findsNWidgets(3));
+
+      // ⌘+click pane 0 and pane 1 -> two panes selected, broadcast live.
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+      await tester.tap(find.byType(TerminalView).at(0));
+      await tester.pump();
+      await tester.tap(find.byType(TerminalView).at(1));
+      await tester.pump();
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+      await tester.pump();
+
+      expect(find.textContaining('· broadcast'), findsNWidgets(2));
+      expect(
+        find.text('broadcast 2/2'),
+        findsOneWidget, // status bar: 2 deliverable of 2 selected
+      );
+
+      // Plain click on an unselected pane exits broadcast.
+      await tester.tap(find.byType(TerminalView).at(2));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.textContaining('broadcast'), findsNothing);
     });
   });
 }

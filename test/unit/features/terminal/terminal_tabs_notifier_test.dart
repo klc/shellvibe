@@ -68,6 +68,82 @@ void main() {
       expect(state.activeTabId, equals(id1));
     });
 
+    test('togglePaneSelection toggles membership and isBroadcasting', () {
+      final notifier = container.read(terminalTabsProvider.notifier);
+
+      notifier.openLocalTab(title: 'A');
+      final a = container.read(terminalTabsProvider).activeTabId!;
+      notifier.openLocalTab(title: 'B');
+      final b = container.read(terminalTabsProvider).activeTabId!;
+
+      expect(container.read(terminalTabsProvider).isBroadcasting, isFalse);
+
+      notifier.togglePaneSelection(a);
+      notifier.togglePaneSelection(b);
+
+      var state = container.read(terminalTabsProvider);
+      expect(state.selectedPaneIds, {a, b});
+      expect(state.isBroadcasting, isTrue);
+
+      notifier.togglePaneSelection(a);
+
+      state = container.read(terminalTabsProvider);
+      expect(state.selectedPaneIds, {b});
+      expect(state.isBroadcasting, isFalse);
+    });
+
+    test('tapPane modifier click selects and activates; plain click on an '
+        'unselected pane clears the selection', () {
+      final notifier = container.read(terminalTabsProvider.notifier);
+
+      notifier.openLocalTab(title: 'A');
+      final a = container.read(terminalTabsProvider).activeTabId!;
+      notifier.openLocalTab(title: 'B');
+      final b = container.read(terminalTabsProvider).activeTabId!;
+      notifier.openLocalTab(title: 'C');
+      final c = container.read(terminalTabsProvider).activeTabId!;
+
+      notifier.tapPane(a, broadcastModifier: true);
+      notifier.tapPane(b, broadcastModifier: true);
+
+      var state = container.read(terminalTabsProvider);
+      expect(state.selectedPaneIds, {a, b});
+      expect(state.activeTabId, b); // last modifier click becomes origin
+
+      // Plain click on an unselected pane exits broadcast and focuses it.
+      notifier.tapPane(c, broadcastModifier: false);
+
+      state = container.read(terminalTabsProvider);
+      expect(state.selectedPaneIds, isEmpty);
+      expect(state.activeTabId, c);
+    });
+
+    test('closeTab clears the closed pane from the selection', () async {
+      final notifier = container.read(terminalTabsProvider.notifier);
+
+      notifier.openLocalTab(title: 'A');
+      final a = container.read(terminalTabsProvider).activeTabId!;
+      notifier.openLocalTab(title: 'B');
+      final b = container.read(terminalTabsProvider).activeTabId!;
+
+      notifier.togglePaneSelection(a);
+      notifier.togglePaneSelection(b);
+
+      await notifier.closeTab(a);
+
+      final state = container.read(terminalTabsProvider);
+      expect(state.selectedPaneIds, {b});
+      expect(state.isBroadcasting, isFalse); // only one pane left
+    });
+
+    test('sendTextToSelectedPanes is a no-op when nothing is selected', () {
+      final notifier = container.read(terminalTabsProvider.notifier);
+
+      notifier.openLocalTab(title: 'A');
+
+      expect(() => notifier.sendTextToSelectedPanes('ls'), returnsNormally);
+    });
+
     test('splitTab creates split pane session', () {
       final notifier = container.read(terminalTabsProvider.notifier);
 

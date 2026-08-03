@@ -110,7 +110,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
               ),
               if (activeRootTab != null) ...[
                 _SnippetDrawer(
-                  onSend: (code) => _sendToActivePane(tabsState, code),
+                  onSend: (code) => _sendToPanes(tabsState, code),
                 ),
                 _buildStatusBar(context, tabsState, activeRootTab),
               ],
@@ -302,6 +302,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
       tokens,
       paneOrder: _paneOrder(tabsState, activeRootTab),
       activePaneId: tabsState.activeTabId,
+      selectedPaneIds: tabsState.selectedPaneIds,
     );
   }
 
@@ -325,16 +326,30 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
     return order;
   }
 
-  /// Sends snippet text to whichever pane is currently focused.
-  ///
-  /// The pane header states which one that is, so this never has to be
-  /// guessed by the user.
-  void _sendToActivePane(TerminalTabsState tabsState, String code) {
+/// Sends snippet text to the focused pane, or to every selected pane while
+  /// broadcast input is active (two or more panes selected).
+  void _sendToPanes(TerminalTabsState tabsState, String code) {
+    if (tabsState.isBroadcasting) {
+      ref.read(terminalTabsProvider.notifier).sendTextToSelectedPanes(code);
+      return;
+    }
     final target =
         tabsState.activeTab ??
         (tabsState.tabs.isEmpty ? null : tabsState.tabs.first);
     if (target == null) return;
     target.terminal.paste(code);
+  }
+
+  /// Of the selected panes, how many have a live session handler (i.e. can
+  /// actually receive input). Shown as `broadcast X/Y` in the status bar.
+  int _deliverablePaneCount(TerminalTabsState tabsState) {
+    var count = 0;
+    for (final id in tabsState.selectedPaneIds) {
+      final matches = tabsState.tabs.where((t) => t.id == id);
+      if (matches.isEmpty) continue;
+      if (matches.first.terminal.onOutput != null) count++;
+    }
+    return count;
   }
 
   Widget _buildStatusBar(
@@ -379,6 +394,12 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
         ),
         Text(connectionLabel),
         if (host != null) Text('${host.hostname}:${host.port}'),
+        if (tabsState.selectedPaneIds.length >= 2)
+          Text(
+            'broadcast '
+            '${_deliverablePaneCount(tabsState)}/'
+            '${tabsState.selectedPaneIds.length}',
+          ),
         Text('${pane.terminal.viewWidth}×${pane.terminal.viewHeight}'),
         Text('tunnels ${activeTunnels.length}'),
       ],
@@ -398,6 +419,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
     TerlyTokens tokens, {
     required List<String> paneOrder,
     required String? activePaneId,
+    required Set<String> selectedPaneIds,
   }) {
     final children = allTabs
         .where((t) => t.splitParentId == session.id)
@@ -417,13 +439,25 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
       }
       final paneNumber = paneOrder.indexOf(paneSession.id) + 1;
       final isActivePane = paneSession.id == activePaneId;
+      final isBroadcastSelected =
+          selectedPaneIds.contains(paneSession.id);
+      final paneLabel = isBroadcastSelected
+          ? 'pane $paneNumber · broadcast'
+          : isActivePane
+          ? 'pane $paneNumber · active'
+          : 'pane $paneNumber';
+      final paneLabelColor = isBroadcastSelected || isActivePane
+          ? tokens.brand
+          : tokens.textMuted;
       return Column(
         children: [
           Container(
             height: 28,
             padding: const EdgeInsets.symmetric(horizontal: 8),
             decoration: BoxDecoration(
-              color: tokens.surfaceRaised,
+              color: isBroadcastSelected
+                  ? tokens.brand.withValues(alpha: 0.08)
+                  : tokens.surfaceRaised,
               border: Border(bottom: BorderSide(color: tokens.border)),
             ),
             child: Row(
@@ -433,7 +467,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
                       ? LucideIcons.terminal
                       : LucideIcons.monitor,
                   size: 13,
-                  color: tokens.textMuted,
+                  color: isBroadcastSelected ? tokens.brand : tokens.textMuted,
                 ),
                 const SizedBox(width: 6),
                 Expanded(
@@ -448,13 +482,11 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
                   ),
                 ),
                 Text(
-                  isActivePane
-                      ? 'pane $paneNumber · active'
-                      : 'pane $paneNumber',
+                  paneLabel,
                   key: Key('pane_label_${paneSession.id}'),
                   style: TextStyle(
                     fontSize: 10,
-                    color: isActivePane ? tokens.brand : tokens.textMuted,
+                    color: paneLabelColor,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -500,6 +532,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
         tokens,
         paneOrder: paneOrder,
         activePaneId: activePaneId,
+        selectedPaneIds: selectedPaneIds,
       );
       final direction = child.splitDirection ?? Axis.horizontal;
       resultWidget = ResizableSplit(
@@ -704,6 +737,12 @@ class _SnippetDrawer extends ConsumerWidget {
     final snippets =
         ref.watch(snippetsProvider).value ?? const <SnippetModel>[];
     if (snippets.isEmpty) return const SizedBox.shrink();
+    final selectedCount = ref.watch(
+      terminalTabsProvider.select((s) => s.selectedPaneIds.length),
+    );
+    final sendLabel = selectedCount >= 2
+        ? 'SNIPPET · SEND TO $selectedCount PANES'
+        : 'SNIPPET · SEND TO ACTIVE PANE';
 
     return Container(
       key: const Key('terminal_snippet_drawer'),
@@ -718,7 +757,7 @@ class _SnippetDrawer extends ConsumerWidget {
           Row(
             children: [
               Text(
-                'SNIPPET · SEND TO ACTIVE PANE',
+                sendLabel,
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
                   fontSize: 10,
                   letterSpacing: 0.8,

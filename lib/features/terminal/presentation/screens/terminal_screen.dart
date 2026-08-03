@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -367,6 +368,33 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
     super.dispose();
   }
 
+  /// A modifier click (⌘ on macOS; ⌘ or Ctrl elsewhere) toggles this pane in
+  /// the broadcast selection and makes it the active origin; a plain click
+  /// routes through [TerminalTabsNotifier.tapPane], which clears the
+  /// selection when an unselected pane is clicked.
+  ///
+  /// Note: `onHyperlinkTap` is not wired anywhere, so ⌘+click on a hyperlink
+  /// currently opens nothing. The guard below keeps a link click from being
+  /// misinterpreted as a broadcast toggle; if URL opening is added later it
+  /// won't fight this selection logic.
+  void _handleTapUp(TapUpDetails _, CellOffset offset) {
+    final pressed = HardwareKeyboard.instance.logicalKeysPressed;
+    final isMac = defaultTargetPlatform == TargetPlatform.macOS;
+    final broadcastModifier =
+        pressed.contains(LogicalKeyboardKey.metaLeft) ||
+        pressed.contains(LogicalKeyboardKey.metaRight) ||
+        (!isMac &&
+            (pressed.contains(LogicalKeyboardKey.controlLeft) ||
+                pressed.contains(LogicalKeyboardKey.controlRight)));
+    if (broadcastModifier &&
+        widget.session.terminal.hyperlinkIdAt(offset) != 0) {
+      return;
+    }
+    ref
+        .read(terminalTabsProvider.notifier)
+        .tapPane(widget.session.id, broadcastModifier: broadcastModifier);
+  }
+
   @override
   Widget build(BuildContext context) {
     // When this pane becomes the active one (new tab, split, or a tab switch
@@ -381,6 +409,11 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
     final session = widget.session;
     final settingsAsync = ref.watch(settingsProvider);
     final settings = settingsAsync.value ?? const AppSettingsModel();
+    final isBroadcastSelected = ref.watch(
+      terminalTabsProvider.select(
+        (s) => s.selectedPaneIds.contains(widget.session.id),
+      ),
+    );
 
     final theme = switch (settings.terminalPalette) {
       TerminalPalette.dark => _darkTheme,
@@ -434,13 +467,22 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
           ),
         Expanded(
           child: Container(
-            color: theme.background,
+            decoration: BoxDecoration(
+              color: theme.background,
+              border: Border.all(
+                color: isBroadcastSelected
+                    ? ShadTheme.of(context).colorScheme.primary
+                    : Colors.transparent,
+                width: 1.5,
+              ),
+            ),
             child: TerminalView(
               session.terminal,
               theme: theme,
               focusNode: _terminalFocus,
               autofocus: true,
               deleteDetection: shouldShowExtraKeys,
+              onTapUp: _handleTapUp,
               cursorType: switch (settings.cursorStyle) {
                 AppCursorStyle.block => TerminalCursorType.block,
                 AppCursorStyle.underline => TerminalCursorType.underline,

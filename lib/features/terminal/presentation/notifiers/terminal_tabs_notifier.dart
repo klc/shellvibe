@@ -12,6 +12,7 @@ import '../../../../shared/providers/database_providers.dart';
 import '../../../hosts/domain/models/host_model.dart';
 import '../../../vault/domain/models/identity_model.dart';
 import '../../domain/models/terminal_tab_session.dart';
+import '../../domain/services/broadcast_input_router.dart';
 
 part 'terminal_tabs_notifier.g.dart';
 
@@ -19,10 +20,18 @@ class TerminalTabsState {
   final List<TerminalTabSession> tabs;
   final String? activeTabId;
 
+  /// Panes picked with ⌘+click. When two or more are selected the terminal
+  /// broadcasts keyboard input and snippets to all of them.
+  final Set<String> selectedPaneIds;
+
   const TerminalTabsState({
     this.tabs = const [],
     this.activeTabId,
+    this.selectedPaneIds = const {},
   });
+
+  /// True when broadcast input is live (two or more panes selected).
+  bool get isBroadcasting => selectedPaneIds.length >= 2;
 
   TerminalTabSession? get activeTab {
     if (activeTabId == null) return null;
@@ -37,20 +46,30 @@ class TerminalTabsState {
     List<TerminalTabSession>? tabs,
     String? activeTabId,
     bool clearActiveTabId = false,
+    Set<String>? selectedPaneIds,
   }) {
     return TerminalTabsState(
       tabs: tabs ?? this.tabs,
       activeTabId: clearActiveTabId ? null : (activeTabId ?? this.activeTabId),
+      selectedPaneIds: selectedPaneIds ?? this.selectedPaneIds,
     );
   }
 }
 
 @Riverpod(keepAlive: true)
+@Riverpod(keepAlive: true)
 class TerminalTabsNotifier extends _$TerminalTabsNotifier {
   final Set<TerminalTabSession> _ownedTabs = {};
+  final BroadcastInputRouter _broadcastRouter = BroadcastInputRouter();
+
   @override
   TerminalTabsState build() {
+    // Tees read the notifier's live selection, never a captured snapshot.
+    _broadcastRouter.forwardCallback = _broadcastFrom;
     ref.onDispose(() {
+      // Reading `state` is forbidden during life-cycles; restore tees from
+      // the owned-tab set instead.
+      _broadcastRouter.restoreAll(_ownedTabs.toList());
       for (final tab in _ownedTabs.toList()) {
         tab.dispose();
       }
@@ -158,6 +177,8 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
         tab.isConnected = true;
 
         state = state.copyWith(tabs: [...state.tabs]);
+        // Wire a broadcast tee if this pane is already part of the selection.
+        _syncBroadcast();
       } catch (e) {
         // A failure after a successful connect (e.g. server refuses a PTY)
         // must tear the client down; otherwise the socket and keep-alive
@@ -216,6 +237,8 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     }
 
     state = state.copyWith(tabs: [...state.tabs]);
+    // Wire a broadcast tee if this pane is already part of the selection.
+    _syncBroadcast();
   }
 
   Future<void> closeTab(String tabId) async {
@@ -253,11 +276,17 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       }
     }
 
+    final prunedSelection = state.selectedPaneIds
+        .where((id) => !closingIds.contains(id))
+        .toSet();
+
     state = state.copyWith(
       tabs: remainingTabs,
       activeTabId: newActiveId,
       clearActiveTabId: newActiveId == null,
+      selectedPaneIds: prunedSelection,
     );
+    _syncBroadcast();
 
     for (final tab in closingTabs) {
       await tab.dispose();
@@ -276,6 +305,64 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     if (index == -1) return;
     state.tabs[index].splitRatio = ratio;
     state = state.copyWith(tabs: [...state.tabs]);
+  }
+
+  /// Reconciles installed broadcast tees with the current selection.
+  void _syncBroadcast() {
+    _broadcastRouter.sync(
+      selectedIds: state.selectedPaneIds,
+      tabs: state.tabs,
+    );
+  }
+
+  /// Forward handler invoked by installed tees with the origin pane id.
+  /// Reads the live selection, so panes added or removed after a tee was
+  /// installed are handled correctly.
+  void _broadcastFrom(String originId, String data) {
+    _broadcastRouter.forwardToOthers(
+      originId: originId,
+      selectedIds: state.selectedPaneIds,
+      tabs: state.tabs,
+      data: data,
+    );
+  }
+
+  /// Toggles [tabId] membership in the broadcast selection.
+  void togglePaneSelection(String tabId) {
+    if (!state.tabs.any((t) => t.id == tabId)) return;
+    final updated = {...state.selectedPaneIds};
+    if (!updated.add(tabId)) updated.remove(tabId);
+    state = state.copyWith(selectedPaneIds: updated);
+    _syncBroadcast();
+  }
+
+  /// Drops every selected pane, ending broadcast.
+  void clearPaneSelection() {
+    if (state.selectedPaneIds.isEmpty) return;
+    state = state.copyWith(selectedPaneIds: const {});
+    _syncBroadcast();
+  }
+
+  /// Single entry point for pane taps. A modifier click toggles selection and
+  /// makes the pane active (it becomes the broadcast origin); a plain click on
+  /// a pane outside the selection clears the selection and focuses that pane.
+  void tapPane(String tabId, {required bool broadcastModifier}) {
+    if (broadcastModifier) {
+      togglePaneSelection(tabId);
+    } else if (!state.selectedPaneIds.contains(tabId)) {
+      clearPaneSelection();
+    }
+    setActiveTab(tabId);
+  }
+
+  /// Sends [code] to every selected pane (origin included) — the snippet
+  /// path while broadcasting.
+  void sendTextToSelectedPanes(String code) {
+    _broadcastRouter.sendTextToPanes(
+      selectedIds: state.selectedPaneIds,
+      tabs: state.tabs,
+      text: code,
+    );
   }
 
   Future<void>? splitTab(
@@ -349,6 +436,8 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       tabs: [...state.tabs, splitTab],
       activeTabId: splitId,
     );
+    // Wire a broadcast tee if this pane is already part of the selection.
+    _syncBroadcast();
     return null;
   }
 }
