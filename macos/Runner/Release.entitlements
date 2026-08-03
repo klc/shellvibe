@@ -5,7 +5,7 @@
 	<key>keychain-access-groups</key>
 	<array/>
 	<key>com.apple.security.app-sandbox</key>
-	<true/>
+	<false/>
 	<key>com.apple.security.network.client</key>
 	<true/>
 	<key>com.apple.security.network.server</key>
