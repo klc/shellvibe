@@ -139,7 +139,10 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
 
       await sessionManager.connect(config);
       try {
-        final sshSession = await sessionManager.openShell();
+        final sshSession = await sessionManager.openShell(
+          width: terminal.viewWidth,
+          height: terminal.viewHeight,
+        );
 
         final bridge = TerminalSSHBridge(
           terminal: terminal,
@@ -147,6 +150,10 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
         );
 
         tab.sshBridge = bridge;
+        // The view has already sized the terminal by now, so `onResize` — only
+        // wired when the bridge is built — never fires for that first layout
+        // and the remote PTY would stay at whatever openShell requested.
+        bridge.resizeTerminal(terminal.viewWidth, terminal.viewHeight);
         tab.isConnecting = false;
         tab.isConnected = true;
 
@@ -187,9 +194,16 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
 
     try {
       final manager = ref.read(localPtyManagerProvider);
-      final bridge = manager.startAndBridge(terminal);
+      final bridge = manager.startAndBridge(
+        terminal,
+        rows: terminal.viewHeight,
+        columns: terminal.viewWidth,
+      );
 
       newTab.ptyBridge = bridge;
+      // See _connectSsh: the first layout resize happens before the bridge
+      // wires `onResize`, so push the current size once by hand.
+      bridge?.resizeTerminal(terminal.viewWidth, terminal.viewHeight);
       newTab.isConnecting = false;
       newTab.isConnected = bridge != null;
       if (bridge == null) {
@@ -308,8 +322,13 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
 
     try {
       final manager = ref.read(localPtyManagerProvider);
-      final bridge = manager.startAndBridge(terminal);
+      final bridge = manager.startAndBridge(
+        terminal,
+        rows: terminal.viewHeight,
+        columns: terminal.viewWidth,
+      );
       splitTab.ptyBridge = bridge;
+      bridge?.resizeTerminal(terminal.viewWidth, terminal.viewHeight);
       splitTab.isConnected = bridge != null;
       if (bridge == null) {
         splitTab.errorMessage = 'Failed to start local terminal session';
