@@ -8,6 +8,7 @@ import 'package:xterm2/xterm.dart';
 import '../../../settings/domain/models/app_settings_model.dart';
 import '../../../settings/presentation/notifiers/settings_notifier.dart';
 import '../../domain/models/terminal_tab_session.dart';
+import '../notifiers/terminal_tabs_notifier.dart';
 import '../widgets/mobile_extra_keys_bar.dart';
 
 class TerminalScreen extends ConsumerStatefulWidget {
@@ -342,8 +343,41 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
     }
   }
 
+  late final FocusNode _terminalFocus;
+
+  @override
+  void initState() {
+    super.initState();
+    // The terminal must own the keystrokes as soon as it mounts. `autofocus`
+    // alone is not enough: the pane is often mounted while some other widget
+    // (the tab bar, a dialog) holds focus, and a reused element never re-fires
+    // autofocus when the active tab changes.
+    _terminalFocus = FocusNode();
+    if (kDebugMode) {
+      _terminalFocus.debugLabel = 'terminal_${widget.session.id}';
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _terminalFocus.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _terminalFocus.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
+    // When this pane becomes the active one (new tab, split, or a tab switch
+    // that reuses this element), hand it the keyboard focus explicitly.
+    ref.listen(terminalTabsProvider.select((s) => s.activeTabId), (prev, next) {
+      if (next == widget.session.id) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _terminalFocus.requestFocus();
+        });
+      }
+    });
     final session = widget.session;
     final settingsAsync = ref.watch(settingsProvider);
     final settings = settingsAsync.value ?? const AppSettingsModel();
@@ -404,6 +438,7 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
             child: TerminalView(
               session.terminal,
               theme: theme,
+              focusNode: _terminalFocus,
               autofocus: true,
               deleteDetection: shouldShowExtraKeys,
               cursorType: switch (settings.cursorStyle) {

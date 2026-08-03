@@ -132,6 +132,44 @@ void main() {
       expect(find.byKey(const Key('empty_open_local_button')), findsOneWidget);
     });
 
+    testWidgets('Focus moves to the newly opened terminal pane', (
+      tester,
+    ) async {
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(TerminalTabView)),
+      );
+
+      // First terminal from the empty state.
+      await tester.tap(find.byKey(const Key('empty_open_local_button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      final tab1 = container.read(terminalTabsProvider).activeTabId;
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'terminal_$tab1',
+        reason: 'keystrokes must land in the newly opened terminal',
+      );
+
+      // A second terminal opened while one is already running must also take
+      // focus (element reuse alone never re-fires autofocus).
+      await tester.tap(find.byKey(const Key('new_tab_button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('new_tab_menu_local')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      final tab2 = container.read(terminalTabsProvider).activeTabId;
+      expect(tab1, isNot(equals(tab2)));
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'terminal_$tab2',
+        reason: 'focus must follow the active tab switch',
+      );
+    });
+
     testWidgets('Vertical and Horizontal split buttons create split sessions without extra top tab bar entries', (tester) async {
       await tester.pumpWidget(createWidgetUnderTest());
       await tester.pump();

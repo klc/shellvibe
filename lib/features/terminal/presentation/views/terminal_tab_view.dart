@@ -404,10 +404,16 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
         .toList();
 
     Widget buildSinglePane(TerminalTabSession paneSession) {
+      // Key by pane id: reusing the element across session switches would
+      // leave stale state behind and never re-fire the pane's focus logic.
+      final screen = TerminalScreen(
+        key: ValueKey(paneSession.id),
+        session: paneSession,
+      );
       // A single-pane tab needs no header; once the tab is split every pane
       // gets one, because the header is what names the snippet target.
       if (paneOrder.length < 2) {
-        return TerminalScreen(session: paneSession);
+        return screen;
       }
       final paneNumber = paneOrder.indexOf(paneSession.id) + 1;
       final isActivePane = paneSession.id == activePaneId;
@@ -474,7 +480,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
               ],
             ),
           ),
-          Expanded(child: TerminalScreen(session: paneSession)),
+          Expanded(child: screen),
         ],
       );
     }
