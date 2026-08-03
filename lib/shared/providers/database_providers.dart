@@ -12,13 +12,28 @@ import '../storage/secure_storage_service.dart';
 part 'database_providers.g.dart';
 
 /// Provides a single instance of [AppDatabase].
+///
+/// The drift database is deliberately **not** closed on dispose. The connection
+/// is a `NativeDatabase.createInBackground` executor, so closing it here frees
+/// the sqlite3 connection while the executor isolate is still going down; at
+/// isolate shutdown the VM runs every attached `sqlite3_finalize` native
+/// finalizer against that freed connection, crashing the app with SIGSEGV on
+/// exit (macOS release, [Process exited with code 255]). Letting the process
+/// exit reclaim the DB is safe: the finalizers then run against a live
+/// connection and SQLite's WAL recovery makes the file crash-safe.
+/// Provides a single instance of [AppDatabase].
+///
+/// The drift database is deliberately **not** closed on dispose. The connection
+/// is a `NativeDatabase.createInBackground` executor, so closing it here frees
+/// the sqlite3 connection while the executor isolate is still going down; at
+/// isolate shutdown the VM runs every attached `sqlite3_finalize` native
+/// finalizer against that freed connection, crashing the app with SIGSEGV on
+/// exit (macOS release, "[Process exited with code 255]"). Letting the process
+/// exit reclaim the DB is safe: the finalizers then run against a live
+/// connection and SQLite's WAL recovery makes the file crash-safe.
 @Riverpod(keepAlive: true)
 AppDatabase appDatabase(Ref ref) {
-  final db = AppDatabase();
-  ref.onDispose(() {
-    db.close();
-  });
-  return db;
+  return AppDatabase();
 }
 
 /// Auto-disposing provider for [KnownHostsDao].
