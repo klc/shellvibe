@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xterm2/xterm.dart';
 
 import 'package:terly2/features/terminal/presentation/widgets/mobile_extra_keys_bar.dart';
 
@@ -150,6 +151,115 @@ void main() {
       await tester.tap(find.byKey(const Key('key_tilde')));
       await tester.pump();
       expect(emittedData, equals('\x1e'));
+    });
+
+    testWidgets('Sticky Ctrl transforms keyboard-typed char via onOutput', (tester) async {
+      final terminal = Terminal();
+      final received = <String>[];
+      terminal.onOutput = received.add;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MobileExtraKeysBar(terminal: terminal),
+          ),
+        ),
+      );
+
+      // Tap Ctrl, then type 'c' through the IME path -> Ctrl+C (0x03).
+      await tester.tap(find.byKey(const Key('key_ctrl')));
+      await tester.pump();
+      terminal.textInput('c');
+      await tester.pump();
+
+      expect(received, equals(['\x03']));
+    });
+
+    testWidgets('Sticky Alt prepends ESC to keyboard-typed char', (tester) async {
+      final terminal = Terminal();
+      final received = <String>[];
+      terminal.onOutput = received.add;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MobileExtraKeysBar(terminal: terminal),
+          ),
+        ),
+      );
+
+      await tester.tap(find.byKey(const Key('key_alt')));
+      await tester.pump();
+      terminal.textInput('a');
+      await tester.pump();
+
+      expect(received, equals(['\x1ba']));
+    });
+
+    testWidgets('Sticky modifier resets after one masked keyboard char', (tester) async {
+      final terminal = Terminal();
+      final received = <String>[];
+      terminal.onOutput = received.add;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MobileExtraKeysBar(terminal: terminal),
+          ),
+        ),
+      );
+
+      await tester.tap(find.byKey(const Key('key_ctrl')));
+      await tester.pump();
+
+      terminal.textInput('a');
+      terminal.textInput('a');
+      await tester.pump();
+
+      // First char masked, sticky consumed -> second char passes through.
+      expect(received, equals(['\x01', 'a']));
+    });
+
+    testWidgets('Multi-byte terminal output passes through unmasked and keeps sticky', (tester) async {
+      final terminal = Terminal();
+      final received = <String>[];
+      terminal.onOutput = received.add;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MobileExtraKeysBar(terminal: terminal),
+          ),
+        ),
+      );
+
+      await tester.tap(find.byKey(const Key('key_ctrl')));
+      await tester.pump();
+
+      // e.g. an arrow escape sequence emitted by the terminal.
+      terminal.textInput('\x1b[A');
+      terminal.textInput('c');
+      await tester.pump();
+
+      expect(received, equals(['\x1b[A', '\x03']));
+    });
+
+    testWidgets('Bar disposes without leaking interceptor on terminal', (tester) async {
+      final terminal = Terminal();
+      void original(String data) {}
+      terminal.onOutput = original;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MobileExtraKeysBar(terminal: terminal),
+          ),
+        ),
+      );
+      expect(identical(terminal.onOutput, original), isFalse);
+
+      await tester.pumpWidget(const SizedBox());
+      expect(identical(terminal.onOutput, original), isTrue);
     });
   });
 }

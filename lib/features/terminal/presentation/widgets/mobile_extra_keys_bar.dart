@@ -20,6 +20,74 @@ class _MobileExtraKeysBarState extends State<MobileExtraKeysBar> {
   bool _ctrlActive = false;
   bool _altActive = false;
 
+  /// The `terminal.onOutput` handler set by the SSH/PTY bridge while this
+  /// bar's interceptor is installed.
+  void Function(String data)? _underlyingOnOutput;
+
+  /// Stable reference to [_interceptOutput]. Method tear-offs are not
+  /// guaranteed identical across accesses, so the install/restore guards must
+  /// compare against this stored reference, not a fresh tear-off.
+  late final void Function(String data) _intercept = _interceptOutput;
+
+  /// Installs an `onOutput` interceptor so the sticky Ctrl/Alt modifiers also
+  /// apply to characters typed on the real (IME/hardware) keyboard, not only
+  /// to the bar's own keys. Idempotent — re-run it after a modifier toggle so
+  /// it survives the bridge (re)assigning `onOutput` after a late connect.
+  void _installOutputInterceptor() {
+    final t = widget.terminal;
+    if (t == null || identical(t.onOutput, _intercept)) return;
+    _underlyingOnOutput = t.onOutput;
+    t.onOutput = _intercept;
+  }
+
+  /// Passes output through, folding the sticky Ctrl/Alt modifier into the next
+  /// single printable ASCII character. Terminal-generated sequences (resize
+  /// replies, focus reports, ...) are multi-byte and pass through untouched.
+  void _interceptOutput(String data) {
+    final underlying = _underlyingOnOutput;
+    if (!_ctrlActive && !_altActive) {
+      underlying?.call(data);
+      return;
+    }
+    if (data.length == 1) {
+      final code = data.codeUnitAt(0);
+      if (code >= 32 && code <= 126) {
+        var output = data;
+        if (_ctrlActive) {
+          // Ctrl + letter/symbol -> ASCII control code (A-Z/a-z -> 1-26).
+          output = String.fromCharCode(code & 0x1F);
+        }
+        if (_altActive) {
+          output = '\x1b$output';
+        }
+        underlying?.call(output);
+        if (mounted) {
+          setState(() {
+            _ctrlActive = false;
+            _altActive = false;
+          });
+        }
+        return;
+      }
+    }
+    underlying?.call(data);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _installOutputInterceptor();
+  }
+
+  @override
+  void dispose() {
+    final t = widget.terminal;
+    if (t != null && identical(t.onOutput, _intercept)) {
+      t.onOutput = _underlyingOnOutput;
+    }
+    super.dispose();
+  }
+
   void _sendData(String rawChar, {String? ctrlChar, String? escapeCode}) {
     String output = escapeCode ?? rawChar;
 
@@ -163,7 +231,10 @@ class _MobileExtraKeysBarState extends State<MobileExtraKeysBar> {
               label: 'Ctrl',
               isModifier: true,
               isActive: _ctrlActive,
-              onTap: () => setState(() => _ctrlActive = !_ctrlActive),
+              onTap: () {
+                _installOutputInterceptor();
+                setState(() => _ctrlActive = !_ctrlActive);
+              },
             ),
             // Sticky Modifier: ALT
             _buildKeyButton(
@@ -171,7 +242,10 @@ class _MobileExtraKeysBarState extends State<MobileExtraKeysBar> {
               label: 'Alt',
               isModifier: true,
               isActive: _altActive,
-              onTap: () => setState(() => _altActive = !_altActive),
+              onTap: () {
+                _installOutputInterceptor();
+                setState(() => _altActive = !_altActive);
+              },
             ),
             const VerticalDivider(width: 12),
             // Action & Character Keys
