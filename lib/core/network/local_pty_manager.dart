@@ -139,6 +139,13 @@ class LocalPtyManager {
     }
 
     final exec = executable ?? getDefaultShell();
+    // Start the shell as a login shell (non-Windows) so it reads the user's
+    // profile (.zprofile/.bash_profile) and restores their real PATH. A bare
+    // shell inherits the GUI app's minimal launchd PATH, hiding Homebrew
+    // binaries such as `htop`. Respect explicit caller arguments over this.
+    final args = arguments.isEmpty && !Platform.isWindows
+        ? const ['-l']
+        : arguments;
     final env = <String, String>{
       ...Platform.environment,
       'TERM': 'xterm-256color',
@@ -148,7 +155,7 @@ class LocalPtyManager {
 
     return Pty.start(
       exec,
-      arguments: arguments,
+      arguments: args,
       workingDirectory: workDir,
       environment: env,
       rows: rows,
