@@ -9,6 +9,10 @@ import '../../../vault/domain/models/identity_model.dart';
 
 enum TerminalSessionType { ssh, local }
 
+/// Clamp range for a split pane's share of its split container.
+const double kSplitPaneMinRatio = 0.15;
+const double kSplitPaneMaxRatio = 0.85;
+
 /// Model representing an active terminal tab session.
 class TerminalTabSession {
   final String id;
@@ -26,6 +30,9 @@ class TerminalTabSession {
   final String? splitParentId;
   final Axis? splitDirection;
 
+  /// Share (0..1) of the split container taken by this pane; the sibling takes 1 - share.
+  double splitRatio = 0.5;
+
   TerminalTabSession({
     required this.id,
     required this.title,
@@ -41,6 +48,7 @@ class TerminalTabSession {
     this.errorMessage,
     this.splitParentId,
     this.splitDirection,
+    this.splitRatio = 0.5,
   });
 
   /// Resizes the tab terminal and propagates dimensions to the active SSH or PTY session bridge.

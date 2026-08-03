@@ -271,6 +271,13 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     }
   }
 
+  void setSplitRatio(String tabId, double ratio) {
+    final index = state.tabs.indexWhere((t) => t.id == tabId);
+    if (index == -1) return;
+    state.tabs[index].splitRatio = ratio;
+    state = state.copyWith(tabs: [...state.tabs]);
+  }
+
   Future<void>? splitTab(
     String parentTabId, {
     Axis direction = Axis.horizontal,

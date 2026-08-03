@@ -21,6 +21,7 @@ import '../../../vault/presentation/notifiers/identities_notifier.dart';
 import '../dialogs/host_key_prompt_dialog.dart';
 import '../notifiers/terminal_tabs_notifier.dart';
 import '../screens/terminal_screen.dart';
+import '../widgets/resizable_split.dart';
 import '../../domain/models/terminal_tab_session.dart';
 
 class TerminalTabView extends ConsumerStatefulWidget {
@@ -495,25 +496,16 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
         activePaneId: activePaneId,
       );
       final direction = child.splitDirection ?? Axis.horizontal;
-      if (direction == Axis.vertical) {
-        // Yatay bölme (Horizontal split line): Panes stacked top-to-bottom in a Column
-        resultWidget = Column(
-          children: [
-            Expanded(child: resultWidget),
-            Container(height: 2, color: tokens.border),
-            Expanded(child: childTree),
-          ],
-        );
-      } else {
-        // Dikey bölme (Vertical split line): Panes side-by-side in a Row
-        resultWidget = Row(
-          children: [
-            Expanded(child: resultWidget),
-            VerticalDivider(width: 2, color: tokens.border),
-            Expanded(child: childTree),
-          ],
-        );
-      }
+      resultWidget = ResizableSplit(
+        axis: direction,
+        first: resultWidget,
+        second: childTree,
+        ratio: child.splitRatio,
+        dividerColor: tokens.border,
+        dividerKey: Key('split_divider_${child.id}'),
+        onRatioChanged: (ratio) =>
+            ref.read(terminalTabsProvider.notifier).setSplitRatio(child.id, ratio),
+      );
     }
 
     return resultWidget;
