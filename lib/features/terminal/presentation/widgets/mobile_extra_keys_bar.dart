@@ -29,6 +29,13 @@ class _MobileExtraKeysBarState extends State<MobileExtraKeysBar> {
   /// compare against this stored reference, not a fresh tear-off.
   late final void Function(String data) _intercept = _interceptOutput;
 
+  /// Set in [dispose]. This bar does not own the `onOutput` slot exclusively —
+  /// `BroadcastInputRouter` may have wrapped the interceptor after it was
+  /// installed, in which case [dispose] cannot pull it back out of the chain.
+  /// A detached interceptor must then behave as a pure pass-through rather
+  /// than keep folding modifiers for a widget that is gone.
+  bool _detached = false;
+
   /// Installs an `onOutput` interceptor so the sticky Ctrl/Alt modifiers also
   /// apply to characters typed on the real (IME/hardware) keyboard, not only
   /// to the bar's own keys. Idempotent — re-run it after a modifier toggle so
@@ -45,7 +52,7 @@ class _MobileExtraKeysBarState extends State<MobileExtraKeysBar> {
   /// replies, focus reports, ...) are multi-byte and pass through untouched.
   void _interceptOutput(String data) {
     final underlying = _underlyingOnOutput;
-    if (!_ctrlActive && !_altActive) {
+    if (_detached || (!_ctrlActive && !_altActive)) {
       underlying?.call(data);
       return;
     }
@@ -81,6 +88,7 @@ class _MobileExtraKeysBarState extends State<MobileExtraKeysBar> {
 
   @override
   void dispose() {
+    _detached = true;
     final t = widget.terminal;
     if (t != null && identical(t.onOutput, _intercept)) {
       t.onOutput = _underlyingOnOutput;

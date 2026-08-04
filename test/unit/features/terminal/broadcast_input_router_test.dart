@@ -154,6 +154,57 @@ void main() {
       expect(b, ['ls', 'pwd']);
     });
 
+    test('reconnect re-installs the tee and forwards to the NEW handler', () {
+      final a = <String>[];
+      final bOld = <String>[];
+      final tabA = session('a', captured: a);
+      final tabB = session('b', captured: bOld);
+      final tabs = [tabA, tabB];
+      final live = {'a', 'b'};
+      wireForward(router, live, tabs);
+
+      router.sync(selectedIds: live, tabs: tabs);
+
+      // b's bridge tears down (onOutput = null), wiping the tee, then a
+      // reconnect installs a brand new handler writing somewhere else.
+      tabB.terminal.onOutput = null;
+      final bNew = <String>[];
+      tabB.terminal.onOutput = (data) => bNew.add(data);
+
+      // The notifier re-syncs once the bridge is wired again.
+      router.sync(selectedIds: live, tabs: tabs);
+
+      tabA.terminal.onOutput!('echo hi');
+
+      expect(a, ['echo hi']);
+      expect(bNew, ['echo hi']); // reaches the live handler...
+      expect(bOld, isEmpty); // ...never the dead pre-disconnect closure
+    });
+
+    test('deselect after a reconnect leaves the live handler intact', () {
+      final a = <String>[];
+      final tabA = session('a', captured: a);
+      final tabB = session('b', captured: <String>[]);
+      final tabs = [tabA, tabB];
+      final live = <String>{'a', 'b'};
+      wireForward(router, live, tabs);
+
+      router.sync(selectedIds: live, tabs: tabs);
+
+      // b reconnects with a fresh handler while still selected.
+      final bNew = <String>[];
+      tabB.terminal.onOutput = (data) => bNew.add(data);
+
+      // Deselect b without an intervening sync: the router must not restore
+      // the handler it stashed before the reconnect.
+      live.remove('b');
+      router.sync(selectedIds: live, tabs: tabs);
+
+      tabB.terminal.onOutput!('x');
+      expect(bNew, ['x']); // typing still reaches b's session
+      expect(a, isEmpty); // and no longer fans out
+    });
+
     test('sendTextToPanes skips panes removed from the tab list (closed)', () {
       final a = <String>[];
       final tabA = session('a', captured: a);
