@@ -230,10 +230,11 @@ void main() {
       await tester.pump();
 
       expect(find.textContaining('· broadcast'), findsNWidgets(2));
-      expect(
-        find.text('broadcast 2/2'),
-        findsOneWidget, // status bar: 2 deliverable of 2 selected
-      );
+      // Status bar reports deliverable/selected. flutter_pty's native library
+      // is not loadable under `flutter test`, so no pane has a live session
+      // here and nothing is deliverable — the counter has to say so rather
+      // than count panes that would silently swallow the input.
+      expect(find.text('broadcast 0/2'), findsOneWidget);
 
       // Plain click on an unselected pane exits broadcast.
       await tester.tap(find.byType(TerminalView).at(2));

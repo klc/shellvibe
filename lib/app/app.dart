@@ -33,16 +33,37 @@ class _TerlyAppState extends ConsumerState<TerlyApp> {
     _lifecycleListener = AppLifecycleListener(
       onStateChange: _onLifecycleChange,
     );
-    // The app launches straight into the terminal screen (see the router's
-    // initialLocation). On desktop, open a local shell there right away;
-    // flutter_pty cannot run on mobile (iOS sandbox / no local shell on
-    // Android), so mobile starts on the terminal's empty state and connects
-    // via SSH instead.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (supportsLocalShell) {
-        ref.read(terminalTabsProvider.notifier).openLocalTab();
-      }
+      _maybeOpenLaunchShell(ref.read(vaultProvider));
     });
+  }
+
+  /// Whether the launch shell has already been opened, so it happens once per
+  /// app run rather than on every vault state change.
+  bool _launchShellOpened = false;
+
+  /// The app launches straight into the terminal screen (see the router's
+  /// initialLocation). On desktop, open a local shell there right away;
+  /// flutter_pty cannot run on mobile (iOS sandbox / no local shell on
+  /// Android), so mobile starts on the terminal's empty state and connects via
+  /// SSH instead.
+  ///
+  /// Gated on the vault not being locked: while the unlock screen is up the
+  /// app is not usable, and spawning the user's login shell behind it would
+  /// hand a process (and its full filesystem reach) to someone who has not
+  /// passed the lock. The unlock itself calls back in here.
+  ///
+  /// The gate waits for the vault status to resolve — at first frame it is
+  /// still loading, and treating "not locked yet" as "not locked" is exactly
+  /// the case being guarded against. A vault that fails to load is not a lock
+  /// (the router lets the app through too), so the shell opens.
+  void _maybeOpenLaunchShell(AsyncValue<VaultState> vault) {
+    if (_launchShellOpened) return;
+    if (!supportsLocalShell) return;
+    if (vault.isLoading && !vault.hasValue) return;
+    if (vault.value?.status == VaultStatus.locked) return;
+    _launchShellOpened = true;
+    ref.read(terminalTabsProvider.notifier).openLocalTab();
   }
 
   /// Locks the vault after the configured auto-lock delay when the app enters
@@ -73,6 +94,10 @@ class _TerlyAppState extends ConsumerState<TerlyApp> {
 
   @override
   Widget build(BuildContext context) {
+    // Unlocking later in the run is what opens the launch shell when the app
+    // started on the unlock screen.
+    ref.listen(vaultProvider, (_, next) => _maybeOpenLaunchShell(next));
+
     final router = ref.watch(appRouterProvider);
     final settingsAsync = ref.watch(settingsProvider);
     final settings = settingsAsync.value ?? const AppSettingsModel();

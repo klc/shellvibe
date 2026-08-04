@@ -9,6 +9,6 @@
 //
 // Leaving DEVELOPMENT_TEAM empty falls back to ad-hoc signing, which is enough
 // for a local debug run but not for notarization or hardened-runtime builds.
-DEVELOPMENT_TEAM = GAL56GVY4U
+DEVELOPMENT_TEAM =
 
 #include? "LocalSigning.xcconfig"

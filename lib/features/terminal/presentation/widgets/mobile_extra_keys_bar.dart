@@ -2,13 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:xterm2/xterm.dart';
 
+import '../../domain/services/terminal_output_chain.dart';
+
 class MobileExtraKeysBar extends StatefulWidget {
   final Terminal? terminal;
+
+  /// The pane's output chain. The bar registers its modifier interceptor here
+  /// so it composes with broadcast in either install order and can always take
+  /// itself back out. When omitted (tests, previews) the bar makes a private
+  /// chain over [terminal].
+  final TerminalOutputChain? outputChain;
+
   final void Function(String data)? onInput;
 
   const MobileExtraKeysBar({
     super.key,
     this.terminal,
+    this.outputChain,
     this.onInput,
   });
 
@@ -20,40 +30,39 @@ class _MobileExtraKeysBarState extends State<MobileExtraKeysBar> {
   bool _ctrlActive = false;
   bool _altActive = false;
 
-  /// The `terminal.onOutput` handler set by the SSH/PTY bridge while this
-  /// bar's interceptor is installed.
-  void Function(String data)? _underlyingOnOutput;
+  /// Chain key for this bar's interceptor.
+  static const Object _chainKey = 'mobile_extra_keys';
 
-  /// Stable reference to [_interceptOutput]. Method tear-offs are not
-  /// guaranteed identical across accesses, so the install/restore guards must
-  /// compare against this stored reference, not a fresh tear-off.
-  late final void Function(String data) _intercept = _interceptOutput;
+  /// The chain the interceptor is registered in: the pane's own when one was
+  /// handed down, otherwise a private one over [MobileExtraKeysBar.terminal]
+  /// so the bar behaves the same when used standalone.
+  TerminalOutputChain? _ownChain;
 
-  /// Set in [dispose]. This bar does not own the `onOutput` slot exclusively —
-  /// `BroadcastInputRouter` may have wrapped the interceptor after it was
-  /// installed, in which case [dispose] cannot pull it back out of the chain.
-  /// A detached interceptor must then behave as a pure pass-through rather
-  /// than keep folding modifiers for a widget that is gone.
-  bool _detached = false;
-
-  /// Installs an `onOutput` interceptor so the sticky Ctrl/Alt modifiers also
-  /// apply to characters typed on the real (IME/hardware) keyboard, not only
-  /// to the bar's own keys. Idempotent — re-run it after a modifier toggle so
-  /// it survives the bridge (re)assigning `onOutput` after a late connect.
-  void _installOutputInterceptor() {
+  TerminalOutputChain? get _chain {
+    final provided = widget.outputChain;
+    if (provided != null) return provided;
     final t = widget.terminal;
-    if (t == null || identical(t.onOutput, _intercept)) return;
-    _underlyingOnOutput = t.onOutput;
-    t.onOutput = _intercept;
+    if (t == null) return null;
+    return _ownChain ??= TerminalOutputChain(t);
   }
 
-  /// Passes output through, folding the sticky Ctrl/Alt modifier into the next
-  /// single printable ASCII character. Terminal-generated sequences (resize
-  /// replies, focus reports, ...) are multi-byte and pass through untouched.
-  void _interceptOutput(String data) {
-    final underlying = _underlyingOnOutput;
-    if (_detached || (!_ctrlActive && !_altActive)) {
-      underlying?.call(data);
+  /// Registers the output interceptor so the sticky Ctrl/Alt modifiers also
+  /// apply to characters typed on the real (IME/hardware) keyboard, not only
+  /// to the bar's own keys. Idempotent — re-run it after a modifier toggle so
+  /// it is picked up once a late connect gives the pane a session handler.
+  void _installOutputInterceptor() {
+    final chain = _chain;
+    if (chain == null || chain.has(_chainKey)) return;
+    chain.add(_chainKey, _interceptOutput);
+  }
+
+  /// Passes output down the chain, folding the sticky Ctrl/Alt modifier into
+  /// the next single printable ASCII character. Terminal-generated sequences
+  /// (resize replies, focus reports, ...) are multi-byte and pass through
+  /// untouched.
+  void _interceptOutput(String data, void Function(String) next) {
+    if (!_ctrlActive && !_altActive) {
+      next(data);
       return;
     }
     if (data.length == 1) {
@@ -67,7 +76,7 @@ class _MobileExtraKeysBarState extends State<MobileExtraKeysBar> {
         if (_altActive) {
           output = '\x1b$output';
         }
-        underlying?.call(output);
+        next(output);
         if (mounted) {
           setState(() {
             _ctrlActive = false;
@@ -77,7 +86,7 @@ class _MobileExtraKeysBarState extends State<MobileExtraKeysBar> {
         return;
       }
     }
-    underlying?.call(data);
+    next(data);
   }
 
   @override
@@ -88,11 +97,9 @@ class _MobileExtraKeysBarState extends State<MobileExtraKeysBar> {
 
   @override
   void dispose() {
-    _detached = true;
-    final t = widget.terminal;
-    if (t != null && identical(t.onOutput, _intercept)) {
-      t.onOutput = _underlyingOnOutput;
-    }
+    // Removing by key works whatever else has since joined the chain, so the
+    // bar never leaves a dead interceptor folding modifiers behind it.
+    _chain?.remove(_chainKey);
     super.dispose();
   }
 
@@ -159,7 +166,13 @@ class _MobileExtraKeysBarState extends State<MobileExtraKeysBar> {
     if (widget.onInput != null) {
       widget.onInput!(output);
     } else if (widget.terminal != null) {
-      widget.terminal!.onOutput?.call(output);
+      // The modifiers are already folded in above, so this must not run back
+      // through this bar's own interceptor — but it does go through the rest
+      // of the chain, so a bar keypress broadcasts like a typed one.
+      _chain?.without(
+        _chainKey,
+        () => widget.terminal!.onOutput?.call(output),
+      );
     }
 
     // Reset Android/iOS IME state after extra key press to prevent composition corruption

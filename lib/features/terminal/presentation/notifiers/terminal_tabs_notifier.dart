@@ -64,11 +64,11 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
 
   @override
   TerminalTabsState build() {
-    // Tees read the notifier's live selection, never a captured snapshot.
+    // Interceptors read the notifier's live selection, never a snapshot.
     _broadcastRouter.forwardCallback = _broadcastFrom;
     ref.onDispose(() {
-      // Reading `state` is forbidden during life-cycles; restore tees from
-      // the owned-tab set instead.
+      // Reading `state` is forbidden during life-cycles; drop interceptors
+      // from the owned-tab set instead.
       _broadcastRouter.restoreAll(_ownedTabs.toList());
       for (final tab in _ownedTabs.toList()) {
         tab.dispose();
@@ -167,7 +167,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
         final bridge = TerminalSSHBridge(
           terminal: terminal,
           session: sshSession,
-          onClosed: () => _handleClientChange(tab, null),
+          onClosed: () => _handleRemoteExit(tab),
         );
 
         tab.sshBridge = bridge;
@@ -180,9 +180,10 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
         bridge.resizeTerminal(terminal.viewWidth, terminal.viewHeight);
         tab.isConnecting = false;
         tab.isConnected = true;
+        tab.disconnectCause = null;
 
         state = state.copyWith(tabs: [...state.tabs]);
-        // Wire a broadcast tee if this pane is already part of the selection.
+        // Wire broadcast if this pane is already part of the selection.
         _syncBroadcast();
       } catch (e) {
         // A failure after a successful connect (e.g. server refuses a PTY)
@@ -219,6 +220,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     tab.isConnected = false;
     tab.isConnecting = true;
     tab.errorMessage = null;
+    tab.disconnectCause = null;
     state = state.copyWith(tabs: [...state.tabs]);
 
     await tab.sshClientChangesSub?.cancel();
@@ -249,18 +251,35 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     if (client != null) return;
     if (!tab.isConnected) return;
     if (!state.tabs.any((t) => t.id == tab.id)) return;
-    _markTabDisconnected(tab, 'Connection lost');
+    _markTabDisconnected(tab, TerminalDisconnectCause.connectionLost);
   }
 
-  /// Flips [tab] to the disconnected state, detaches its bridge, and
-  /// surfaces the reason in the terminal buffer so the view can offer a
-  /// reconnect.
-  void _markTabDisconnected(TerminalTabSession tab, String reason) {
+  /// Reacts to the bridge's remote streams ending: the shell on the other side
+  /// exited. That is an ordinary end to a session, so it is recorded as such
+  /// and not reported as a failure — the bridge has already written its own
+  /// `[Session closed / Process exited]` notice to the buffer.
+  void _handleRemoteExit(TerminalTabSession tab) {
+    if (!tab.isConnected) return;
+    if (!state.tabs.any((t) => t.id == tab.id)) return;
+    _markTabDisconnected(tab, TerminalDisconnectCause.remoteExit);
+  }
+
+  /// Flips [tab] to the disconnected state, detaches its bridge, and records
+  /// [cause] so the view can offer a reconnect with the right tone. Only a
+  /// dropped transport is announced in the terminal buffer; a remote exit was
+  /// already announced by the bridge.
+  void _markTabDisconnected(
+    TerminalTabSession tab,
+    TerminalDisconnectCause cause,
+  ) {
     tab.isConnected = false;
     tab.isConnecting = false;
-    tab.sshBridge?.dispose(closeSession: true);
+    tab.disconnectCause = cause;
+    unawaited(tab.sshBridge?.dispose(closeSession: true) ?? Future.value());
     tab.sshBridge = null;
-    tab.terminal.write('\r\n\x1b[1;31m[$reason]\x1b[0m\r\n');
+    if (cause == TerminalDisconnectCause.connectionLost) {
+      tab.terminal.write('\r\n\x1b[1;31m[Connection lost]\x1b[0m\r\n');
+    }
     state = state.copyWith(tabs: [...state.tabs]);
   }
 
@@ -306,7 +325,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     }
 
     state = state.copyWith(tabs: [...state.tabs]);
-    // Wire a broadcast tee if this pane is already part of the selection.
+    // Wire broadcast if this pane is already part of the selection.
     _syncBroadcast();
   }
 
@@ -376,7 +395,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     state = state.copyWith(tabs: [...state.tabs]);
   }
 
-  /// Reconciles installed broadcast tees with the current selection.
+  /// Reconciles installed broadcast interceptors with the current selection.
   void _syncBroadcast() {
     _broadcastRouter.sync(
       selectedIds: state.selectedPaneIds,
@@ -384,9 +403,9 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     );
   }
 
-  /// Forward handler invoked by installed tees with the origin pane id.
-  /// Reads the live selection, so panes added or removed after a tee was
-  /// installed are handled correctly.
+  /// Forward handler invoked by installed interceptors with the origin pane
+  /// id. Reads the live selection, so panes added or removed after an
+  /// interceptor was installed are handled correctly.
   void _broadcastFrom(String originId, String data) {
     _broadcastRouter.forwardToOthers(
       originId: originId,
@@ -434,9 +453,16 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     );
   }
 
+  /// Opens a new pane inside the split tree of [parentTabId].
+  ///
+  /// With [host] the pane connects to that host instead of inheriting the
+  /// parent's session, so one tab can hold panes on different connections.
+  /// Without it the pane mirrors the parent (see below).
   Future<void>? splitTab(
     String parentTabId, {
     Axis direction = Axis.horizontal,
+    HostModel? host,
+    IdentityModel? identity,
     HostKeyPromptCallback? onHostKeyPrompt,
   }) {
     final parentIndex = state.tabs.indexWhere((t) => t.id == parentTabId);
@@ -446,21 +472,25 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     final splitId = const Uuid().v4();
     final terminal = Terminal(maxLines: 10000);
 
-    // A split pane mirrors the session type of the pane it was created from.
-    // Splitting an SSH host session opens a second SSH session to the same
-    // host rather than a local shell; this also keeps splits working on
-    // mobile, where a local PTY is not available.
-    final isSshSplit = parentTab.sessionType == TerminalSessionType.ssh &&
-        parentTab.host != null;
+    // Without an explicit target a split pane mirrors the session type of the
+    // pane it was created from. Splitting an SSH host session opens a second
+    // SSH session to the same host rather than a local shell; this also keeps
+    // splits working on mobile, where a local PTY is not available.
+    final targetHost = host ?? parentTab.host;
+    final isSshSplit = host != null ||
+        (parentTab.sessionType == TerminalSessionType.ssh &&
+            parentTab.host != null);
 
     final splitTab = TerminalTabSession(
       id: splitId,
-      title: '${parentTab.title} (Split)',
+      // A pane on its own connection is titled after that host; an inherited
+      // pane keeps the parent's title with a marker.
+      title: host != null ? host.label : '${parentTab.title} (Split)',
       sessionType: isSshSplit
           ? TerminalSessionType.ssh
           : TerminalSessionType.local,
-      host: parentTab.host,
-      identity: parentTab.identity,
+      host: targetHost,
+      identity: host != null ? identity : parentTab.identity,
       terminal: terminal,
       splitParentId: parentTabId,
       splitDirection: direction,
@@ -478,8 +508,8 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       // SSH handshake; UI call sites fire-and-forget via unawaited(...).
       return _connectSshTab(
         splitTab,
-        parentTab.host!,
-        parentTab.identity,
+        targetHost!,
+        splitTab.identity,
         onHostKeyPrompt,
       );
     }
@@ -506,7 +536,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       tabs: [...state.tabs, splitTab],
       activeTabId: splitId,
     );
-    // Wire a broadcast tee if this pane is already part of the selection.
+    // Wire broadcast if this pane is already part of the selection.
     _syncBroadcast();
     return null;
   }

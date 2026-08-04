@@ -131,6 +131,51 @@ void main() {
       );
     });
 
+    testWidgets('Remote shell exit shows a neutral banner, not an error', (
+      tester,
+    ) async {
+      final session = TerminalTabSession(
+        id: 'session-exit',
+        title: 'SSH Host',
+        sessionType: TerminalSessionType.ssh,
+        host: HostModel(
+          id: 'host-1',
+          workspaceId: 'ws-1',
+          label: 'SSH Host',
+          hostname: '127.0.0.1',
+          port: 22,
+          createdAt: DateTime.now(),
+        ),
+        terminal: Terminal(maxLines: 100),
+        isConnected: false,
+        disconnectCause: TerminalDisconnectCause.remoteExit,
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          child: ShadTheme(
+            data: ShadThemeData(
+              colorScheme: const ShadSlateColorScheme.dark(),
+              brightness: Brightness.dark,
+            ),
+            child: MaterialApp(
+              home: Scaffold(body: TerminalScreen(session: session)),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // Typing `exit` is not a failure: same Reconnect affordance, no alarm.
+      expect(find.text('Session ended'), findsOneWidget);
+      expect(find.text('Connection lost'), findsNothing);
+      expect(find.byIcon(Icons.error_outline), findsNothing);
+      expect(
+        find.byKey(const Key('reconnect_session-exit')),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('Failed SSH session shows error banner with Reconnect button', (
       tester,
     ) async {
