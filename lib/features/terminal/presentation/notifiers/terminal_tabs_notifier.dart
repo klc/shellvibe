@@ -57,7 +57,6 @@ class TerminalTabsState {
 }
 
 @Riverpod(keepAlive: true)
-@Riverpod(keepAlive: true)
 class TerminalTabsNotifier extends _$TerminalTabsNotifier {
   final Set<TerminalTabSession> _ownedTabs = {};
   final BroadcastInputRouter _broadcastRouter = BroadcastInputRouter();

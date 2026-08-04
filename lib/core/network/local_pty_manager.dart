@@ -143,9 +143,7 @@ class LocalPtyManager {
     // profile (.zprofile/.bash_profile) and restores their real PATH. A bare
     // shell inherits the GUI app's minimal launchd PATH, hiding Homebrew
     // binaries such as `htop`. Respect explicit caller arguments over this.
-    final args = arguments.isEmpty && !Platform.isWindows
-        ? const ['-l']
-        : arguments;
+    final loginArgs = arguments.isEmpty && !Platform.isWindows;
     final env = <String, String>{
       ...Platform.environment,
       'TERM': 'xterm-256color',
@@ -153,14 +151,24 @@ class LocalPtyManager {
     };
     final workDir = workingDirectory ?? Platform.environment['HOME'];
 
-    return Pty.start(
-      exec,
-      arguments: args,
-      workingDirectory: workDir,
-      environment: env,
-      rows: rows,
-      columns: columns,
-    );
+    Pty spawn(List<String> args) => Pty.start(
+          exec,
+          arguments: args,
+          workingDirectory: workDir,
+          environment: env,
+          rows: rows,
+          columns: columns,
+        );
+
+    if (!loginArgs) return spawn(arguments);
+    try {
+      return spawn(const ['-l']);
+    } catch (_) {
+      // `SHELL` may point at a shell that rejects `-l` (nushell, some
+      // restricted shells). A terminal that opens with a thin PATH beats one
+      // that refuses to open at all, so fall back to a bare invocation.
+      return spawn(const []);
+    }
   }
 
   /// Spawns a local PTY process and binds it to [terminal].

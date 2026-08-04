@@ -9,16 +9,43 @@ part of 'database_providers.dart';
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // ignore_for_file: type=lint, type=warning
 /// Provides a single instance of [AppDatabase].
+///
+/// The drift database is deliberately **not** closed on dispose. The connection
+/// is a `NativeDatabase.createInBackground` executor, so closing it here frees
+/// the sqlite3 connection while the executor isolate is still going down; at
+/// isolate shutdown the VM runs every attached `sqlite3_finalize` native
+/// finalizer against that freed connection, crashing the app with SIGSEGV on
+/// exit (macOS release, "[Process exited with code 255]"). Letting the process
+/// exit reclaim the DB is safe: the finalizers then run against a live
+/// connection and SQLite's WAL recovery makes the file crash-safe.
 
 @ProviderFor(appDatabase)
 final appDatabaseProvider = AppDatabaseProvider._();
 
 /// Provides a single instance of [AppDatabase].
+///
+/// The drift database is deliberately **not** closed on dispose. The connection
+/// is a `NativeDatabase.createInBackground` executor, so closing it here frees
+/// the sqlite3 connection while the executor isolate is still going down; at
+/// isolate shutdown the VM runs every attached `sqlite3_finalize` native
+/// finalizer against that freed connection, crashing the app with SIGSEGV on
+/// exit (macOS release, "[Process exited with code 255]"). Letting the process
+/// exit reclaim the DB is safe: the finalizers then run against a live
+/// connection and SQLite's WAL recovery makes the file crash-safe.
 
 final class AppDatabaseProvider
     extends $FunctionalProvider<AppDatabase, AppDatabase, AppDatabase>
     with $Provider<AppDatabase> {
   /// Provides a single instance of [AppDatabase].
+  ///
+  /// The drift database is deliberately **not** closed on dispose. The connection
+  /// is a `NativeDatabase.createInBackground` executor, so closing it here frees
+  /// the sqlite3 connection while the executor isolate is still going down; at
+  /// isolate shutdown the VM runs every attached `sqlite3_finalize` native
+  /// finalizer against that freed connection, crashing the app with SIGSEGV on
+  /// exit (macOS release, "[Process exited with code 255]"). Letting the process
+  /// exit reclaim the DB is safe: the finalizers then run against a live
+  /// connection and SQLite's WAL recovery makes the file crash-safe.
   AppDatabaseProvider._()
     : super(
         from: null,
@@ -52,7 +79,7 @@ final class AppDatabaseProvider
   }
 }
 
-String _$appDatabaseHash() => r'67f06207fff3a55949c4c4b67200f868a9b6acc8';
+String _$appDatabaseHash() => r'8c69eb46d45206533c176c88a926608e79ca927d';
 
 /// Auto-disposing provider for [KnownHostsDao].
 

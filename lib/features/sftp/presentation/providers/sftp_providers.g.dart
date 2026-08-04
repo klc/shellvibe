@@ -198,7 +198,7 @@ final class SftpNotifierProvider
   }
 }
 
-String _$sftpNotifierHash() => r'bdf99288e591566174af15d106936e7d8012eff8';
+String _$sftpNotifierHash() => r'97a6feee75853e28cdca2a419601098404d57bd3';
 
 abstract class _$SftpNotifier extends $Notifier<SftpState> {
   SftpState build();

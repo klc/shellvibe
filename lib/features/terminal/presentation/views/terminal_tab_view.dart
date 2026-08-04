@@ -326,7 +326,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
     return order;
   }
 
-/// Sends snippet text to the focused pane, or to every selected pane while
+  /// Sends snippet text to the focused pane, or to every selected pane while
   /// broadcast input is active (two or more panes selected).
   void _sendToPanes(TerminalTabsState tabsState, String code) {
     if (tabsState.isBroadcasting) {
@@ -343,11 +343,10 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
   /// Of the selected panes, how many have a live session handler (i.e. can
   /// actually receive input). Shown as `broadcast X/Y` in the status bar.
   int _deliverablePaneCount(TerminalTabsState tabsState) {
+    final tabsById = {for (final tab in tabsState.tabs) tab.id: tab};
     var count = 0;
     for (final id in tabsState.selectedPaneIds) {
-      final matches = tabsState.tabs.where((t) => t.id == id);
-      if (matches.isEmpty) continue;
-      if (matches.first.terminal.onOutput != null) count++;
+      if (tabsById[id]?.terminal.onOutput != null) count++;
     }
     return count;
   }
