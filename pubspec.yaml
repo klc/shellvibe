@@ -100,6 +100,35 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  # Terminal Nerd Fonts (Mono variants — every glyph single-cell wide, which
+  # keeps xterm2's grid alignment because xterm2 treats the Private Use Area
+  # as width 1). Licenses in assets/fonts/nerd/LICENSES.txt.
+  fonts:
+    - family: JetBrainsMono Nerd Font Mono
+      fonts:
+        - asset: assets/fonts/nerd/JetBrainsMonoNerdFontMono-Regular.ttf
+    - family: FiraCode Nerd Font Mono
+      fonts:
+        - asset: assets/fonts/nerd/FiraCodeNerdFontMono-Regular.ttf
+    - family: MesloLGM Nerd Font Mono
+      fonts:
+        - asset: assets/fonts/nerd/MesloLGMNerdFontMono-Regular.ttf
+    - family: Hack Nerd Font Mono
+      fonts:
+        - asset: assets/fonts/nerd/HackNerdFontMono-Regular.ttf
+    - family: CaskaydiaCove Nerd Font Mono
+      fonts:
+        - asset: assets/fonts/nerd/CaskaydiaCoveNerdFontMono-Regular.ttf
+    - family: UbuntuMono Nerd Font Mono
+      fonts:
+        - asset: assets/fonts/nerd/UbuntuMonoNerdFontMono-Regular.ttf
+    - family: SauceCodePro Nerd Font Mono
+      fonts:
+        - asset: assets/fonts/nerd/SauceCodeProNerdFontMono-Regular.ttf
+    - family: Symbols Nerd Font Mono
+      fonts:
+        - asset: assets/fonts/nerd/SymbolsNerdFontMono-Regular.ttf
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg
