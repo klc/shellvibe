@@ -23,6 +23,7 @@ class AppSettingsModel {
   final TerminalPalette terminalPalette;
   final String fontFamily;
   final double fontSize;
+  final double lineHeightFactor;
   final AppCursorStyle cursorStyle;
   final bool enableLigatures;
   final int autoLockTimerSeconds;
@@ -35,6 +36,7 @@ class AppSettingsModel {
     this.terminalPalette = TerminalPalette.dark,
     this.fontFamily = 'RobotoMono',
     this.fontSize = 14.0,
+    this.lineHeightFactor = 1.4,
     this.cursorStyle = AppCursorStyle.block,
     this.enableLigatures = true,
     this.autoLockTimerSeconds = 0,
@@ -48,6 +50,7 @@ class AppSettingsModel {
     TerminalPalette? terminalPalette,
     String? fontFamily,
     double? fontSize,
+    double? lineHeightFactor,
     AppCursorStyle? cursorStyle,
     bool? enableLigatures,
     int? autoLockTimerSeconds,
@@ -60,6 +63,7 @@ class AppSettingsModel {
       terminalPalette: terminalPalette ?? this.terminalPalette,
       fontFamily: fontFamily ?? this.fontFamily,
       fontSize: fontSize ?? this.fontSize,
+      lineHeightFactor: lineHeightFactor ?? this.lineHeightFactor,
       cursorStyle: cursorStyle ?? this.cursorStyle,
       enableLigatures: enableLigatures ?? this.enableLigatures,
       autoLockTimerSeconds: autoLockTimerSeconds ?? this.autoLockTimerSeconds,
@@ -75,6 +79,7 @@ class AppSettingsModel {
     'terminalPalette': terminalPalette.name,
     'fontFamily': fontFamily,
     'fontSize': fontSize,
+    'lineHeightFactor': lineHeightFactor,
     'cursorStyle': cursorStyle.name,
     'enableLigatures': enableLigatures,
     'autoLockTimerSeconds': autoLockTimerSeconds,
@@ -98,6 +103,8 @@ class AppSettingsModel {
       ),
       fontFamily: (json['fontFamily'] as String?) ?? 'RobotoMono',
       fontSize: (json['fontSize'] as num?)?.toDouble() ?? 14.0,
+      lineHeightFactor:
+          (json['lineHeightFactor'] as num?)?.toDouble() ?? 1.4,
       cursorStyle: AppCursorStyle.values.firstWhere(
         (e) => e.name == json['cursorStyle'],
         orElse: () => AppCursorStyle.block,

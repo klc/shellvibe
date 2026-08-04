@@ -586,6 +586,23 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
                 const Divider(),
                 ListTile(
+                  title: const Text('Line Height'),
+                  subtitle: Slider(
+                    key: const Key('settings_line_height_slider'),
+                    min: 1.0,
+                    max: 2.0,
+                    divisions: 20,
+                    value: settings.lineHeightFactor,
+                    label:
+                        '${settings.lineHeightFactor.toStringAsFixed(2)}x',
+                    onChanged: (val) => notifier.setLineHeightFactor(val),
+                  ),
+                  trailing: Text(
+                    '${settings.lineHeightFactor.toStringAsFixed(2)}x',
+                  ),
+                ),
+                const Divider(),
+                ListTile(
                   title: const Text('Cursor Style'),
                   trailing: ShadSelect<AppCursorStyle>(
                     key: const Key('settings_cursor_style_dropdown'),

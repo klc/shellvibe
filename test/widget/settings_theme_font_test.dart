@@ -121,5 +121,24 @@ void main() {
       container.read(settingsProvider).value?.fontFamily,
       'JetBrainsMonoNF',
     );
+
+    // Line height slider is wired: dragging persists a new factor.
+    final lineHeightSlider = find.byKey(
+      const Key('settings_line_height_slider'),
+    );
+    await tester.ensureVisible(lineHeightSlider);
+    await tester.pumpAndSettle();
+    expect(lineHeightSlider, findsOneWidget);
+    expect(
+      container.read(settingsProvider).value?.lineHeightFactor,
+      1.4,
+    );
+    await tester.drag(lineHeightSlider, const Offset(400, 0));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(
+      container.read(settingsProvider).value?.lineHeightFactor,
+      2.0,
+    );
   });
 }

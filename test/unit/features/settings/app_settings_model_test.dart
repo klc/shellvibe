@@ -12,6 +12,7 @@ void main() {
       expect(settings.terminalPalette, equals(TerminalPalette.dark));
       expect(settings.fontFamily, equals('RobotoMono'));
       expect(settings.fontSize, equals(14.0));
+      expect(settings.lineHeightFactor, equals(1.4));
       expect(settings.cursorStyle, equals(AppCursorStyle.block));
       expect(settings.enableLigatures, isTrue);
       expect(settings.autoLockTimerSeconds, equals(0));
@@ -26,6 +27,7 @@ void main() {
         terminalPalette: TerminalPalette.dracula,
         enableLigatures: false,
         fontSize: 16.0,
+        lineHeightFactor: 1.7,
         autoLockTimerSeconds: 60,
         activeWorkspaceId: 'client-ops',
       );
@@ -34,6 +36,7 @@ void main() {
       expect(updated.terminalPalette, equals(TerminalPalette.dracula));
       expect(updated.enableLigatures, isFalse);
       expect(updated.fontSize, equals(16.0));
+      expect(updated.lineHeightFactor, equals(1.7));
       expect(updated.autoLockTimerSeconds, equals(60));
       expect(updated.fontFamily, equals('RobotoMono'));
       expect(updated.activeWorkspaceId, equals('client-ops'));
@@ -46,6 +49,7 @@ void main() {
         terminalPalette: TerminalPalette.solarizedDark,
         fontFamily: 'FiraCode',
         fontSize: 18.0,
+        lineHeightFactor: 1.6,
         cursorStyle: AppCursorStyle.underline,
         autoLockTimerSeconds: 300,
         clipboardAutoClearSeconds: 15,
@@ -60,6 +64,7 @@ void main() {
       expect(restored.terminalPalette, equals(TerminalPalette.solarizedDark));
       expect(restored.fontFamily, equals('FiraCode'));
       expect(restored.fontSize, equals(18.0));
+      expect(restored.lineHeightFactor, equals(1.6));
       expect(restored.cursorStyle, equals(AppCursorStyle.underline));
       expect(restored.autoLockTimerSeconds, equals(300));
       expect(restored.clipboardAutoClearSeconds, equals(15));
@@ -73,6 +78,7 @@ void main() {
       });
 
       expect(restored.activeWorkspaceId, equals('default'));
+      expect(restored.lineHeightFactor, equals(1.4));
     });
 
     test('serializes and deserializes all new palettes and fonts correctly', () {

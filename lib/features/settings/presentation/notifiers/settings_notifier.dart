@@ -91,6 +91,11 @@ class SettingsNotifier extends _$SettingsNotifier {
     await updateSettings(current.copyWith(fontSize: fontSize));
   }
 
+  Future<void> setLineHeightFactor(double lineHeightFactor) async {
+    final current = _base;
+    await updateSettings(current.copyWith(lineHeightFactor: lineHeightFactor));
+  }
+
   Future<void> setCursorStyle(AppCursorStyle cursorStyle) async {
     final current = _base;
     await updateSettings(current.copyWith(cursorStyle: cursorStyle));
