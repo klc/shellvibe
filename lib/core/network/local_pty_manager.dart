@@ -139,11 +139,6 @@ class LocalPtyManager {
     }
 
     final exec = executable ?? getDefaultShell();
-    // Start the shell as a login shell (non-Windows) so it reads the user's
-    // profile (.zprofile/.bash_profile) and restores their real PATH. A bare
-    // shell inherits the GUI app's minimal launchd PATH, hiding Homebrew
-    // binaries such as `htop`. Respect explicit caller arguments over this.
-    final loginArgs = arguments.isEmpty && !Platform.isWindows;
     final env = <String, String>{
       ...Platform.environment,
       'TERM': 'xterm-256color',
@@ -151,24 +146,49 @@ class LocalPtyManager {
     };
     final workDir = workingDirectory ?? Platform.environment['HOME'];
 
-    Pty spawn(List<String> args) => Pty.start(
-          exec,
-          arguments: args,
-          workingDirectory: workDir,
-          environment: env,
-          rows: rows,
-          columns: columns,
-        );
+    return Pty.start(
+      exec,
+      arguments: arguments.isEmpty ? defaultShellArguments(exec) : arguments,
+      workingDirectory: workDir,
+      environment: env,
+      rows: rows,
+      columns: columns,
+    );
+  }
 
-    if (!loginArgs) return spawn(arguments);
-    try {
-      return spawn(const ['-l']);
-    } catch (_) {
-      // `SHELL` may point at a shell that rejects `-l` (nushell, some
-      // restricted shells). A terminal that opens with a thin PATH beats one
-      // that refuses to open at all, so fall back to a bare invocation.
-      return spawn(const []);
-    }
+  /// POSIX shells known to take `-l` for "login shell". Anything outside this
+  /// set is started bare.
+  static const Set<String> _loginFlagShells = {
+    'sh',
+    'bash',
+    'zsh',
+    'ksh',
+    'ksh93',
+    'mksh',
+    'dash',
+    'ash',
+    'fish',
+    'csh',
+    'tcsh',
+  };
+
+  /// Arguments to start [executable] with when the caller gave none.
+  ///
+  /// Known POSIX shells are started as login shells so they read the user's
+  /// profile (`.zprofile`/`.bash_profile`) and restore their real PATH — a
+  /// bare shell inherits the GUI app's minimal launchd PATH, which hides
+  /// Homebrew binaries such as `htop`.
+  ///
+  /// The flag is gated on a known-shell list rather than tried and retried:
+  /// `Pty.start` forks and execs, so a shell that rejects `-l` still spawns
+  /// successfully and then dies in the child with a usage error. There is no
+  /// exception to catch, so an unrecognised shell (nushell, a restricted or
+  /// wrapper shell) gets a bare invocation and a thin PATH — which beats a
+  /// pane that opens onto a dead process.
+  List<String> defaultShellArguments(String executable) {
+    if (Platform.isWindows) return const [];
+    final name = executable.split('/').last;
+    return _loginFlagShells.contains(name) ? const ['-l'] : const [];
   }
 
   /// Spawns a local PTY process and binds it to [terminal].
