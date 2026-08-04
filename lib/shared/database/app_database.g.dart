@@ -4122,6 +4122,1032 @@ class RunbookStepsCompanion extends UpdateCompanion<RunbookStep> {
   }
 }
 
+class $TemplatesTable extends Templates
+    with TableInfo<$TemplatesTable, Template> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $TemplatesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _workspaceIdMeta = const VerificationMeta(
+    'workspaceId',
+  );
+  @override
+  late final GeneratedColumn<String> workspaceId = GeneratedColumn<String>(
+    'workspace_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES workspaces (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _descriptionMeta = const VerificationMeta(
+    'description',
+  );
+  @override
+  late final GeneratedColumn<String> description = GeneratedColumn<String>(
+    'description',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _activePaneIdMeta = const VerificationMeta(
+    'activePaneId',
+  );
+  @override
+  late final GeneratedColumn<String> activePaneId = GeneratedColumn<String>(
+    'active_pane_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    workspaceId,
+    name,
+    description,
+    activePaneId,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'templates';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<Template> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('workspace_id')) {
+      context.handle(
+        _workspaceIdMeta,
+        workspaceId.isAcceptableOrUnknown(
+          data['workspace_id']!,
+          _workspaceIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_workspaceIdMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('description')) {
+      context.handle(
+        _descriptionMeta,
+        description.isAcceptableOrUnknown(
+          data['description']!,
+          _descriptionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('active_pane_id')) {
+      context.handle(
+        _activePaneIdMeta,
+        activePaneId.isAcceptableOrUnknown(
+          data['active_pane_id']!,
+          _activePaneIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Template map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Template(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      workspaceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}workspace_id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      description: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}description'],
+      ),
+      activePaneId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}active_pane_id'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $TemplatesTable createAlias(String alias) {
+    return $TemplatesTable(attachedDatabase, alias);
+  }
+}
+
+class Template extends DataClass implements Insertable<Template> {
+  final String id;
+  final String workspaceId;
+  final String name;
+  final String? description;
+
+  /// Template-local id of the pane that was focused at capture time, restored
+  /// as the active pane once the whole layout is back up. Null when the capture
+  /// had no focused pane.
+  final String? activePaneId;
+  final DateTime createdAt;
+  const Template({
+    required this.id,
+    required this.workspaceId,
+    required this.name,
+    this.description,
+    this.activePaneId,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['workspace_id'] = Variable<String>(workspaceId);
+    map['name'] = Variable<String>(name);
+    if (!nullToAbsent || description != null) {
+      map['description'] = Variable<String>(description);
+    }
+    if (!nullToAbsent || activePaneId != null) {
+      map['active_pane_id'] = Variable<String>(activePaneId);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  TemplatesCompanion toCompanion(bool nullToAbsent) {
+    return TemplatesCompanion(
+      id: Value(id),
+      workspaceId: Value(workspaceId),
+      name: Value(name),
+      description: description == null && nullToAbsent
+          ? const Value.absent()
+          : Value(description),
+      activePaneId: activePaneId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(activePaneId),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory Template.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Template(
+      id: serializer.fromJson<String>(json['id']),
+      workspaceId: serializer.fromJson<String>(json['workspaceId']),
+      name: serializer.fromJson<String>(json['name']),
+      description: serializer.fromJson<String?>(json['description']),
+      activePaneId: serializer.fromJson<String?>(json['activePaneId']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'workspaceId': serializer.toJson<String>(workspaceId),
+      'name': serializer.toJson<String>(name),
+      'description': serializer.toJson<String?>(description),
+      'activePaneId': serializer.toJson<String?>(activePaneId),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  Template copyWith({
+    String? id,
+    String? workspaceId,
+    String? name,
+    Value<String?> description = const Value.absent(),
+    Value<String?> activePaneId = const Value.absent(),
+    DateTime? createdAt,
+  }) => Template(
+    id: id ?? this.id,
+    workspaceId: workspaceId ?? this.workspaceId,
+    name: name ?? this.name,
+    description: description.present ? description.value : this.description,
+    activePaneId: activePaneId.present ? activePaneId.value : this.activePaneId,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  Template copyWithCompanion(TemplatesCompanion data) {
+    return Template(
+      id: data.id.present ? data.id.value : this.id,
+      workspaceId: data.workspaceId.present
+          ? data.workspaceId.value
+          : this.workspaceId,
+      name: data.name.present ? data.name.value : this.name,
+      description: data.description.present
+          ? data.description.value
+          : this.description,
+      activePaneId: data.activePaneId.present
+          ? data.activePaneId.value
+          : this.activePaneId,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Template(')
+          ..write('id: $id, ')
+          ..write('workspaceId: $workspaceId, ')
+          ..write('name: $name, ')
+          ..write('description: $description, ')
+          ..write('activePaneId: $activePaneId, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, workspaceId, name, description, activePaneId, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Template &&
+          other.id == this.id &&
+          other.workspaceId == this.workspaceId &&
+          other.name == this.name &&
+          other.description == this.description &&
+          other.activePaneId == this.activePaneId &&
+          other.createdAt == this.createdAt);
+}
+
+class TemplatesCompanion extends UpdateCompanion<Template> {
+  final Value<String> id;
+  final Value<String> workspaceId;
+  final Value<String> name;
+  final Value<String?> description;
+  final Value<String?> activePaneId;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const TemplatesCompanion({
+    this.id = const Value.absent(),
+    this.workspaceId = const Value.absent(),
+    this.name = const Value.absent(),
+    this.description = const Value.absent(),
+    this.activePaneId = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  TemplatesCompanion.insert({
+    required String id,
+    required String workspaceId,
+    required String name,
+    this.description = const Value.absent(),
+    this.activePaneId = const Value.absent(),
+    required DateTime createdAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       workspaceId = Value(workspaceId),
+       name = Value(name),
+       createdAt = Value(createdAt);
+  static Insertable<Template> custom({
+    Expression<String>? id,
+    Expression<String>? workspaceId,
+    Expression<String>? name,
+    Expression<String>? description,
+    Expression<String>? activePaneId,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (workspaceId != null) 'workspace_id': workspaceId,
+      if (name != null) 'name': name,
+      if (description != null) 'description': description,
+      if (activePaneId != null) 'active_pane_id': activePaneId,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  TemplatesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? workspaceId,
+    Value<String>? name,
+    Value<String?>? description,
+    Value<String?>? activePaneId,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return TemplatesCompanion(
+      id: id ?? this.id,
+      workspaceId: workspaceId ?? this.workspaceId,
+      name: name ?? this.name,
+      description: description ?? this.description,
+      activePaneId: activePaneId ?? this.activePaneId,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (workspaceId.present) {
+      map['workspace_id'] = Variable<String>(workspaceId.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (description.present) {
+      map['description'] = Variable<String>(description.value);
+    }
+    if (activePaneId.present) {
+      map['active_pane_id'] = Variable<String>(activePaneId.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TemplatesCompanion(')
+          ..write('id: $id, ')
+          ..write('workspaceId: $workspaceId, ')
+          ..write('name: $name, ')
+          ..write('description: $description, ')
+          ..write('activePaneId: $activePaneId, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $TemplatePanesTable extends TemplatePanes
+    with TableInfo<$TemplatePanesTable, TemplatePane> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $TemplatePanesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _templateIdMeta = const VerificationMeta(
+    'templateId',
+  );
+  @override
+  late final GeneratedColumn<String> templateId = GeneratedColumn<String>(
+    'template_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES templates (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _paneOrderMeta = const VerificationMeta(
+    'paneOrder',
+  );
+  @override
+  late final GeneratedColumn<int> paneOrder = GeneratedColumn<int>(
+    'pane_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _parentPaneIdMeta = const VerificationMeta(
+    'parentPaneId',
+  );
+  @override
+  late final GeneratedColumn<String> parentPaneId = GeneratedColumn<String>(
+    'parent_pane_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _splitDirectionMeta = const VerificationMeta(
+    'splitDirection',
+  );
+  @override
+  late final GeneratedColumn<String> splitDirection = GeneratedColumn<String>(
+    'split_direction',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _splitRatioMeta = const VerificationMeta(
+    'splitRatio',
+  );
+  @override
+  late final GeneratedColumn<double> splitRatio = GeneratedColumn<double>(
+    'split_ratio',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0.5),
+  );
+  static const VerificationMeta _sessionTypeMeta = const VerificationMeta(
+    'sessionType',
+  );
+  @override
+  late final GeneratedColumn<String> sessionType = GeneratedColumn<String>(
+    'session_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _hostIdMeta = const VerificationMeta('hostId');
+  @override
+  late final GeneratedColumn<String> hostId = GeneratedColumn<String>(
+    'host_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _titleMeta = const VerificationMeta('title');
+  @override
+  late final GeneratedColumn<String> title = GeneratedColumn<String>(
+    'title',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    templateId,
+    paneOrder,
+    parentPaneId,
+    splitDirection,
+    splitRatio,
+    sessionType,
+    hostId,
+    title,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'template_panes';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<TemplatePane> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('template_id')) {
+      context.handle(
+        _templateIdMeta,
+        templateId.isAcceptableOrUnknown(data['template_id']!, _templateIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_templateIdMeta);
+    }
+    if (data.containsKey('pane_order')) {
+      context.handle(
+        _paneOrderMeta,
+        paneOrder.isAcceptableOrUnknown(data['pane_order']!, _paneOrderMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_paneOrderMeta);
+    }
+    if (data.containsKey('parent_pane_id')) {
+      context.handle(
+        _parentPaneIdMeta,
+        parentPaneId.isAcceptableOrUnknown(
+          data['parent_pane_id']!,
+          _parentPaneIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('split_direction')) {
+      context.handle(
+        _splitDirectionMeta,
+        splitDirection.isAcceptableOrUnknown(
+          data['split_direction']!,
+          _splitDirectionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('split_ratio')) {
+      context.handle(
+        _splitRatioMeta,
+        splitRatio.isAcceptableOrUnknown(data['split_ratio']!, _splitRatioMeta),
+      );
+    }
+    if (data.containsKey('session_type')) {
+      context.handle(
+        _sessionTypeMeta,
+        sessionType.isAcceptableOrUnknown(
+          data['session_type']!,
+          _sessionTypeMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_sessionTypeMeta);
+    }
+    if (data.containsKey('host_id')) {
+      context.handle(
+        _hostIdMeta,
+        hostId.isAcceptableOrUnknown(data['host_id']!, _hostIdMeta),
+      );
+    }
+    if (data.containsKey('title')) {
+      context.handle(
+        _titleMeta,
+        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  TemplatePane map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return TemplatePane(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      templateId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}template_id'],
+      )!,
+      paneOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}pane_order'],
+      )!,
+      parentPaneId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}parent_pane_id'],
+      ),
+      splitDirection: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}split_direction'],
+      ),
+      splitRatio: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}split_ratio'],
+      )!,
+      sessionType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}session_type'],
+      )!,
+      hostId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}host_id'],
+      ),
+      title: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}title'],
+      ),
+    );
+  }
+
+  @override
+  $TemplatePanesTable createAlias(String alias) {
+    return $TemplatePanesTable(attachedDatabase, alias);
+  }
+}
+
+class TemplatePane extends DataClass implements Insertable<TemplatePane> {
+  final String id;
+  final String templateId;
+  final int paneOrder;
+
+  /// Template-local reference to another pane of the same template.
+  ///
+  /// Deliberately not a foreign key: panes are always written and deleted as
+  /// one batch per template, and a self-referencing FK would impose insert
+  /// ordering constraints on that batch for no benefit.
+  final String? parentPaneId;
+  final String? splitDirection;
+  final double splitRatio;
+  final String sessionType;
+
+  /// Host this pane connected to, or null for a local shell.
+  ///
+  /// Deliberately **not** a foreign key to [Hosts]: deleting a host must not
+  /// silently rewrite or delete saved templates. A pane whose host no longer
+  /// exists is skipped with a warning when the template runs.
+  final String? hostId;
+  final String? title;
+  const TemplatePane({
+    required this.id,
+    required this.templateId,
+    required this.paneOrder,
+    this.parentPaneId,
+    this.splitDirection,
+    required this.splitRatio,
+    required this.sessionType,
+    this.hostId,
+    this.title,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['template_id'] = Variable<String>(templateId);
+    map['pane_order'] = Variable<int>(paneOrder);
+    if (!nullToAbsent || parentPaneId != null) {
+      map['parent_pane_id'] = Variable<String>(parentPaneId);
+    }
+    if (!nullToAbsent || splitDirection != null) {
+      map['split_direction'] = Variable<String>(splitDirection);
+    }
+    map['split_ratio'] = Variable<double>(splitRatio);
+    map['session_type'] = Variable<String>(sessionType);
+    if (!nullToAbsent || hostId != null) {
+      map['host_id'] = Variable<String>(hostId);
+    }
+    if (!nullToAbsent || title != null) {
+      map['title'] = Variable<String>(title);
+    }
+    return map;
+  }
+
+  TemplatePanesCompanion toCompanion(bool nullToAbsent) {
+    return TemplatePanesCompanion(
+      id: Value(id),
+      templateId: Value(templateId),
+      paneOrder: Value(paneOrder),
+      parentPaneId: parentPaneId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(parentPaneId),
+      splitDirection: splitDirection == null && nullToAbsent
+          ? const Value.absent()
+          : Value(splitDirection),
+      splitRatio: Value(splitRatio),
+      sessionType: Value(sessionType),
+      hostId: hostId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(hostId),
+      title: title == null && nullToAbsent
+          ? const Value.absent()
+          : Value(title),
+    );
+  }
+
+  factory TemplatePane.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return TemplatePane(
+      id: serializer.fromJson<String>(json['id']),
+      templateId: serializer.fromJson<String>(json['templateId']),
+      paneOrder: serializer.fromJson<int>(json['paneOrder']),
+      parentPaneId: serializer.fromJson<String?>(json['parentPaneId']),
+      splitDirection: serializer.fromJson<String?>(json['splitDirection']),
+      splitRatio: serializer.fromJson<double>(json['splitRatio']),
+      sessionType: serializer.fromJson<String>(json['sessionType']),
+      hostId: serializer.fromJson<String?>(json['hostId']),
+      title: serializer.fromJson<String?>(json['title']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'templateId': serializer.toJson<String>(templateId),
+      'paneOrder': serializer.toJson<int>(paneOrder),
+      'parentPaneId': serializer.toJson<String?>(parentPaneId),
+      'splitDirection': serializer.toJson<String?>(splitDirection),
+      'splitRatio': serializer.toJson<double>(splitRatio),
+      'sessionType': serializer.toJson<String>(sessionType),
+      'hostId': serializer.toJson<String?>(hostId),
+      'title': serializer.toJson<String?>(title),
+    };
+  }
+
+  TemplatePane copyWith({
+    String? id,
+    String? templateId,
+    int? paneOrder,
+    Value<String?> parentPaneId = const Value.absent(),
+    Value<String?> splitDirection = const Value.absent(),
+    double? splitRatio,
+    String? sessionType,
+    Value<String?> hostId = const Value.absent(),
+    Value<String?> title = const Value.absent(),
+  }) => TemplatePane(
+    id: id ?? this.id,
+    templateId: templateId ?? this.templateId,
+    paneOrder: paneOrder ?? this.paneOrder,
+    parentPaneId: parentPaneId.present ? parentPaneId.value : this.parentPaneId,
+    splitDirection: splitDirection.present
+        ? splitDirection.value
+        : this.splitDirection,
+    splitRatio: splitRatio ?? this.splitRatio,
+    sessionType: sessionType ?? this.sessionType,
+    hostId: hostId.present ? hostId.value : this.hostId,
+    title: title.present ? title.value : this.title,
+  );
+  TemplatePane copyWithCompanion(TemplatePanesCompanion data) {
+    return TemplatePane(
+      id: data.id.present ? data.id.value : this.id,
+      templateId: data.templateId.present
+          ? data.templateId.value
+          : this.templateId,
+      paneOrder: data.paneOrder.present ? data.paneOrder.value : this.paneOrder,
+      parentPaneId: data.parentPaneId.present
+          ? data.parentPaneId.value
+          : this.parentPaneId,
+      splitDirection: data.splitDirection.present
+          ? data.splitDirection.value
+          : this.splitDirection,
+      splitRatio: data.splitRatio.present
+          ? data.splitRatio.value
+          : this.splitRatio,
+      sessionType: data.sessionType.present
+          ? data.sessionType.value
+          : this.sessionType,
+      hostId: data.hostId.present ? data.hostId.value : this.hostId,
+      title: data.title.present ? data.title.value : this.title,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TemplatePane(')
+          ..write('id: $id, ')
+          ..write('templateId: $templateId, ')
+          ..write('paneOrder: $paneOrder, ')
+          ..write('parentPaneId: $parentPaneId, ')
+          ..write('splitDirection: $splitDirection, ')
+          ..write('splitRatio: $splitRatio, ')
+          ..write('sessionType: $sessionType, ')
+          ..write('hostId: $hostId, ')
+          ..write('title: $title')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    templateId,
+    paneOrder,
+    parentPaneId,
+    splitDirection,
+    splitRatio,
+    sessionType,
+    hostId,
+    title,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is TemplatePane &&
+          other.id == this.id &&
+          other.templateId == this.templateId &&
+          other.paneOrder == this.paneOrder &&
+          other.parentPaneId == this.parentPaneId &&
+          other.splitDirection == this.splitDirection &&
+          other.splitRatio == this.splitRatio &&
+          other.sessionType == this.sessionType &&
+          other.hostId == this.hostId &&
+          other.title == this.title);
+}
+
+class TemplatePanesCompanion extends UpdateCompanion<TemplatePane> {
+  final Value<String> id;
+  final Value<String> templateId;
+  final Value<int> paneOrder;
+  final Value<String?> parentPaneId;
+  final Value<String?> splitDirection;
+  final Value<double> splitRatio;
+  final Value<String> sessionType;
+  final Value<String?> hostId;
+  final Value<String?> title;
+  final Value<int> rowid;
+  const TemplatePanesCompanion({
+    this.id = const Value.absent(),
+    this.templateId = const Value.absent(),
+    this.paneOrder = const Value.absent(),
+    this.parentPaneId = const Value.absent(),
+    this.splitDirection = const Value.absent(),
+    this.splitRatio = const Value.absent(),
+    this.sessionType = const Value.absent(),
+    this.hostId = const Value.absent(),
+    this.title = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  TemplatePanesCompanion.insert({
+    required String id,
+    required String templateId,
+    required int paneOrder,
+    this.parentPaneId = const Value.absent(),
+    this.splitDirection = const Value.absent(),
+    this.splitRatio = const Value.absent(),
+    required String sessionType,
+    this.hostId = const Value.absent(),
+    this.title = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       templateId = Value(templateId),
+       paneOrder = Value(paneOrder),
+       sessionType = Value(sessionType);
+  static Insertable<TemplatePane> custom({
+    Expression<String>? id,
+    Expression<String>? templateId,
+    Expression<int>? paneOrder,
+    Expression<String>? parentPaneId,
+    Expression<String>? splitDirection,
+    Expression<double>? splitRatio,
+    Expression<String>? sessionType,
+    Expression<String>? hostId,
+    Expression<String>? title,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (templateId != null) 'template_id': templateId,
+      if (paneOrder != null) 'pane_order': paneOrder,
+      if (parentPaneId != null) 'parent_pane_id': parentPaneId,
+      if (splitDirection != null) 'split_direction': splitDirection,
+      if (splitRatio != null) 'split_ratio': splitRatio,
+      if (sessionType != null) 'session_type': sessionType,
+      if (hostId != null) 'host_id': hostId,
+      if (title != null) 'title': title,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  TemplatePanesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? templateId,
+    Value<int>? paneOrder,
+    Value<String?>? parentPaneId,
+    Value<String?>? splitDirection,
+    Value<double>? splitRatio,
+    Value<String>? sessionType,
+    Value<String?>? hostId,
+    Value<String?>? title,
+    Value<int>? rowid,
+  }) {
+    return TemplatePanesCompanion(
+      id: id ?? this.id,
+      templateId: templateId ?? this.templateId,
+      paneOrder: paneOrder ?? this.paneOrder,
+      parentPaneId: parentPaneId ?? this.parentPaneId,
+      splitDirection: splitDirection ?? this.splitDirection,
+      splitRatio: splitRatio ?? this.splitRatio,
+      sessionType: sessionType ?? this.sessionType,
+      hostId: hostId ?? this.hostId,
+      title: title ?? this.title,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (templateId.present) {
+      map['template_id'] = Variable<String>(templateId.value);
+    }
+    if (paneOrder.present) {
+      map['pane_order'] = Variable<int>(paneOrder.value);
+    }
+    if (parentPaneId.present) {
+      map['parent_pane_id'] = Variable<String>(parentPaneId.value);
+    }
+    if (splitDirection.present) {
+      map['split_direction'] = Variable<String>(splitDirection.value);
+    }
+    if (splitRatio.present) {
+      map['split_ratio'] = Variable<double>(splitRatio.value);
+    }
+    if (sessionType.present) {
+      map['session_type'] = Variable<String>(sessionType.value);
+    }
+    if (hostId.present) {
+      map['host_id'] = Variable<String>(hostId.value);
+    }
+    if (title.present) {
+      map['title'] = Variable<String>(title.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TemplatePanesCompanion(')
+          ..write('id: $id, ')
+          ..write('templateId: $templateId, ')
+          ..write('paneOrder: $paneOrder, ')
+          ..write('parentPaneId: $parentPaneId, ')
+          ..write('splitDirection: $splitDirection, ')
+          ..write('splitRatio: $splitRatio, ')
+          ..write('sessionType: $sessionType, ')
+          ..write('hostId: $hostId, ')
+          ..write('title: $title, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -4136,6 +5162,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $SnippetsTable snippets = $SnippetsTable(this);
   late final $RunbooksTable runbooks = $RunbooksTable(this);
   late final $RunbookStepsTable runbookSteps = $RunbookStepsTable(this);
+  late final $TemplatesTable templates = $TemplatesTable(this);
+  late final $TemplatePanesTable templatePanes = $TemplatePanesTable(this);
   late final HostsDao hostsDao = HostsDao(this as AppDatabase);
   late final IdentitiesDao identitiesDao = IdentitiesDao(this as AppDatabase);
   late final KnownHostsDao knownHostsDao = KnownHostsDao(this as AppDatabase);
@@ -4143,6 +5171,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final WorkspacesDao workspacesDao = WorkspacesDao(this as AppDatabase);
   late final SnippetsDao snippetsDao = SnippetsDao(this as AppDatabase);
   late final RunbooksDao runbooksDao = RunbooksDao(this as AppDatabase);
+  late final TemplatesDao templatesDao = TemplatesDao(this as AppDatabase);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -4157,6 +5186,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     snippets,
     runbooks,
     runbookSteps,
+    templates,
+    templatePanes,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -4236,6 +5267,20 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('runbook_steps', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'workspaces',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('templates', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'templates',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('template_panes', kind: UpdateKind.delete)],
     ),
   ]);
 }
@@ -4349,6 +5394,24 @@ final class $$WorkspacesTableReferences
     ).filter((f) => f.workspaceId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_runbooksRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$TemplatesTable, List<Template>>
+  _templatesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.templates,
+    aliasName: 'workspaces__id__templates__workspace_id',
+  );
+
+  $$TemplatesTableProcessedTableManager get templatesRefs {
+    final manager = $$TemplatesTableTableManager(
+      $_db,
+      $_db.templates,
+    ).filter((f) => f.workspaceId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_templatesRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -4500,6 +5563,31 @@ class $$WorkspacesTableFilterComposer
           }) => $$RunbooksTableFilterComposer(
             $db: $db,
             $table: $db.runbooks,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> templatesRefs(
+    Expression<bool> Function($$TemplatesTableFilterComposer f) f,
+  ) {
+    final $$TemplatesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.templates,
+      getReferencedColumn: (t) => t.workspaceId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TemplatesTableFilterComposer(
+            $db: $db,
+            $table: $db.templates,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -4685,6 +5773,31 @@ class $$WorkspacesTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> templatesRefs<T extends Object>(
+    Expression<T> Function($$TemplatesTableAnnotationComposer a) f,
+  ) {
+    final $$TemplatesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.templates,
+      getReferencedColumn: (t) => t.workspaceId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TemplatesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.templates,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$WorkspacesTableTableManager
@@ -4706,6 +5819,7 @@ class $$WorkspacesTableTableManager
             bool hostsRefs,
             bool snippetsRefs,
             bool runbooksRefs,
+            bool templatesRefs,
           })
         > {
   $$WorkspacesTableTableManager(_$AppDatabase db, $WorkspacesTable table)
@@ -4762,6 +5876,7 @@ class $$WorkspacesTableTableManager
                 hostsRefs = false,
                 snippetsRefs = false,
                 runbooksRefs = false,
+                templatesRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -4771,6 +5886,7 @@ class $$WorkspacesTableTableManager
                     if (hostsRefs) db.hosts,
                     if (snippetsRefs) db.snippets,
                     if (runbooksRefs) db.runbooks,
+                    if (templatesRefs) db.templates,
                   ],
                   addJoins: null,
                   getPrefetchedDataCallback: (items) async {
@@ -4880,6 +5996,27 @@ class $$WorkspacesTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (templatesRefs)
+                        await $_getPrefetchedData<
+                          Workspace,
+                          $WorkspacesTable,
+                          Template
+                        >(
+                          currentTable: table,
+                          referencedTable: $$WorkspacesTableReferences
+                              ._templatesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$WorkspacesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).templatesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.workspaceId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -4906,6 +6043,7 @@ typedef $$WorkspacesTableProcessedTableManager =
         bool hostsRefs,
         bool snippetsRefs,
         bool runbooksRefs,
+        bool templatesRefs,
       })
     >;
 typedef $$IdentitiesTableCreateCompanionBuilder =
@@ -8385,6 +9523,844 @@ typedef $$RunbookStepsTableProcessedTableManager =
       RunbookStep,
       PrefetchHooks Function({bool runbookId})
     >;
+typedef $$TemplatesTableCreateCompanionBuilder =
+    TemplatesCompanion Function({
+      required String id,
+      required String workspaceId,
+      required String name,
+      Value<String?> description,
+      Value<String?> activePaneId,
+      required DateTime createdAt,
+      Value<int> rowid,
+    });
+typedef $$TemplatesTableUpdateCompanionBuilder =
+    TemplatesCompanion Function({
+      Value<String> id,
+      Value<String> workspaceId,
+      Value<String> name,
+      Value<String?> description,
+      Value<String?> activePaneId,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+final class $$TemplatesTableReferences
+    extends BaseReferences<_$AppDatabase, $TemplatesTable, Template> {
+  $$TemplatesTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $WorkspacesTable _workspaceIdTable(_$AppDatabase db) =>
+      db.workspaces.createAlias('templates__workspace_id__workspaces__id');
+
+  $$WorkspacesTableProcessedTableManager get workspaceId {
+    final $_column = $_itemColumn<String>('workspace_id')!;
+
+    final manager = $$WorkspacesTableTableManager(
+      $_db,
+      $_db.workspaces,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_workspaceIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<$TemplatePanesTable, List<TemplatePane>>
+  _templatePanesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.templatePanes,
+    aliasName: 'templates__id__template_panes__template_id',
+  );
+
+  $$TemplatePanesTableProcessedTableManager get templatePanesRefs {
+    final manager = $$TemplatePanesTableTableManager(
+      $_db,
+      $_db.templatePanes,
+    ).filter((f) => f.templateId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_templatePanesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$TemplatesTableFilterComposer
+    extends Composer<_$AppDatabase, $TemplatesTable> {
+  $$TemplatesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get activePaneId => $composableBuilder(
+    column: $table.activePaneId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$WorkspacesTableFilterComposer get workspaceId {
+    final $$WorkspacesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.workspaceId,
+      referencedTable: $db.workspaces,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WorkspacesTableFilterComposer(
+            $db: $db,
+            $table: $db.workspaces,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> templatePanesRefs(
+    Expression<bool> Function($$TemplatePanesTableFilterComposer f) f,
+  ) {
+    final $$TemplatePanesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.templatePanes,
+      getReferencedColumn: (t) => t.templateId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TemplatePanesTableFilterComposer(
+            $db: $db,
+            $table: $db.templatePanes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$TemplatesTableOrderingComposer
+    extends Composer<_$AppDatabase, $TemplatesTable> {
+  $$TemplatesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get activePaneId => $composableBuilder(
+    column: $table.activePaneId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$WorkspacesTableOrderingComposer get workspaceId {
+    final $$WorkspacesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.workspaceId,
+      referencedTable: $db.workspaces,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WorkspacesTableOrderingComposer(
+            $db: $db,
+            $table: $db.workspaces,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$TemplatesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $TemplatesTable> {
+  $$TemplatesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get activePaneId => $composableBuilder(
+    column: $table.activePaneId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$WorkspacesTableAnnotationComposer get workspaceId {
+    final $$WorkspacesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.workspaceId,
+      referencedTable: $db.workspaces,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WorkspacesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.workspaces,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> templatePanesRefs<T extends Object>(
+    Expression<T> Function($$TemplatePanesTableAnnotationComposer a) f,
+  ) {
+    final $$TemplatePanesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.templatePanes,
+      getReferencedColumn: (t) => t.templateId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TemplatePanesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.templatePanes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$TemplatesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $TemplatesTable,
+          Template,
+          $$TemplatesTableFilterComposer,
+          $$TemplatesTableOrderingComposer,
+          $$TemplatesTableAnnotationComposer,
+          $$TemplatesTableCreateCompanionBuilder,
+          $$TemplatesTableUpdateCompanionBuilder,
+          (Template, $$TemplatesTableReferences),
+          Template,
+          PrefetchHooks Function({bool workspaceId, bool templatePanesRefs})
+        > {
+  $$TemplatesTableTableManager(_$AppDatabase db, $TemplatesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$TemplatesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$TemplatesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$TemplatesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> workspaceId = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String?> description = const Value.absent(),
+                Value<String?> activePaneId = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => TemplatesCompanion(
+                id: id,
+                workspaceId: workspaceId,
+                name: name,
+                description: description,
+                activePaneId: activePaneId,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String workspaceId,
+                required String name,
+                Value<String?> description = const Value.absent(),
+                Value<String?> activePaneId = const Value.absent(),
+                required DateTime createdAt,
+                Value<int> rowid = const Value.absent(),
+              }) => TemplatesCompanion.insert(
+                id: id,
+                workspaceId: workspaceId,
+                name: name,
+                description: description,
+                activePaneId: activePaneId,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$TemplatesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({workspaceId = false, templatePanesRefs = false}) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (templatePanesRefs) db.templatePanes,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (workspaceId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.workspaceId,
+                                    referencedTable: $$TemplatesTableReferences
+                                        ._workspaceIdTable(db),
+                                    referencedColumn: $$TemplatesTableReferences
+                                        ._workspaceIdTable(db)
+                                        .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (templatePanesRefs)
+                        await $_getPrefetchedData<
+                          Template,
+                          $TemplatesTable,
+                          TemplatePane
+                        >(
+                          currentTable: table,
+                          referencedTable: $$TemplatesTableReferences
+                              ._templatePanesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$TemplatesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).templatePanesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.templateId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$TemplatesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $TemplatesTable,
+      Template,
+      $$TemplatesTableFilterComposer,
+      $$TemplatesTableOrderingComposer,
+      $$TemplatesTableAnnotationComposer,
+      $$TemplatesTableCreateCompanionBuilder,
+      $$TemplatesTableUpdateCompanionBuilder,
+      (Template, $$TemplatesTableReferences),
+      Template,
+      PrefetchHooks Function({bool workspaceId, bool templatePanesRefs})
+    >;
+typedef $$TemplatePanesTableCreateCompanionBuilder =
+    TemplatePanesCompanion Function({
+      required String id,
+      required String templateId,
+      required int paneOrder,
+      Value<String?> parentPaneId,
+      Value<String?> splitDirection,
+      Value<double> splitRatio,
+      required String sessionType,
+      Value<String?> hostId,
+      Value<String?> title,
+      Value<int> rowid,
+    });
+typedef $$TemplatePanesTableUpdateCompanionBuilder =
+    TemplatePanesCompanion Function({
+      Value<String> id,
+      Value<String> templateId,
+      Value<int> paneOrder,
+      Value<String?> parentPaneId,
+      Value<String?> splitDirection,
+      Value<double> splitRatio,
+      Value<String> sessionType,
+      Value<String?> hostId,
+      Value<String?> title,
+      Value<int> rowid,
+    });
+
+final class $$TemplatePanesTableReferences
+    extends BaseReferences<_$AppDatabase, $TemplatePanesTable, TemplatePane> {
+  $$TemplatePanesTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $TemplatesTable _templateIdTable(_$AppDatabase db) =>
+      db.templates.createAlias('template_panes__template_id__templates__id');
+
+  $$TemplatesTableProcessedTableManager get templateId {
+    final $_column = $_itemColumn<String>('template_id')!;
+
+    final manager = $$TemplatesTableTableManager(
+      $_db,
+      $_db.templates,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_templateIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$TemplatePanesTableFilterComposer
+    extends Composer<_$AppDatabase, $TemplatePanesTable> {
+  $$TemplatePanesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get paneOrder => $composableBuilder(
+    column: $table.paneOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get parentPaneId => $composableBuilder(
+    column: $table.parentPaneId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get splitDirection => $composableBuilder(
+    column: $table.splitDirection,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get splitRatio => $composableBuilder(
+    column: $table.splitRatio,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sessionType => $composableBuilder(
+    column: $table.sessionType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get hostId => $composableBuilder(
+    column: $table.hostId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$TemplatesTableFilterComposer get templateId {
+    final $$TemplatesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.templateId,
+      referencedTable: $db.templates,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TemplatesTableFilterComposer(
+            $db: $db,
+            $table: $db.templates,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$TemplatePanesTableOrderingComposer
+    extends Composer<_$AppDatabase, $TemplatePanesTable> {
+  $$TemplatePanesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get paneOrder => $composableBuilder(
+    column: $table.paneOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get parentPaneId => $composableBuilder(
+    column: $table.parentPaneId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get splitDirection => $composableBuilder(
+    column: $table.splitDirection,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get splitRatio => $composableBuilder(
+    column: $table.splitRatio,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sessionType => $composableBuilder(
+    column: $table.sessionType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get hostId => $composableBuilder(
+    column: $table.hostId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$TemplatesTableOrderingComposer get templateId {
+    final $$TemplatesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.templateId,
+      referencedTable: $db.templates,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TemplatesTableOrderingComposer(
+            $db: $db,
+            $table: $db.templates,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$TemplatePanesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $TemplatePanesTable> {
+  $$TemplatePanesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get paneOrder =>
+      $composableBuilder(column: $table.paneOrder, builder: (column) => column);
+
+  GeneratedColumn<String> get parentPaneId => $composableBuilder(
+    column: $table.parentPaneId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get splitDirection => $composableBuilder(
+    column: $table.splitDirection,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get splitRatio => $composableBuilder(
+    column: $table.splitRatio,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get sessionType => $composableBuilder(
+    column: $table.sessionType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get hostId =>
+      $composableBuilder(column: $table.hostId, builder: (column) => column);
+
+  GeneratedColumn<String> get title =>
+      $composableBuilder(column: $table.title, builder: (column) => column);
+
+  $$TemplatesTableAnnotationComposer get templateId {
+    final $$TemplatesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.templateId,
+      referencedTable: $db.templates,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TemplatesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.templates,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$TemplatePanesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $TemplatePanesTable,
+          TemplatePane,
+          $$TemplatePanesTableFilterComposer,
+          $$TemplatePanesTableOrderingComposer,
+          $$TemplatePanesTableAnnotationComposer,
+          $$TemplatePanesTableCreateCompanionBuilder,
+          $$TemplatePanesTableUpdateCompanionBuilder,
+          (TemplatePane, $$TemplatePanesTableReferences),
+          TemplatePane,
+          PrefetchHooks Function({bool templateId})
+        > {
+  $$TemplatePanesTableTableManager(_$AppDatabase db, $TemplatePanesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$TemplatePanesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$TemplatePanesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$TemplatePanesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> templateId = const Value.absent(),
+                Value<int> paneOrder = const Value.absent(),
+                Value<String?> parentPaneId = const Value.absent(),
+                Value<String?> splitDirection = const Value.absent(),
+                Value<double> splitRatio = const Value.absent(),
+                Value<String> sessionType = const Value.absent(),
+                Value<String?> hostId = const Value.absent(),
+                Value<String?> title = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => TemplatePanesCompanion(
+                id: id,
+                templateId: templateId,
+                paneOrder: paneOrder,
+                parentPaneId: parentPaneId,
+                splitDirection: splitDirection,
+                splitRatio: splitRatio,
+                sessionType: sessionType,
+                hostId: hostId,
+                title: title,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String templateId,
+                required int paneOrder,
+                Value<String?> parentPaneId = const Value.absent(),
+                Value<String?> splitDirection = const Value.absent(),
+                Value<double> splitRatio = const Value.absent(),
+                required String sessionType,
+                Value<String?> hostId = const Value.absent(),
+                Value<String?> title = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => TemplatePanesCompanion.insert(
+                id: id,
+                templateId: templateId,
+                paneOrder: paneOrder,
+                parentPaneId: parentPaneId,
+                splitDirection: splitDirection,
+                splitRatio: splitRatio,
+                sessionType: sessionType,
+                hostId: hostId,
+                title: title,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$TemplatePanesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({templateId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (templateId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.templateId,
+                                referencedTable: $$TemplatePanesTableReferences
+                                    ._templateIdTable(db),
+                                referencedColumn: $$TemplatePanesTableReferences
+                                    ._templateIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$TemplatePanesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $TemplatePanesTable,
+      TemplatePane,
+      $$TemplatePanesTableFilterComposer,
+      $$TemplatePanesTableOrderingComposer,
+      $$TemplatePanesTableAnnotationComposer,
+      $$TemplatePanesTableCreateCompanionBuilder,
+      $$TemplatePanesTableUpdateCompanionBuilder,
+      (TemplatePane, $$TemplatePanesTableReferences),
+      TemplatePane,
+      PrefetchHooks Function({bool templateId})
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -8407,4 +10383,8 @@ class $AppDatabaseManager {
       $$RunbooksTableTableManager(_db, _db.runbooks);
   $$RunbookStepsTableTableManager get runbookSteps =>
       $$RunbookStepsTableTableManager(_db, _db.runbookSteps);
+  $$TemplatesTableTableManager get templates =>
+      $$TemplatesTableTableManager(_db, _db.templates);
+  $$TemplatePanesTableTableManager get templatePanes =>
+      $$TemplatePanesTableTableManager(_db, _db.templatePanes);
 }

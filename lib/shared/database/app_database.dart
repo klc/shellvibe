@@ -11,6 +11,7 @@ import 'daos/identities_dao.dart';
 import 'daos/known_hosts_dao.dart';
 import 'daos/runbooks_dao.dart';
 import 'daos/snippets_dao.dart';
+import 'daos/templates_dao.dart';
 import 'daos/tunnels_dao.dart';
 import 'daos/workspaces_dao.dart';
 
@@ -27,6 +28,8 @@ part 'app_database.g.dart';
     Snippets,
     Runbooks,
     RunbookSteps,
+    Templates,
+    TemplatePanes,
   ],
   daos: [
     HostsDao,
@@ -36,13 +39,14 @@ part 'app_database.g.dart';
     WorkspacesDao,
     SnippetsDao,
     RunbooksDao,
+    TemplatesDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration {
@@ -70,6 +74,10 @@ class AppDatabase extends _$AppDatabase {
         }
         if (from < 3) {
           await _migrateHostKeyFingerprints();
+        }
+        if (from < 4) {
+          await m.createTable(templates);
+          await m.createTable(templatePanes);
         }
       },
     );

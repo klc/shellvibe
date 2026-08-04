@@ -62,11 +62,12 @@ void main() {
       ''');
       rawDb.close();
 
-      // 2. Open the database using AppDatabase (which is at schemaVersion 2).
+      // 2. Open the database using AppDatabase, which runs every migration
+      // from v1 up to the current schema version.
       final appDb = AppDatabase(NativeDatabase(tempDbFile));
       db = appDb;
 
-      expect(appDb.schemaVersion, equals(3));
+      expect(appDb.schemaVersion, equals(4));
 
       // 3. Verify existing legacy host record can be fetched.
       final fetchedHost = await appDb.hostsDao.getHostById('host-v1');
@@ -138,6 +139,51 @@ void main() {
       final untouched = await appDb.knownHostsDao.findKnownHost('new.example.com', 22);
       expect(untouched, isNotNull);
       expect(untouched!.fingerprintSha256, equals(plainFingerprint));
+    });
+
+    test('upgrading to v4 creates usable template tables', () async {
+      final rawDb = sqlite3.open(tempDbFile.path);
+      rawDb.execute('''
+        CREATE TABLE IF NOT EXISTS "workspaces" (
+          "id" TEXT NOT NULL PRIMARY KEY,
+          "name" TEXT NOT NULL,
+          "color_code" TEXT NULL,
+          "created_at" INTEGER NOT NULL
+        );
+      ''');
+      rawDb.execute('PRAGMA user_version = 3;');
+      rawDb.execute('''
+        INSERT INTO workspaces (id, name, created_at)
+        VALUES ('ws-1', 'Default Workspace', 1600000000);
+      ''');
+      rawDb.close();
+
+      final appDb = AppDatabase(NativeDatabase(tempDbFile));
+      db = appDb;
+
+      await appDb.templatesDao.insertTemplate(
+        TemplatesCompanion.insert(
+          id: 'tpl-1',
+          workspaceId: 'ws-1',
+          name: 'Morning check',
+          createdAt: DateTime.now(),
+        ),
+      );
+      await appDb.templatesDao.replacePanes('tpl-1', [
+        TemplatePanesCompanion.insert(
+          id: 'pane-1',
+          templateId: 'tpl-1',
+          paneOrder: 0,
+          sessionType: 'local',
+        ),
+      ]);
+
+      final templates = await appDb.templatesDao.getAllTemplates();
+      expect(templates.map((t) => t.name), ['Morning check']);
+      final panes = await appDb.templatesDao.getPanesForTemplate('tpl-1');
+      expect(panes.single.sessionType, equals('local'));
+      // Column default, so an older row shape stays readable.
+      expect(panes.single.splitRatio, equals(0.5));
     });
   });
 }

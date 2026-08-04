@@ -357,6 +357,52 @@ final class RunbooksDaoProvider
 
 String _$runbooksDaoHash() => r'59560463966bf8bf51483ce42bee80aa59c87e28';
 
+/// Auto-disposing provider for [TemplatesDao].
+
+@ProviderFor(templatesDao)
+final templatesDaoProvider = TemplatesDaoProvider._();
+
+/// Auto-disposing provider for [TemplatesDao].
+
+final class TemplatesDaoProvider
+    extends $FunctionalProvider<TemplatesDao, TemplatesDao, TemplatesDao>
+    with $Provider<TemplatesDao> {
+  /// Auto-disposing provider for [TemplatesDao].
+  TemplatesDaoProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'templatesDaoProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$templatesDaoHash();
+
+  @$internal
+  @override
+  $ProviderElement<TemplatesDao> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  TemplatesDao create(Ref ref) {
+    return templatesDao(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(TemplatesDao value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<TemplatesDao>(value),
+    );
+  }
+}
+
+String _$templatesDaoHash() => r'36020e3c565fa67e7fac75aba01d14ab54f84d0a';
+
 /// Provider for [EncryptionEngine].
 
 @ProviderFor(encryptionEngine)
