@@ -3,10 +3,15 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
+import 'package:xterm2/xterm.dart';
 
 import '../../../../app/theme/terly_tokens.dart';
 import '../../../../app/widgets/terly_ui.dart';
 import '../../../../shared/providers/database_providers.dart';
+import '../../../terminal/domain/models/terminal_font.dart';
+import '../../../terminal/domain/models/terminal_palette.dart';
+import '../../../terminal/domain/models/terminal_palette_data.dart';
+import '../../../terminal/presentation/utils/terminal_font_resolver.dart';
 import '../../../vault/presentation/notifiers/identities_notifier.dart';
 import '../../../vault/presentation/notifiers/vault_notifier.dart';
 import '../../domain/models/app_settings_model.dart';
@@ -471,82 +476,27 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ListTile(
                   title: const Text('Terminal Color Scheme'),
                   subtitle: Text(
-                    'Current: ${settings.terminalPalette.name.toUpperCase()}',
+                    'Current: ${TerminalPaletteData.of(settings.terminalPalette).label}',
                   ),
                   trailing: ShadSelect<TerminalPalette>(
                     key: const Key('settings_terminal_palette_dropdown'),
                     initialValue: settings.terminalPalette,
                     selectedOptionBuilder: (context, value) {
-                      switch (value) {
-                        case TerminalPalette.dark:
-                          return const Text('Dark Default');
-                        case TerminalPalette.oled:
-                          return const Text('OLED True Black');
-                        case TerminalPalette.catppuccin:
-                          return const Text('Catppuccin Macchiato');
-                        case TerminalPalette.nord:
-                          return const Text('Nord');
-                        case TerminalPalette.dracula:
-                          return const Text('Dracula');
-                        case TerminalPalette.solarizedDark:
-                          return const Text('Solarized Dark');
-                        case TerminalPalette.tokyoNight:
-                          return const Text('Tokyo Night');
-                        case TerminalPalette.gruvboxDark:
-                          return const Text('Gruvbox Dark');
-                        case TerminalPalette.oneDark:
-                          return const Text('One Dark');
-                        case TerminalPalette.monokai:
-                          return const Text('Monokai Pro');
-                        case TerminalPalette.cyberpunk:
-                          return const Text('Cyberpunk');
-                      }
+                      return Text(TerminalPaletteData.of(value).label);
                     },
-                    options: const [
-                      ShadOption(
-                        value: TerminalPalette.dark,
-                        child: Text('Dark Default'),
-                      ),
-                      ShadOption(
-                        value: TerminalPalette.oled,
-                        child: Text('OLED True Black'),
-                      ),
-                      ShadOption(
-                        value: TerminalPalette.catppuccin,
-                        child: Text('Catppuccin Macchiato'),
-                      ),
-                      ShadOption(
-                        value: TerminalPalette.nord,
-                        child: Text('Nord'),
-                      ),
-                      ShadOption(
-                        value: TerminalPalette.dracula,
-                        child: Text('Dracula'),
-                      ),
-                      ShadOption(
-                        value: TerminalPalette.solarizedDark,
-                        child: Text('Solarized Dark'),
-                      ),
-                      ShadOption(
-                        value: TerminalPalette.tokyoNight,
-                        child: Text('Tokyo Night'),
-                      ),
-                      ShadOption(
-                        value: TerminalPalette.gruvboxDark,
-                        child: Text('Gruvbox Dark'),
-                      ),
-                      ShadOption(
-                        value: TerminalPalette.oneDark,
-                        child: Text('One Dark'),
-                      ),
-                      ShadOption(
-                        value: TerminalPalette.monokai,
-                        child: Text('Monokai Pro'),
-                      ),
-                      ShadOption(
-                        value: TerminalPalette.cyberpunk,
-                        child: Text('Cyberpunk'),
-                      ),
+                    options: [
+                      for (final p in kTerminalPalettes)
+                        ShadOption(
+                          value: p.palette,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _PaletteSwatch(theme: p.theme),
+                              const SizedBox(width: 8),
+                              Text(p.label),
+                            ],
+                          ),
+                        ),
                     ],
                     onChanged: (palette) {
                       if (palette != null) {
@@ -555,7 +505,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     },
                   ),
                 ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                  child: _TerminalThemePreview(
+                    theme:
+                        TerminalPaletteData.themeOf(settings.terminalPalette),
+                    fontFamily:
+                        resolveTerminalFontFamily(settings.fontFamily),
+                  ),
+                ),
                 const Divider(),
+
                 ListTile(
                   title: const Text('Font Family'),
                   subtitle: const Text('Terminal sessions only'),
@@ -563,56 +523,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     key: const Key('settings_font_family_dropdown'),
                     initialValue: settings.fontFamily,
                     selectedOptionBuilder: (context, value) {
-                      switch (value) {
-                        case 'JetBrainsMono':
-                          return const Text('JetBrains Mono');
-                        case 'FiraCode':
-                          return const Text('Fira Code');
-                        case 'SourceCodePro':
-                          return const Text('Source Code Pro');
-                        case 'Inconsolata':
-                          return const Text('Inconsolata');
-                        case 'Hack':
-                          return const Text('Hack');
-                        case 'CascadiaCode':
-                          return const Text('Cascadia Code');
-                        case 'SpaceMono':
-                          return const Text('Space Mono');
-                        case 'Inter':
-                          return const Text('Inter');
-                        case 'Courier':
-                          return const Text('Courier');
-                        case 'RobotoMono':
-                        default:
-                          return const Text('Roboto Mono');
-                      }
+                      return Text(TerminalFont.of(value).label);
                     },
-                    options: const [
-                      ShadOption(
-                        value: 'RobotoMono',
-                        child: Text('Roboto Mono'),
-                      ),
-                      ShadOption(
-                        value: 'JetBrainsMono',
-                        child: Text('JetBrains Mono'),
-                      ),
-                      ShadOption(value: 'FiraCode', child: Text('Fira Code')),
-                      ShadOption(
-                        value: 'SourceCodePro',
-                        child: Text('Source Code Pro'),
-                      ),
-                      ShadOption(
-                        value: 'Inconsolata',
-                        child: Text('Inconsolata'),
-                      ),
-                      ShadOption(value: 'Hack', child: Text('Hack')),
-                      ShadOption(
-                        value: 'CascadiaCode',
-                        child: Text('Cascadia Code'),
-                      ),
-                      ShadOption(value: 'SpaceMono', child: Text('Space Mono')),
-                      ShadOption(value: 'Inter', child: Text('Inter')),
-                      ShadOption(value: 'Courier', child: Text('Courier')),
+                    options: [
+                      for (final f in kTerminalFonts)
+                        ShadOption(
+                          value: f.id,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(f.label),
+                              if (f.source ==
+                                  TerminalFontSource.bundledNerdFont) ...[
+                                const SizedBox(width: 6),
+                                const ShadBadge.secondary(child: Text('NF')),
+                              ],
+                            ],
+                          ),
+                        ),
                     ],
                     onChanged: (font) {
                       if (font != null) {
@@ -621,7 +549,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     },
                   ),
                 ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                  child: _FontPreview(
+                    fontFamily: resolveTerminalFontFamily(settings.fontFamily),
+                    ligatures: settings.enableLigatures,
+                  ),
+                ),
                 const Divider(),
+
                 Material(
                   color: Colors.transparent,
                   child: SwitchListTile(
@@ -1022,3 +958,134 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 }
+
+/// Compact 8-color ANSI strip used in the theme dropdown rows.
+class _PaletteSwatch extends StatelessWidget {
+  const _PaletteSwatch({required this.theme});
+
+  final TerminalTheme theme;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 88,
+      height: 12,
+      child: Row(
+        children: [
+          for (final color in _themeAnsiColors(theme).take(8))
+            Expanded(child: Container(color: color)),
+        ],
+      ),
+    );
+  }
+}
+
+/// The 16 ANSI colors of a scheme, base then bright.
+List<Color> _themeAnsiColors(TerminalTheme theme) => [
+      theme.black,
+      theme.red,
+      theme.green,
+      theme.yellow,
+      theme.blue,
+      theme.magenta,
+      theme.cyan,
+      theme.white,
+      theme.brightBlack,
+      theme.brightRed,
+      theme.brightGreen,
+      theme.brightYellow,
+      theme.brightBlue,
+      theme.brightMagenta,
+      theme.brightCyan,
+      theme.brightWhite,
+    ];
+
+/// Live preview of the selected terminal color scheme.
+class _TerminalThemePreview extends StatelessWidget {
+  const _TerminalThemePreview({required this.theme, required this.fontFamily});
+
+  final TerminalTheme theme;
+
+  /// The font the terminal itself will use, so this preview and the font
+  /// preview right below it don't disagree about what a session looks like.
+  final String fontFamily;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: theme.background,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: theme.white.withValues(alpha: 0.12)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              for (final color in _themeAnsiColors(theme)) ...[
+                Expanded(child: Container(height: 8, color: color)),
+                const SizedBox(width: 2),
+              ],
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            r'$> ssh deploy  grep "port"  ./run.sh',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontFamily: fontFamily,
+              fontFamilyFallback: kTerminalFontFamilyFallback,
+              fontSize: 12,
+              color: theme.foreground,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Live preview of the selected terminal font.
+class _FontPreview extends StatelessWidget {
+  const _FontPreview({required this.fontFamily, required this.ligatures});
+
+  final String fontFamily;
+
+  /// Mirrors the ligature setting: with it off the sample must show `!=` and
+  /// `=>` as separate glyphs, exactly as a session would.
+  final bool ligatures;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = ShadTheme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: colorScheme.muted,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        kFontPreviewText,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontFamily: fontFamily,
+          fontFamilyFallback: kTerminalFontFamilyFallback,
+          fontSize: 15,
+          height: 1.4,
+          color: colorScheme.foreground,
+          fontFeatures: [
+            FontFeature('liga', ligatures ? 1 : 0),
+            FontFeature('calt', ligatures ? 1 : 0),
+          ],
+        ),
+      ),
+    );
+  }
+}
+

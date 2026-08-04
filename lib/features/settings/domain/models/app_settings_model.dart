@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../terminal/domain/models/terminal_palette.dart';
+
 enum AppPalette {
   dark,
   oled,
@@ -11,21 +13,6 @@ enum AppPalette {
   gruvbox,
   oneDark,
 }
-
-enum TerminalPalette {
-  dark,
-  oled,
-  catppuccin,
-  nord,
-  dracula,
-  solarizedDark,
-  tokyoNight,
-  gruvboxDark,
-  oneDark,
-  monokai,
-  cyberpunk,
-}
-
 
 enum AppCursorStyle { block, underline, bar }
 

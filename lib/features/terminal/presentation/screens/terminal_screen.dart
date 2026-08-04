@@ -2,14 +2,15 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:xterm2/xterm.dart';
 
 import '../../../settings/domain/models/app_settings_model.dart';
 import '../../../settings/presentation/notifiers/settings_notifier.dart';
+import '../../domain/models/terminal_palette_data.dart';
 import '../../domain/models/terminal_tab_session.dart';
 import '../notifiers/terminal_tabs_notifier.dart';
+import '../utils/terminal_font_resolver.dart';
 import '../widgets/mobile_extra_keys_bar.dart';
 
 class TerminalScreen extends ConsumerStatefulWidget {
@@ -27,322 +28,7 @@ class TerminalScreen extends ConsumerStatefulWidget {
 }
 
 class _TerminalScreenState extends ConsumerState<TerminalScreen> {
-  // Dark Palette
-  static final _darkTheme = TerminalTheme(
-    cursor: const Color(0xFFA855F7),
-    selection: const Color(0xFF3F3F46),
-    foreground: const Color(0xFFF4F4F5),
-    background: const Color(0xFF18181B),
-    black: const Color(0xFF27272A),
-    red: const Color(0xFFEF4444),
-    green: const Color(0xFF22C55E),
-    yellow: const Color(0xFFEAB308),
-    blue: const Color(0xFF3B82F6),
-    magenta: const Color(0xFFA855F7),
-    cyan: const Color(0xFF06B6D4),
-    white: const Color(0xFFE4E4E7),
-    brightBlack: const Color(0xFF52525B),
-    brightRed: const Color(0xFFF87171),
-    brightGreen: const Color(0xFF4ADE80),
-    brightYellow: const Color(0xFFFACC15),
-    brightBlue: const Color(0xFF60A5FA),
-    brightMagenta: const Color(0xFFC084FC),
-    brightCyan: const Color(0xFF22D3EE),
-    brightWhite: const Color(0xFFFAFAFA),
-    searchHitBackground: const Color(0xFF6366F1),
-    searchHitBackgroundCurrent: const Color(0xFFA855F7),
-    searchHitForeground: const Color(0xFFFFFFFF),
-  );
 
-  // OLED Palette (True Black)
-  static final _oledTheme = TerminalTheme(
-    cursor: const Color(0xFF00E676),
-    selection: const Color(0xFF263238),
-    foreground: const Color(0xFFECEFF1),
-    background: const Color(0xFF000000),
-    black: const Color(0xFF212121),
-    red: const Color(0xFFFF5252),
-    green: const Color(0xFF00E676),
-    yellow: const Color(0xFFFFD740),
-    blue: const Color(0xFF40C4FF),
-    magenta: const Color(0xFFE040FB),
-    cyan: const Color(0xFF18FFFF),
-    white: const Color(0xFFEEFFFF),
-    brightBlack: const Color(0xFF424242),
-    brightRed: const Color(0xFFFF8A80),
-    brightGreen: const Color(0xFFB9F6CA),
-    brightYellow: const Color(0xFFFFE57F),
-    brightBlue: const Color(0xFF80D8FF),
-    brightMagenta: const Color(0xFFEA80FC),
-    brightCyan: const Color(0xFFA7FFEB),
-    brightWhite: const Color(0xFFFFFFFF),
-    searchHitBackground: const Color(0xFF00E676),
-    searchHitBackgroundCurrent: const Color(0xFF18FFFF),
-    searchHitForeground: const Color(0xFF000000),
-  );
-
-  // Catppuccin Macchiato Dark Terminal Theme Palette
-  static final _catppuccinTheme = TerminalTheme(
-    cursor: const Color(0xFFF4D9E1),
-    selection: const Color(0xFF5B6078),
-    foreground: const Color(0xFFCAD3F5),
-    background: const Color(0xFF24273A),
-    black: const Color(0xFF494D64),
-    red: const Color(0xFFED8796),
-    green: const Color(0xFFA6DA95),
-    yellow: const Color(0xFFEED49F),
-    blue: const Color(0xFF8AADF4),
-    magenta: const Color(0xFFF5BDE6),
-    cyan: const Color(0xFF8BD5CA),
-    white: const Color(0xFFB8C0E0),
-    brightBlack: const Color(0xFF5B6078),
-    brightRed: const Color(0xFFED8796),
-    brightGreen: const Color(0xFFA6DA95),
-    brightYellow: const Color(0xFFEED49F),
-    brightBlue: const Color(0xFF8AADF4),
-    brightMagenta: const Color(0xFFF5BDE6),
-    brightCyan: const Color(0xFF8BD5CA),
-    brightWhite: const Color(0xFFA5ADCB),
-    searchHitBackground: const Color(0xFFF5E0DC),
-    searchHitBackgroundCurrent: const Color(0xFFF38BA8),
-    searchHitForeground: const Color(0xFF1E1E2E),
-  );
-
-  // Nord Palette
-  static final _nordTheme = TerminalTheme(
-    cursor: const Color(0xFFD8DEE9),
-    selection: const Color(0xFF434C5E),
-    foreground: const Color(0xFFD8DEE9),
-    background: const Color(0xFF2E3440),
-    black: const Color(0xFF3B4252),
-    red: const Color(0xFFBF616A),
-    green: const Color(0xFFA3BE8C),
-    yellow: const Color(0xFFEBCB8B),
-    blue: const Color(0xFF81A1C1),
-    magenta: const Color(0xFFB48EAD),
-    cyan: const Color(0xFF88C0D0),
-    white: const Color(0xFFE5E9F0),
-    brightBlack: const Color(0xFF4C566A),
-    brightRed: const Color(0xFFD08770),
-    brightGreen: const Color(0xFFA3BE8C),
-    brightYellow: const Color(0xFFEBCB8B),
-    brightBlue: const Color(0xFF5E81AC),
-    brightMagenta: const Color(0xFFB48EAD),
-    brightCyan: const Color(0xFF8FBCBB),
-    brightWhite: const Color(0xFFECEFF4),
-    searchHitBackground: const Color(0xFF88C0D0),
-    searchHitBackgroundCurrent: const Color(0xFF81A1C1),
-    searchHitForeground: const Color(0xFF2E3440),
-  );
-
-  // Dracula Palette
-  static final _draculaTheme = TerminalTheme(
-    cursor: const Color(0xFFF8F8F2),
-    selection: const Color(0xFF44475A),
-    foreground: const Color(0xFFF8F8F2),
-    background: const Color(0xFF282A36),
-    black: const Color(0xFF21222C),
-    red: const Color(0xFFFF5555),
-    green: const Color(0xFF50FA7B),
-    yellow: const Color(0xFFF1FA8C),
-    blue: const Color(0xFFBD93F9),
-    magenta: const Color(0xFFFF79C6),
-    cyan: const Color(0xFF8BE9FD),
-    white: const Color(0xFFF8F8F2),
-    brightBlack: const Color(0xFF6272A4),
-    brightRed: const Color(0xFFFF6E6E),
-    brightGreen: const Color(0xFF69FF94),
-    brightYellow: const Color(0xFFFFFFA5),
-    brightBlue: const Color(0xFFD6ACFF),
-    brightMagenta: const Color(0xFFFF92D0),
-    brightCyan: const Color(0xFFA4FFFF),
-    brightWhite: const Color(0xFFFFFFFF),
-    searchHitBackground: const Color(0xFFBD93F9),
-    searchHitBackgroundCurrent: const Color(0xFFFF79C6),
-    searchHitForeground: const Color(0xFF282A36),
-  );
-
-  // Solarized Dark Palette
-  static final _solarizedDarkTheme = TerminalTheme(
-    cursor: const Color(0xFF93A1A1),
-    selection: const Color(0xFF073642),
-    foreground: const Color(0xFF839496),
-    background: const Color(0xFF002B36),
-    black: const Color(0xFF073642),
-    red: const Color(0xFFDC322F),
-    green: const Color(0xFF859900),
-    yellow: const Color(0xFFB58900),
-    blue: const Color(0xFF268BD2),
-    magenta: const Color(0xFFD33682),
-    cyan: const Color(0xFF2AA198),
-    white: const Color(0xFFEEE8D5),
-    brightBlack: const Color(0xFF002B36),
-    brightRed: const Color(0xFFCB4B16),
-    brightGreen: const Color(0xFF586E75),
-    brightYellow: const Color(0xFF657B83),
-    brightBlue: const Color(0xFF839496),
-    brightMagenta: const Color(0xFF6C71C4),
-    brightCyan: const Color(0xFF93A1A1),
-    brightWhite: const Color(0xFFFDF6E3),
-    searchHitBackground: const Color(0xFF2AA198),
-    searchHitBackgroundCurrent: const Color(0xFF268BD2),
-    searchHitForeground: const Color(0xFF002B36),
-  );
-
-  // Tokyo Night Palette
-  static final _tokyoNightTheme = TerminalTheme(
-    cursor: const Color(0xFF7AA2F7),
-    selection: const Color(0xFF33467C),
-    foreground: const Color(0xFFA9B1D6),
-    background: const Color(0xFF1A1B26),
-    black: const Color(0xFF15161E),
-    red: const Color(0xFFF7768E),
-    green: const Color(0xFF9ECE6A),
-    yellow: const Color(0xFFE0AF68),
-    blue: const Color(0xFF7AA2F7),
-    magenta: const Color(0xFFBB9AF7),
-    cyan: const Color(0xFF7DCFFF),
-    white: const Color(0xFFA9B1D6),
-    brightBlack: const Color(0xFF414868),
-    brightRed: const Color(0xFFF7768E),
-    brightGreen: const Color(0xFF9ECE6A),
-    brightYellow: const Color(0xFFE0AF68),
-    brightBlue: const Color(0xFF7AA2F7),
-    brightMagenta: const Color(0xFFBB9AF7),
-    brightCyan: const Color(0xFF7DCFFF),
-    brightWhite: const Color(0xFFC0CAF5),
-    searchHitBackground: const Color(0xFF7AA2F7),
-    searchHitBackgroundCurrent: const Color(0xFFBB9AF7),
-    searchHitForeground: const Color(0xFF1A1B26),
-  );
-
-  // Gruvbox Dark Palette
-  static final _gruvboxDarkTheme = TerminalTheme(
-    cursor: const Color(0xFFFE8019),
-    selection: const Color(0xFF504945),
-    foreground: const Color(0xFFEBDBB2),
-    background: const Color(0xFF282828),
-    black: const Color(0xFF282828),
-    red: const Color(0xFFCC241D),
-    green: const Color(0xFF98971A),
-    yellow: const Color(0xFFD79921),
-    blue: const Color(0xFF458588),
-    magenta: const Color(0xFFB16286),
-    cyan: const Color(0xFF689D6A),
-    white: const Color(0xFFA89984),
-    brightBlack: const Color(0xFF928374),
-    brightRed: const Color(0xFFFB4934),
-    brightGreen: const Color(0xFFB8BB26),
-    brightYellow: const Color(0xFFFABD2F),
-    brightBlue: const Color(0xFF83A598),
-    brightMagenta: const Color(0xFFD3869B),
-    brightCyan: const Color(0xFF8EC07C),
-    brightWhite: const Color(0xFFEBDBB2),
-    searchHitBackground: const Color(0xFFFE8019),
-    searchHitBackgroundCurrent: const Color(0xFFFABD2F),
-    searchHitForeground: const Color(0xFF282828),
-  );
-
-  // One Dark Palette
-  static final _oneDarkTheme = TerminalTheme(
-    cursor: const Color(0xFF528BFF),
-    selection: const Color(0xFF3E4451),
-    foreground: const Color(0xFFABB2BF),
-    background: const Color(0xFF282C34),
-    black: const Color(0xFF1E2127),
-    red: const Color(0xFFE06C75),
-    green: const Color(0xFF98C379),
-    yellow: const Color(0xFFE5C07B),
-    blue: const Color(0xFF61AFEF),
-    magenta: const Color(0xFFC678DD),
-    cyan: const Color(0xFF56B6C2),
-    white: const Color(0xFFABB2BF),
-    brightBlack: const Color(0xFF5C6370),
-    brightRed: const Color(0xFFBE5046),
-    brightGreen: const Color(0xFF98C379),
-    brightYellow: const Color(0xFFD19A66),
-    brightBlue: const Color(0xFF61AFEF),
-    brightMagenta: const Color(0xFFC678DD),
-    brightCyan: const Color(0xFF56B6C2),
-    brightWhite: const Color(0xFFFFFFFF),
-    searchHitBackground: const Color(0xFF61AFEF),
-    searchHitBackgroundCurrent: const Color(0xFFC678DD),
-    searchHitForeground: const Color(0xFF282C34),
-  );
-
-  // Monokai Pro Palette
-  static final _monokaiTheme = TerminalTheme(
-    cursor: const Color(0xFFFFD866),
-    selection: const Color(0xFF403E41),
-    foreground: const Color(0xFFFCFCFA),
-    background: const Color(0xFF2D2A2E),
-    black: const Color(0xFF2D2A2E),
-    red: const Color(0xFFFF6188),
-    green: const Color(0xFFA9DC76),
-    yellow: const Color(0xFFFFD866),
-    blue: const Color(0xFF78DCE8),
-    magenta: const Color(0xFFAB9DF2),
-    cyan: const Color(0xFF78DCE8),
-    white: const Color(0xFFFCFCFA),
-    brightBlack: const Color(0xFF727072),
-    brightRed: const Color(0xFFFF6188),
-    brightGreen: const Color(0xFFA9DC76),
-    brightYellow: const Color(0xFFFFD866),
-    brightBlue: const Color(0xFF78DCE8),
-    brightMagenta: const Color(0xFFAB9DF2),
-    brightCyan: const Color(0xFF78DCE8),
-    brightWhite: const Color(0xFFFFFFFF),
-    searchHitBackground: const Color(0xFFFFD866),
-    searchHitBackgroundCurrent: const Color(0xFFFF6188),
-    searchHitForeground: const Color(0xFF2D2A2E),
-  );
-
-  // Cyberpunk Palette
-  static final _cyberpunkTheme = TerminalTheme(
-    cursor: const Color(0xFF00FF9F),
-    selection: const Color(0xFF3A1C71),
-    foreground: const Color(0xFF00F0FF),
-    background: const Color(0xFF120E24),
-    black: const Color(0xFF100C1E),
-    red: const Color(0xFFFF0055),
-    green: const Color(0xFF00FF9F),
-    yellow: const Color(0xFFFFE600),
-    blue: const Color(0xFF00F0FF),
-    magenta: const Color(0xFFFF007F),
-    cyan: const Color(0xFF00FFFF),
-    white: const Color(0xFFFFFFFF),
-    brightBlack: const Color(0xFF4A3E6D),
-    brightRed: const Color(0xFFFF3377),
-    brightGreen: const Color(0xFF33FFAF),
-    brightYellow: const Color(0xFFFFEB33),
-    brightBlue: const Color(0xFF33F3FF),
-    brightMagenta: const Color(0xFFFF3399),
-    brightCyan: const Color(0xFF33FFFF),
-    brightWhite: const Color(0xFFFFFFFF),
-    searchHitBackground: const Color(0xFF00FF9F),
-    searchHitBackgroundCurrent: const Color(0xFFFF007F),
-    searchHitForeground: const Color(0xFF120E24),
-  );
-
-  String _resolveFontFamily(String name) {
-    try {
-      final fontName = switch (name) {
-        'JetBrainsMono' => 'JetBrains Mono',
-        'FiraCode' => 'Fira Code',
-        'SourceCodePro' => 'Source Code Pro',
-        'Inconsolata' => 'Inconsolata',
-        'SpaceMono' => 'Space Mono',
-        'RobotoMono' => 'Roboto Mono',
-        'Inter' => 'Inter',
-        'Courier' => 'Courier',
-        _ => name,
-      };
-      if (fontName == 'Courier') return 'Courier';
-      return GoogleFonts.getFont(fontName).fontFamily ?? fontName;
-    } catch (_) {
-      return name;
-    }
-  }
 
   late final FocusNode _terminalFocus;
 
@@ -415,19 +101,7 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
       ),
     );
 
-    final theme = switch (settings.terminalPalette) {
-      TerminalPalette.dark => _darkTheme,
-      TerminalPalette.oled => _oledTheme,
-      TerminalPalette.catppuccin => _catppuccinTheme,
-      TerminalPalette.nord => _nordTheme,
-      TerminalPalette.dracula => _draculaTheme,
-      TerminalPalette.solarizedDark => _solarizedDarkTheme,
-      TerminalPalette.tokyoNight => _tokyoNightTheme,
-      TerminalPalette.gruvboxDark => _gruvboxDarkTheme,
-      TerminalPalette.oneDark => _oneDarkTheme,
-      TerminalPalette.monokai => _monokaiTheme,
-      TerminalPalette.cyberpunk => _cyberpunkTheme,
-    };
+    final theme = TerminalPaletteData.themeOf(settings.terminalPalette);
 
 
     final shouldShowExtraKeys = widget.showExtraKeys ??
@@ -490,8 +164,17 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
               },
               textStyle: TerminalStyle(
                 fontSize: settings.fontSize,
-                fontFamily: _resolveFontFamily(settings.fontFamily),
+                fontFamily: resolveTerminalFontFamily(settings.fontFamily),
+                fontFamilyFallback: kTerminalFontFamilyFallback,
                 enableLigatures: settings.enableLigatures,
+                // xterm2 defaults to 1.2, which spaces rows noticeably wider
+                // than Terminal.app/iTerm and costs visible rows at the same
+                // pane height. 1.0 leaves the row height to the font metrics.
+                height: 1.0,
+                // Reference terminals keep bold text in its declared color.
+                // xterm2 defaults to remapping colors 0-7 onto 8-15 for bold
+                // runs, which silently recolors most shell prompts.
+                drawBoldTextWithBrightColors: false,
               ),
             ),
           ),

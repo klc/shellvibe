@@ -1,0 +1,33 @@
+/// Terminal color schemes selectable in Settings.
+///
+/// Values are persisted by `name` — append only, never rename or reorder.
+enum TerminalPalette {
+  dark,
+  oled,
+  catppuccin,
+  nord,
+  dracula,
+  solarizedDark,
+  tokyoNight,
+  gruvboxDark,
+  oneDark,
+  monokai,
+  cyberpunk,
+  catppuccinMocha,
+  catppuccinLatte,
+  rosePine,
+  rosePineMoon,
+  kanagawaWave,
+  everforestDark,
+  ayuMirage,
+  material,
+  doomOne,
+  nightOwl,
+  synthwave84,
+  horizon,
+  snazzy,
+  githubDarkDimmed,
+  solarizedLight,
+  gruvboxLight,
+  oneLight,
+}

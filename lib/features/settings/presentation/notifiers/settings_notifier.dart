@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../shared/providers/database_providers.dart';
+import '../../../terminal/domain/models/terminal_palette.dart';
 import '../../data/repositories/settings_repository.dart';
 import '../../domain/models/app_settings_model.dart';
 import '../../domain/services/biometric_lock_service.dart';
