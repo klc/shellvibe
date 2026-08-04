@@ -284,6 +284,15 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
                 );
               },
             ),
+            IconButton(
+              key: const Key('split_with_host_button'),
+              icon: const Icon(LucideIcons.serverCog, size: 17),
+              tooltip: 'Split with Another Host',
+              onPressed: () {
+                final targetId = tabsState.activeTabId ?? activeRootTab.id;
+                _startSplitWithHost(targetId);
+              },
+            ),
           ],
           // New Tab Button
           IconButton(
@@ -646,34 +655,102 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
     );
   }
 
-  /// Resolves the host's identity and opens an SSH tab.
+  /// Decrypts the identity attached to [host], if any.
   ///
-  /// Decryption failures are surfaced instead of connecting with silently
-  /// missing credentials, and host key verification is routed through
-  /// [HostKeyPromptDialog] so the user actually gets asked.
-  Future<void> _connectToHost(HostModel host) async {
-    IdentityModel? identity;
-    if (host.identityId != null) {
-      try {
-        identity = await ref
-            .read(identitiesProvider.notifier)
-            .getDecryptedIdentity(host.identityId!);
-      } catch (e) {
-        if (!mounted) return;
+  /// Returns `(ok: false, ...)` when the stored credentials cannot be read, so
+  /// callers abort instead of connecting with silently missing credentials;
+  /// the failure is surfaced as a toast here.
+  Future<({bool ok, IdentityModel? identity})> _resolveIdentity(
+    HostModel host,
+  ) async {
+    if (host.identityId == null) return (ok: true, identity: null);
+    try {
+      final identity = await ref
+          .read(identitiesProvider.notifier)
+          .getDecryptedIdentity(host.identityId!);
+      return (ok: true, identity: identity);
+    } catch (e) {
+      if (mounted) {
         ShadToaster.of(context).show(
           ShadToast.destructive(
             description: Text('Cannot read stored credentials: $e'),
           ),
         );
-        return;
       }
+      return (ok: false, identity: null);
     }
+  }
+
+  /// Resolves the host's identity and opens an SSH tab.
+  ///
+  /// Host key verification is routed through [HostKeyPromptDialog] so the user
+  /// actually gets asked.
+  Future<void> _connectToHost(HostModel host) async {
+    final resolved = await _resolveIdentity(host);
+    if (!resolved.ok) return;
 
     await ref
         .read(terminalTabsProvider.notifier)
         .openTabForHost(
           host,
-          identity: identity,
+          identity: resolved.identity,
+          onHostKeyPrompt: _promptHostKey,
+        );
+  }
+
+  /// Splits [paneId] into a pane running on a different host: asks for the
+  /// split direction first, then for the host.
+  Future<void> _startSplitWithHost(String paneId) async {
+    final direction = await _askSplitDirection();
+    if (direction == null || !mounted) return;
+    _showSelectHostModal(
+      context,
+      ref,
+      onSelect: (host) => _splitWithHost(paneId, direction, host),
+    );
+  }
+
+  Future<Axis?> _askSplitDirection() {
+    final tokens = TerlyTokens.resolve(context);
+    return showModalBottomSheet<Axis>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: tokens.surface,
+      builder: (ctx) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            key: const Key('split_host_direction_vertical'),
+            leading: const Icon(LucideIcons.columns2, size: 18),
+            title: const Text('Side by Side'),
+            onTap: () => Navigator.of(ctx).pop(Axis.horizontal),
+          ),
+          ListTile(
+            key: const Key('split_host_direction_horizontal'),
+            leading: const Icon(LucideIcons.rows2, size: 18),
+            title: const Text('Top / Bottom'),
+            onTap: () => Navigator.of(ctx).pop(Axis.vertical),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _splitWithHost(
+    String paneId,
+    Axis direction,
+    HostModel host,
+  ) async {
+    final resolved = await _resolveIdentity(host);
+    if (!resolved.ok) return;
+
+    await ref
+        .read(terminalTabsProvider.notifier)
+        .splitTab(
+          paneId,
+          direction: direction,
+          host: host,
+          identity: resolved.identity,
           onHostKeyPrompt: _promptHostKey,
         );
   }
@@ -697,7 +774,13 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
     return approved ?? false;
   }
 
-  void _showSelectHostModal(BuildContext context, WidgetRef ref) {
+  /// Host picker sheet. [onSelect] runs after the sheet is dismissed, so the
+  /// same list drives both "new tab" and "split with another host".
+  void _showSelectHostModal(
+    BuildContext context,
+    WidgetRef ref, {
+    Future<void> Function(HostModel host)? onSelect,
+  }) {
     final tokens = TerlyTokens.resolve(context);
     showModalBottomSheet(
       context: context,
@@ -727,7 +810,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
                       subtitle: Text('${host.hostname}:${host.port}'),
                       onTap: () async {
                         Navigator.of(ctx).pop();
-                        await _connectToHost(host);
+                        await (onSelect ?? _connectToHost)(host);
                       },
                     );
                   },

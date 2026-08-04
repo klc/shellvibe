@@ -434,9 +434,16 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     );
   }
 
+  /// Opens a new pane inside the split tree of [parentTabId].
+  ///
+  /// With [host] the pane connects to that host instead of inheriting the
+  /// parent's session, so one tab can hold panes on different connections.
+  /// Without it the pane mirrors the parent (see below).
   Future<void>? splitTab(
     String parentTabId, {
     Axis direction = Axis.horizontal,
+    HostModel? host,
+    IdentityModel? identity,
     HostKeyPromptCallback? onHostKeyPrompt,
   }) {
     final parentIndex = state.tabs.indexWhere((t) => t.id == parentTabId);
@@ -446,21 +453,25 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     final splitId = const Uuid().v4();
     final terminal = Terminal(maxLines: 10000);
 
-    // A split pane mirrors the session type of the pane it was created from.
-    // Splitting an SSH host session opens a second SSH session to the same
-    // host rather than a local shell; this also keeps splits working on
-    // mobile, where a local PTY is not available.
-    final isSshSplit = parentTab.sessionType == TerminalSessionType.ssh &&
-        parentTab.host != null;
+    // Without an explicit target a split pane mirrors the session type of the
+    // pane it was created from. Splitting an SSH host session opens a second
+    // SSH session to the same host rather than a local shell; this also keeps
+    // splits working on mobile, where a local PTY is not available.
+    final targetHost = host ?? parentTab.host;
+    final isSshSplit = host != null ||
+        (parentTab.sessionType == TerminalSessionType.ssh &&
+            parentTab.host != null);
 
     final splitTab = TerminalTabSession(
       id: splitId,
-      title: '${parentTab.title} (Split)',
+      // A pane on its own connection is titled after that host; an inherited
+      // pane keeps the parent's title with a marker.
+      title: host != null ? host.label : '${parentTab.title} (Split)',
       sessionType: isSshSplit
           ? TerminalSessionType.ssh
           : TerminalSessionType.local,
-      host: parentTab.host,
-      identity: parentTab.identity,
+      host: targetHost,
+      identity: host != null ? identity : parentTab.identity,
       terminal: terminal,
       splitParentId: parentTabId,
       splitDirection: direction,
@@ -478,8 +489,8 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       // SSH handshake; UI call sites fire-and-forget via unawaited(...).
       return _connectSshTab(
         splitTab,
-        parentTab.host!,
-        parentTab.identity,
+        targetHost!,
+        splitTab.identity,
         onHostKeyPrompt,
       );
     }
