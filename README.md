@@ -73,6 +73,16 @@ flutter test
 - Failed unlock attempts trigger exponential back-off lockout (30s → … → 1h).
 - SFTP operations mitigate path-traversal (slip) attacks and uploads use atomic temp-file + rename commits.
 
+### macOS App Sandbox is disabled
+
+`macos/Runner/Release.entitlements` sets `com.apple.security.app-sandbox` to `false` in **release as well as debug**. This is deliberate: the Local Shell feature spawns the user's real login shell via `flutter_pty`, which a sandboxed process may not do (it can neither exec arbitrary binaries nor reach files outside its container), so under the sandbox the local terminal is unusable.
+
+Consequences to keep in mind:
+
+- The app **cannot** be distributed through the Mac App Store, which requires the sandbox. Direct distribution (Developer ID + notarization) is the only path.
+- Release builds run with the same filesystem reach as the user, so a bug in path handling is not contained by the OS. The SFTP path-traversal checks above are load-bearing, not defence in depth.
+- Signing team lives in `macos/Runner/Configs/Signing.xcconfig`; override it locally with a git-ignored `LocalSigning.xcconfig` rather than editing `project.pbxproj`.
+
 See the [Technical Architecture Specification](docs/tech_spec.md) for sequence diagrams and edge-case handling.
 
 ## 📄 License

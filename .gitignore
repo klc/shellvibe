@@ -48,3 +48,9 @@ app.*.map.json
 /memory-bank/
 /.Jules/
 .flutter-plugins
+
+# Local, per-developer macOS signing overrides (see Configs/Signing.xcconfig)
+macos/Runner/Configs/LocalSigning.xcconfig
+
+# Local scratch/repro tests, not part of the suite
+test/scratch/
