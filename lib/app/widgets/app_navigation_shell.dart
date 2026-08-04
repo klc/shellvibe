@@ -62,44 +62,36 @@ const List<NavigationItemData> appNavigationItems = [
     tooltip: 'Credentials & Key Vault (Cmd+3)',
   ),
   NavigationItemData(
-    label: 'SFTP',
-    icon: LucideIcons.folderSync,
-    selectedIcon: LucideIcons.folderSync,
-    path: '/sftp',
-    shortcut: '⌘4',
-    tooltip: 'Dual-Pane SFTP Manager (Cmd+4)',
-  ),
-  NavigationItemData(
     label: 'Tunnels',
     icon: LucideIcons.network,
     selectedIcon: LucideIcons.network,
     path: '/tunnels',
-    shortcut: '⌘5',
-    tooltip: 'Port Forwarding Tunnels (Cmd+5)',
+    shortcut: '⌘4',
+    tooltip: 'Port Forwarding Tunnels (Cmd+4)',
   ),
   NavigationItemData(
     label: 'Snippets',
     icon: LucideIcons.zap,
     selectedIcon: LucideIcons.zap,
     path: '/snippets',
-    shortcut: '⌘6',
-    tooltip: 'Snippets & Runbooks (Cmd+6)',
+    shortcut: '⌘5',
+    tooltip: 'Snippets & Runbooks (Cmd+5)',
   ),
   NavigationItemData(
     label: 'Workspaces',
     icon: LucideIcons.panelTop,
     selectedIcon: LucideIcons.panelTop,
     path: '/workspaces',
-    shortcut: '⌘7',
-    tooltip: 'Workspace Manager (Cmd+7)',
+    shortcut: '⌘6',
+    tooltip: 'Workspace Manager (Cmd+6)',
   ),
   NavigationItemData(
     label: 'Settings',
     icon: LucideIcons.settings,
     selectedIcon: LucideIcons.settings,
     path: '/settings',
-    shortcut: '⌘8',
-    tooltip: 'Application Settings (Cmd+8)',
+    shortcut: '⌘7',
+    tooltip: 'Application Settings (Cmd+7)',
   ),
 ];
 
@@ -108,7 +100,6 @@ const List<NavigationItemData> appNavigationItems = [
 const List<String?> kRailLayout = [
   '/hosts',
   '/terminal',
-  '/sftp',
   '/tunnels',
   '/snippets',
   null,
@@ -117,12 +108,15 @@ const List<String?> kRailLayout = [
   '/settings',
 ];
 
-/// The five first-class Android tabs. Vault and Settings are promoted out of
-/// the old "Tools" sheet so the tab order mirrors the desktop rail.
+/// The first-class Android tabs. Vault and Settings are promoted out of the
+/// old "Tools" sheet so the tab order mirrors the desktop rail.
+///
+/// File transfer is deliberately absent: it is always scoped to one SSH
+/// connection now, so it is entered from a host row or the terminal toolbar
+/// rather than from a standalone tab with no visible target.
 const List<String> kMobileTabPaths = [
   '/hosts',
   '/terminal',
-  '/sftp',
   '/vault',
   '/settings',
 ];
@@ -353,7 +347,7 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
   static String _mobileTabLabel(String path) => switch (path) {
     '/hosts' => 'Hosts',
     '/terminal' => 'Terminal',
-    '/sftp' => 'Files',
+
     '/vault' => 'Vault',
     '/settings' => 'Settings',
     _ => path.substring(1),

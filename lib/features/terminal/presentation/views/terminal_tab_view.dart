@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../../../../app/theme/terly_tokens.dart';
@@ -238,6 +239,15 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
               },
             ),
           ),
+          // File transfer for the focused session. A local shell has no remote
+          // side, so the button is absent rather than disabled there.
+          if (_sftpTargetPane(tabsState, activeRootTab) case final sftpTarget?)
+            IconButton(
+              key: const Key('open_sftp_button'),
+              icon: const Icon(LucideIcons.folderSync, size: 17),
+              tooltip: 'File Transfer (SFTP) — ${sftpTarget.title}',
+              onPressed: () => _openSftpForPane(sftpTarget),
+            ),
           // Split Pane Action Buttons (Vertical & Horizontal Split)
           if (activeRootTab != null) ...[
             IconButton(
@@ -303,6 +313,34 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
       paneOrder: _paneOrder(tabsState, activeRootTab),
       activePaneId: tabsState.activeTabId,
       selectedPaneIds: tabsState.selectedPaneIds,
+    );
+  }
+
+  /// The session file transfer would run over: the focused pane when it is an
+  /// SSH session, otherwise the active tab root if that one is SSH.
+  ///
+  /// Returns null for a local shell (and when no tab is open) so the toolbar
+  /// never offers a transfer with nowhere to send files.
+  TerminalTabSession? _sftpTargetPane(
+    TerminalTabsState tabsState,
+    TerminalTabSession? activeRootTab,
+  ) {
+    final focused = tabsState.activeTab;
+    if (focused != null && focused.sessionType == TerminalSessionType.ssh) {
+      return focused;
+    }
+    if (activeRootTab != null &&
+        activeRootTab.sessionType == TerminalSessionType.ssh) {
+      return activeRootTab;
+    }
+    return null;
+  }
+
+  void _openSftpForPane(TerminalTabSession pane) {
+    final label = pane.host?.label ?? pane.title;
+    GoRouter.of(context).push(
+      '/sftp?tab=${Uri.encodeComponent(pane.id)}'
+      '&label=${Uri.encodeComponent(label)}',
     );
   }
 

@@ -24,7 +24,19 @@ class SftpDualPaneScreen extends ConsumerStatefulWidget {
   final SftpClient? sftpClient;
   final String? hostLabel;
 
-  const SftpDualPaneScreen({super.key, this.sftpClient, this.hostLabel});
+  /// Terminal tab whose SSH session this screen transfers files over.
+  ///
+  /// The screen used to follow whatever tab happened to be active, which left
+  /// the user unable to tell which server they were writing to. With a target
+  /// pinned, the header names the connection and it cannot drift.
+  final String? sessionTabId;
+
+  const SftpDualPaneScreen({
+    super.key,
+    this.sftpClient,
+    this.hostLabel,
+    this.sessionTabId,
+  });
 
   @override
   ConsumerState<SftpDualPaneScreen> createState() => _SftpDualPaneScreenState();
@@ -57,11 +69,20 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     }
   }
 
+  /// The tab this screen transfers over: the pinned [sessionTabId] when one was
+  /// passed, otherwise the active terminal tab (legacy embedded usage).
+  TerminalTabSession? _resolveTargetTab() {
+    final tabsState = ref.read(terminalTabsProvider);
+    final targetId = widget.sessionTabId;
+    if (targetId == null) return tabsState.activeTab;
+    return tabsState.tabs.where((tab) => tab.id == targetId).firstOrNull;
+  }
+
   Future<void> _syncActiveSshSession() async {
     if (!mounted || _usesProvidedClient) return;
 
     final generation = ++_attachmentGeneration;
-    final activeTab = ref.read(terminalTabsProvider).activeTab;
+    final activeTab = _resolveTargetTab();
     final session = activeTab?.sshSessionManager;
 
     if (activeTab == null ||
@@ -110,7 +131,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     SSHSessionManager session,
     SSHClient sshClient,
   ) {
-    final activeTab = ref.read(terminalTabsProvider).activeTab;
+    final activeTab = _resolveTargetTab();
     return mounted &&
         generation == _attachmentGeneration &&
         activeTab?.id == tabId &&
@@ -201,18 +222,41 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     final tokens = TerlyTokens.resolve(context);
     final screenWidth = MediaQuery.sizeOf(context).width;
     final isMobile = screenWidth < 600;
+    final targetTab = widget.sessionTabId == null
+        ? null
+        : ref
+              .watch(terminalTabsProvider)
+              .tabs
+              .where((tab) => tab.id == widget.sessionTabId)
+              .firstOrNull;
+    final connectionLabel =
+        widget.hostLabel ?? targetTab?.host?.label ?? targetTab?.title;
+    final targetHost = targetTab?.host;
+    final canPop = Navigator.of(context).canPop();
 
     return Scaffold(
       body: Column(
         children: [
           TerlyPageHeader(
             icon: LucideIcons.folderSync,
-            title: widget.hostLabel != null
-                ? 'SFTP: ${widget.hostLabel}'
+            title: connectionLabel != null
+                ? 'SFTP: $connectionLabel'
                 : 'Dual-Pane SFTP Manager',
-            description:
-                'Move files between local and remote systems with a visible queue.',
+            description: targetHost != null
+                // The old header never said which server was on the far side of
+                // the queue; the address is the whole point of this line.
+                ? 'Transferring over '
+                      '${targetHost.username != null && targetHost.username!.isNotEmpty ? '${targetHost.username}@' : ''}'
+                      '${targetHost.hostname}:${targetHost.port}'
+                : 'Move files between local and remote systems with a visible queue.',
             actions: [
+              if (canPop)
+                IconButton(
+                  key: const Key('sftp_back_button'),
+                  icon: const Icon(LucideIcons.arrowLeft, size: 17),
+                  tooltip: 'Back',
+                  onPressed: () => Navigator.of(context).maybePop(),
+                ),
               IconButton(
                 icon: const Icon(LucideIcons.listTodo, size: 17),
                 tooltip: 'Transfer Queue',
@@ -279,12 +323,12 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
             child: isMobile
                 ? (_selectedMobileTab == 0
                       ? _buildLocalPane(state, notifier)
-                      : _buildRemotePane(state, notifier))
+                      : _buildRemotePane(state, notifier, connectionLabel))
                 : Row(
                     children: [
                       Expanded(child: _buildLocalPane(state, notifier)),
                       VerticalDivider(width: 1, color: tokens.border),
-                      Expanded(child: _buildRemotePane(state, notifier)),
+                      Expanded(child: _buildRemotePane(state, notifier, connectionLabel)),
                     ],
                   ),
           ),
@@ -354,14 +398,22 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     );
   }
 
-  Widget _buildRemotePane(SftpState state, SftpNotifier notifier) {
+  Widget _buildRemotePane(
+    SftpState state,
+    SftpNotifier notifier,
+    String? connectionLabel,
+  ) {
     return DropTarget(
       onDragDone: (details) =>
           _handleDragAndDropUpload(details.files, state.remotePath),
       child: _buildPane(
         title: state.remoteClient != null
-            ? 'Remote SFTP Server'
-            : 'Remote (Disconnected)',
+            ? (connectionLabel == null
+                  ? 'Remote SFTP Server'
+                  : 'Remote — $connectionLabel')
+            : (connectionLabel == null
+                  ? 'Remote (Disconnected)'
+                  : '$connectionLabel (Disconnected)'),
         path: state.remotePath,
         files: state.remoteFiles,
         isLoading: state.isLoadingRemote,

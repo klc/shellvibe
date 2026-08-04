@@ -24,6 +24,13 @@ const double _kContextColumnBreakpoint = 900;
 /// Width at which the inline detail drawer fits as well.
 const double _kDetailDrawerBreakpoint = 1180;
 
+/// Whether [host] can carry an SFTP session.
+///
+/// Local and serial hosts have no SSH transport, so file transfer is hidden
+/// rather than offered and then failing at connect time.
+bool hostSupportsFileTransfer(HostModel host) =>
+    host.protocol != 'local' && host.protocol != 'serial';
+
 /// Pseudo-group selections that sit above the real groups in the column.
 enum _HostFilter { all, connected, ungrouped }
 
@@ -284,6 +291,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
                                     }
                                   },
                                   onConnect: () => _onConnectHost(host),
+                                  onOpenSftp: () => _onOpenSftp(host),
                                   onEdit: () =>
                                       _openHostForm(context, initialHost: host),
                                   onDelete: () => _deleteHost(context, host),
@@ -302,6 +310,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
                           groups: groups,
                           connected: connectedIds.contains(selected.id),
                           onConnect: () => _onConnectHost(selected),
+                          onOpenSftp: () => _onOpenSftp(selected),
                           onEdit: () =>
                               _openHostForm(context, initialHost: selected),
                           onDelete: () => _deleteHost(context, selected),
@@ -404,6 +413,10 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
               Navigator.of(sheetContext).pop();
               _onConnectHost(host);
             },
+            onOpenSftp: () {
+              Navigator.of(sheetContext).pop();
+              _onOpenSftp(host);
+            },
             onEdit: () {
               Navigator.of(sheetContext).pop();
               _openHostForm(context, initialHost: host);
@@ -491,7 +504,9 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
 
   // ── actions ─────────────────────────────────────────────────────────────
 
-  Future<void> _defaultConnectHost(HostModel host) async {
+  /// Opens (and connects) a terminal tab for [host] and returns its id, or
+  /// null when credentials could not be read.
+  Future<String?> _openSessionForHost(HostModel host) async {
     IdentityModel? identity;
     if (host.identityId != null) {
       try {
@@ -506,7 +521,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
             ),
           );
         }
-        return;
+        return null;
       }
     }
 
@@ -530,6 +545,11 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
               },
         );
 
+    return ref.read(terminalTabsProvider).activeTabId;
+  }
+
+  Future<void> _defaultConnectHost(HostModel host) async {
+    await _openSessionForHost(host);
     if (mounted) {
       GoRouter.maybeOf(context)?.go('/terminal');
     }
@@ -549,6 +569,53 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
         setState(() => _connectingHostIds.remove(host.id));
       }
     }
+  }
+
+  /// Opens file transfer against [host], reusing its live session when there is
+  /// one and connecting a new one otherwise. The session id travels with the
+  /// route so the SFTP screen can name the server it is writing to.
+  Future<void> _onOpenSftp(HostModel host) async {
+    if (_connectingHostIds.contains(host.id)) return;
+
+    var tab = ref
+        .read(terminalTabsProvider)
+        .tabs
+        .where((session) => session.host?.id == host.id && session.isConnected)
+        .firstOrNull;
+
+    if (tab == null) {
+      setState(() => _connectingHostIds.add(host.id));
+      String? tabId;
+      try {
+        tabId = await _openSessionForHost(host);
+      } finally {
+        if (mounted) {
+          setState(() => _connectingHostIds.remove(host.id));
+        }
+      }
+      if (!mounted || tabId == null) return;
+      tab = ref
+          .read(terminalTabsProvider)
+          .tabs
+          .where((session) => session.id == tabId)
+          .firstOrNull;
+      if (tab == null || !tab.isConnected) {
+        ShadToaster.of(context).show(
+          ShadToast.destructive(
+            description: Text(
+              'Could not connect to ${host.label} for file transfer.',
+            ),
+          ),
+        );
+        return;
+      }
+    }
+
+    if (!mounted) return;
+    GoRouter.maybeOf(context)?.push(
+      '/sftp?tab=${Uri.encodeComponent(tab.id)}'
+      '&label=${Uri.encodeComponent(host.label)}',
+    );
   }
 
   void _openHostForm(BuildContext context, {HostModel? initialHost}) {
@@ -606,9 +673,10 @@ const List<int> _kHostColumnFlex = [4, 4, 3, 2];
 
 /// Rendered width of the row's trailing controls.
 ///
-/// Measured, not guessed: a compact [IconButton] still occupies 40px and a
-/// [PopupMenuButton] 48px once Material's minimum tap target is applied.
-const double _kHostActionsWidth = 92;
+/// Measured, not guessed: the two compact [IconButton]s occupy 34px each and
+/// the [PopupMenuButton] 48px once Material's minimum tap target is applied,
+/// plus the 12px the popup adds around its icon.
+const double _kHostActionsWidth = 128;
 
 class _HostListHeader extends StatelessWidget {
   final TerlyTokens tokens;
@@ -669,6 +737,7 @@ class _HostRow extends StatelessWidget {
   final bool compact;
   final VoidCallback onSelect;
   final VoidCallback onConnect;
+  final VoidCallback onOpenSftp;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
@@ -682,6 +751,7 @@ class _HostRow extends StatelessWidget {
     required this.compact,
     required this.onSelect,
     required this.onConnect,
+    required this.onOpenSftp,
     required this.onEdit,
     required this.onDelete,
   });
@@ -805,6 +875,25 @@ class _HostRow extends StatelessWidget {
                         tooltip: 'Connect Terminal',
                         onPressed: onConnect,
                       ),
+                    // Transfer only makes sense over SSH; a local or serial
+                    // host has no SFTP subsystem to talk to.
+                    if (hostSupportsFileTransfer(host))
+                      IconButton(
+                        key: Key('sftp_host_${host.id}'),
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints.tightFor(
+                          width: 34,
+                          height: 34,
+                        ),
+                        icon: Icon(
+                          LucideIcons.folderSync,
+                          size: 16,
+                          color: tokens.info,
+                        ),
+                        tooltip: 'File Transfer (SFTP)',
+                        onPressed: onOpenSftp,
+                      ),
                     PopupMenuButton<String>(
                       tooltip: 'Host actions',
                       // No `constraints` here: that property sizes the popup
@@ -912,6 +1001,7 @@ class _HostDetailPanel extends StatelessWidget {
   final List<HostGroupModel> groups;
   final bool connected;
   final VoidCallback onConnect;
+  final VoidCallback onOpenSftp;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
   final VoidCallback onClose;
@@ -922,6 +1012,7 @@ class _HostDetailPanel extends StatelessWidget {
     required this.groups,
     required this.connected,
     required this.onConnect,
+    required this.onOpenSftp,
     required this.onEdit,
     required this.onDelete,
     required this.onClose,
@@ -987,14 +1078,17 @@ class _HostDetailPanel extends StatelessWidget {
         const SizedBox(height: 8),
         Row(
           children: [
-            Expanded(
-              child: ShadButton.outline(
-                size: ShadButtonSize.sm,
-                onPressed: () => GoRouter.maybeOf(context)?.go('/sftp'),
-                child: const Text('SFTP'),
+            if (hostSupportsFileTransfer(host)) ...[
+              Expanded(
+                child: ShadButton.outline(
+                  key: const Key('detail_open_sftp'),
+                  size: ShadButtonSize.sm,
+                  onPressed: onOpenSftp,
+                  child: const Text('Files'),
+                ),
               ),
-            ),
-            const SizedBox(width: 6),
+              const SizedBox(width: 6),
+            ],
             Expanded(
               child: ShadButton.outline(
                 size: ShadButtonSize.sm,

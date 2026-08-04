@@ -26,7 +26,9 @@ void main() {
 
       expect(find.text('SFTP: Test Server'), findsOneWidget);
       expect(find.text('Local Workstation'), findsOneWidget);
-      expect(find.text('Remote (Disconnected)'), findsOneWidget);
+      // The remote pane names the connection so the target server is never
+      // ambiguous, even while it is disconnected.
+      expect(find.text('Test Server (Disconnected)'), findsOneWidget);
     });
 
     testWidgets('renders segmented tab control on narrow screens (< 600px)', (WidgetTester tester) async {

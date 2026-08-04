@@ -7,7 +7,6 @@ import 'package:terly2/app/router/app_router.dart';
 import 'package:terly2/app/widgets/app_navigation_shell.dart';
 import 'package:terly2/features/hosts/presentation/screens/hosts_screen.dart';
 import 'package:terly2/features/settings/presentation/screens/settings_screen.dart';
-import 'package:terly2/features/sftp/presentation/screens/sftp_dual_pane_screen.dart';
 import 'package:terly2/features/snippets/presentation/screens/snippets_screen.dart';
 import 'package:terly2/features/terminal/presentation/views/terminal_tab_view.dart';
 import 'package:terly2/features/tunnels/presentation/screens/tunnels_screen.dart';
@@ -135,28 +134,23 @@ void main() {
         await pumpTabTransition(tester);
         expect(find.byType(VaultScreen), findsOneWidget);
 
-        // 3. Switch to SFTP (/sftp - Index 3)
+        // 3. Switch to Tunnels (/tunnels - Index 3)
         await tester.tap(find.byKey(const Key('nav_item_3')));
-        await pumpTabTransition(tester);
-        expect(find.byType(SftpDualPaneScreen), findsOneWidget);
-
-        // 4. Switch to Tunnels (/tunnels - Index 4)
-        await tester.tap(find.byKey(const Key('nav_item_4')));
         await pumpTabTransition(tester);
         expect(find.byType(TunnelsScreen), findsOneWidget);
 
-        // 5. Switch to Snippets (/snippets - Index 5)
-        await tester.tap(find.byKey(const Key('nav_item_5')));
+        // 4. Switch to Snippets (/snippets - Index 4)
+        await tester.tap(find.byKey(const Key('nav_item_4')));
         await pumpTabTransition(tester);
         expect(find.byType(SnippetsScreen), findsOneWidget);
 
-        // 6. Switch to Workspaces (/workspaces - Index 6)
-        await tester.tap(find.byKey(const Key('nav_item_6')));
+        // 5. Switch to Workspaces (/workspaces - Index 5)
+        await tester.tap(find.byKey(const Key('nav_item_5')));
         await pumpTabTransition(tester);
         expect(find.byType(WorkspaceManagerScreen), findsOneWidget);
 
-        // 7. Switch to Settings (/settings - Index 7)
-        await tester.tap(find.byKey(const Key('nav_item_7')));
+        // 6. Switch to Settings (/settings - Index 6)
+        await tester.tap(find.byKey(const Key('nav_item_6')));
         await pumpTabTransition(tester);
         expect(find.byType(SettingsScreen), findsOneWidget);
 
@@ -211,7 +205,7 @@ void main() {
     );
 
     testWidgets(
-      'Mobile navigation exposes the five wireframe tabs in rail order',
+      'Mobile navigation exposes the wireframe tabs in rail order',
       (tester) async {
         tester.view.physicalSize = const Size(375, 812);
         tester.view.devicePixelRatio = 1.0;
@@ -221,7 +215,10 @@ void main() {
         await pumpTabTransition(tester);
 
         // Vault and Settings are first-class tabs rather than sheet entries.
-        expect(find.byType(NavigationDestination), findsNWidgets(5));
+        expect(
+          find.byType(NavigationDestination),
+          findsNWidgets(kMobileTabPaths.length),
+        );
         for (final path in kMobileTabPaths) {
           expect(
             find.byKey(Key('mobile_nav_destination_${path.substring(1)}')),

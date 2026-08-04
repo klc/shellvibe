@@ -60,6 +60,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: kUnlockRoute,
         builder: (context, state) => const VaultUnlockDialog(),
       ),
+      // File transfer is no longer a rail module: it is always opened for one
+      // specific session (`tab`), pushed over the shell so the user returns to
+      // wherever they launched it from.
+      GoRoute(
+        path: '/sftp',
+        builder: (context, state) => SftpDualPaneScreen(
+          sessionTabId: state.uri.queryParameters['tab'],
+          hostLabel: state.uri.queryParameters['label'],
+        ),
+      ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) {
           return AppNavigationShell(navigationShell: navigationShell);
@@ -92,16 +102,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               ),
             ],
           ),
-          // Index 3: SFTP
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: '/sftp',
-                builder: (context, state) => const SftpDualPaneScreen(),
-              ),
-            ],
-          ),
-          // Index 4: Tunnels
+          // Index 3: Tunnels
           StatefulShellBranch(
             routes: [
               GoRoute(
@@ -110,7 +111,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               ),
             ],
           ),
-          // Index 5: Snippets
+          // Index 4: Snippets
           StatefulShellBranch(
             routes: [
               GoRoute(
@@ -119,7 +120,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               ),
             ],
           ),
-          // Index 6: Workspaces
+          // Index 5: Workspaces
           StatefulShellBranch(
             routes: [
               GoRoute(
@@ -128,7 +129,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               ),
             ],
           ),
-          // Index 7: Settings
+          // Index 6: Settings
           StatefulShellBranch(
             routes: [
               GoRoute(
