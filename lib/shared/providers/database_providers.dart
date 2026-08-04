@@ -6,6 +6,7 @@ import '../database/daos/identities_dao.dart';
 import '../database/daos/known_hosts_dao.dart';
 import '../database/daos/runbooks_dao.dart';
 import '../database/daos/snippets_dao.dart';
+import '../database/daos/templates_dao.dart';
 import '../database/daos/tunnels_dao.dart';
 import '../storage/secure_storage_service.dart';
 
@@ -66,6 +67,13 @@ SnippetsDao snippetsDao(Ref ref) {
 RunbooksDao runbooksDao(Ref ref) {
   final db = ref.watch(appDatabaseProvider);
   return db.runbooksDao;
+}
+
+/// Auto-disposing provider for [TemplatesDao].
+@riverpod
+TemplatesDao templatesDao(Ref ref) {
+  final db = ref.watch(appDatabaseProvider);
+  return db.templatesDao;
 }
 
 /// Provider for [EncryptionEngine].

@@ -16,6 +16,10 @@ import '../../../snippets/domain/models/snippet_model.dart';
 import '../../../snippets/domain/services/snippet_variable_parser.dart';
 import '../../../snippets/presentation/notifiers/snippets_notifier.dart';
 import '../../../snippets/presentation/widgets/variable_input_dialog.dart';
+import '../../../templates/domain/models/template_model.dart';
+import '../../../templates/presentation/dialogs/save_template_dialog.dart';
+import '../../../templates/presentation/notifiers/templates_notifier.dart';
+import '../../../templates/presentation/widgets/template_picker_sheet.dart';
 import '../../../tunnels/presentation/providers/tunnels_providers.dart';
 import '../../../vault/domain/models/identity_model.dart';
 import '../../../vault/presentation/notifiers/identities_notifier.dart';
@@ -294,6 +298,24 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
               },
             ),
           ],
+          // Layout templates: save what is open, or reopen a saved layout.
+          // Saving needs something to capture; running does not.
+          if (tabsState.tabs.isNotEmpty)
+            IconButton(
+              key: const Key('save_template_button'),
+              icon: const Icon(LucideIcons.bookmarkPlus, size: 17),
+              tooltip: 'Save Tabs & Panes as Template',
+              onPressed: _saveCurrentLayoutAsTemplate,
+            ),
+          IconButton(
+            key: const Key('run_template_button'),
+            icon: const Icon(LucideIcons.layoutTemplate, size: 17),
+            tooltip: 'Run Template',
+            onPressed: () => TemplatePickerSheet.show(
+              context,
+              onSelect: _runTemplate,
+            ),
+          ),
           // New Tab Button
           IconButton(
             key: const Key('new_tab_button'),
@@ -753,6 +775,78 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
           identity: resolved.identity,
           onHostKeyPrompt: _promptHostKey,
         );
+  }
+
+  /// Saves every open tab and split pane as a named template.
+  Future<void> _saveCurrentLayoutAsTemplate() async {
+    final tabsState = ref.read(terminalTabsProvider);
+    if (tabsState.tabs.isEmpty) return;
+
+    final tabs = tabsState.tabs.where((t) => t.splitParentId == null).length;
+    final splits = tabsState.tabs.length - tabs;
+    final summary = splits == 0
+        ? 'Saving $tabs ${tabs == 1 ? 'tab' : 'tabs'}.'
+        : 'Saving $tabs ${tabs == 1 ? 'tab' : 'tabs'} and $splits '
+              '${splits == 1 ? 'split pane' : 'split panes'}.';
+
+    final details = await SaveTemplateDialog.show(context, summary: summary);
+    if (details == null || !mounted) return;
+
+    final template = await ref
+        .read(templatesProvider.notifier)
+        .saveCurrentLayout(
+          name: details.name,
+          description: details.description,
+        );
+    if (!mounted) return;
+
+    ShadToaster.of(context).show(
+      template == null
+          ? const ShadToast.destructive(
+              description: Text('Nothing open to save as a template.'),
+            )
+          : ShadToast(
+              description: Text('Saved "${template.name}".'),
+            ),
+    );
+  }
+
+  /// Reopens a saved layout alongside whatever is already open.
+  ///
+  /// Panes that cannot be recreated — a deleted host, unreadable credentials —
+  /// are reported rather than failing the whole run.
+  Future<void> _runTemplate(TemplateModel template) async {
+    final result = await ref
+        .read(templatesProvider.notifier)
+        .runTemplate(
+          template,
+          resolveIdentity: _resolveIdentity,
+          onHostKeyPrompt: _promptHostKey,
+        );
+    if (!mounted) return;
+
+    if (result.isComplete) {
+      ShadToaster.of(context).show(
+        ShadToast(
+          description: Text(
+            'Opened "${template.name}" — ${result.openedPanes} '
+            '${result.openedPanes == 1 ? 'pane' : 'panes'}.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    ShadToaster.of(context).show(
+      ShadToast.destructive(
+        title: Text(
+          result.openedPanes == 0
+              ? 'Could not run "${template.name}"'
+              : 'Ran "${template.name}" with skipped panes',
+        ),
+        description: Text(result.warnings.join('\n')),
+      ),
+    );
   }
 
   Future<bool> _promptHostKey(

@@ -6,6 +6,11 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 import '../../../../app/theme/terly_tokens.dart';
 import '../../../../app/widgets/terly_ui.dart';
 import '../../../../app/widgets/workspace_switcher.dart';
+import '../../../../core/network/ssh_session_manager.dart';
+import '../../../templates/domain/models/template_model.dart';
+import '../../../templates/presentation/dialogs/save_template_dialog.dart';
+import '../../../templates/presentation/notifiers/templates_notifier.dart';
+import '../../../templates/presentation/widgets/template_picker_sheet.dart';
 import '../../../terminal/presentation/dialogs/host_key_prompt_dialog.dart';
 import '../../../terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import '../../../vault/domain/models/identity_model.dart';
@@ -96,6 +101,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
     final hosts = hostsAsync.value ?? const <HostModel>[];
     final groups = groupsAsync.value ?? const <HostGroupModel>[];
     final connectedIds = _connectedHostIds();
+    final templates = ref.watch(templatesProvider).value ?? const [];
 
     return TerlyContextColumn(
       head: TerlyWorkspaceSwitcher(
@@ -148,6 +154,18 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
               _filter = _HostFilter.all;
             }),
           ),
+        // Saved terminal layouts. Unlike the entries above these are actions,
+        // not filters: tapping one opens its tabs and panes in the terminal.
+        if (templates.isNotEmpty) ...[
+          const TerlySectionLabel(label: 'Templates'),
+          for (final template in templates)
+            _TemplateNavItem(
+              template: template,
+              onRun: () => _runTemplate(template),
+              onRename: () => _renameTemplate(template),
+              onDelete: () => _deleteTemplate(context, template),
+            ),
+        ],
       ],
     );
   }
@@ -507,42 +525,15 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
   /// Opens (and connects) a terminal tab for [host] and returns its id, or
   /// null when credentials could not be read.
   Future<String?> _openSessionForHost(HostModel host) async {
-    IdentityModel? identity;
-    if (host.identityId != null) {
-      try {
-        identity = await ref
-            .read(identitiesProvider.notifier)
-            .getDecryptedIdentity(host.identityId!);
-      } catch (e) {
-        if (mounted) {
-          ShadToaster.of(context).show(
-            ShadToast.destructive(
-              description: Text('Cannot read stored credentials: $e'),
-            ),
-          );
-        }
-        return null;
-      }
-    }
+    final resolved = await _resolveIdentity(host);
+    if (!resolved.ok) return null;
 
     await ref
         .read(terminalTabsProvider.notifier)
         .openTabForHost(
           host,
-          identity: identity,
-          onHostKeyPrompt:
-              (hostname, port, keyType, fingerprint, status) async {
-                if (!mounted) return false;
-                final approved = await HostKeyPromptDialog.show(
-                  context,
-                  hostname: hostname,
-                  port: port,
-                  keyType: keyType,
-                  fingerprint: fingerprint,
-                  status: status,
-                );
-                return approved ?? false;
-              },
+          identity: resolved.identity,
+          onHostKeyPrompt: _promptHostKey,
         );
 
     return ref.read(terminalTabsProvider).activeTabId;
@@ -616,6 +607,119 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
       '/sftp?tab=${Uri.encodeComponent(tab.id)}'
       '&label=${Uri.encodeComponent(host.label)}',
     );
+  }
+
+  // ── templates ───────────────────────────────────────────────────────────
+
+  /// Decrypts a host's stored credentials for a template replay.
+  ///
+  /// `ok: false` aborts the pane instead of connecting without the credentials
+  /// it was saved with.
+  Future<({bool ok, IdentityModel? identity})> _resolveIdentity(
+    HostModel host,
+  ) async {
+    if (host.identityId == null) return (ok: true, identity: null);
+    try {
+      final identity = await ref
+          .read(identitiesProvider.notifier)
+          .getDecryptedIdentity(host.identityId!);
+      return (ok: true, identity: identity);
+    } catch (e) {
+      if (mounted) {
+        ShadToaster.of(context).show(
+          ShadToast.destructive(
+            description: Text('Cannot read stored credentials: $e'),
+          ),
+        );
+      }
+      return (ok: false, identity: null);
+    }
+  }
+
+  Future<bool> _promptHostKey(
+    String hostname,
+    int port,
+    String keyType,
+    String fingerprint,
+    HostKeyVerificationStatus status,
+  ) async {
+    if (!mounted) return false;
+    final approved = await HostKeyPromptDialog.show(
+      context,
+      hostname: hostname,
+      port: port,
+      keyType: keyType,
+      fingerprint: fingerprint,
+      status: status,
+    );
+    return approved ?? false;
+  }
+
+  /// Opens a template's tabs and panes and moves to the terminal.
+  Future<void> _runTemplate(TemplateModel template) async {
+    final result = await ref
+        .read(templatesProvider.notifier)
+        .runTemplate(
+          template,
+          resolveIdentity: _resolveIdentity,
+          onHostKeyPrompt: _promptHostKey,
+        );
+    if (!mounted) return;
+
+    if (result.openedPanes > 0) {
+      GoRouter.maybeOf(context)?.go('/terminal');
+    }
+    if (!result.isComplete) {
+      ShadToaster.of(context).show(
+        ShadToast.destructive(
+          title: Text(
+            result.openedPanes == 0
+                ? 'Could not run "${template.name}"'
+                : 'Ran "${template.name}" with skipped panes',
+          ),
+          description: Text(result.warnings.join('\n')),
+        ),
+      );
+    }
+  }
+
+  Future<void> _renameTemplate(TemplateModel template) async {
+    final details = await SaveTemplateDialog.show(
+      context,
+      initialName: template.name,
+      isRename: true,
+    );
+    if (details == null) return;
+    await ref
+        .read(templatesProvider.notifier)
+        .renameTemplate(template, details.name);
+  }
+
+  Future<void> _deleteTemplate(
+    BuildContext context,
+    TemplateModel template,
+  ) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => ShadDialog.alert(
+        title: const Text('Delete Template'),
+        description: Text('Delete the saved layout "${template.name}"?'),
+        actions: [
+          ShadButton.outline(
+            child: const Text('Cancel'),
+            onPressed: () => Navigator.of(ctx).pop(false),
+          ),
+          ShadButton.destructive(
+            child: const Text('Delete'),
+            onPressed: () => Navigator.of(ctx).pop(true),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await ref.read(templatesProvider.notifier).deleteTemplate(template.id);
+    }
   }
 
   void _openHostForm(BuildContext context, {HostModel? initialHost}) {
@@ -942,6 +1046,104 @@ class _HostRow extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Context-column entry for a saved layout.
+///
+/// Shaped like [TerlyNavItem] so it reads as part of the column, but it runs an
+/// action rather than selecting a filter, and carries its own rename/delete
+/// menu.
+class _TemplateNavItem extends StatelessWidget {
+  final TemplateModel template;
+  final VoidCallback onRun;
+  final VoidCallback onRename;
+  final VoidCallback onDelete;
+
+  const _TemplateNavItem({
+    required this.template,
+    required this.onRun,
+    required this.onRename,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = TerlyTokens.resolve(context);
+    return Semantics(
+      button: true,
+      label: 'Run template ${template.name}, ${templateSummary(template)}',
+      child: Row(
+        children: [
+          Expanded(
+            child: InkWell(
+              key: Key('run_template_${template.id}'),
+              onTap: onRun,
+              borderRadius: BorderRadius.circular(tokens.radiusSmall),
+              child: Container(
+                height: 30,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Row(
+                  children: [
+                    Icon(
+                      LucideIcons.layoutTemplate,
+                      size: 15,
+                      color: tokens.textMuted,
+                    ),
+                    const SizedBox(width: 9),
+                    Expanded(
+                      child: Text(
+                        template.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.labelMedium
+                            ?.copyWith(color: tokens.textMuted),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          PopupMenuButton<String>(
+            key: Key('template_menu_${template.id}'),
+            tooltip: 'Template actions',
+            padding: EdgeInsets.zero,
+            iconSize: 14,
+            icon: const Icon(LucideIcons.ellipsis, size: 14),
+            onSelected: (value) {
+              if (value == 'rename') onRename();
+              if (value == 'delete') onDelete();
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'rename',
+                child: Row(
+                  children: [
+                    Icon(LucideIcons.pencil, size: 16),
+                    SizedBox(width: 8),
+                    Text('Rename template'),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'delete',
+                child: Row(
+                  children: [
+                    Icon(LucideIcons.trash2, size: 16, color: tokens.danger),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Delete template',
+                      style: TextStyle(color: tokens.danger),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

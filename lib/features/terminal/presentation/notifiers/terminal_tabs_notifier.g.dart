@@ -42,7 +42,7 @@ final class TerminalTabsNotifierProvider
 }
 
 String _$terminalTabsNotifierHash() =>
-    r'95f568a115b3676e73eb0902698011502da10469';
+    r'4b73c8d0b38a26a1fc4bec47a018109f893708df';
 
 abstract class _$TerminalTabsNotifier extends $Notifier<TerminalTabsState> {
   TerminalTabsState build();
