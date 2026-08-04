@@ -64,7 +64,7 @@ void main() {
   }
 
   group('AppNavigationShell & GoRouter Integration Tests', () {
-    testWidgets('Renders the persistent rail and the initial Hosts screen', (
+    testWidgets('Renders the persistent rail and the initial Terminal screen', (
       tester,
     ) async {
       tester.view.physicalSize = const Size(1440, 900);
@@ -86,14 +86,11 @@ void main() {
       );
       expect(find.byKey(const Key('workspace_avatar_button')), findsOneWidget);
 
-      // The workspace switcher moved into the module's context column.
-      expect(
-        find.byKey(const Key('workspace_selector_dropdown')),
-        findsOneWidget,
-      );
-
-      // Default initial tab should be HostsScreen
-      expect(find.byType(HostsScreen), findsOneWidget);
+      // Default initial tab should be the Terminal screen with the local
+      // shell empty state (this harness pumps the shell without TerlyApp,
+      // so the startup auto-open of a local shell does not run here).
+      expect(find.byType(TerminalTabView), findsOneWidget);
+      expect(find.text('No Active Terminal Sessions'), findsOneWidget);
     });
 
     testWidgets('Rail renders the wireframe module order', (tester) async {

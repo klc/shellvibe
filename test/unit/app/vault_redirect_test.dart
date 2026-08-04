@@ -23,9 +23,9 @@ void main() {
 
     test('leaves the unlock screen once unlocked or unconfigured', () {
       expect(resolveVaultRedirect(VaultStatus.unlocked, kUnlockRoute),
-          equals('/hosts'));
+          equals('/terminal'));
       expect(resolveVaultRedirect(VaultStatus.unconfigured, kUnlockRoute),
-          equals('/hosts'));
+          equals('/terminal'));
     });
 
     test('does not interfere with normal navigation', () {

@@ -27,7 +27,7 @@ String? resolveVaultRedirect(VaultStatus? status, String location) {
 
   if (status == VaultStatus.locked) return isAtUnlock ? null : kUnlockRoute;
   if (isAtUnlock && status == null) return null;
-  if (isAtUnlock) return '/hosts';
+  if (isAtUnlock) return '/terminal';
   return null;
 }
 
@@ -46,7 +46,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   ref.onDispose(vaultRouterNotifier.dispose);
 
   return GoRouter(
-    initialLocation: '/hosts',
+    initialLocation: '/terminal',
     refreshListenable: vaultRouterNotifier,
     // Gate the whole app behind the unlock screen while the vault is locked.
     // Without this the master password would never be asked for.
@@ -55,7 +55,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       state.matchedLocation,
     ),
     routes: [
-      GoRoute(path: '/', redirect: (context, state) => '/hosts'),
+      GoRoute(path: '/', redirect: (context, state) => '/terminal'),
       GoRoute(
         path: kUnlockRoute,
         builder: (context, state) => const VaultUnlockDialog(),

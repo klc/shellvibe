@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
+import '../core/utils/platform_capabilities.dart';
 import '../features/settings/domain/models/app_settings_model.dart';
 import '../features/settings/presentation/notifiers/settings_notifier.dart';
+import '../features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import '../features/vault/presentation/notifiers/vault_notifier.dart';
 import 'router/app_router.dart';
 import 'theme/app_theme.dart';
@@ -31,6 +33,16 @@ class _TerlyAppState extends ConsumerState<TerlyApp> {
     _lifecycleListener = AppLifecycleListener(
       onStateChange: _onLifecycleChange,
     );
+    // The app launches straight into the terminal screen (see the router's
+    // initialLocation). On desktop, open a local shell there right away;
+    // flutter_pty cannot run on mobile (iOS sandbox / no local shell on
+    // Android), so mobile starts on the terminal's empty state and connects
+    // via SSH instead.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (supportsLocalShell) {
+        ref.read(terminalTabsProvider.notifier).openLocalTab();
+      }
+    });
   }
 
   /// Locks the vault after the configured auto-lock delay when the app enters
