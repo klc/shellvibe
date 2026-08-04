@@ -101,7 +101,21 @@ class _ResizableSplitState extends State<ResizableSplit> {
 
   void _handleEnd() {
     final ratio = _dragRatio;
-    if (ratio != null) widget.onRatioChanged(ratio);
+    if (ratio == null) return;
+    // Drop the local override up front. The owner is expected to publish this
+    // ratio straight back, but if it clamps it, rejects it, or is already at
+    // that value, [didUpdateWidget] never fires and the pane would otherwise
+    // sit at a ratio nobody else knows about.
+    setState(() => _dragRatio = null);
+    widget.onRatioChanged(ratio);
+  }
+
+  /// The gesture was taken away mid-drag (pointer cancelled, arena lost).
+  /// Nothing gets published, so drop the local ratio and snap back to the
+  /// owner's.
+  void _handleCancel() {
+    if (_dragRatio == null) return;
+    setState(() => _dragRatio = null);
   }
 
   @override
@@ -124,6 +138,7 @@ class _ResizableSplitState extends State<ResizableSplit> {
           onDragStart: _handleStart,
           onDragUpdate: (delta) => _handleUpdate(delta, total),
           onDragEnd: _handleEnd,
+          onDragCancel: _handleCancel,
         );
 
         if (widget.axis == Axis.vertical) {
@@ -158,6 +173,7 @@ class _SplitDivider extends StatelessWidget {
   final VoidCallback onDragStart;
   final ValueChanged<double> onDragUpdate;
   final VoidCallback onDragEnd;
+  final VoidCallback onDragCancel;
 
   const _SplitDivider({
     super.key,
@@ -166,6 +182,7 @@ class _SplitDivider extends StatelessWidget {
     required this.onDragStart,
     required this.onDragUpdate,
     required this.onDragEnd,
+    required this.onDragCancel,
   });
 
   @override
@@ -181,10 +198,12 @@ class _SplitDivider extends StatelessWidget {
         onHorizontalDragUpdate:
             isHorizontal ? (d) => onDragUpdate(d.delta.dx) : null,
         onHorizontalDragEnd: isHorizontal ? (_) => onDragEnd() : null,
+        onHorizontalDragCancel: isHorizontal ? onDragCancel : null,
         onVerticalDragStart: isHorizontal ? null : (_) => onDragStart(),
         onVerticalDragUpdate:
             isHorizontal ? null : (d) => onDragUpdate(d.delta.dy),
         onVerticalDragEnd: isHorizontal ? null : (_) => onDragEnd(),
+        onVerticalDragCancel: isHorizontal ? null : onDragCancel,
         child: SizedBox(
           width: isHorizontal ? ResizableSplit._hit : double.infinity,
           height: isHorizontal ? double.infinity : ResizableSplit._hit,

@@ -154,6 +154,62 @@ void main() {
       expect(b, ['ls', 'pwd']);
     });
 
+    test('a foreign interceptor installed on top does not duplicate a '
+        'broadcast snippet', () {
+      // The mobile extra-keys bar registers its own interceptor in the same
+      // chain, possibly after broadcast is already live. Wrapping the raw
+      // `onOutput` slot used to make the router lose track of its own tee,
+      // which sent the snippet once directly and once more through the tee.
+      final a = <String>[];
+      final b = <String>[];
+      final tabA = session('a', captured: a);
+      final tabB = session('b', captured: b);
+      final tabs = [tabA, tabB];
+      final live = {'a', 'b'};
+      wireForward(router, live, tabs);
+
+      router.sync(selectedIds: live, tabs: tabs);
+      for (final tab in tabs) {
+        tab.outputChain.add('extra_keys', (data, next) => next(data));
+      }
+
+      final sent =
+          router.sendTextToPanes(selectedIds: live, tabs: tabs, text: 'ls');
+
+      expect(sent, 2);
+      expect(a, ['ls']);
+      expect(b, ['ls']);
+
+      // Typing still broadcasts exactly once per pane through both links.
+      tabA.terminal.onOutput!('pwd');
+      expect(a, ['ls', 'pwd']);
+      expect(b, ['ls', 'pwd']);
+    });
+
+    test('a foreign interceptor can be removed while broadcast stays live',
+        () {
+      final a = <String>[];
+      final b = <String>[];
+      final tabA = session('a', captured: a);
+      final tabB = session('b', captured: b);
+      final tabs = [tabA, tabB];
+      final live = {'a', 'b'};
+      wireForward(router, live, tabs);
+
+      // Foreign link first, broadcast on top: the reverse install order.
+      tabA.outputChain.add('extra_keys', (data, next) => next('$data!'));
+      router.sync(selectedIds: live, tabs: tabs);
+
+      tabA.terminal.onOutput!('x');
+      expect(a, ['x!']);
+      expect(b, ['x!']); // forwarded after the foreign link had its say
+
+      tabA.outputChain.remove('extra_keys');
+      tabA.terminal.onOutput!('y');
+      expect(a, ['x!', 'y']);
+      expect(b, ['x!', 'y']);
+    });
+
     test('reconnect re-installs the tee and forwards to the NEW handler', () {
       final a = <String>[];
       final bOld = <String>[];

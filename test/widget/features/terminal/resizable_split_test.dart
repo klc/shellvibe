@@ -124,6 +124,54 @@ void main() {
       expect(firstH + secondH, closeTo(390, 1));
     });
 
+    testWidgets('a ratio the owner does not publish is not kept locally',
+        (tester) async {
+      // The owner is free to ignore or clamp what a drag reports (a notifier
+      // may reject it, or already be at that value). The pane must then go
+      // back to the owner's ratio rather than sit at one only it knows about
+      // — which would survive until the next drag and then be lost anyway.
+      var reported = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 800,
+              height: 400,
+              child: ResizableSplit(
+                axis: Axis.horizontal,
+                ratio: 0.5,
+                first: Container(key: const Key('first'), color: Colors.red),
+                second: Container(key: const Key('second'), color: Colors.blue),
+                dividerColor: Colors.black,
+                onRatioChanged: (_) => reported++,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byKey(const ValueKey('split_divider'))),
+      );
+      await gesture.moveBy(const Offset(200, 0));
+      await tester.pump();
+      expect(
+        tester.getSize(find.byKey(const Key('first'))).width,
+        greaterThan(500), // local drag ratio is in effect mid-gesture
+      );
+
+      await gesture.up();
+      await tester.pump();
+
+      expect(reported, 1); // the owner heard about it...
+      // ...and, having kept ratio at 0.5, that is where the pane sits.
+      expect(
+        tester.getSize(find.byKey(const Key('first'))).width,
+        closeTo(firstWidthOfRatio(0.5), 1),
+      );
+    });
+
     testWidgets('shows resize cursor over the divider on desktop-like platform',
         (tester) async {
       await tester.pumpWidget(

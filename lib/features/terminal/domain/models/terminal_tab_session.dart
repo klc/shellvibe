@@ -9,8 +9,20 @@ import '../../../../core/network/ssh_session_manager.dart';
 import '../../../../core/network/terminal_ssh_bridge.dart';
 import '../../../hosts/domain/models/host_model.dart';
 import '../../../vault/domain/models/identity_model.dart';
+import '../services/terminal_output_chain.dart';
 
 enum TerminalSessionType { ssh, local }
+
+/// Why a session that was connected is no longer live.
+enum TerminalDisconnectCause {
+  /// The remote shell exited (`exit`, `logout`, a killed process): an ordinary
+  /// end to the session, not a failure.
+  remoteExit,
+
+  /// The transport went away underneath us — keep-alive failure, network drop,
+  /// server-side kill.
+  connectionLost,
+}
 
 /// Clamp range for a split pane's share of its split container.
 const double kSplitPaneMinRatio = 0.15;
@@ -24,6 +36,13 @@ class TerminalTabSession {
   final HostModel? host;
   final IdentityModel? identity;
   final Terminal terminal;
+
+  /// Shared owner of `terminal.onOutput`. Broadcast and the mobile extra-keys
+  /// bar register interceptors here instead of wrapping the slot themselves,
+  /// which is what lets them be added and removed independently and survive a
+  /// bridge reconnect.
+  late final TerminalOutputChain outputChain = TerminalOutputChain(terminal);
+
   SSHSessionManager? sshSessionManager;
   TerminalSSHBridge? sshBridge;
 
@@ -40,6 +59,13 @@ class TerminalTabSession {
   bool isConnecting;
   bool isConnected;
   String? errorMessage;
+
+  /// Set when a live session ended by itself. `remoteExit` is a normal
+  /// shell exit and must not be reported as an error; `connectionLost` is a
+  /// dropped transport. Null while connecting or connected, and for a session
+  /// that never came up (that case carries [errorMessage] instead).
+  TerminalDisconnectCause? disconnectCause;
+
   final String? splitParentId;
   final Axis? splitDirection;
 
@@ -61,6 +87,7 @@ class TerminalTabSession {
     this.isConnecting = false,
     this.isConnected = false,
     this.errorMessage,
+    this.disconnectCause,
     this.splitParentId,
     this.splitDirection,
     this.splitRatio = 0.5,
@@ -74,6 +101,7 @@ class TerminalTabSession {
   }
 
   Future<void> dispose() async {
+    outputChain.dispose();
     await sshClientChangesSub?.cancel();
     sshClientChangesSub = null;
     if (sshBridge != null) {

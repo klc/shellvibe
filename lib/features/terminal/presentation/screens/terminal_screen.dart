@@ -54,6 +54,22 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
     super.dispose();
   }
 
+  /// True when the session ended because the remote shell exited — an
+  /// ordinary logout, not a failure.
+  bool _isCleanExit(TerminalTabSession session) =>
+      session.errorMessage == null &&
+      session.disconnectCause == TerminalDisconnectCause.remoteExit;
+
+  String _bannerMessage(TerminalTabSession session) {
+    if (session.errorMessage != null) {
+      return 'Connection Error: ${session.errorMessage}';
+    }
+    return switch (session.disconnectCause) {
+      TerminalDisconnectCause.remoteExit => 'Session ended',
+      _ => 'Connection lost',
+    };
+  }
+
   /// A modifier click (⌘ on macOS; ⌘ or Ctrl elsewhere) toggles this pane in
   /// the broadcast selection and makes it the active origin; a plain click
   /// routes through [TerminalTabsNotifier.tapPane], which clears the
@@ -115,31 +131,40 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
             backgroundColor: theme.background,
             color: theme.blue,
           ),
-        // A failed or dropped SSH session (one with a host to reconnect to)
+        // A finished or failed SSH session (one with a host to reconnect to)
         // shows the banner with a Reconnect action. Local panes and idle
-        // connecting state are excluded.
+        // connecting state are excluded. A remote shell that simply exited is
+        // not a failure, so it gets a muted banner rather than the red one.
         if (!session.isConnecting &&
             session.sessionType == TerminalSessionType.ssh &&
             session.host != null &&
             !session.isConnected)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            color: ShadTheme.of(context).colorScheme.destructive,
+            color: _isCleanExit(session)
+                ? ShadTheme.of(context).colorScheme.muted
+                : ShadTheme.of(context).colorScheme.destructive,
             child: Row(
               children: [
                 Icon(
-                  Icons.error_outline,
-                  color: ShadTheme.of(context).colorScheme.destructiveForeground,
+                  _isCleanExit(session)
+                      ? Icons.info_outline
+                      : Icons.error_outline,
+                  color: _isCleanExit(session)
+                      ? ShadTheme.of(context).colorScheme.mutedForeground
+                      : ShadTheme.of(context).colorScheme.destructiveForeground,
                   size: 18,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    session.errorMessage != null
-                        ? 'Connection Error: ${session.errorMessage}'
-                        : 'Connection lost',
+                    _bannerMessage(session),
                     style: TextStyle(
-                      color: ShadTheme.of(context).colorScheme.destructiveForeground,
+                      color: _isCleanExit(session)
+                          ? ShadTheme.of(context).colorScheme.mutedForeground
+                          : ShadTheme.of(context)
+                              .colorScheme
+                              .destructiveForeground,
                       fontSize: 12,
                     ),
                   ),
@@ -199,6 +224,7 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
         if (shouldShowExtraKeys)
           MobileExtraKeysBar(
             terminal: session.terminal,
+            outputChain: session.outputChain,
           ),
       ],
     );
