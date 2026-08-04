@@ -188,6 +188,65 @@ void main() {
       await Future.wait([openFuture, splitFuture ?? Future<void>.value()]);
     });
 
+    test('splitTab with an explicit host opens that host instead of inheriting the parent', () async {
+      final notifier = container.read(terminalTabsProvider.notifier);
+      final parentHost = HostModel(
+        id: 'host-parent',
+        workspaceId: 'ws-1',
+        label: 'Parent Host',
+        hostname: '127.0.0.1',
+        port: 1,
+        createdAt: DateTime.now(),
+      );
+      final otherHost = HostModel(
+        id: 'host-other',
+        workspaceId: 'ws-1',
+        label: 'Other Host',
+        hostname: '127.0.0.1',
+        port: 1,
+        createdAt: DateTime.now(),
+      );
+
+      final openFuture = notifier.openTabForHost(parentHost);
+      final mainId = container.read(terminalTabsProvider).activeTabId!;
+
+      final splitFuture = notifier.splitTab(mainId, host: otherHost);
+      final state = container.read(terminalTabsProvider);
+      final splitTab = state.tabs.last;
+
+      // Same split tree, different connection.
+      expect(splitTab.splitParentId, equals(mainId));
+      expect(splitTab.sessionType, equals(TerminalSessionType.ssh));
+      expect(splitTab.host?.id, equals(otherHost.id));
+      expect(splitTab.title, equals(otherHost.label));
+      expect(splitTab.isConnecting, isTrue);
+
+      await Future.wait([openFuture, splitFuture ?? Future<void>.value()]);
+    });
+
+    test('splitTab with an explicit host works from a local pane', () async {
+      final notifier = container.read(terminalTabsProvider.notifier);
+      final host = HostModel(
+        id: 'host-from-local',
+        workspaceId: 'ws-1',
+        label: 'Remote Host',
+        hostname: '127.0.0.1',
+        port: 1,
+        createdAt: DateTime.now(),
+      );
+
+      notifier.openLocalTab(title: 'Main Tab');
+      final mainId = container.read(terminalTabsProvider).activeTabId!;
+
+      final splitFuture = notifier.splitTab(mainId, host: host);
+      final splitTab = container.read(terminalTabsProvider).tabs.last;
+
+      expect(splitTab.sessionType, equals(TerminalSessionType.ssh));
+      expect(splitTab.host?.id, equals(host.id));
+
+      await (splitFuture ?? Future<void>.value());
+    });
+
     test('openTabForHost assigns dedicated SSHSessionManager instance per tab', () async {
       final notifier = container.read(terminalTabsProvider.notifier);
       final host = HostModel(
