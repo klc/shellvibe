@@ -26,7 +26,13 @@ String resolveTerminalFontFamily(String fontId) {
 }
 
 /// Fallback chain for terminal glyphs the primary font lacks: Nerd Font
-/// symbols first, then the xterm2 default stack (CJK, emoji, …).
+/// symbols first, then the xterm2 default stack (CJK, symbols, emoji, …).
+///
+/// Monochrome symbol families deliberately precede the color emoji families.
+/// Codepoints such as U+23F8 PAUSE default to text presentation, and no
+/// monospace font on macOS carries them — without a text-presentation font
+/// ahead of it, Apple Color Emoji claims the glyph and a status line meant to
+/// read as two thin bars renders as a colored pill.
 const kTerminalFontFamilyFallback = <String>[
   kSymbolsNerdFontFamily,
   'SF Mono',
@@ -42,10 +48,15 @@ const kTerminalFontFamilyFallback = <String>[
   'Noto Sans Mono CJK KR',
   'Noto Sans Mono CJK JP',
   'Noto Sans Mono CJK HK',
+  // Text-presentation symbol coverage, per platform: STIX Two Math ships with
+  // macOS and is the only system family there with Miscellaneous Technical.
+  'STIX Two Math',
+  'Segoe UI Symbol',
+  'Noto Sans Symbols 2',
+  'Noto Sans Symbols',
   'Apple Color Emoji',
   'Segoe UI Emoji',
   'Noto Color Emoji',
-  'Segoe UI Symbol',
   'monospace',
   'sans-serif',
 ];

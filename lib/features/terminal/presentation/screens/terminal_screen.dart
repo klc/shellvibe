@@ -167,10 +167,12 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
                 fontFamily: resolveTerminalFontFamily(settings.fontFamily),
                 fontFamilyFallback: kTerminalFontFamilyFallback,
                 enableLigatures: settings.enableLigatures,
-                // xterm2 defaults to 1.2, which spaces rows noticeably wider
-                // than Terminal.app/iTerm and costs visible rows at the same
-                // pane height. 1.0 leaves the row height to the font metrics.
-                height: 1.0,
+                // Measured against a reference terminal rendering the same
+                // output at the same cell width (8.0px advance in both): its
+                // rows sit on an 18px pitch, xterm2's 1.2 default gives ~16px
+                // and 1.0 gives 13px, which reads as squat because the cells
+                // stay as wide as ever. 1.4 lands on the same 18px pitch.
+                height: 1.4,
                 // Reference terminals keep bold text in its declared color.
                 // xterm2 defaults to remapping colors 0-7 onto 8-15 for bold
                 // runs, which silently recolors most shell prompts.
