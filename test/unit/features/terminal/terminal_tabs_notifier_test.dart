@@ -241,5 +241,83 @@ void main() {
 
       await future;
     });
+
+    test('reconnectTab re-attempts connection on a failed SSH tab', () async {
+      final notifier = container.read(terminalTabsProvider.notifier);
+      final host = HostModel(
+        id: 'host-reconnect',
+        workspaceId: 'ws-1',
+        label: 'Reconnect Host',
+        hostname: '127.0.0.1',
+        port: 1,
+        createdAt: DateTime.now(),
+      );
+
+      await notifier.openTabForHost(host);
+      final preTab = container.read(terminalTabsProvider).tabs.last;
+      expect(preTab.isConnected, isFalse);
+      expect(preTab.errorMessage, isNotNull);
+      final oldManager = preTab.sshSessionManager;
+
+      // The reconnect flips the tab to connecting and clears the error
+      // synchronously, before the new handshake is in flight.
+      final reconnectFuture = notifier.reconnectTab(preTab.id);
+      final midTab = container.read(terminalTabsProvider).tabs.last;
+      expect(midTab.isConnecting, isTrue);
+      expect(midTab.errorMessage, isNull);
+      expect(midTab.isConnected, isFalse);
+
+      await reconnectFuture;
+
+      // The attempt failed (port 1 is unreachable) but the tab survived with
+      // a fresh session manager; closing the tab is no longer required to
+      // retry.
+      final afterTab = container.read(terminalTabsProvider).tabs.last;
+      expect(container.read(terminalTabsProvider).tabs.length, equals(1));
+      expect(afterTab.id, equals(preTab.id));
+      expect(afterTab.isConnecting, isFalse);
+      expect(afterTab.isConnected, isFalse);
+      expect(afterTab.errorMessage, isNotNull);
+      expect(afterTab.sshSessionManager, isNotNull);
+      expect(identical(afterTab.sshSessionManager, oldManager), isFalse);
+    });
+
+    test('reconnectTab is a no-op for non-SSH tabs and connecting tabs', () async {
+      final notifier = container.read(terminalTabsProvider.notifier);
+
+      notifier.openLocalTab(title: 'Local');
+      final localId = container.read(terminalTabsProvider).activeTabId!;
+      final localTabBefore = container.read(terminalTabsProvider).tabs.last;
+
+      await notifier.reconnectTab(localId);
+      final localTabAfter = container.read(terminalTabsProvider).tabs.last;
+      expect(identical(localTabBefore, localTabAfter), isTrue);
+
+      final host = HostModel(
+        id: 'host-connecting',
+        workspaceId: 'ws-1',
+        label: 'Connecting Host',
+        hostname: '127.0.0.1',
+        port: 1,
+        createdAt: DateTime.now(),
+      );
+      final openFuture = notifier.openTabForHost(host);
+      final connectingTab = container.read(terminalTabsProvider).tabs.last;
+      expect(connectingTab.isConnecting, isTrue);
+
+      // Guarded: no restart while a connect is already in flight.
+      final reconnectFuture = notifier.reconnectTab(connectingTab.id);
+      expect(container.read(terminalTabsProvider).tabs.last.isConnecting, isTrue);
+
+      await Future.wait([
+        openFuture,
+        reconnectFuture,
+      ]);
+
+      // Only a single connection attempt ran; the tab failed once.
+      final finalTab = container.read(terminalTabsProvider).tabs.last;
+      expect(finalTab.isConnecting, isFalse);
+      expect(finalTab.errorMessage, isNotNull);
+    });
   });
 }

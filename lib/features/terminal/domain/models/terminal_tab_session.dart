@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/widgets.dart';
 import 'package:xterm2/xterm.dart';
 
@@ -23,6 +26,16 @@ class TerminalTabSession {
   final Terminal terminal;
   SSHSessionManager? sshSessionManager;
   TerminalSSHBridge? sshBridge;
+
+  /// Subscription to the session manager's client-change stream, used to
+  /// detect a dropped keep-alive connection and flip the tab to
+  /// disconnected. Replaced on every (re)connect, cancelled on tab close.
+  StreamSubscription<SSHClient?>? sshClientChangesSub;
+
+  /// Host key prompt callback captured at connect time so a reconnect re-runs
+  /// host key verification through the same UI.
+  HostKeyPromptCallback? hostKeyPromptCallback;
+
   TerminalLocalPtyBridge? ptyBridge;
   bool isConnecting;
   bool isConnected;
@@ -42,6 +55,8 @@ class TerminalTabSession {
     required this.terminal,
     this.sshSessionManager,
     this.sshBridge,
+    this.sshClientChangesSub,
+    this.hostKeyPromptCallback,
     this.ptyBridge,
     this.isConnecting = false,
     this.isConnected = false,
@@ -59,6 +74,8 @@ class TerminalTabSession {
   }
 
   Future<void> dispose() async {
+    await sshClientChangesSub?.cancel();
+    sshClientChangesSub = null;
     if (sshBridge != null) {
       await sshBridge!.dispose(closeSession: true);
       sshBridge = null;

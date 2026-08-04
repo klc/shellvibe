@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/widgets.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:uuid/uuid.dart';
@@ -93,6 +94,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       identity: identity,
       terminal: terminal,
       isConnecting: true,
+      hostKeyPromptCallback: onHostKeyPrompt,
     );
     _ownedTabs.add(newTab);
 
@@ -165,9 +167,13 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
         final bridge = TerminalSSHBridge(
           terminal: terminal,
           session: sshSession,
+          onClosed: () => _handleClientChange(tab, null),
         );
 
         tab.sshBridge = bridge;
+        tab.sshClientChangesSub = sessionManager.clientChanges.listen(
+          (client) => _handleClientChange(tab, client),
+        );
         // The view has already sized the terminal by now, so `onResize` — only
         // wired when the bridge is built — never fires for that first layout
         // and the remote PTY would stay at whatever openShell requested.
@@ -192,6 +198,70 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       terminal.write('\r\n\x1b[1;31m[Connection Error]\x1b[0m Failed to connect: $e\r\n');
       state = state.copyWith(tabs: [...state.tabs]);
     }
+  }
+
+  /// Re-establishes the SSH session of a tab whose connection dropped or
+  /// failed, reusing the stored host, identity, and host key prompt
+  /// callback. The old bridge and manager are torn down first so a single
+  /// live session per tab is preserved.
+  Future<void> reconnectTab(String tabId) async {
+    final index = state.tabs.indexWhere((t) => t.id == tabId);
+    if (index == -1) return;
+    final tab = state.tabs[index];
+    if (tab.sessionType != TerminalSessionType.ssh) return;
+    final host = tab.host;
+    if (host == null) return;
+    if (tab.isConnecting) return;
+
+    // Flip the tab state before tearing the old session down: the old
+    // manager's `close()` null emission is then ignored by the drop
+    // listener, and the UI shows the reconnect in flight.
+    tab.isConnected = false;
+    tab.isConnecting = true;
+    tab.errorMessage = null;
+    state = state.copyWith(tabs: [...state.tabs]);
+
+    await tab.sshClientChangesSub?.cancel();
+    tab.sshClientChangesSub = null;
+    if (tab.sshBridge != null) {
+      await tab.sshBridge!.dispose(closeSession: true);
+      tab.sshBridge = null;
+    }
+    if (tab.sshSessionManager != null) {
+      await tab.sshSessionManager!.close();
+      tab.sshSessionManager = null;
+    }
+
+    await _connectSshTab(
+      tab,
+      host,
+      tab.identity,
+      tab.hostKeyPromptCallback,
+    );
+  }
+
+  /// Reacts to [SSHSessionManager.clientChanges]: a `null` client means the
+  /// session was closed, either by the local manager (reconnect teardown,
+  /// tab close) or by a dropped keep-alive connection. Only the drop case
+  /// needs the UI flipped to disconnected; the tab must still be live in
+  /// the state (the manager also emits null during [closeTab] teardown).
+  void _handleClientChange(TerminalTabSession tab, SSHClient? client) {
+    if (client != null) return;
+    if (!tab.isConnected) return;
+    if (!state.tabs.any((t) => t.id == tab.id)) return;
+    _markTabDisconnected(tab, 'Connection lost');
+  }
+
+  /// Flips [tab] to the disconnected state, detaches its bridge, and
+  /// surfaces the reason in the terminal buffer so the view can offer a
+  /// reconnect.
+  void _markTabDisconnected(TerminalTabSession tab, String reason) {
+    tab.isConnected = false;
+    tab.isConnecting = false;
+    tab.sshBridge?.dispose(closeSession: true);
+    tab.sshBridge = null;
+    tab.terminal.write('\r\n\x1b[1;31m[$reason]\x1b[0m\r\n');
+    state = state.copyWith(tabs: [...state.tabs]);
   }
 
   void openLocalTab({String? title}) {
@@ -395,6 +465,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       splitParentId: parentTabId,
       splitDirection: direction,
       isConnecting: isSshSplit,
+      hostKeyPromptCallback: onHostKeyPrompt,
     );
     _ownedTabs.add(splitTab);
 

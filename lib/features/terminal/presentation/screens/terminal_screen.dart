@@ -115,7 +115,13 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
             backgroundColor: theme.background,
             color: theme.blue,
           ),
-        if (session.errorMessage != null)
+        // A failed or dropped SSH session (one with a host to reconnect to)
+        // shows the banner with a Reconnect action. Local panes and idle
+        // connecting state are excluded.
+        if (!session.isConnecting &&
+            session.sessionType == TerminalSessionType.ssh &&
+            session.host != null &&
+            !session.isConnected)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             color: ShadTheme.of(context).colorScheme.destructive,
@@ -129,12 +135,24 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Connection Error: ${session.errorMessage}',
+                    session.errorMessage != null
+                        ? 'Connection Error: ${session.errorMessage}'
+                        : 'Connection lost',
                     style: TextStyle(
                       color: ShadTheme.of(context).colorScheme.destructiveForeground,
                       fontSize: 12,
                     ),
                   ),
+                ),
+                const SizedBox(width: 8),
+                ShadButton(
+                  key: Key('reconnect_${session.id}'),
+                  size: ShadButtonSize.sm,
+                  leading: const Icon(Icons.refresh, size: 14),
+                  onPressed: () => ref
+                      .read(terminalTabsProvider.notifier)
+                      .reconnectTab(session.id),
+                  child: const Text('Reconnect'),
                 ),
               ],
             ),

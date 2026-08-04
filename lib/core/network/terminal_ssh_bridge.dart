@@ -11,6 +11,12 @@ class TerminalSSHBridge {
   final Terminal terminal;
   final SSHSession session;
 
+  /// Invoked when both remote streams have ended and the session is being
+  /// torn down — the remote shell exited or the connection dropped. Lets the
+  /// owner (tab notifier) flip its connection state before the bridge
+  /// detaches the terminal handlers.
+  final void Function()? onClosed;
+
   StreamSubscription<String>? _stdoutSubscription;
   StreamSubscription<String>? _stderrSubscription;
   bool _isDisposed = false;
@@ -23,6 +29,7 @@ class TerminalSSHBridge {
   TerminalSSHBridge({
     required this.terminal,
     required this.session,
+    this.onClosed,
   }) {
     _bind();
   }
@@ -85,6 +92,7 @@ class TerminalSSHBridge {
     if (_isDisposed) return;
     if (_stdoutDone && _stderrDone) {
       terminal.write('\r\n\x1b[1;33m[Session closed / Process exited]\x1b[0m\r\n');
+      onClosed?.call();
       dispose();
     }
   }
