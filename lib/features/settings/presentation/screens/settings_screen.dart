@@ -571,6 +571,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
                 ),
                 const Divider(),
+
+                Material(
+                  color: Colors.transparent,
+                  child: SwitchListTile(
+                    key: const Key('settings_bold_bright_switch'),
+                    title: const Text('Bold Text Uses Bright Colors'),
+                    subtitle: const Text(
+                      'Draw bold text in the bright variant of its color '
+                      '(ANSI 0-7 remapped to 8-15)',
+                    ),
+                    value: settings.drawBoldTextWithBrightColors,
+                    onChanged: (val) =>
+                        notifier.setDrawBoldTextWithBrightColors(val),
+                  ),
+                ),
+                const Divider(),
                 ListTile(
                   title: const Text('Font Size'),
                   subtitle: Slider(

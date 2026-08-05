@@ -15,6 +15,7 @@ void main() {
       expect(settings.lineHeightFactor, equals(1.4));
       expect(settings.cursorStyle, equals(AppCursorStyle.block));
       expect(settings.enableLigatures, isTrue);
+      expect(settings.drawBoldTextWithBrightColors, isTrue);
       expect(settings.autoLockTimerSeconds, equals(0));
       expect(settings.clipboardAutoClearSeconds, equals(30));
       expect(settings.activeWorkspaceId, equals('default'));
@@ -26,6 +27,7 @@ void main() {
         palette: AppPalette.catppuccin,
         terminalPalette: TerminalPalette.dracula,
         enableLigatures: false,
+        drawBoldTextWithBrightColors: false,
         fontSize: 16.0,
         lineHeightFactor: 1.7,
         autoLockTimerSeconds: 60,
@@ -35,6 +37,7 @@ void main() {
       expect(updated.palette, equals(AppPalette.catppuccin));
       expect(updated.terminalPalette, equals(TerminalPalette.dracula));
       expect(updated.enableLigatures, isFalse);
+      expect(updated.drawBoldTextWithBrightColors, isFalse);
       expect(updated.fontSize, equals(16.0));
       expect(updated.lineHeightFactor, equals(1.7));
       expect(updated.autoLockTimerSeconds, equals(60));
@@ -51,6 +54,7 @@ void main() {
         fontSize: 18.0,
         lineHeightFactor: 1.6,
         cursorStyle: AppCursorStyle.underline,
+        drawBoldTextWithBrightColors: false,
         autoLockTimerSeconds: 300,
         clipboardAutoClearSeconds: 15,
         activeWorkspaceId: 'client-ops',
@@ -66,6 +70,7 @@ void main() {
       expect(restored.fontSize, equals(18.0));
       expect(restored.lineHeightFactor, equals(1.6));
       expect(restored.cursorStyle, equals(AppCursorStyle.underline));
+      expect(restored.drawBoldTextWithBrightColors, isFalse);
       expect(restored.autoLockTimerSeconds, equals(300));
       expect(restored.clipboardAutoClearSeconds, equals(15));
       expect(restored.activeWorkspaceId, equals('client-ops'));
@@ -79,6 +84,7 @@ void main() {
 
       expect(restored.activeWorkspaceId, equals('default'));
       expect(restored.lineHeightFactor, equals(1.4));
+      expect(restored.drawBoldTextWithBrightColors, isTrue);
     });
 
     test('serializes and deserializes all new palettes and fonts correctly', () {

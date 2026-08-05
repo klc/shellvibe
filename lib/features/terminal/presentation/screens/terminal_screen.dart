@@ -213,10 +213,12 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
                 // Configurable in Settings; 1.4 lands on the same 18px pitch
                 // reference terminals use at the default 14px font.
                 height: settings.lineHeightFactor,
-                // Reference terminals keep bold text in its declared color.
-                // xterm2 defaults to remapping colors 0-7 onto 8-15 for bold
-                // runs, which silently recolors most shell prompts.
-                drawBoldTextWithBrightColors: false,
+                // Configurable in Settings. Most palettes ship distinct bright
+                // variants, so remapping bold runs from 0-7 onto 8-15 is what
+                // the schemes were authored for; palettes whose brights mirror
+                // the base colors (Rosé Pine, Snazzy, One Light) are unaffected.
+                drawBoldTextWithBrightColors:
+                    settings.drawBoldTextWithBrightColors,
               ),
             ),
           ),
