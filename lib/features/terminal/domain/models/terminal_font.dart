@@ -51,76 +51,14 @@ class TerminalFont {
 /// default `fontFamilyFallback`.
 const kSymbolsNerdFontFamily = 'Symbols Nerd Font Mono';
 
-/// All selectable fonts, in Settings dropdown order.
+/// All selectable fonts, in Settings dropdown order: the default
+/// (Roboto Mono) first, the rest sorted alphabetically by label.
 const kTerminalFonts = <TerminalFont>[
-  // --- Google Fonts (fetched from the CDN on first use, then cached on
-  // disk; the bundled Nerd Fonts below are the offline-from-the-start
-  // options) ---
   TerminalFont(
     id: 'RobotoMono',
     label: 'Roboto Mono',
     source: TerminalFontSource.googleFonts,
     googleFontsName: 'Roboto Mono',
-  ),
-  TerminalFont(
-    id: 'JetBrainsMono',
-    label: 'JetBrains Mono',
-    source: TerminalFontSource.googleFonts,
-    googleFontsName: 'JetBrains Mono',
-  ),
-  TerminalFont(
-    id: 'FiraCode',
-    label: 'Fira Code',
-    source: TerminalFontSource.googleFonts,
-    googleFontsName: 'Fira Code',
-  ),
-  TerminalFont(
-    id: 'SourceCodePro',
-    label: 'Source Code Pro',
-    source: TerminalFontSource.googleFonts,
-    googleFontsName: 'Source Code Pro',
-  ),
-  TerminalFont(
-    id: 'Inconsolata',
-    label: 'Inconsolata',
-    source: TerminalFontSource.googleFonts,
-    googleFontsName: 'Inconsolata',
-  ),
-  TerminalFont(
-    id: 'CascadiaCode',
-    label: 'Cascadia Code',
-    source: TerminalFontSource.googleFonts,
-    googleFontsName: 'Cascadia Code',
-  ),
-  TerminalFont(
-    id: 'SpaceMono',
-    label: 'Space Mono',
-    source: TerminalFontSource.googleFonts,
-    googleFontsName: 'Space Mono',
-  ),
-  TerminalFont(
-    id: 'Inter',
-    label: 'Inter',
-    source: TerminalFontSource.googleFonts,
-    googleFontsName: 'Inter',
-  ),
-  TerminalFont(
-    id: 'UbuntuMono',
-    label: 'Ubuntu Mono',
-    source: TerminalFontSource.googleFonts,
-    googleFontsName: 'Ubuntu Mono',
-  ),
-  TerminalFont(
-    id: 'IBMPlexMono',
-    label: 'IBM Plex Mono',
-    source: TerminalFontSource.googleFonts,
-    googleFontsName: 'IBM Plex Mono',
-  ),
-  TerminalFont(
-    id: 'FiraMono',
-    label: 'Fira Mono',
-    source: TerminalFontSource.googleFonts,
-    googleFontsName: 'Fira Mono',
   ),
   TerminalFont(
     id: 'AnonymousPro',
@@ -129,10 +67,88 @@ const kTerminalFonts = <TerminalFont>[
     googleFontsName: 'Anonymous Pro',
   ),
   TerminalFont(
+    id: 'CascadiaCode',
+    label: 'Cascadia Code',
+    source: TerminalFontSource.googleFonts,
+    googleFontsName: 'Cascadia Code',
+  ),
+  TerminalFont(
+    id: 'CaskaydiaCoveNF',
+    label: 'Cascadia Code Nerd Font',
+    source: TerminalFontSource.bundledNerdFont,
+    familyName: 'CaskaydiaCove Nerd Font Mono',
+  ),
+  TerminalFont(
+    id: 'Courier',
+    label: 'Courier',
+    source: TerminalFontSource.system,
+    familyName: 'Courier',
+  ),
+  TerminalFont(
+    id: 'FiraCode',
+    label: 'Fira Code',
+    source: TerminalFontSource.googleFonts,
+    googleFontsName: 'Fira Code',
+  ),
+  TerminalFont(
+    id: 'FiraCodeNF',
+    label: 'Fira Code Nerd Font',
+    source: TerminalFontSource.bundledNerdFont,
+    familyName: 'FiraCode Nerd Font Mono',
+  ),
+  TerminalFont(
+    id: 'FiraMono',
+    label: 'Fira Mono',
+    source: TerminalFontSource.googleFonts,
+    googleFontsName: 'Fira Mono',
+  ),
+  TerminalFont(
+    id: 'Hack',
+    label: 'Hack Nerd Font',
+    source: TerminalFontSource.bundledNerdFont,
+    familyName: 'Hack Nerd Font Mono',
+  ),
+  TerminalFont(
+    id: 'IBMPlexMono',
+    label: 'IBM Plex Mono',
+    source: TerminalFontSource.googleFonts,
+    googleFontsName: 'IBM Plex Mono',
+  ),
+  TerminalFont(
+    id: 'Inconsolata',
+    label: 'Inconsolata',
+    source: TerminalFontSource.googleFonts,
+    googleFontsName: 'Inconsolata',
+  ),
+  TerminalFont(
+    id: 'Inter',
+    label: 'Inter',
+    source: TerminalFontSource.googleFonts,
+    googleFontsName: 'Inter',
+  ),
+  TerminalFont(
+    id: 'JetBrainsMono',
+    label: 'JetBrains Mono',
+    source: TerminalFontSource.googleFonts,
+    googleFontsName: 'JetBrains Mono',
+  ),
+  TerminalFont(
+    id: 'JetBrainsMonoNF',
+    label: 'JetBrains Mono Nerd Font',
+    source: TerminalFontSource.bundledNerdFont,
+    familyName: 'JetBrainsMono Nerd Font Mono',
+  ),
+  TerminalFont(
     id: 'KodeMono',
     label: 'Kode Mono',
     source: TerminalFontSource.googleFonts,
     googleFontsName: 'Kode Mono',
+  ),
+  TerminalFont(
+    id: 'MesloLGMNF',
+    label: 'MesloLGM Nerd Font',
+    source: TerminalFontSource.bundledNerdFont,
+    familyName: 'MesloLGM Nerd Font Mono',
   ),
   TerminalFont(
     id: 'ShareTechMono',
@@ -144,40 +160,10 @@ const kTerminalFonts = <TerminalFont>[
   // --- Bundled Nerd Fonts (Mono variant: every glyph single-cell wide, so
   // grid alignment holds inside xterm2, which treats PUA as width 1) ---
   TerminalFont(
-    id: 'JetBrainsMonoNF',
-    label: 'JetBrains Mono Nerd Font',
-    source: TerminalFontSource.bundledNerdFont,
-    familyName: 'JetBrainsMono Nerd Font Mono',
-  ),
-  TerminalFont(
-    id: 'FiraCodeNF',
-    label: 'Fira Code Nerd Font',
-    source: TerminalFontSource.bundledNerdFont,
-    familyName: 'FiraCode Nerd Font Mono',
-  ),
-  TerminalFont(
-    id: 'MesloLGMNF',
-    label: 'MesloLGM Nerd Font',
-    source: TerminalFontSource.bundledNerdFont,
-    familyName: 'MesloLGM Nerd Font Mono',
-  ),
-  TerminalFont(
-    id: 'Hack',
-    label: 'Hack Nerd Font',
-    source: TerminalFontSource.bundledNerdFont,
-    familyName: 'Hack Nerd Font Mono',
-  ),
-  TerminalFont(
-    id: 'CaskaydiaCoveNF',
-    label: 'Cascadia Code Nerd Font',
-    source: TerminalFontSource.bundledNerdFont,
-    familyName: 'CaskaydiaCove Nerd Font Mono',
-  ),
-  TerminalFont(
-    id: 'UbuntuMonoNF',
-    label: 'Ubuntu Mono Nerd Font',
-    source: TerminalFontSource.bundledNerdFont,
-    familyName: 'UbuntuMono Nerd Font Mono',
+    id: 'SourceCodePro',
+    label: 'Source Code Pro',
+    source: TerminalFontSource.googleFonts,
+    googleFontsName: 'Source Code Pro',
   ),
   TerminalFont(
     id: 'SauceCodeProNF',
@@ -188,9 +174,21 @@ const kTerminalFonts = <TerminalFont>[
 
   // --- System ---
   TerminalFont(
-    id: 'Courier',
-    label: 'Courier',
-    source: TerminalFontSource.system,
-    familyName: 'Courier',
+    id: 'SpaceMono',
+    label: 'Space Mono',
+    source: TerminalFontSource.googleFonts,
+    googleFontsName: 'Space Mono',
+  ),
+  TerminalFont(
+    id: 'UbuntuMono',
+    label: 'Ubuntu Mono',
+    source: TerminalFontSource.googleFonts,
+    googleFontsName: 'Ubuntu Mono',
+  ),
+  TerminalFont(
+    id: 'UbuntuMonoNF',
+    label: 'Ubuntu Mono Nerd Font',
+    source: TerminalFontSource.bundledNerdFont,
+    familyName: 'UbuntuMono Nerd Font Mono',
   ),
 ];

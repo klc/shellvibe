@@ -106,6 +106,13 @@ class SettingsNotifier extends _$SettingsNotifier {
     await updateSettings(current.copyWith(enableLigatures: enabled));
   }
 
+  Future<void> setDrawBoldTextWithBrightColors(bool enabled) async {
+    final current = _base;
+    await updateSettings(
+      current.copyWith(drawBoldTextWithBrightColors: enabled),
+    );
+  }
+
   Future<void> setAutoLockTimer(int seconds) async {
     final current = _base;
     await updateSettings(current.copyWith(autoLockTimerSeconds: seconds));

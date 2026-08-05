@@ -26,6 +26,7 @@ class AppSettingsModel {
   final double lineHeightFactor;
   final AppCursorStyle cursorStyle;
   final bool enableLigatures;
+  final bool drawBoldTextWithBrightColors;
   final int autoLockTimerSeconds;
   final int clipboardAutoClearSeconds;
   final String activeWorkspaceId;
@@ -39,6 +40,7 @@ class AppSettingsModel {
     this.lineHeightFactor = 1.4,
     this.cursorStyle = AppCursorStyle.block,
     this.enableLigatures = true,
+    this.drawBoldTextWithBrightColors = true,
     this.autoLockTimerSeconds = 0,
     this.clipboardAutoClearSeconds = 30,
     this.activeWorkspaceId = 'default',
@@ -53,6 +55,7 @@ class AppSettingsModel {
     double? lineHeightFactor,
     AppCursorStyle? cursorStyle,
     bool? enableLigatures,
+    bool? drawBoldTextWithBrightColors,
     int? autoLockTimerSeconds,
     int? clipboardAutoClearSeconds,
     String? activeWorkspaceId,
@@ -66,6 +69,8 @@ class AppSettingsModel {
       lineHeightFactor: lineHeightFactor ?? this.lineHeightFactor,
       cursorStyle: cursorStyle ?? this.cursorStyle,
       enableLigatures: enableLigatures ?? this.enableLigatures,
+      drawBoldTextWithBrightColors:
+          drawBoldTextWithBrightColors ?? this.drawBoldTextWithBrightColors,
       autoLockTimerSeconds: autoLockTimerSeconds ?? this.autoLockTimerSeconds,
       clipboardAutoClearSeconds:
           clipboardAutoClearSeconds ?? this.clipboardAutoClearSeconds,
@@ -82,6 +87,7 @@ class AppSettingsModel {
     'lineHeightFactor': lineHeightFactor,
     'cursorStyle': cursorStyle.name,
     'enableLigatures': enableLigatures,
+    'drawBoldTextWithBrightColors': drawBoldTextWithBrightColors,
     'autoLockTimerSeconds': autoLockTimerSeconds,
     'clipboardAutoClearSeconds': clipboardAutoClearSeconds,
     'activeWorkspaceId': activeWorkspaceId,
@@ -110,6 +116,8 @@ class AppSettingsModel {
         orElse: () => AppCursorStyle.block,
       ),
       enableLigatures: (json['enableLigatures'] as bool?) ?? true,
+      drawBoldTextWithBrightColors:
+          (json['drawBoldTextWithBrightColors'] as bool?) ?? true,
       autoLockTimerSeconds: (json['autoLockTimerSeconds'] as int?) ?? 0,
       clipboardAutoClearSeconds:
           (json['clipboardAutoClearSeconds'] as int?) ?? 30,
