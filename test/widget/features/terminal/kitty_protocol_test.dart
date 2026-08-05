@@ -63,8 +63,7 @@ void main() {
     expect(outputs, ['/']);
   });
 
-  testWidgets('Option+Q is encoded as CSI-u alt+q, not as @, in kitty mode',
-      (tester) async {
+  testWidgets('Option+Q still types @ in kitty mode', (tester) async {
     final (outputs, terminal) = await pumpTerminal(tester);
     terminal.write('\x1b[?u');
     terminal.write('\x1b[>5u');
@@ -80,10 +79,9 @@ void main() {
     await tester.sendKeyUpEvent(LogicalKeyboardKey.keyQ, platform: 'macos');
     await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft, platform: 'macos');
 
-    // The kitty handler wins over the composed-text fallback: every byte is a
-    // CSI-u key report (alt itself, then alt+q), and the composed @ never
-    // reaches the shell.
-    expect(outputs, contains('\x1b[113;3u'));
-    expect(outputs.join(), isNot(contains('@')));
+    // Option composes text on macOS, so the keystroke is the character — not a
+    // CSI-u alt+q report — and the Option key press itself is not reported at
+    // this flag level.
+    expect(outputs, ['@']);
   });
 }
