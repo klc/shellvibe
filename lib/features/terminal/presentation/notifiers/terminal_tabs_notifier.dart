@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dartssh2/dartssh2.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:uuid/uuid.dart';
@@ -16,6 +17,24 @@ import '../../domain/models/terminal_tab_session.dart';
 import '../../domain/services/broadcast_input_router.dart';
 
 part 'terminal_tabs_notifier.g.dart';
+
+/// Maps the runtime platform onto the terminal's platform so key input is
+/// decoded with host-platform semantics.
+///
+/// Without this the terminal stays `TerminalTargetPlatform.unknown`, which
+/// takes the non-macOS branch in the input handlers: on macOS the Turkish Q
+/// layout composes `@` with Option+Q, but `unknown` treats Option as Meta
+/// and sends `ESC + @`, so the @ never reaches the shell.
+TerminalTargetPlatform _terminalTargetPlatform() {
+  return switch (defaultTargetPlatform) {
+    TargetPlatform.macOS => TerminalTargetPlatform.macos,
+    TargetPlatform.iOS => TerminalTargetPlatform.ios,
+    TargetPlatform.android => TerminalTargetPlatform.android,
+    TargetPlatform.windows => TerminalTargetPlatform.windows,
+    TargetPlatform.linux => TerminalTargetPlatform.linux,
+    TargetPlatform.fuchsia => TerminalTargetPlatform.fuchsia,
+  };
+}
 
 class TerminalTabsState {
   final List<TerminalTabSession> tabs;
@@ -84,7 +103,10 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     HostKeyPromptCallback? onHostKeyPrompt,
   }) async {
     final tabId = const Uuid().v4();
-    final terminal = Terminal(maxLines: 10000);
+    final terminal = Terminal(
+      maxLines: 10000,
+      platform: _terminalTargetPlatform(),
+    );
 
     final newTab = TerminalTabSession(
       id: tabId,
@@ -285,7 +307,10 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
 
   void openLocalTab({String? title}) {
     final tabId = const Uuid().v4();
-    final terminal = Terminal(maxLines: 10000);
+    final terminal = Terminal(
+      maxLines: 10000,
+      platform: _terminalTargetPlatform(),
+    );
 
     final newTab = TerminalTabSession(
       id: tabId,
@@ -470,7 +495,10 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
 
     final parentTab = state.tabs[parentIndex];
     final splitId = const Uuid().v4();
-    final terminal = Terminal(maxLines: 10000);
+    final terminal = Terminal(
+      maxLines: 10000,
+      platform: _terminalTargetPlatform(),
+    );
 
     // Without an explicit target a split pane mirrors the session type of the
     // pane it was created from. Splitting an SSH host session opens a second
