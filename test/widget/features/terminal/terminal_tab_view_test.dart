@@ -102,6 +102,34 @@ void main() {
       expect(find.text('Local Shell'), findsWidgets);
       expect(find.byKey(const Key('new_tab_button')), findsOneWidget);
     });
+    testWidgets('Tab bar actions collapse into an overflow menu on a phone', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(400, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      await tester.tap(find.byKey(const Key('empty_open_local_button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      // Only "+" and the overflow trigger stay inline; the split/template
+      // buttons live behind the menu.
+      expect(find.byKey(const Key('new_tab_button')), findsOneWidget);
+      expect(find.byKey(const Key('tab_bar_overflow_button')), findsOneWidget);
+      expect(find.byKey(const Key('split_vertical_button')), findsNothing);
+
+      await tester.tap(find.byKey(const Key('tab_bar_overflow_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('split_vertical_button')), findsOneWidget);
+      expect(find.byKey(const Key('run_template_button')), findsOneWidget);
+    });
+
     testWidgets('Opens new tab menu on new tab button tap', (tester) async {
       await tester.pumpWidget(createWidgetUnderTest());
       await tester.pump();

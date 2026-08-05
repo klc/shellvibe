@@ -29,6 +29,25 @@ import '../screens/terminal_screen.dart';
 import '../widgets/resizable_split.dart';
 import '../../domain/models/terminal_tab_session.dart';
 
+/// Below this bar width the trailing actions collapse into one overflow menu.
+const double _kTabBarCompactWidth = 620;
+
+/// A trailing tab-bar action, rendered either as an [IconButton] or as a row in
+/// the compact overflow menu.
+class _TabBarAction {
+  const _TabBarAction({
+    required this.buttonKey,
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final Key buttonKey;
+  final IconData icon;
+  final String label;
+  final VoidCallback onPressed;
+}
+
 class TerminalTabView extends ConsumerStatefulWidget {
   const TerminalTabView({super.key});
 
@@ -114,9 +133,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
                     : _buildTabBody(context, ref, tabsState, activeRootTab),
               ),
               if (activeRootTab != null) ...[
-                _SnippetDrawer(
-                  onSend: (code) => _sendToPanes(tabsState, code),
-                ),
+                _SnippetDrawer(onSend: (code) => _sendToPanes(tabsState, code)),
                 _buildStatusBar(context, tabsState, activeRootTab),
               ],
             ],
@@ -137,193 +154,251 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
         .where((t) => t.splitParentId == null)
         .toList();
 
+    // Every action except "new tab" is collapsible: on a phone six inline
+    // IconButtons eat the whole bar and the tab strip is squeezed to a single
+    // clipped character.
+    final actions = <_TabBarAction>[
+      // File transfer for the focused session. A local shell has no remote
+      // side, so the button is absent rather than disabled there.
+      if (_sftpTargetPane(tabsState, activeRootTab) case final sftpTarget?)
+        _TabBarAction(
+          buttonKey: const Key('open_sftp_button'),
+          icon: LucideIcons.folderSync,
+          label: 'File Transfer (SFTP) — ${sftpTarget.title}',
+          onPressed: () => _openSftpForPane(sftpTarget),
+        ),
+      // Split Pane Action Buttons (Vertical & Horizontal Split)
+      if (activeRootTab != null) ...[
+        _TabBarAction(
+          buttonKey: const Key('split_vertical_button'),
+          icon: LucideIcons.columns2,
+          label: 'Split Vertically (Side by Side)',
+          onPressed: () {
+            final targetId = tabsState.activeTabId ?? activeRootTab.id;
+            unawaited(
+              ref
+                  .read(terminalTabsProvider.notifier)
+                  .splitTab(
+                    targetId,
+                    direction: Axis.horizontal,
+                    onHostKeyPrompt: _promptHostKey,
+                  ),
+            );
+          },
+        ),
+        _TabBarAction(
+          buttonKey: const Key('split_horizontal_button'),
+          icon: LucideIcons.rows2,
+          label: 'Split Horizontally (Top/Bottom)',
+          onPressed: () {
+            final targetId = tabsState.activeTabId ?? activeRootTab.id;
+            unawaited(
+              ref
+                  .read(terminalTabsProvider.notifier)
+                  .splitTab(
+                    targetId,
+                    direction: Axis.vertical,
+                    onHostKeyPrompt: _promptHostKey,
+                  ),
+            );
+          },
+        ),
+        _TabBarAction(
+          buttonKey: const Key('split_with_host_button'),
+          icon: LucideIcons.serverCog,
+          label: 'Split with Another Host',
+          onPressed: () {
+            final targetId = tabsState.activeTabId ?? activeRootTab.id;
+            _startSplitWithHost(targetId);
+          },
+        ),
+      ],
+      // Layout templates: save what is open, or reopen a saved layout.
+      // Saving needs something to capture; running does not.
+      if (tabsState.tabs.isNotEmpty)
+        _TabBarAction(
+          buttonKey: const Key('save_template_button'),
+          icon: LucideIcons.bookmarkPlus,
+          label: 'Save Tabs & Panes as Template',
+          onPressed: _saveCurrentLayoutAsTemplate,
+        ),
+      _TabBarAction(
+        buttonKey: const Key('run_template_button'),
+        icon: LucideIcons.layoutTemplate,
+        label: 'Run Template',
+        onPressed: () =>
+            TemplatePickerSheet.show(context, onSelect: _runTemplate),
+      ),
+    ];
+
     return Container(
       height: 42,
       decoration: BoxDecoration(
         color: tokens.surface,
         border: Border(bottom: BorderSide(color: tokens.border)),
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              itemCount: rootTabs.length,
-              itemBuilder: (context, index) {
-                final tab = rootTabs[index];
-                final isActive = tab.id == activeRootTab?.id;
-                // Tab identity is the host name plus a state dot. The old
-                // colour-coded tab edge is gone: the wireframe wants text to
-                // do the distinguishing so eight tabs stay readable.
-                final dotState = tab.errorMessage != null
-                    ? TerlyDotState.error
-                    : tab.isConnecting
-                    ? TerlyDotState.idle
-                    : tab.isConnected
-                    ? TerlyDotState.online
-                    : TerlyDotState.offline;
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < _kTabBarCompactWidth;
+          return Row(
+            children: [
+              Expanded(
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: rootTabs.length,
+                  itemBuilder: (context, index) {
+                    final tab = rootTabs[index];
+                    final isActive = tab.id == activeRootTab?.id;
+                    // Tab identity is the host name plus a state dot. The old
+                    // colour-coded tab edge is gone: the wireframe wants text to
+                    // do the distinguishing so eight tabs stay readable.
+                    final dotState = tab.errorMessage != null
+                        ? TerlyDotState.error
+                        : tab.isConnecting
+                        ? TerlyDotState.idle
+                        : tab.isConnected
+                        ? TerlyDotState.online
+                        : TerlyDotState.offline;
 
-                return Semantics(
-                  label: 'Tab ${tab.title}',
-                  selected: isActive,
-                  button: true,
-                  child: InkWell(
-                    onTap: () => ref
-                        .read(terminalTabsProvider.notifier)
-                        .setActiveTab(tab.id),
-                    child: AnimatedContainer(
-                      duration: tokens.motionFast,
-                      key: Key('tab_header_${tab.id}'),
-                      constraints: const BoxConstraints(
-                        minWidth: 120,
-                        maxWidth: 230,
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      decoration: BoxDecoration(
-                        color: isActive
-                            ? tokens.surfaceRaised
-                            : Colors.transparent,
-                        border: Border(
-                          bottom: BorderSide(
-                            color: isActive ? tokens.brand : Colors.transparent,
-                            width: 2,
+                    return Semantics(
+                      label: 'Tab ${tab.title}',
+                      selected: isActive,
+                      button: true,
+                      child: InkWell(
+                        onTap: () => ref
+                            .read(terminalTabsProvider.notifier)
+                            .setActiveTab(tab.id),
+                        child: AnimatedContainer(
+                          duration: tokens.motionFast,
+                          key: Key('tab_header_${tab.id}'),
+                          constraints: BoxConstraints(
+                            minWidth: compact ? 96 : 120,
+                            maxWidth: 230,
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          decoration: BoxDecoration(
+                            color: isActive
+                                ? tokens.surfaceRaised
+                                : Colors.transparent,
+                            border: Border(
+                              bottom: BorderSide(
+                                color: isActive
+                                    ? tokens.brand
+                                    : Colors.transparent,
+                                width: 2,
+                              ),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              TerlyStatusDot(state: dotState, size: 6),
+                              const SizedBox(width: 7),
+                              Icon(
+                                tab.sessionType == TerminalSessionType.ssh
+                                    ? LucideIcons.terminal
+                                    : LucideIcons.monitor,
+                                size: 15,
+                                color: isActive
+                                    ? tokens.brand
+                                    : tokens.textMuted,
+                              ),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
+                                  tab.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: isActive
+                                        ? tokens.textPrimary
+                                        : tokens.textMuted,
+                                    fontWeight: isActive
+                                        ? FontWeight.w600
+                                        : FontWeight.w500,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Semantics(
+                                label: 'Close tab ${tab.title}',
+                                button: true,
+                                child: InkWell(
+                                  key: Key('close_tab_${tab.id}'),
+                                  onTap: () => ref
+                                      .read(terminalTabsProvider.notifier)
+                                      .closeTab(tab.id),
+                                  child: Icon(
+                                    LucideIcons.x,
+                                    size: 13,
+                                    color: tokens.textMuted,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          TerlyStatusDot(state: dotState, size: 6),
-                          const SizedBox(width: 7),
-                          Icon(
-                            tab.sessionType == TerminalSessionType.ssh
-                                ? LucideIcons.terminal
-                                : LucideIcons.monitor,
-                            size: 15,
-                            color: isActive ? tokens.brand : tokens.textMuted,
-                          ),
-                          const SizedBox(width: 6),
-                          Flexible(
-                            child: Text(
-                              tab.title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: isActive
-                                    ? tokens.textPrimary
-                                    : tokens.textMuted,
-                                fontWeight: isActive
-                                    ? FontWeight.w600
-                                    : FontWeight.w500,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Semantics(
-                            label: 'Close tab ${tab.title}',
-                            button: true,
-                            child: InkWell(
-                              key: Key('close_tab_${tab.id}'),
-                              onTap: () => ref
-                                  .read(terminalTabsProvider.notifier)
-                                  .closeTab(tab.id),
-                              child: Icon(
-                                LucideIcons.x,
-                                size: 13,
-                                color: tokens.textMuted,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                    );
+                  },
+                ),
+              ),
+              if (compact)
+                // The same actions, one tap deeper, so the tab strip keeps its
+                // width on a phone.
+                PopupMenuButton<_TabBarAction>(
+                  key: const Key('tab_bar_overflow_button'),
+                  icon: Icon(
+                    LucideIcons.ellipsisVertical,
+                    size: 18,
+                    color: tokens.textPrimary,
                   ),
-                );
-              },
-            ),
-          ),
-          // File transfer for the focused session. A local shell has no remote
-          // side, so the button is absent rather than disabled there.
-          if (_sftpTargetPane(tabsState, activeRootTab) case final sftpTarget?)
-            IconButton(
-              key: const Key('open_sftp_button'),
-              icon: const Icon(LucideIcons.folderSync, size: 17),
-              tooltip: 'File Transfer (SFTP) — ${sftpTarget.title}',
-              onPressed: () => _openSftpForPane(sftpTarget),
-            ),
-          // Split Pane Action Buttons (Vertical & Horizontal Split)
-          if (activeRootTab != null) ...[
-            IconButton(
-              key: const Key('split_vertical_button'),
-              icon: const Icon(LucideIcons.columns2, size: 17),
-              tooltip: 'Split Vertically (Side by Side)',
-              onPressed: () {
-                final targetId = tabsState.activeTabId ?? activeRootTab.id;
-                unawaited(
-                  ref
-                      .read(terminalTabsProvider.notifier)
-                      .splitTab(
-                        targetId,
-                        direction: Axis.horizontal,
-                        onHostKeyPrompt: _promptHostKey,
+                  tooltip: 'More Actions',
+                  onSelected: (action) => action.onPressed(),
+                  itemBuilder: (context) => [
+                    for (final action in actions)
+                      PopupMenuItem<_TabBarAction>(
+                        key: action.buttonKey,
+                        value: action,
+                        child: Row(
+                          children: [
+                            Icon(action.icon, size: 17),
+                            const SizedBox(width: 10),
+                            Flexible(
+                              child: Text(
+                                action.label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                );
-              },
-            ),
-            IconButton(
-              key: const Key('split_horizontal_button'),
-              icon: const Icon(LucideIcons.rows2, size: 17),
-              tooltip: 'Split Horizontally (Top/Bottom)',
-              onPressed: () {
-                final targetId = tabsState.activeTabId ?? activeRootTab.id;
-                unawaited(
-                  ref
-                      .read(terminalTabsProvider.notifier)
-                      .splitTab(
-                        targetId,
-                        direction: Axis.vertical,
-                        onHostKeyPrompt: _promptHostKey,
-                      ),
-                );
-              },
-            ),
-            IconButton(
-              key: const Key('split_with_host_button'),
-              icon: const Icon(LucideIcons.serverCog, size: 17),
-              tooltip: 'Split with Another Host',
-              onPressed: () {
-                final targetId = tabsState.activeTabId ?? activeRootTab.id;
-                _startSplitWithHost(targetId);
-              },
-            ),
-          ],
-          // Layout templates: save what is open, or reopen a saved layout.
-          // Saving needs something to capture; running does not.
-          if (tabsState.tabs.isNotEmpty)
-            IconButton(
-              key: const Key('save_template_button'),
-              icon: const Icon(LucideIcons.bookmarkPlus, size: 17),
-              tooltip: 'Save Tabs & Panes as Template',
-              onPressed: _saveCurrentLayoutAsTemplate,
-            ),
-          IconButton(
-            key: const Key('run_template_button'),
-            icon: const Icon(LucideIcons.layoutTemplate, size: 17),
-            tooltip: 'Run Template',
-            onPressed: () => TemplatePickerSheet.show(
-              context,
-              onSelect: _runTemplate,
-            ),
-          ),
-          // New Tab Button
-          IconButton(
-            key: const Key('new_tab_button'),
-            icon: Icon(LucideIcons.plus, size: 18, color: tokens.textPrimary),
-            tooltip: 'New Tab',
-            onPressed: () => _showNewTabMenu(context, ref),
-          ),
-        ],
+                  ],
+                )
+              else
+                for (final action in actions)
+                  IconButton(
+                    key: action.buttonKey,
+                    icon: Icon(action.icon, size: 17),
+                    tooltip: action.label,
+                    onPressed: action.onPressed,
+                  ),
+              // New Tab Button
+              IconButton(
+                key: const Key('new_tab_button'),
+                icon: Icon(
+                  LucideIcons.plus,
+                  size: 18,
+                  color: tokens.textPrimary,
+                ),
+                tooltip: 'New Tab',
+                onPressed: () => _showNewTabMenu(context, ref),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -507,8 +582,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
       }
       final paneNumber = paneOrder.indexOf(paneSession.id) + 1;
       final isActivePane = paneSession.id == activePaneId;
-      final isBroadcastSelected =
-          selectedPaneIds.contains(paneSession.id);
+      final isBroadcastSelected = selectedPaneIds.contains(paneSession.id);
       final paneLabel = isBroadcastSelected
           ? 'pane $paneNumber · broadcast'
           : isActivePane
@@ -552,10 +626,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
                 Text(
                   paneLabel,
                   key: Key('pane_label_${paneSession.id}'),
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: paneLabelColor,
-                  ),
+                  style: TextStyle(fontSize: 10, color: paneLabelColor),
                 ),
                 const SizedBox(width: 8),
                 if (paneSession.splitParentId != null)
@@ -610,8 +681,9 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
         ratio: child.splitRatio,
         dividerColor: tokens.border,
         dividerKey: Key('split_divider_${child.id}'),
-        onRatioChanged: (ratio) =>
-            ref.read(terminalTabsProvider.notifier).setSplitRatio(child.id, ratio),
+        onRatioChanged: (ratio) => ref
+            .read(terminalTabsProvider.notifier)
+            .setSplitRatio(child.id, ratio),
       );
     }
 
@@ -805,9 +877,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
           ? const ShadToast.destructive(
               description: Text('Nothing open to save as a template.'),
             )
-          : ShadToast(
-              description: Text('Saved "${template.name}".'),
-            ),
+          : ShadToast(description: Text('Saved "${template.name}".')),
     );
   }
 
