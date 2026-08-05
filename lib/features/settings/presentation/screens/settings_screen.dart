@@ -422,33 +422,33 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         child: Text('Terly Graphite'),
                       ),
                       ShadOption(
-                        value: AppPalette.oled,
-                        child: Text('Terly OLED'),
-                      ),
-                      ShadOption(
                         value: AppPalette.catppuccin,
                         child: Text('Catppuccin'),
                       ),
-                      ShadOption(value: AppPalette.nord, child: Text('Nord')),
                       ShadOption(
                         value: AppPalette.dracula,
                         child: Text('Dracula'),
+                      ),
+                      ShadOption(
+                        value: AppPalette.gruvbox,
+                        child: Text('Gruvbox'),
+                      ),
+                      ShadOption(value: AppPalette.nord, child: Text('Nord')),
+                      ShadOption(
+                        value: AppPalette.oneDark,
+                        child: Text('One Dark'),
                       ),
                       ShadOption(
                         value: AppPalette.solarizedDark,
                         child: Text('Solarized Dark'),
                       ),
                       ShadOption(
+                        value: AppPalette.oled,
+                        child: Text('Terly OLED'),
+                      ),
+                      ShadOption(
                         value: AppPalette.tokyoNight,
                         child: Text('Tokyo Night'),
-                      ),
-                      ShadOption(
-                        value: AppPalette.gruvbox,
-                        child: Text('Gruvbox'),
-                      ),
-                      ShadOption(
-                        value: AppPalette.oneDark,
-                        child: Text('One Dark'),
                       ),
                     ],
                     onChanged: (palette) {
