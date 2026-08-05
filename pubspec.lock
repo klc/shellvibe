@@ -1423,7 +1423,7 @@ packages:
     description:
       path: "."
       ref: HEAD
-      resolved-ref: "1345247302e9f813829e794023f1b2beb0f5f9fa"
+      resolved-ref: d6f7b59018555af6f402b66469e63d64d823da8b
       url: "https://github.com/klc/xterm2.git"
     source: git
     version: "5.3.0"
