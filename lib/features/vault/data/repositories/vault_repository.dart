@@ -111,8 +111,14 @@ class VaultRepository {
   /// Lists identities. With [decryptSecrets] the secrets are decrypted
   /// best-effort: a row whose secrets are unreadable is still returned, flagged
   /// with [IdentityModel.hasUndecryptableSecrets] instead of silently blank.
+  ///
+  /// [onlyPrivateKey] skips decrypting `password`/`passphrase` — for callers
+  /// (e.g. import key-dedupe) that only need the private key's plaintext to
+  /// hash, decrypting unrelated secrets into memory would be needless
+  /// exposure.
   Future<List<IdentityModel>> getAllIdentities({
     bool decryptSecrets = false,
+    bool onlyPrivateKey = false,
     String? workspaceId,
   }) async {
     final rows = workspaceId == null
@@ -135,24 +141,28 @@ class VaultRepository {
 
       if (decryptSecrets && secretKey != null) {
         try {
-          password = await _decryptField(
-            row.passwordEncrypted,
-            secretKey,
-            row.id,
-            'password',
-          );
+          if (!onlyPrivateKey) {
+            password = await _decryptField(
+              row.passwordEncrypted,
+              secretKey,
+              row.id,
+              'password',
+            );
+          }
           privateKey = await _decryptField(
             row.privateKeyEncrypted,
             secretKey,
             row.id,
             'privateKey',
           );
-          passphrase = await _decryptField(
-            row.passphraseEncrypted,
-            secretKey,
-            row.id,
-            'passphrase',
-          );
+          if (!onlyPrivateKey) {
+            passphrase = await _decryptField(
+              row.passphraseEncrypted,
+              secretKey,
+              row.id,
+              'passphrase',
+            );
+          }
         } on SecretDecryptionException {
           undecryptable = true;
           password = null;

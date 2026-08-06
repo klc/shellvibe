@@ -65,7 +65,17 @@ class Socks5ProxyServer {
         return;
       }
 
-      // Reply: SOCKS5, NO AUTHENTICATION REQUIRED (0x00)
+      // RFC 1928: reply with the chosen method, or 0xFF if none of the
+      // client's offered methods are acceptable — this server only ever
+      // offers NO AUTHENTICATION (0x00).
+      if (!methods.contains(0x00)) {
+        clientSocket.add([0x05, 0xFF]);
+        await clientSocket.flush();
+        await reader.detach();
+        _activeSockets.remove(clientSocket);
+        clientSocket.destroy();
+        return;
+      }
       clientSocket.add([0x05, 0x00]);
       await clientSocket.flush();
 

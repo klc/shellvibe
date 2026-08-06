@@ -44,6 +44,11 @@ class TerminalTabSession {
   late final TerminalOutputChain outputChain = TerminalOutputChain(terminal);
 
   SSHSessionManager? sshSessionManager;
+
+  /// Session managers for each hop of a `ProxyJump` chain, outermost first,
+  /// kept alive alongside [sshSessionManager] since its transport tunnels
+  /// through the last of these.
+  List<SSHSessionManager> jumpSessionManagers = [];
   TerminalSSHBridge? sshBridge;
 
   /// Subscription to the session manager's client-change stream, used to
@@ -116,6 +121,13 @@ class TerminalTabSession {
       await sshSessionManager!.close();
       sshSessionManager = null;
     }
+    // Closed innermost-first (reverse of connect order): the target's own
+    // manager is already down above, so nothing downstream depends on these
+    // anymore when they close.
+    for (final jumpManager in jumpSessionManagers.reversed) {
+      await jumpManager.close();
+    }
+    jumpSessionManagers = [];
     // xterm2 guards write() against a disposed terminal, so late writes from
     // an in-flight connect do not crash after disposal.
     terminal.dispose();

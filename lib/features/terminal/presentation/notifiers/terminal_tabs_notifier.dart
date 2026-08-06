@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/foundation.dart';
@@ -12,7 +13,9 @@ import '../../../../core/network/ssh_session_manager.dart';
 import '../../../../core/network/terminal_ssh_bridge.dart';
 import '../../../../shared/providers/database_providers.dart';
 import '../../../hosts/domain/models/host_model.dart';
+import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
 import '../../../vault/domain/models/identity_model.dart';
+import '../../../vault/presentation/notifiers/identities_notifier.dart';
 import '../../domain/models/terminal_tab_session.dart';
 import '../../domain/services/broadcast_input_router.dart';
 
@@ -143,43 +146,57 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
   ) async {
     final terminal = tab.terminal;
     try {
+      // ProxyJump: connect each hop in turn, tunneling every subsequent hop's
+      // transport through the previous hop's already-authenticated client.
+      //
+      // Gated on the synchronous `jumpHostId` check, not just an empty
+      // resolved chain: `await` always inserts a microtask gap even for an
+      // already-completed Future, so unconditionally awaiting
+      // `_resolveJumpChain` would delay `tab.sshSessionManager` being set
+      // below past the caller's next synchronous read of it — every hostless
+      // connect, not just jump ones.
+      SSHClient? viaClient;
+      if (host.jumpHostId != null) {
+        final jumpChain = await _resolveJumpChain(host);
+        for (final jumpHost in jumpChain) {
+          final jumpIdentity = jumpHost.identityId == null
+              ? null
+              : await ref
+                  .read(vaultRepositoryProvider)
+                  .getIdentityById(jumpHost.identityId!);
+          final jumpManager = SSHSessionManager(
+            knownHostsDao: ref.read(knownHostsDaoProvider),
+          );
+          tab.jumpSessionManagers.add(jumpManager);
+          final jumpConfig = _buildConnectConfig(
+            jumpHost,
+            jumpIdentity,
+            onHostKeyPrompt: onHostKeyPrompt,
+          );
+          terminal.write(
+              '\x1b[1;34m[SSH]\x1b[0m Connecting via jump host \x1b[1;36m'
+              '${jumpConfig.username}@${jumpConfig.hostname}:${jumpConfig.port}'
+              '\x1b[0m...\r\n');
+          viaClient = await jumpManager.connect(jumpConfig, viaClient: viaClient);
+        }
+      }
+
       final sessionManager = SSHSessionManager(
         knownHostsDao: ref.read(knownHostsDaoProvider),
       );
       tab.sshSessionManager = sessionManager;
 
-      String cleanHostname = host.hostname.trim();
-      String? parsedUser;
-      if (cleanHostname.contains('@')) {
-        final atIndex = cleanHostname.indexOf('@');
-        parsedUser = cleanHostname.substring(0, atIndex).trim();
-        cleanHostname = cleanHostname.substring(atIndex + 1).trim();
-      }
-
-      final hostUser = host.username?.trim();
-      final identityUser = identity?.username.trim();
-      final effectiveUsername = (hostUser != null && hostUser.isNotEmpty)
-          ? hostUser
-          : ((parsedUser != null && parsedUser.isNotEmpty)
-              ? parsedUser
-              : ((identityUser != null && identityUser.isNotEmpty)
-                  ? identityUser
-                  : 'root'));
-
-      final config = SSHConnectConfig(
-        hostname: cleanHostname,
-        port: host.port,
-        username: effectiveUsername,
-        password: identity?.password,
-        privateKeyPem: identity?.privateKey,
-        passphrase: identity?.passphrase,
+      final config = _buildConnectConfig(
+        host,
+        identity,
         onHostKeyPrompt: onHostKeyPrompt,
       );
 
       terminal.write(
-          '\x1b[1;34m[SSH]\x1b[0m Connecting to \x1b[1;36m$effectiveUsername@$cleanHostname:${host.port}\x1b[0m...\r\n');
+          '\x1b[1;34m[SSH]\x1b[0m Connecting to \x1b[1;36m'
+          '${config.username}@${config.hostname}:${config.port}\x1b[0m...\r\n');
 
-      await sessionManager.connect(config);
+      await sessionManager.connect(config, viaClient: viaClient);
       try {
         final sshSession = await sessionManager.openShell(
           width: terminal.viewWidth,
@@ -220,7 +237,87 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       tab.errorMessage = e.toString();
       terminal.write('\r\n\x1b[1;31m[Connection Error]\x1b[0m Failed to connect: $e\r\n');
       state = state.copyWith(tabs: [...state.tabs]);
+      for (final jumpManager in tab.jumpSessionManagers.reversed) {
+        await jumpManager.close();
+      }
+      tab.jumpSessionManagers = [];
     }
+  }
+
+  /// Walks `jumpHostId` outward from [target], returning the hops in
+  /// connection order: the directly-reachable outermost host first, the jump
+  /// nearest [target] last. Empty when [target] has no `ProxyJump`.
+  ///
+  /// Throws on a missing host, a cycle, or an unreasonably long chain rather
+  /// than looping forever or connecting through a broken link silently.
+  Future<List<HostModel>> _resolveJumpChain(HostModel target) async {
+    const maxHops = 8;
+    final repo = ref.read(hostsRepositoryProvider);
+    final chain = <HostModel>[];
+    final visited = <String>{target.id};
+    var nextId = target.jumpHostId;
+    while (nextId != null) {
+      if (!visited.add(nextId)) {
+        throw StateError(
+          'ProxyJump chain for "${target.label}" contains a cycle.',
+        );
+      }
+      if (chain.length >= maxHops) {
+        throw StateError(
+          'ProxyJump chain for "${target.label}" exceeds $maxHops hops.',
+        );
+      }
+      final jumpHost = await repo.getHostById(nextId);
+      if (jumpHost == null) {
+        throw StateError(
+          'Jump host referenced by "${target.label}" no longer exists.',
+        );
+      }
+      chain.add(jumpHost);
+      nextId = jumpHost.jumpHostId;
+    }
+    return chain.reversed.toList();
+  }
+
+  /// Builds the connect config for one hop (a jump host or the final
+  /// target): resolves the effective username from, in order, the host's own
+  /// `username` field, a `user@host` prefix embedded in the hostname, the
+  /// identity's username, and finally the local OS user — matching the
+  /// fallback order `ssh` itself uses rather than silently trying `root`.
+  SSHConnectConfig _buildConnectConfig(
+    HostModel host,
+    IdentityModel? identity, {
+    HostKeyPromptCallback? onHostKeyPrompt,
+  }) {
+    String cleanHostname = host.hostname.trim();
+    String? parsedUser;
+    if (cleanHostname.contains('@')) {
+      final atIndex = cleanHostname.indexOf('@');
+      parsedUser = cleanHostname.substring(0, atIndex).trim();
+      cleanHostname = cleanHostname.substring(atIndex + 1).trim();
+    }
+
+    final hostUser = host.username?.trim();
+    final identityUser = identity?.username.trim();
+    final osUser = Platform.environment['USER'] ??
+        Platform.environment['USERNAME'];
+    final effectiveUsername = (hostUser != null && hostUser.isNotEmpty)
+        ? hostUser
+        : ((parsedUser != null && parsedUser.isNotEmpty)
+            ? parsedUser
+            : ((identityUser != null && identityUser.isNotEmpty)
+                ? identityUser
+                : (osUser ?? '')));
+
+    return SSHConnectConfig(
+      hostname: cleanHostname,
+      port: host.port,
+      username: effectiveUsername,
+      password: identity?.password,
+      privateKeyPem: identity?.privateKey,
+      passphrase: identity?.passphrase,
+      onHostKeyPrompt: onHostKeyPrompt,
+    );
   }
 
   /// Re-establishes the SSH session of a tab whose connection dropped or
@@ -255,6 +352,10 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       await tab.sshSessionManager!.close();
       tab.sshSessionManager = null;
     }
+    for (final jumpManager in tab.jumpSessionManagers.reversed) {
+      await jumpManager.close();
+    }
+    tab.jumpSessionManagers = [];
 
     await _connectSshTab(
       tab,

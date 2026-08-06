@@ -69,6 +69,11 @@ class SSHSessionManager {
   Timer? _keepAliveTimer;
   bool _isConnected = false;
   bool _isPromptingHostKey = false;
+
+  /// Set when the current connect attempt failed because host key
+  /// verification returned false, so the generic catch below can report that
+  /// distinctly instead of the misleading "authentication failed".
+  bool _hostKeyRejected = false;
   StreamController<SSHClient?> _clientChanges =
       StreamController<SSHClient?>.broadcast();
 
@@ -90,9 +95,15 @@ class SSHSessionManager {
   bool get isConnected => _isConnected && _client != null && !_client!.isClosed;
 
   /// Establishes an SSH connection and authenticates based on [config].
-  Future<SSHClient> connect(SSHConnectConfig config) async {
+  ///
+  /// When [viaClient] is given, the transport socket is opened as a
+  /// forwarded channel through that already-authenticated client (`ssh -J`)
+  /// instead of a direct TCP dial — [viaClient] must stay connected for the
+  /// lifetime of this session, since the channel tunnels through it.
+  Future<SSHClient> connect(SSHConnectConfig config, {SSHClient? viaClient}) async {
     await close();
     _abortRequested = false;
+    _hostKeyRejected = false;
     if (_clientChanges.isClosed) {
       _clientChanges = StreamController<SSHClient?>.broadcast();
     }
@@ -111,13 +122,21 @@ class SSHSessionManager {
       }
     }
 
-    // 2. Open TCP socket
+    // 2. Open the transport socket: a direct TCP dial, or a forwarded
+    // channel through a jump host's client (SSHForwardChannel implements
+    // SSHSocket, so it drops straight in).
     try {
-      _socket = await SSHSocket.connect(
-        config.hostname,
-        config.port,
-        timeout: config.timeout,
-      );
+      if (viaClient != null) {
+        _socket = await viaClient
+            .forwardLocal(config.hostname, config.port)
+            .timeout(config.timeout);
+      } else {
+        _socket = await SSHSocket.connect(
+          config.hostname,
+          config.port,
+          timeout: config.timeout,
+        );
+      }
     } catch (e) {
       throw Exception(
         'Failed to connect to ${config.hostname}:${config.port}: $e',
@@ -133,6 +152,11 @@ class SSHSessionManager {
     }
 
     // 3. Create SSH Client with Host Key Verification and Auth handlers
+    //
+    // No keepAliveInterval here: dartssh2's own keep-alive pings the server
+    // but never surfaces a failure to us, so it can't drive the disconnect
+    // detection the UI depends on. The manual `ping()` timer started below
+    // does both jobs, so passing this too would just double the traffic.
     final client = SSHClient(
       _socket!,
       username: config.username,
@@ -140,7 +164,15 @@ class SSHSessionManager {
       onPasswordRequest: config.password != null
           ? () => config.password!
           : null,
-      keepAliveInterval: config.keepAliveInterval,
+      // `ChallengeResponseAuthentication`/2FA servers use keyboard-interactive
+      // instead of plain password auth; without this handler login fails
+      // even with the right password. Relaying it to every prompt covers the
+      // common single-prompt "Password:" case — there is no UI yet for
+      // servers that ask for something else.
+      onUserInfoRequest: config.password != null
+          ? (request) =>
+              List<String>.filled(request.prompts.length, config.password!)
+          : null,
       onVerifyHostKey: (String type, Uint8List fingerprintBytes) async {
         // dartssh2 already hands us the ASCII "SHA256:<base64>" form, i.e. the
         // exact string `ssh-keygen -lf` prints. Re-encoding it would produce a
@@ -182,7 +214,14 @@ class SSHSessionManager {
 
       return client;
     } catch (e) {
+      final hostKeyRejected = _hostKeyRejected;
       await close();
+      if (hostKeyRejected) {
+        throw Exception(
+          'Host key verification was rejected for '
+          '${config.hostname}:${config.port}; refusing to connect.',
+        );
+      }
       throw Exception(
         'SSH authentication failed for ${config.username}@${config.hostname}: $e',
       );
@@ -289,6 +328,7 @@ class SSHSessionManager {
               _isPromptingHostKey = false;
             }
           }
+          _hostKeyRejected = true;
           return false;
         }
       } else {
@@ -322,6 +362,7 @@ class SSHSessionManager {
             ),
           );
         }
+        if (!approve) _hostKeyRejected = true;
         return approve;
       }
     }
@@ -329,8 +370,9 @@ class SSHSessionManager {
     // Fallback if no DAO provided
     if (promptCallback != null) {
       _isPromptingHostKey = true;
+      bool approve;
       try {
-        return await promptCallback(
+        approve = await promptCallback(
           hostname,
           port,
           keyType,
@@ -340,9 +382,12 @@ class SSHSessionManager {
       } finally {
         _isPromptingHostKey = false;
       }
+      if (!approve) _hostKeyRejected = true;
+      return approve;
     }
     // Nothing can vouch for this key: neither a known_hosts store nor a user.
     // Deny rather than silently accepting an unverified host.
+    _hostKeyRejected = true;
     return false;
   }
 

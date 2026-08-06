@@ -159,7 +159,7 @@ class E2EECloudSyncService {
 
     final jsonStr = jsonEncode(payloadMap);
     final salt = _cryptoEngine.generateSalt();
-    final secretKey = await _cryptoEngine.deriveMasterKey(
+    final secretKey = await _cryptoEngine.deriveMasterKeyInBackground(
       masterPassword: masterPassword,
       salt: salt,
     );
@@ -216,7 +216,7 @@ class E2EECloudSyncService {
     }
 
     final salt = Uint8List.fromList(base64.decode(saltBase64));
-    final secretKey = await _cryptoEngine.deriveMasterKey(
+    final secretKey = await _cryptoEngine.deriveMasterKeyInBackground(
       masterPassword: masterPassword,
       salt: salt,
     );
@@ -315,18 +315,42 @@ class E2EECloudSyncService {
       }
 
       // 5. Known Hosts
+      //
+      // `insertOnConflictUpdate` only upserts on the primary key (id), but
+      // `(hostname, port)` is the actual unique constraint on this table. Two
+      // devices that independently TOFU'd the same server end up with the
+      // same (hostname, port) under different ids, so a plain id-keyed
+      // upsert throws a UNIQUE constraint violation and rolls back the whole
+      // restore. Look the row up by (hostname, port) first and update it in
+      // place when it already exists.
       if (data['known_hosts'] is List) {
         for (final item in data['known_hosts'] as List) {
-          await db.into(db.knownHosts).insertOnConflictUpdate(
-                KnownHostsCompanion.insert(
-                  id: item['id'] as String,
-                  hostname: item['hostname'] as String,
-                  port: item['port'] as int,
-                  keyType: item['keyType'] as String,
-                  fingerprintSha256: item['fingerprintSha256'] as String,
-                  firstSeenAt: DateTime.parse(item['firstSeenAt'] as String),
-                ),
-              );
+          final hostname = item['hostname'] as String;
+          final port = item['port'] as int;
+          final existing = await db.knownHostsDao.findKnownHost(hostname, port);
+          if (existing != null) {
+            await db.knownHostsDao.insertOrUpdateKnownHost(
+              KnownHostsCompanion(
+                id: Value(existing.id),
+                hostname: Value(hostname),
+                port: Value(port),
+                keyType: Value(item['keyType'] as String),
+                fingerprintSha256: Value(item['fingerprintSha256'] as String),
+                firstSeenAt: Value(DateTime.parse(item['firstSeenAt'] as String)),
+              ),
+            );
+          } else {
+            await db.knownHostsDao.insertOrUpdateKnownHost(
+              KnownHostsCompanion.insert(
+                id: item['id'] as String,
+                hostname: hostname,
+                port: port,
+                keyType: item['keyType'] as String,
+                fingerprintSha256: item['fingerprintSha256'] as String,
+                firstSeenAt: DateTime.parse(item['firstSeenAt'] as String),
+              ),
+            );
+          }
         }
       }
 

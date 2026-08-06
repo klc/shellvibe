@@ -4,6 +4,12 @@ import 'dart:io';
 import 'package:dartssh2/dartssh2.dart';
 import 'socks5_proxy_server.dart';
 
+/// Upper bound for dialing the local target of a remote (`-R`) forward. A
+/// dead local target would otherwise hang the connection attempt until the
+/// OS's own TCP connect timeout, holding the remote channel open the whole
+/// time.
+const _kLocalForwardConnectTimeout = Duration(seconds: 10);
+
 class ActiveTunnel {
   final String ruleId;
   final String hostId;
@@ -104,9 +110,24 @@ class TunnelEngine {
     _startStatsTimer();
   }
 
-  Stream<List<ActiveTunnel>> watchActiveTunnels() async* {
-    yield activeTunnelsList;
-    yield* _tunnelsController.stream;
+  /// A snapshot-then-live view of active tunnels.
+  ///
+  /// Subscribes to the source stream and pushes the current snapshot in the
+  /// same synchronous `onListen` callback, so no update from [_notify] can
+  /// land in the gap between "read the snapshot" and "start listening" — the
+  /// two used to be separate `async*` steps with an event-loop turn between
+  /// them, wide enough to lose an update that fired in that window.
+  Stream<List<ActiveTunnel>> watchActiveTunnels() {
+    late final StreamController<List<ActiveTunnel>> controller;
+    StreamSubscription<List<ActiveTunnel>>? sub;
+    controller = StreamController<List<ActiveTunnel>>.broadcast(
+      onListen: () {
+        sub = _tunnelsController.stream.listen(controller.add);
+        controller.add(activeTunnelsList);
+      },
+      onCancel: () => sub?.cancel(),
+    );
+    return controller.stream;
   }
 
   List<ActiveTunnel> get activeTunnelsList => _activeTunnels.values.toList();
@@ -310,7 +331,8 @@ class TunnelEngine {
           _activeChannels[ruleId]?.add(connection);
           Socket? localSocket;
           try {
-            localSocket = await Socket.connect(localHost, localPort);
+            localSocket = await Socket.connect(localHost, localPort)
+                .timeout(_kLocalForwardConnectTimeout);
             if (!isTunnelActive(ruleId)) {
               localSocket.destroy();
               connection.close();

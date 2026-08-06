@@ -196,6 +196,7 @@ class SshConfigImportService {
       if (hasKeyFiles) {
         final existing = await _vaultRepository.getAllIdentities(
           decryptSecrets: true,
+          onlyPrivateKey: true,
           workspaceId: options.workspaceId,
         );
         for (final identity in existing) {
@@ -324,7 +325,14 @@ class SshConfigImportService {
                 hostname: Value(draft.hostname),
                 username: Value(draft.username),
                 port: Value(draft.port),
-                identityId: Value(identityId),
+                // `identityId` is only null here because key import was off
+                // or this host has no IdentityFile — not because the config
+                // wants the link cleared. `Value(null)` would wipe an
+                // existing host->identity link on every overwrite whenever
+                // keys aren't being imported; absent leaves it untouched.
+                identityId: identityId != null
+                    ? Value(identityId)
+                    : const Value.absent(),
                 groupId: Value(options.groupId),
                 // Cleared here; pass 2 re-writes it when the config has a
                 // ProxyJump.
