@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:xterm2/xterm.dart';
 
 import '../../../settings/domain/models/app_settings_model.dart';
@@ -75,10 +76,10 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
   /// routes through [TerminalTabsNotifier.tapPane], which clears the
   /// selection when an unselected pane is clicked.
   ///
-  /// Note: `onHyperlinkTap` is not wired anywhere, so ⌘+click on a hyperlink
-  /// currently opens nothing. The guard below keeps a link click from being
-  /// misinterpreted as a broadcast toggle; if URL opening is added later it
-  /// won't fight this selection logic.
+  /// `onHyperlinkTap` (see [_handleHyperlinkTap]) opens OSC 8 hyperlinks and
+  /// plain-text URLs on the same modifier click on desktop, and on a plain
+  /// tap on touch. The guard below keeps a link click from also being
+  /// interpreted as a broadcast toggle.
   void _handleTapUp(TapUpDetails _, CellOffset offset) {
     final pressed = HardwareKeyboard.instance.logicalKeysPressed;
     final isMac = defaultTargetPlatform == TargetPlatform.macOS;
@@ -89,12 +90,32 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
             (pressed.contains(LogicalKeyboardKey.controlLeft) ||
                 pressed.contains(LogicalKeyboardKey.controlRight)));
     if (broadcastModifier &&
-        widget.session.terminal.hyperlinkIdAt(offset) != 0) {
+        (widget.session.terminal.hyperlinkIdAt(offset) != 0 ||
+            widget.session.terminal.urlAt(offset) != null)) {
       return;
     }
     ref
         .read(terminalTabsProvider.notifier)
         .tapPane(widget.session.id, broadcastModifier: broadcastModifier);
+  }
+
+  static final _uriSchemePattern = RegExp(r'^[a-zA-Z][a-zA-Z0-9+.-]*:');
+
+  /// Opens a link tapped/clicked in the terminal (OSC 8 hyperlink or a
+  /// detected plain-text URL). Restricted to http(s)/mailto — an OSC 8
+  /// hyperlink's URI is attacker-controlled program output, so anything
+  /// else (e.g. `file://`) is dropped rather than handed to the OS. A bare
+  /// `www.` match from the plain-text detector has no scheme, so it is
+  /// treated as https.
+  Future<void> _handleHyperlinkTap(String uri) async {
+    final normalized =
+        _uriSchemePattern.hasMatch(uri) ? uri : 'https://$uri';
+    final parsed = Uri.tryParse(normalized);
+    if (parsed == null) return;
+    const allowedSchemes = {'http', 'https', 'mailto'};
+    if (!allowedSchemes.contains(parsed.scheme.toLowerCase())) return;
+    if (!await canLaunchUrl(parsed)) return;
+    await launchUrl(parsed, mode: LaunchMode.externalApplication);
   }
 
   @override
@@ -200,6 +221,7 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
               autofocus: true,
               deleteDetection: shouldShowExtraKeys,
               onTapUp: _handleTapUp,
+              onHyperlinkTap: _handleHyperlinkTap,
               cursorType: switch (settings.cursorStyle) {
                 AppCursorStyle.block => TerminalCursorType.block,
                 AppCursorStyle.underline => TerminalCursorType.underline,
