@@ -142,6 +142,10 @@ class LocalPtyManager {
     final env = <String, String>{
       ...Platform.environment,
       'TERM': 'xterm-256color',
+      // Launched from Finder the app inherits launchd's env, which lacks
+      // COLORTERM. Programs that gate 24-bit output on it (oh-my-posh, delta,
+      // bat) would silently fall back to the 256-colour cube.
+      'COLORTERM': 'truecolor',
       ...?environment,
     };
     final workDir = workingDirectory ?? Platform.environment['HOME'];

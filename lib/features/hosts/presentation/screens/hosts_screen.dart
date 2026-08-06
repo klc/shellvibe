@@ -1,12 +1,18 @@
+import 'dart:io';
+
+import 'package:desktop_drop/desktop_drop.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:path/path.dart' as p;
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../../../../app/theme/terly_tokens.dart';
 import '../../../../app/widgets/terly_ui.dart';
 import '../../../../app/widgets/workspace_switcher.dart';
 import '../../../../core/network/ssh_session_manager.dart';
+import '../../../../core/utils/platform_capabilities.dart';
 import '../../../templates/domain/models/template_model.dart';
 import '../../../templates/presentation/dialogs/save_template_dialog.dart';
 import '../../../templates/presentation/notifiers/templates_notifier.dart';
@@ -16,8 +22,10 @@ import '../../../terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import '../../../vault/domain/models/identity_model.dart';
 import '../../../vault/presentation/notifiers/identities_notifier.dart';
 import '../../../../shared/providers/workspace_provider.dart';
+import '../../data/services/ssh_config_import_service.dart';
 import '../dialogs/host_form_dialog.dart';
 import '../dialogs/host_group_form_dialog.dart';
+import '../dialogs/ssh_config_import_dialog.dart';
 import '../notifiers/host_groups_notifier.dart';
 import '../notifiers/hosts_notifier.dart';
 import '../../domain/models/host_group_model.dart';
@@ -57,6 +65,9 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
   /// Non-null when a real group (rather than a pseudo-filter) is selected.
   String? _selectedGroupId;
   String? _selectedHostId;
+
+  /// True while a config-looking file hovers the drop target (desktop).
+  bool _isDraggingConfig = false;
 
   @override
   Widget build(BuildContext context) {
@@ -197,6 +208,13 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
         tooltip: 'Add Group',
         onPressed: () => _openGroupForm(context),
       ),
+      ShadButton.outline(
+        key: const Key('import_ssh_config_button'),
+        size: ShadButtonSize.sm,
+        leading: const Icon(LucideIcons.fileInput, size: 16),
+        onPressed: () => _openImportConfig(context),
+        child: const Text('Import'),
+      ),
       ShadButton(
         key: const Key('add_host_button'),
         size: ShadButtonSize.sm,
@@ -206,7 +224,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
       ),
     ];
 
-    return Column(
+    final workArea = Column(
       children: [
         // Without the context column there is no home for the workspace
         // switcher, so the compact title bar carries it instead.
@@ -343,6 +361,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
         ),
       ],
     );
+    return _wrapWithConfigDropTarget(context, workArea);
   }
 
   Widget _buildCompactFilterBar(
@@ -467,7 +486,152 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
           leading: const Icon(LucideIcons.folderPlus, size: 16),
           child: const Text('Create group'),
         ),
+        ShadButton.outline(
+          key: const Key('empty_state_import_button'),
+          onPressed: () => _openImportConfig(context),
+          leading: const Icon(LucideIcons.fileInput, size: 16),
+          child: const Text('Import SSH Config'),
+        ),
       ],
+    );
+  }
+
+  // ── ssh config import ───────────────────────────────────────────────────
+
+  /// Picks a `~/.ssh/config`-style file and opens the import preview dialog.
+  Future<void> _openImportConfig(BuildContext context) async {
+    // Deliberately no acceptedTypeGroups: the canonical file is literally
+    // named `config` with NO extension, and extension/UTType filters grey it
+    // out in the native dialogs (macOS/Linux/Windows alike). The import
+    // dialog validates the content anyway.
+    final file = await openFile(initialDirectory: _sshConfigDirectory());
+    if (file == null || file.path.isEmpty) return;
+    if (!context.mounted) return;
+    await _showImportDialog(context, file.path);
+  }
+
+  /// Desktop drag-and-drop entry point; accepts files named `config`,
+  /// `ssh_config` or ending in `.config`.
+  Future<void> _handleConfigDrop(BuildContext context, List<XFile> files) async {
+    final dropped = files.where((f) => _isConfigFileName(f.name)).firstOrNull;
+    if (dropped == null || dropped.path.isEmpty) return;
+    await _showImportDialog(context, dropped.path);
+  }
+
+  bool _isConfigFileName(String name) =>
+      name == 'config' || name == 'ssh_config' || name.endsWith('.config');
+
+  /// `~/.ssh` when it exists on this machine, else null (mobile: no picker
+  /// initial directory; the sandbox has no user `.ssh` folder).
+  String? _sshConfigDirectory() {
+    if (isMobilePlatform) return null;
+    // HOME is absent on Windows, where the equivalent is USERPROFILE.
+    final home =
+        Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'];
+    if (home == null) return null;
+    final dir = Directory(p.join(home, '.ssh'));
+    return dir.existsSync() ? dir.path : null;
+  }
+
+  Future<void> _showImportDialog(BuildContext context, String path) async {
+    final String content;
+    try {
+      content = await File(path).readAsString();
+    } catch (_) {
+      if (context.mounted) {
+        ShadToaster.of(context).show(
+          ShadToast.destructive(
+            title: const Text('Import Failed'),
+            description: Text('Could not read $path'),
+          ),
+        );
+      }
+      return;
+    }
+    if (!context.mounted) return;
+    final SshConfigImportResult? result;
+    try {
+      result = await showDialog<SshConfigImportResult>(
+        context: context,
+        builder: (_) =>
+            SshConfigImportDialog(filePath: path, content: content),
+      );
+    } catch (e) {
+      if (context.mounted) {
+        ShadToaster.of(context).show(
+          ShadToast.destructive(
+            title: const Text('Import Failed'),
+            description: Text('Could not open the import dialog: $e'),
+          ),
+        );
+      }
+      return;
+    }
+    if (result != null && context.mounted) {
+      // The import service writes through the DAOs directly, bypassing the
+      // notifiers — invalidate so hosts/groups/identities reload immediately
+      // instead of on the next app start.
+      ref.invalidate(hostsProvider);
+      ref.invalidate(hostGroupsProvider);
+      ref.invalidate(identitiesProvider);
+      _showImportSummary(context, result);
+    }
+  }
+
+  void _showImportSummary(BuildContext context, SshConfigImportResult result) {
+    final parts = <String>[
+      if (result.hostsAdded > 0) '${result.hostsAdded} added',
+      if (result.hostsUpdated > 0) '${result.hostsUpdated} updated',
+      if (result.hostsSkipped > 0) '${result.hostsSkipped} skipped',
+    ];
+    final extras = <String>[
+      if (result.identitiesAdded > 0) '${result.identitiesAdded} keys',
+      if (result.tunnelsAdded > 0) '${result.tunnelsAdded} forwards',
+      if (result.jumpHostsAdded > 0) '${result.jumpHostsAdded} jump hosts',
+    ];
+    final summary = parts.isEmpty ? 'Nothing imported' : parts.join(', ');
+    final description = [
+      summary,
+      if (extras.isNotEmpty) extras.join(', '),
+      if (result.warnings.isNotEmpty)
+        '${result.warnings.length} '
+            'note${result.warnings.length == 1 ? '' : 's'}',
+    ].join(' · ');
+    ShadToaster.of(context).show(
+      ShadToast(
+        title: const Text('Import Complete'),
+        description: Text(description),
+      ),
+    );
+  }
+
+  /// Desktop only: wraps the work area in a drop target accepting ssh config
+  /// files. Mobile gets the plain work area — `desktop_drop` has no mobile
+  /// implementation.
+  Widget _wrapWithConfigDropTarget(BuildContext context, Widget child) {
+    if (isMobilePlatform) return child;
+    return DropTarget(
+      onDragEntered: (_) => setState(() => _isDraggingConfig = true),
+      onDragExited: (_) {
+        if (_isDraggingConfig) setState(() => _isDraggingConfig = false);
+      },
+      onDragDone: (details) async {
+        if (_isDraggingConfig) setState(() => _isDraggingConfig = false);
+        await _handleConfigDrop(context, details.files);
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        decoration: _isDraggingConfig
+            ? BoxDecoration(
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.primary,
+                  width: 2,
+                ),
+                borderRadius: BorderRadius.circular(10),
+              )
+            : null,
+        child: child,
+      ),
     );
   }
 
