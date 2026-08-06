@@ -10,7 +10,7 @@ import 'package:terly2/features/terminal/presentation/notifiers/terminal_tabs_no
 import 'package:terly2/features/terminal/presentation/views/terminal_tab_view.dart';
 import 'package:terly2/shared/database/app_database.dart';
 import 'package:terly2/shared/providers/database_providers.dart';
-import 'package:xterm2/xterm.dart';
+import 'package:xterm3/xterm.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

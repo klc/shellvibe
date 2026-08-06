@@ -26,7 +26,7 @@ Mevcut kod tabanı (`docs/features_and_competitor_analysis.md` ve `docs/tech_spe
 
 | Modül / Özellik | Hedeflenen Yetenek | Mevcut Durum | Olgunluk / Seviye | PO Notu |
 | :--- | :--- | :--- | :---: | :--- |
-| **Bağlantı & Terminal Motoru** | SSHv2, Local Shell (zsh/pwsh), `xterm2` canvas render, sekmeli oturumlar. | Tam teşekküllü uygulandı. Pure Dart `dart_ssh2` + Isolate KEX + `flutter_pty`. | ✅ **İleri Seviye (9.5/10)** | Donanım ivmeli 60 FPS rendering ve klavye barı başarılı. |
+| **Bağlantı & Terminal Motoru** | SSHv2, Local Shell (zsh/pwsh), `xterm3` canvas render, sekmeli oturumlar. | Tam teşekküllü uygulandı. Pure Dart `dart_ssh2` + Isolate KEX + `flutter_pty`. | ✅ **İleri Seviye (9.5/10)** | Donanım ivmeli 60 FPS rendering ve klavye barı başarılı. |
 | **Sunucu & Kimlik Vault** | Hiyerarşik grup mimarisi, Argon2id + AES-256-GCM Zero-Knowledge Identity Vault. | Drift SQLite + Secure Storage ile şifreli persistence tamamlandı. | ✅ **İleri Seviye (9/10)** | Güvenlik mimarisi ticari standartların üzerinde. |
 | **SFTP & Dosya Yönetimi** | Çift panelli GUI, arka plan transfer kuyruğu, dahili kod düzenleyici (in-app editor). | Çift panel UI, transfer kuyruğu, uzaktan dosya düzenleme ve chmod/chown mevcut. | ✅ **Yüksek (8.5/10)** | Masaüstü drag-drop ve mobil dosya navigasyonu akıcı. |
 | **Görsel Tünelleme (Tunnels)** | Local (`-L`), Remote (`-R`), Dynamic SOCKS5 (`-D`) görsel tünel matrisi. | Grafiksel tünel sihirbazı ve aktif tünel durumu mevcut. | ✅ **Yüksek (8.5/10)** | Karmaşık SSH port yönlendirmelerini basitleştiriyor. |

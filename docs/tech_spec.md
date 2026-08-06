@@ -12,7 +12,7 @@
 | :--- | :--- | :--- | :--- |
 | **Framework & Dili** | **Flutter SDK 3.x / Dart SDK `^3.12.2`** | BSD-3 | Tek kod tabanından 5 platforma yerel performans ve tutarlı UI donanım ivmeli (Skia/Impeller) rendering. |
 | **State Management** | **`flutter_riverpod` 3.x + `riverpod_annotation` 4.x** | MIT | `BuildContext` bağımlılığı olmadan async stream'leri (SSH/Socket) yönetebilme, üst düzey tip güvenliği ve kolay test edilebilirlik. |
-| **Terminal UI / Render** | **`xterm2`** *(Forked & Maintained `xterm.dart`)* | MIT | Donanım ivmeli (60 FPS) ANSI/VT100 rendering, CJK/Emoji/IME desteği ve UI katmanından bağımsız terminal tamponu (buffer) yönetimi. |
+| **Terminal UI / Render** | **`xterm3`** *(Forked & Maintained `xterm.dart`)* | MIT | Donanım ivmeli (60 FPS) ANSI/VT100 rendering, CJK/Emoji/IME desteği ve UI katmanından bağımsız terminal tamponu (buffer) yönetimi. |
 | **SSH & SFTP Engine** | **`dart_ssh2`** | MIT | Pure Dart ile yazıldığı için C/C++ native derleme karmaşası olmadan 5 platformda sıfır bağımlılıkla çalışır. KEX şifreleme yüklerini Dart Isolate'lerine devrederek UI donmalarını engeller. |
 | **Yerel PTY Motoru** | **`flutter_pty`** | MIT | macOS, Windows (ConPTY), Linux ve Android üzerinde yerel terminal (Local Shell: zsh/bash/pwsh) başlatabilme. |
 | **Yerel Veritabanı** | **`drift` + `sqlite3` (native assets/hooks)** | MIT | 2026 itibarıyla en güvenilir, sürdürülebilir, tip güvenli ve SQL tabanlı çözümdür. Relational şema yapısı (Host -> Vault -> Tunnel) için mükemmeldir. |
@@ -29,11 +29,11 @@
 
 ## 2. Derinlemesine Paket Seçim Analizleri ve Alternatif Değerlendirmeleri
 
-### 2.1. Terminal UI Engine: Neden `xterm2`?
+### 2.1. Terminal UI Engine: Neden `xterm3`?
 - **Değerlendirilen Alternatifler:** `flutter_pty` + `pty`, ham CustomPainter canvas, `xterm.dart` (orijinal).
 - **Analiz:** 
-  - Orijinal `xterm.dart` reposu son zamanlarda topluluk güncellemelerinde yavaşladığı için, aktif bakımı yapılan `xterm2` forku tercih edilmiştir.
-  - `xterm2`, ANSI renk kodlarını, cursor konumlandırmalarını ve VT100 kaçış dizilerini doğrudan Dart belleğinde (Buffer Matrix) işler.
+  - Orijinal `xterm.dart` reposu son zamanlarda topluluk güncellemelerinde yavaşladığı için, aktif bakımı yapılan `xterm3` forku tercih edilmiştir.
+  - `xterm3`, ANSI renk kodlarını, cursor konumlandırmalarını ve VT100 kaçış dizilerini doğrudan Dart belleğinde (Buffer Matrix) işler.
   - `CustomPainter` kullanarak sadece değişen hücreleri render eder. Bu sayede 100.000 satırlık log akışlarında bile belleği şişirmez ve 60 FPS akıcılık sunar.
 
 ### 2.2. SSH / SFTP Protokol Engine: Neden `dart_ssh2`? (Pure Dart vs Native C FFI)
@@ -103,13 +103,13 @@ graph TD
 
 ### 4.1. Terminal & SSH Akış Köprüsü (Stream Bridge Architecture)
 
-Terminal UI katmanı (`xterm2`) ile SSH ağ katmanı (`dart_ssh2`) arasındaki çift yönlü veri akış mimarisi:
+Terminal UI katmanı (`xterm3`) ile SSH ağ katmanı (`dart_ssh2`) arasındaki çift yönlü veri akış mimarisi:
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant User as Kullanıcı / Klavye
-    participant Xterm as xterm2 Terminal Widget
+    participant Xterm as xterm3 Terminal Widget
     participant Bridge as Terminal-SSH Stream Bridge
     participant SSH as dart_ssh2 Shell Session
     participant Server as Uzak Sunucu (Remote Server)
@@ -337,7 +337,7 @@ terly2/
     │   ├── utils/
     │   └── widgets/              # Common UI Components
     ├── features/
-    │   ├── terminal/             # Terminal Screen, xterm2, Stream Bridge
+    │   ├── terminal/             # Terminal Screen, xterm3, Stream Bridge
     │   │   ├── data/
     │   │   ├── domain/
     │   │   └── presentation/
@@ -366,7 +366,7 @@ terly2/
    - Eski fingerprint formatının yalnızca gerektiğinde ve veri kaybı olmadan normalize edildiğinin test edilmesi.
 3. **Widget & UI Integration Testing:**
    - Masaüstü ve mobil ekran boyutlarında `LayoutBuilder` uyumluluk testleri.
-   - `xterm2` klavye girdi ve kısayol çubuğu widget testleri.
+   - `xterm3` klavye girdi ve kısayol çubuğu widget testleri.
 
 ---
 

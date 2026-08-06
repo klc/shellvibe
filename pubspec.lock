@@ -1546,15 +1546,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "7.0.1"
-  xterm2:
+  xterm3:
     dependency: "direct main"
     description:
-      path: "."
-      ref: HEAD
-      resolved-ref: ea08e89a7b15ac19ad338d646840db89c67aae54
-      url: "https://github.com/klc/xterm2.git"
-    source: git
-    version: "5.3.0"
+      name: xterm3
+      sha256: bbe78b2cacd08b48cc619147dd8ffc182bb2dc6481ffa2f67f3d9744fb5c1c8c
+      url: "https://pub.dev"
+    source: hosted
+    version: "6.0.1"
   yaml:
     dependency: transitive
     description:

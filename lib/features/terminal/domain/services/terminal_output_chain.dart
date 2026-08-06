@@ -1,4 +1,4 @@
-import 'package:xterm2/xterm.dart';
+import 'package:xterm3/xterm.dart';
 
 /// An interceptor link: receives the data heading for the session and decides
 /// what (if anything) to pass to [next], the rest of the chain.

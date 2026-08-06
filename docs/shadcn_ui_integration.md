@@ -32,7 +32,7 @@ React/Tailwind ekosistemindeki orijinal `shadcn/ui` kütüphanesini Flutter'a uy
 | **Kararlılık ve Popülerlik** | Pub.dev üzerinde en yaygın ve aktif geliştirilen paket. | Gelişmiş fakat daha dik öğrenme eğrisi. | Tasarım harika, fakat bileşen yelpazesi daha dar. |
 
 > [!TIP]
-> **Karar:** Terly2 için **`shadcn_ui`** (nank1ro) paketi ve ikonografi için **`lucide_icons_flutter`** kombinasyonu seçilmiştir. Sebebi; `go_router`, Riverpod, `xterm2` ve `window_manager` ile sorunsuz entegre olabilmesi ve en geniş bileşen kütüphanesine sahip olmasıdır.
+> **Karar:** Terly2 için **`shadcn_ui`** (nank1ro) paketi ve ikonografi için **`lucide_icons_flutter`** kombinasyonu seçilmiştir. Sebebi; `go_router`, Riverpod, `xterm3` ve `window_manager` ile sorunsuz entegre olabilmesi ve en geniş bileşen kütüphanesine sahip olmasıdır.
 
 ---
 
@@ -97,7 +97,7 @@ dependencies:
   go_router: ^17.3.0
 
   # Terminal Engine
-  xterm2: ^5.2.0
+  xterm3: ^5.2.0
 ```
 
 ### 4.2. Kök Uygulama Konfigürasyonu (`ShadApp.router`)
@@ -281,7 +281,7 @@ class AddHostDialog extends StatelessWidget {
 import 'package:flutter/material.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import 'package:xterm2/xterm2.dart';
+import 'package:xterm3/xterm3.dart';
 
 class TerminalWithContextMenu extends StatelessWidget {
   final Terminal terminal;
@@ -342,8 +342,8 @@ class TerminalWithContextMenu extends StatelessWidget {
 
 ## 6. Odaklanma (Focus), Klavye Navigasyonu ve Performans Notları
 
-1. **Terminal (`xterm2`) vs UI Input Odak Yönetimi:**
-   - SSH terminal alanı aktifken tüm klavye girdileri `xterm2` nesnesine yönlendirilmelidir.
+1. **Terminal (`xterm3`) vs UI Input Odak Yönetimi:**
+   - SSH terminal alanı aktifken tüm klavye girdileri `xterm3` nesnesine yönlendirilmelidir.
    - `ShadDialog` veya `ShadCommand` (Cmd+K) açıldığında Flutter `FocusScope` otomatik olarak arayüze geçmeli, modal kapandığında odak tekrar `TerminalView`'e dönmelidir.
 
 2. **Masaüstü Pencere Başlık Çubuğu (`window_manager`):**

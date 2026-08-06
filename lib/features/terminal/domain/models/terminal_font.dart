@@ -47,7 +47,7 @@ class TerminalFont {
 
 /// Symbols Nerd Font Mono — registered in pubspec; every terminal session
 /// falls back to it so prompt icons (powerline, devicons, …) render even with
-/// non-Nerd Fonts. Matches the family name xterm2 already lists in its
+/// non-Nerd Fonts. Matches the family name xterm3 already lists in its
 /// default `fontFamilyFallback`.
 const kSymbolsNerdFontFamily = 'Symbols Nerd Font Mono';
 
@@ -158,7 +158,7 @@ const kTerminalFonts = <TerminalFont>[
   ),
 
   // --- Bundled Nerd Fonts (Mono variant: every glyph single-cell wide, so
-  // grid alignment holds inside xterm2, which treats PUA as width 1) ---
+  // grid alignment holds inside xterm3, which treats PUA as width 1) ---
   TerminalFont(
     id: 'SourceCodePro',
     label: 'Source Code Pro',

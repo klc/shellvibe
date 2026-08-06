@@ -14,7 +14,7 @@ All agents working on this repository **MUST** adhere to the designs, feature sp
 1. 📄 [**Feature Specification & Competitor Benchmark**](file:///Users/mkilic/www/klc/terly2/docs/features_and_competitor_analysis.md) (`docs/features_and_competitor_analysis.md`)
    - Detailed product features: Local shell, SSHv2, Mosh, Dual-pane SFTP, Port Forwarding (Local/Remote/Dynamic), Workspaces, Snippets, Runbooks, AI Assistant, and competitor analysis (Termius, Warp, Tabby, Blink Shell, MobaXterm).
 2. 📄 [**Technical Architecture Specification**](file:///Users/mkilic/www/klc/terly2/docs/tech_spec.md) (`docs/tech_spec.md`)
-   - Mandatory tech stack (`flutter_riverpod`, `xterm2`, `dart_ssh2`, `flutter_pty`, `drift` SQLite, `flutter_secure_storage`, `cryptography` AES-256-GCM / Argon2id).
+   - Mandatory tech stack (`flutter_riverpod`, `xterm3`, `dart_ssh2`, `flutter_pty`, `drift` SQLite, `flutter_secure_storage`, `cryptography` AES-256-GCM / Argon2id).
    - Drift SQLite database schema, Stream Bridge architecture, edge cases, and OS constraints (iOS sandbox, Host key verification, background keep-alive, sticky keys, tab lifecycle).
 
 ---
@@ -35,7 +35,7 @@ Maintain strict separation of concerns across layers:
 - Always use `autoDispose` for tab-specific or session-specific providers to ensure sockets, streams, and terminal buffer memory are destroyed on tab close.
 
 ### 2.3. Terminal & Network Stream Bridge
-- UI terminal rendering **MUST** use `xterm2`.
+- UI terminal rendering **MUST** use `xterm3`.
 - SSH & SFTP networking **MUST** use `dart_ssh2` (Pure Dart engine with isolate-offloaded KEX).
 - Local terminal execution on macOS, Windows, Linux, and Android **MUST** use `flutter_pty`.
 - Wire `terminal.onResize` to `session.resizeTerminal` and `terminal.onOutput` to `session.write`.

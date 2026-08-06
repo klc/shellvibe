@@ -1,5 +1,5 @@
 name: terly2
-description: "Terly2 — Cross-platform (iOS, Android, macOS, Windows, Linux) terminal, SSH/SFTP client and remote infrastructure workstation built with Flutter, dart_ssh2, xterm2 and Zero-Knowledge E2EE encryption."
+description: "Terly2 — Cross-platform (iOS, Android, macOS, Windows, Linux) terminal, SSH/SFTP client and remote infrastructure workstation built with Flutter, dart_ssh2, xterm3 and Zero-Knowledge E2EE encryption."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -42,11 +42,9 @@ dependencies:
   go_router: ^17.3.0
 
   # Terminal & SSH Engine
-  # Kept in-tree until the Android IME action/composition ordering fix is
-  # released upstream. See third_party/xterm2/README.md.
-  xterm2:
-    git:
-      url: https://github.com/klc/xterm2.git
+  # xterm3 continues the xterm2 fork and is published on pub.dev from 6.0.0 on,
+  # so this tracks releases instead of a git ref. It is AGPL-3.0-or-later.
+  xterm3: ^6.0.1
   dartssh2: ^2.22.5
   flutter_pty: ^0.4.2
 
@@ -103,7 +101,7 @@ flutter:
   uses-material-design: true
 
   # Terminal Nerd Fonts (Mono variants — every glyph single-cell wide, which
-  # keeps xterm2's grid alignment because xterm2 treats the Private Use Area
+  # keeps xterm3's grid alignment because xterm3 treats the Private Use Area
   # as width 1). Licenses in assets/fonts/nerd/LICENSES.txt.
   fonts:
     - family: JetBrainsMono Nerd Font Mono

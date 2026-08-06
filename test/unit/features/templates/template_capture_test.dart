@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:terly2/features/hosts/domain/models/host_model.dart';
 import 'package:terly2/features/templates/domain/services/template_capture.dart';
 import 'package:terly2/features/terminal/domain/models/terminal_tab_session.dart';
-import 'package:xterm2/xterm.dart';
+import 'package:xterm3/xterm.dart';
 
 /// Deterministic id source so the expectations can name panes directly.
 String Function() _sequentialIds() {

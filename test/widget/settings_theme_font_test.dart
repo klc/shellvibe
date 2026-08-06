@@ -11,7 +11,7 @@ import 'package:terly2/features/settings/presentation/notifiers/settings_notifie
 import 'package:terly2/features/terminal/domain/models/terminal_palette.dart';
 import 'package:terly2/shared/database/app_database.dart';
 import 'package:terly2/shared/providers/database_providers.dart';
-import 'package:xterm2/xterm.dart';
+import 'package:xterm3/xterm.dart';
 
 class _NullPtyManager extends LocalPtyManager {
   @override

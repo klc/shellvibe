@@ -1,7 +1,7 @@
 import 'package:flutter_pty/flutter_pty.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:dartssh2/dartssh2.dart';
-import 'package:xterm2/xterm.dart';
+import 'package:xterm3/xterm.dart';
 
 import '../../../shared/providers/database_providers.dart';
 import '../local_pty_manager.dart';

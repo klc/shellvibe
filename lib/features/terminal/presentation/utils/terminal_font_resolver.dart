@@ -26,7 +26,7 @@ String resolveTerminalFontFamily(String fontId) {
 }
 
 /// Fallback chain for terminal glyphs the primary font lacks: Nerd Font
-/// symbols first, then the xterm2 default stack (CJK, symbols, emoji, …).
+/// symbols first, then the xterm3 default stack (CJK, symbols, emoji, …).
 ///
 /// Monochrome symbol families deliberately precede the color emoji families.
 /// Codepoints such as U+23F8 PAUSE default to text presentation, and no

@@ -14,7 +14,7 @@ import 'package:terly2/features/vault/presentation/notifiers/vault_notifier.dart
 import 'package:terly2/shared/database/app_database.dart';
 import 'package:terly2/shared/providers/database_providers.dart';
 import 'package:terly2/shared/storage/secure_storage_service.dart';
-import 'package:xterm2/xterm.dart';
+import 'package:xterm3/xterm.dart';
 
 /// Test double that never spawns a real PTY, keeping the app-level startup
 /// tests hermetic instead of launching the host's shell.

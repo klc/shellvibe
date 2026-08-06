@@ -22,7 +22,7 @@ Terly2 brings modern, hardware-accelerated terminal rendering, a Zero-Knowledge 
 | :--- | :--- |
 | Framework | Flutter SDK 3.x / Dart SDK `^3.12.2` |
 | State | `flutter_riverpod` 3.x + `riverpod_annotation` (codegen) |
-| Terminal UI | `xterm2` (maintained fork) |
+| Terminal UI | `xterm3` (maintained fork) |
 | SSH / SFTP | `dart_ssh2` (Pure Dart) |
 | Local PTY | `flutter_pty` |
 | Database | `drift` (SQLite) — 9 tables, schema-versioned migrations |

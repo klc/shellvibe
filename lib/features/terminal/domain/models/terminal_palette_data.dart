@@ -6,7 +6,7 @@
 // Regenerate the new entries with `python3 tool/gen_terminal_palettes.py`;
 // the hex values in this file are the source of truth.
 import 'package:flutter/material.dart';
-import 'package:xterm2/xterm.dart';
+import 'package:xterm3/xterm.dart';
 
 import 'terminal_palette.dart';
 

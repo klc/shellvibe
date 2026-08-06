@@ -54,3 +54,6 @@ macos/Runner/Configs/LocalSigning.xcconfig
 
 # Local scratch/repro tests, not part of the suite
 test/scratch/
+
+# Gradle writes build reports here.
+/android/build/

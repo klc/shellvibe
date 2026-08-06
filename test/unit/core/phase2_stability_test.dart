@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:terly2/features/sftp/data/sftp_service.dart';
 import 'package:terly2/core/network/ssh_session_manager.dart';
 import 'package:terly2/features/terminal/domain/models/terminal_tab_session.dart';
-import 'package:xterm2/xterm.dart';
+import 'package:xterm3/xterm.dart';
 
 void main() {
   group('Phase 2 Stability & Wiring Tests', () {

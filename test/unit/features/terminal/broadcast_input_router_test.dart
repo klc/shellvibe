@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:xterm2/xterm.dart';
+import 'package:xterm3/xterm.dart';
 
 import 'package:terly2/features/terminal/domain/models/terminal_tab_session.dart';
 import 'package:terly2/features/terminal/domain/services/broadcast_input_router.dart';

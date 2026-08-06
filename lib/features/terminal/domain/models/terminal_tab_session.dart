@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/widgets.dart';
-import 'package:xterm2/xterm.dart';
+import 'package:xterm3/xterm.dart';
 
 import '../../../../core/network/local_pty_manager.dart';
 import '../../../../core/network/ssh_session_manager.dart';
@@ -128,7 +128,7 @@ class TerminalTabSession {
       await jumpManager.close();
     }
     jumpSessionManagers = [];
-    // xterm2 guards write() against a disposed terminal, so late writes from
+    // xterm3 guards write() against a disposed terminal, so late writes from
     // an in-flight connect do not crash after disposal.
     terminal.dispose();
   }

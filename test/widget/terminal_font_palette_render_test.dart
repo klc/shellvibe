@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:terly2/features/terminal/domain/models/terminal_font.dart';
 import 'package:terly2/features/terminal/domain/models/terminal_palette_data.dart';
 import 'package:terly2/features/terminal/presentation/utils/terminal_font_resolver.dart';
-import 'package:xterm2/xterm.dart';
+import 'package:xterm3/xterm.dart';
 
 /// Bundled Nerd Font assets referenced by pubspec, keyed by font id.
 const _kNerdFontAssets = <String, String>{
