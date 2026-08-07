@@ -57,19 +57,32 @@ final class WorkspaceRepositoryProvider
 String _$workspaceRepositoryHash() =>
     r'9854660eeae4f561f47bccc16a13a849f9ec5e24';
 
+/// Must be [Riverpod(keepAlive: true)]: every call site only does
+/// `ref.read(...notifier)`, never `watch`, so with autoDispose this has
+/// zero listeners and gets torn down mid-`await`, leaving `create`/`rename`/
+/// `delete` mutating a disposed ref.
+
 @ProviderFor(WorkspaceManagerNotifier)
 final workspaceManagerProvider = WorkspaceManagerNotifierProvider._();
 
+/// Must be [Riverpod(keepAlive: true)]: every call site only does
+/// `ref.read(...notifier)`, never `watch`, so with autoDispose this has
+/// zero listeners and gets torn down mid-`await`, leaving `create`/`rename`/
+/// `delete` mutating a disposed ref.
 final class WorkspaceManagerNotifierProvider
     extends
         $AsyncNotifierProvider<WorkspaceManagerNotifier, List<WorkspaceModel>> {
+  /// Must be [Riverpod(keepAlive: true)]: every call site only does
+  /// `ref.read(...notifier)`, never `watch`, so with autoDispose this has
+  /// zero listeners and gets torn down mid-`await`, leaving `create`/`rename`/
+  /// `delete` mutating a disposed ref.
   WorkspaceManagerNotifierProvider._()
     : super(
         from: null,
         argument: null,
         retry: null,
         name: r'workspaceManagerProvider',
-        isAutoDispose: true,
+        isAutoDispose: false,
         dependencies: null,
         $allTransitiveDependencies: null,
       );
@@ -83,7 +96,12 @@ final class WorkspaceManagerNotifierProvider
 }
 
 String _$workspaceManagerNotifierHash() =>
-    r'f04f9bf0d08d1b60ab23ec0bcc57c0dffd1c994f';
+    r'd30962aaf4e0ba1c42ea5d3e96147b08e373bfe7';
+
+/// Must be [Riverpod(keepAlive: true)]: every call site only does
+/// `ref.read(...notifier)`, never `watch`, so with autoDispose this has
+/// zero listeners and gets torn down mid-`await`, leaving `create`/`rename`/
+/// `delete` mutating a disposed ref.
 
 abstract class _$WorkspaceManagerNotifier
     extends $AsyncNotifier<List<WorkspaceModel>> {

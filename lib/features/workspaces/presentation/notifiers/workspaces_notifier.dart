@@ -13,7 +13,11 @@ WorkspaceRepository workspaceRepository(Ref ref) {
   return WorkspaceRepository(ref.watch(appDatabaseProvider).workspacesDao);
 }
 
-@riverpod
+/// Must be [Riverpod(keepAlive: true)]: every call site only does
+/// `ref.read(...notifier)`, never `watch`, so with autoDispose this has
+/// zero listeners and gets torn down mid-`await`, leaving `create`/`rename`/
+/// `delete` mutating a disposed ref.
+@Riverpod(keepAlive: true)
 class WorkspaceManagerNotifier extends _$WorkspaceManagerNotifier {
   @override
   Future<List<WorkspaceModel>> build() async {
