@@ -159,39 +159,42 @@ class _IdentityFormDialogState extends ConsumerState<IdentityFormDialog> {
                       v.trim().isEmpty ? 'Title is required' : null,
                 ),
                 const SizedBox(height: 12),
-                ShadInputFormField(
-                  key: const Key('identity_username_input'),
-                  controller: _usernameController,
-                  label: const Text('Username (Optional)'),
-                  placeholder: const Text('e.g. root, ubuntu (optional)'),
-                  leading: const Icon(LucideIcons.user, size: 16),
-                ),
-                const SizedBox(height: 12),
-                ShadSelectFormField<String>(
-                  key: const Key('identity_authtype_dropdown'),
-                  initialValue: _authType,
-                  label: const Text('Authentication Type'),
-                  selectedOptionBuilder: (context, value) {
-                    switch (value) {
-                      case 'key':
-                        return const Text('SSH Private Key');
-                      case 'agent':
-                        return const Text('SSH Agent');
-                      case 'password':
-                      default:
-                        return const Text('Password');
-                    }
-                  },
-                  options: const [
-                    ShadOption(value: 'password', child: Text('Password')),
-                    ShadOption(value: 'key', child: Text('SSH Private Key')),
-                    ShadOption(value: 'agent', child: Text('SSH Agent')),
-                  ],
-                  onChanged: (val) {
-                    if (val != null) {
-                      setState(() => _authType = val);
-                    }
-                  },
+                // ShadInputDecorator start-aligns its child, so the select
+                // shrinks to its default min width. Feed the available width
+                // in as minWidth to match the full-width inputs.
+                LayoutBuilder(
+                  builder: (context, constraints) => ShadSelectFormField<String>(
+                    key: const Key('identity_authtype_dropdown'),
+                    minWidth: constraints.maxWidth,
+                    initialValue: _authType,
+                    label: const Text('Authentication Type'),
+                    selectedOptionBuilder: (context, value) {
+                      switch (value) {
+                        case 'key':
+                          return const Text('SSH Private Key');
+                        case 'agent':
+                          return const Text('SSH Agent');
+                        case 'password':
+                        default:
+                          return const Text('Password');
+                      }
+                    },
+                    options: const [
+                      ShadOption(value: 'password', child: Text('Password')),
+                      ShadOption(value: 'key', child: Text('SSH Private Key')),
+                      ShadOption(value: 'agent', child: Text('SSH Agent')),
+                    ],
+                    onChanged: (val) {
+                      if (val != null) {
+                        setState(() {
+                          _authType = val;
+                          if (val != 'password') {
+                            _usernameController.clear();
+                          }
+                        });
+                      }
+                    },
+                  ),
                 ),
                 const SizedBox(height: 20),
                 // ---- Credentials ----
@@ -201,6 +204,16 @@ class _IdentityFormDialogState extends ConsumerState<IdentityFormDialog> {
                 ),
                 const SizedBox(height: 12),
                 if (_authType == 'password') ...[
+                  ShadInputFormField(
+                    key: const Key('identity_username_input'),
+                    controller: _usernameController,
+                    label: const Text('Username'),
+                    placeholder: const Text('e.g. root, ubuntu'),
+                    leading: const Icon(LucideIcons.user, size: 16),
+                    validator: (v) =>
+                        v.trim().isEmpty ? 'Username is required' : null,
+                  ),
+                  const SizedBox(height: 12),
                   ShadInputFormField(
                     key: const Key('identity_password_input'),
                     controller: _passwordController,
@@ -214,10 +227,14 @@ class _IdentityFormDialogState extends ConsumerState<IdentityFormDialog> {
                         _obscurePassword
                             ? Icons.visibility
                             : Icons.visibility_off,
+                        size: 16,
                       ),
                       tooltip: _obscurePassword
                           ? 'Show password'
                           : 'Hide password',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      visualDensity: VisualDensity.compact,
                       onPressed: () =>
                           setState(() => _obscurePassword = !_obscurePassword),
                     ),
