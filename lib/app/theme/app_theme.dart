@@ -17,6 +17,8 @@ class AppTheme {
               Brightness.dark
         : settings.themeMode == ThemeMode.dark;
 
+    final tokens = isDark ? TerlyTokens.dark : TerlyTokens.light;
+
     ShadColorScheme colorScheme;
     if (!isDark) {
       colorScheme = const ShadSlateColorScheme.light(
@@ -123,6 +125,27 @@ class AppTheme {
     return ShadThemeData(
       brightness: isDark ? Brightness.dark : Brightness.light,
       colorScheme: colorScheme,
+      radius: BorderRadius.circular(tokens.radiusMedium),
+      inputTheme: ShadInputTheme(
+        // Default input padding is EdgeInsets.symmetric(horizontal: 12,
+        // vertical: 8) and its text uses theme.textTheme.muted (fontSize 14,
+        // height 20/14 => exact 20px line height), giving a natural height
+        // of 20 + 16 = 36px — the minHeight floor below is not enough on its
+        // own to reach 34px since it's a floor, not a cap. Trimming vertical
+        // padding to 7 (total 14) yields 20 + 14 = 34px, matching
+        // tokens.controlHeight exactly, same derivation as selectTheme below.
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        constraints: BoxConstraints(minHeight: tokens.controlHeight),
+      ),
+      selectTheme: ShadSelectTheme(
+        // Default select padding is EdgeInsets.symmetric(horizontal: 12,
+        // vertical: 8) and the trigger text uses theme.textTheme.muted
+        // (fontSize 14, height 20/14 => exact 20px line height), giving a
+        // natural height of 20 + 16 = 36px. Trimming vertical padding to 7
+        // (total 14) yields 20 + 14 = 34px, matching tokens.controlHeight
+        // exactly.
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      ),
     );
   }
 
