@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
+import 'package:terly2/app/widgets/terly_ui.dart';
 import '../../../../shared/providers/workspace_provider.dart';
 import '../../../vault/data/vault_key_service.dart';
 import '../../../vault/presentation/notifiers/vault_notifier.dart';
@@ -231,7 +232,10 @@ class _SshConfigImportDialogState extends ConsumerState<SshConfigImportDialog> {
                           },
                         ),
                         const SizedBox(height: 16),
-                        const _OptionsHeader(),
+                        const TerlyFormSectionHeader(
+                          icon: LucideIcons.slidersHorizontal,
+                          title: 'Import Options',
+                        ),
                         const SizedBox(height: 12),
                         groupsAsync.when(
                           data: (groups) => ShadSelectFormField<String?>(
@@ -475,39 +479,6 @@ class _Badge extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _OptionsHeader extends StatelessWidget {
-  const _OptionsHeader();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Row(
-      children: [
-        Icon(
-          LucideIcons.slidersHorizontal,
-          size: 15,
-          color: theme.colorScheme.primary,
-        ),
-        const SizedBox(width: 8),
-        Text(
-          'Import Options',
-          style: theme.textTheme.labelLarge?.copyWith(
-            color: theme.colorScheme.primary,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Divider(
-            height: 1,
-            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
-          ),
-        ),
-      ],
     );
   }
 }

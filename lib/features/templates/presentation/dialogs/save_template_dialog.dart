@@ -100,7 +100,7 @@ class _SaveTemplateDialogState extends State<SaveTemplateDialog> {
         ),
       ],
       child: SizedBox(
-        width: 400,
+        width: 460,
         child: Form(
           key: _formKey,
           child: Column(

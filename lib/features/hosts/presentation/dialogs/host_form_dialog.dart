@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
+import 'package:terly2/app/widgets/terly_ui.dart';
 import 'package:terly2/core/utils/platform_capabilities.dart';
 import 'package:terly2/features/vault/presentation/notifiers/identities_notifier.dart';
 import '../notifiers/host_groups_notifier.dart';
@@ -196,7 +197,7 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SizedBox(height: 8),
-                const _FormSectionHeader(
+                const TerlyFormSectionHeader(
                   icon: LucideIcons.server,
                   title: 'Connection',
                 ),
@@ -205,7 +206,7 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
-                      flex: 3,
+                      flex: 2,
                       child: ShadInputFormField(
                         key: const Key('host_label_input'),
                         controller: _labelController,
@@ -218,7 +219,7 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      flex: 2,
+                      flex: 1,
                       child: ShadInputFormField(
                         key: const Key('host_colortag_input'),
                         controller: _colorTagController,
@@ -297,6 +298,7 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                         controller: _portController,
                         keyboardType: TextInputType.number,
                         label: const Text('Port'),
+                        leading: const Icon(LucideIcons.hash, size: 16),
                         validator: (v) {
                           if (v.trim().isEmpty) return 'Required';
                           final port = int.tryParse(v.trim());
@@ -310,7 +312,7 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                   ],
                 ),
                 const SizedBox(height: 20),
-                const _FormSectionHeader(
+                const TerlyFormSectionHeader(
                   icon: LucideIcons.lockKeyhole,
                   title: 'Authentication',
                 ),
@@ -361,7 +363,7 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                   ),
                 ),
                 const SizedBox(height: 20),
-                const _FormSectionHeader(
+                const TerlyFormSectionHeader(
                   icon: LucideIcons.network,
                   title: 'Routing & Organization',
                 ),
@@ -476,39 +478,6 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
           ),
         ),
       ),
-    );
-  }
-}
-
-/// Small section title used to group related form fields.
-class _FormSectionHeader extends StatelessWidget {
-  final IconData icon;
-  final String title;
-
-  const _FormSectionHeader({required this.icon, required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Row(
-      children: [
-        Icon(icon, size: 15, color: theme.colorScheme.primary),
-        const SizedBox(width: 8),
-        Text(
-          title,
-          style: theme.textTheme.labelLarge?.copyWith(
-            color: theme.colorScheme.primary,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Divider(
-            height: 1,
-            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
-          ),
-        ),
-      ],
     );
   }
 }
