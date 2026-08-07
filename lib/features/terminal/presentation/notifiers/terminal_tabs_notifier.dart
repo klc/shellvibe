@@ -237,6 +237,11 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       tab.errorMessage = e.toString();
       terminal.write('\r\n\x1b[1;31m[Connection Error]\x1b[0m Failed to connect: $e\r\n');
       state = state.copyWith(tabs: [...state.tabs]);
+      // Not nulled: the error banner/reconnect path expects a failed tab to
+      // still carry a (now-closed) session manager, and the next connect
+      // attempt (see `tab.sshSessionManager = sessionManager` above) always
+      // overwrites this with a fresh one anyway.
+      await tab.sshSessionManager?.close();
       for (final jumpManager in tab.jumpSessionManagers.reversed) {
         await jumpManager.close();
       }

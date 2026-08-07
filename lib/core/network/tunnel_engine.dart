@@ -125,7 +125,11 @@ class TunnelEngine {
         sub = _tunnelsController.stream.listen(controller.add);
         controller.add(activeTunnelsList);
       },
-      onCancel: () => sub?.cancel(),
+      onCancel: () async {
+        await sub?.cancel();
+        sub = null;
+        await controller.close();
+      },
     );
     return controller.stream;
   }
