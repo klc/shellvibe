@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'package:terly2/features/snippets/presentation/screens/runbooks_screen.dart';
+import 'package:terly2/features/snippets/presentation/screens/snippets_screen.dart';
 import 'package:terly2/shared/database/app_database.dart';
 import 'package:terly2/shared/providers/database_providers.dart';
 
@@ -28,50 +29,43 @@ void main() {
     await db.close();
   });
 
-  group('RunbooksScreen Widget Tests', () {
-    testWidgets('Renders RunbooksScreen with title and add button', (tester) async {
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            appDatabaseProvider.overrideWithValue(db),
-          ],
-          child: ShadTheme(
-            data: ShadThemeData(
-              colorScheme: const ShadSlateColorScheme.light(),
-              brightness: Brightness.light,
-            ),
-            child: const MaterialApp(
-              home: RunbooksScreen(),
-            ),
-          ),
+  Widget wrap(Widget child) {
+    return ProviderScope(
+      overrides: [appDatabaseProvider.overrideWithValue(db)],
+      child: ShadTheme(
+        data: ShadThemeData(
+          colorScheme: const ShadSlateColorScheme.light(),
+          brightness: Brightness.light,
         ),
-      );
+        child: MaterialApp(home: child),
+      ),
+    );
+  }
 
+  group('Runbooks section', () {
+    testWidgets('Renders the empty state when no runbook exists', (
+      tester,
+    ) async {
+      await tester.pumpWidget(wrap(const RunbooksScreen()));
       await tester.pumpAndSettle();
 
-      expect(find.text('Executable Runbooks'), findsOneWidget);
-      expect(find.byKey(const Key('add_runbook_button')), findsOneWidget);
+      expect(find.text('No runbooks defined.'), findsOneWidget);
+      expect(find.text('Add runbook'), findsOneWidget);
     });
 
-    testWidgets('Opens RunbookEditorDialog on add button tap', (tester) async {
+    testWidgets('Automation library opens RunbookEditorDialog from the shell', (
+      tester,
+    ) async {
       await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            appDatabaseProvider.overrideWithValue(db),
-          ],
-          child: ShadTheme(
-            data: ShadThemeData(
-              colorScheme: const ShadSlateColorScheme.light(),
-              brightness: Brightness.light,
-            ),
-            child: const MaterialApp(
-              home: RunbooksScreen(),
-            ),
+        wrap(
+          const SnippetsScreen(
+            initialSection: AutomationSection.runbooks,
           ),
         ),
       );
-
       await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('add_runbook_button')), findsOneWidget);
 
       await tester.tap(find.byKey(const Key('add_runbook_button')));
       await tester.pumpAndSettle();
