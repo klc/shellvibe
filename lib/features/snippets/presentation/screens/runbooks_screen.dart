@@ -221,6 +221,7 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
       runbook: runbook,
       workspaceId: workspaceId,
     );
+    if (!mounted) return;
     if (result == null) return;
 
     final notifier = ref.read(runbooksProvider.notifier);
@@ -255,6 +256,7 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
       ),
     );
     if (confirm != true) return;
+    if (!mounted) return;
 
     if (_selectedRunbookId == runbook.id) {
       setState(() => _selectedRunbookId = null);

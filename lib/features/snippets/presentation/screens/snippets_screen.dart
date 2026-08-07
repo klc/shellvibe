@@ -479,6 +479,7 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
       snippet: snippet,
       workspaceId: workspaceId,
     );
+    if (!mounted) return;
     if (result == null) return;
 
     final notifier = ref.read(snippetsProvider.notifier);
@@ -500,6 +501,7 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
       context,
       workspaceId: workspaceId,
     );
+    if (!mounted) return;
     if (result == null) return;
 
     await ref
@@ -531,6 +533,7 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
       ),
     );
     if (confirm != true) return;
+    if (!mounted) return;
 
     if (_selectedSnippetId == snippet.id) {
       setState(() => _selectedSnippetId = null);
@@ -551,6 +554,7 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
         variables: vars,
         title: 'Fill Variables for "${snippet.title}"',
       );
+      if (!mounted) return;
       if (inputValues == null) return; // User cancelled
       values = inputValues;
     }
