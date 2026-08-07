@@ -738,48 +738,14 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
   }
 
   void _showCreateDialog({required bool isFolder}) async {
-    final controller = TextEditingController();
-    final screenWidth = MediaQuery.of(context).size.width;
-    final dialogWidth = math.min(screenWidth * 0.9, 450.0);
-
     final name = await showDialog<String>(
       context: context,
-      builder: (ctx) => ShadDialog(
-        title: Text(
-          isFolder ? 'Create Remote Directory' : 'Create Remote File',
-        ),
-        description: SizedBox(
-          width: dialogWidth,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(height: 8),
-              ShadInput(
-                controller: controller,
-                autofocus: true,
-                placeholder: Text(isFolder ? 'folder_name' : 'filename.txt'),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          ShadButton.outline(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          ShadButton(
-            onPressed: () {
-              final text = controller.text.trim();
-              if (text.isNotEmpty) {
-                Navigator.of(ctx).pop(text);
-              }
-            },
-            child: const Text('Create'),
-          ),
-        ],
+      builder: (ctx) => _TextPromptDialog(
+        title: isFolder ? 'Create Remote Directory' : 'Create Remote File',
+        placeholder: isFolder ? 'folder_name' : 'filename.txt',
+        confirmLabel: 'Create',
       ),
     );
-    controller.dispose();
 
     if (name != null && name.isNotEmpty) {
       final notifier = ref.read(sftpProvider.notifier);
@@ -792,45 +758,108 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
   }
 
   void _showRenameDialog(SftpFileItem item) async {
-    final controller = TextEditingController(text: item.name);
-    final screenWidth = MediaQuery.of(context).size.width;
-    final dialogWidth = math.min(screenWidth * 0.9, 450.0);
-
     final newName = await showDialog<String>(
       context: context,
-      builder: (ctx) => ShadDialog(
-        title: Text('Rename ${item.name}'),
-        description: SizedBox(
-          width: dialogWidth,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(height: 8),
-              ShadInput(controller: controller, autofocus: true),
-            ],
-          ),
-        ),
-        actions: [
-          ShadButton.outline(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          ShadButton(
-            onPressed: () {
-              final text = controller.text.trim();
-              if (text.isNotEmpty && text != item.name) {
-                Navigator.of(ctx).pop(text);
-              }
-            },
-            child: const Text('Rename'),
-          ),
-        ],
+      builder: (ctx) => _TextPromptDialog(
+        title: 'Rename ${item.name}',
+        initialText: item.name,
+        confirmLabel: 'Rename',
+        canConfirm: (text) => text.isNotEmpty && text != item.name,
       ),
     );
-    controller.dispose();
 
     if (newName != null && newName.isNotEmpty && newName != item.name) {
       ref.read(sftpProvider.notifier).renameRemoteItem(item, newName);
     }
+  }
+}
+
+/// Single-field text-entry dialog used for create-folder, create-file, and
+/// rename prompts.
+///
+/// Owns its [TextEditingController] itself (created in [initState], disposed
+/// in [dispose]) instead of the caller disposing one after `showDialog`
+/// returns — the caller's `await` completes as soon as the route is popped,
+/// but the dialog widget (and the [ShadInput] holding the controller) stays
+/// mounted through its exit transition, so a caller-side dispose can race a
+/// still-mounted input and throw.
+class _TextPromptDialog extends StatefulWidget {
+  final String title;
+  final String? placeholder;
+  final String? initialText;
+  final String confirmLabel;
+
+  /// Whether [text] may be submitted. Defaults to "non-empty" when omitted.
+  final bool Function(String text)? canConfirm;
+
+  const _TextPromptDialog({
+    required this.title,
+    this.placeholder,
+    this.initialText,
+    required this.confirmLabel,
+    this.canConfirm,
+  });
+
+  @override
+  State<_TextPromptDialog> createState() => _TextPromptDialogState();
+}
+
+class _TextPromptDialogState extends State<_TextPromptDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialText);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final text = _controller.text.trim();
+    final canConfirm = widget.canConfirm?.call(text) ?? text.isNotEmpty;
+    if (canConfirm) {
+      Navigator.of(context).pop(text);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final dialogWidth = math.min(screenWidth * 0.9, 450.0);
+
+    return ShadDialog(
+      title: Text(widget.title),
+      description: SizedBox(
+        width: dialogWidth,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            ShadInput(
+              controller: _controller,
+              autofocus: true,
+              placeholder: widget.placeholder == null
+                  ? null
+                  : Text(widget.placeholder!),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        ShadButton.outline(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ShadButton(
+          onPressed: _submit,
+          child: Text(widget.confirmLabel),
+        ),
+      ],
+    );
   }
 }
