@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
+import '../../../../app/theme/terly_tokens.dart';
 import '../../domain/models/sftp_file_item.dart';
 import '../providers/sftp_providers.dart';
 
@@ -140,6 +141,7 @@ class _RemoteFileEditorDialogState extends ConsumerState<RemoteFileEditorDialog>
   @override
   Widget build(BuildContext context) {
     final colorScheme = ShadTheme.of(context).colorScheme;
+    final tokens = TerlyTokens.resolve(context);
     final mediaQuery = MediaQuery.of(context);
     final availableHeight = mediaQuery.size.height - mediaQuery.viewInsets.bottom;
     final dialogWidth = math.min(mediaQuery.size.width * 0.9, 850.0);
@@ -161,7 +163,7 @@ class _RemoteFileEditorDialogState extends ConsumerState<RemoteFileEditorDialog>
       child: ShadDialog(
         title: Row(
           children: [
-            const Icon(Icons.edit_note, color: Colors.cyanAccent),
+            Icon(Icons.edit_note, color: tokens.brand),
             const SizedBox(width: 8),
             Expanded(
               child: Column(
@@ -174,7 +176,7 @@ class _RemoteFileEditorDialogState extends ConsumerState<RemoteFileEditorDialog>
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                       ),
                       if (_isModified)
-                        const Text(' *', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold)),
+                        Text(' *', style: TextStyle(color: tokens.warning, fontWeight: FontWeight.bold)),
                     ],
                   ),
                   Text(
@@ -239,9 +241,9 @@ class _RemoteFileEditorDialogState extends ConsumerState<RemoteFileEditorDialog>
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.error_outline, color: Colors.redAccent, size: 48),
+                      Icon(Icons.error_outline, color: tokens.danger, size: 48),
                       const SizedBox(height: 12),
-                      Text(_errorMessage!, style: const TextStyle(color: Colors.redAccent)),
+                      Text(_errorMessage!, style: TextStyle(color: tokens.danger)),
                       const SizedBox(height: 16),
                       ShadButton(
                         onPressed: _loadFileContent,
