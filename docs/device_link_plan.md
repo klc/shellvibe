@@ -1,7 +1,9 @@
 # Device Link — Masaüstü Terminalini Telefona Bağlama
 
-> Tarih: 2026-08-08 · Durum: taslak, onay bekliyor · İlgili: `docs/tech_spec.md`,
-> `docs/product_roadmap_2026-08-07.md`, `AGENTS.md` §2.3
+> Tarih: 2026-08-08 · Durum: **kod tabanına karşı doğrulandı**, onay bekliyor
+> İlgili: `docs/tech_spec.md`, `docs/product_roadmap_2026-08-07.md`, `AGENTS.md` §2.3
+> Rev. 2026-08-08 — Mosh + prediction merge'ünden sonra tüm dosya/satır referansları
+> ve varsayımlar taranarak düzeltildi; bkz. [Kod tabanı doğrulaması](#kod-tabanı-doğrulaması).
 
 ## Context
 
@@ -19,17 +21,104 @@ Gereken parçaların çoğu repoda zaten var:
 
 | İhtiyaç | Mevcut karşılığı |
 | :--- | :--- |
-| Masaüstünde PTY + emulator | `lib/core/network/local_pty_manager.dart` (`TerminalLocalPtyBridge`) |
-| Mobilde terminal render | `xterm3` + `lib/features/terminal/presentation/views/terminal_tab_view.dart` |
-| Mobil klavye (Esc/Ctrl/ok tuşları) | `lib/features/terminal/presentation/widgets/mobile_extra_keys_bar.dart` |
-| Oturuma girdi enjekte etme noktası | `lib/features/terminal/domain/services/terminal_output_chain.dart` |
-| Şifreli kalıcı depolama | `cryptography` + `flutter_secure_storage` |
+| Masaüstünde PTY + emulator | `lib/core/network/local_pty_manager.dart:11` (`TerminalLocalPtyBridge`) |
+| Mobilde terminal render | `xterm3` + `lib/features/terminal/presentation/screens/terminal_screen.dart:17` |
+| Mobil klavye (Esc/Ctrl/ok tuşları) | `lib/features/terminal/presentation/widgets/mobile_extra_keys_bar.dart:7` |
+| Oturuma girdi enjekte etme noktası | `terminal_output_chain.dart:59` (`base`) veya `bridge.pty.write` |
+| Buffer okuma (snapshot) | `xterm3` 6.1.0 public API — `Terminal.buffer`, `BufferLine.get*`, mod getter'ları |
+| Şifreli kalıcı depolama | `cryptography` 2.9.0 (Argon2id + AES-GCM) + `flutter_secure_storage` |
+| Argon2id hash | `lib/core/crypto/encryption_engine.dart:21` — hazır, yeniden kullanılacak |
 
 Eksik olan tek şey iki cihaz arasındaki **taşıma katmanı**.
 
 > ⚠️ `docs/product_roadmap_2026-08-07.md` §9 önümüzdeki 8 hafta yeni özellik
 > yazılmamasını öneriyor. Bu plan o tavsiyeyle çelişiyor; bilinçli bir istisna
 > olarak onaylanmalı ya da roadmap'in ilerisine alınmalı.
+
+---
+
+## Kod tabanı doğrulaması
+
+Plan ilk yazıldığında bazı varsayımlar doğrulanmamıştı; Mosh (Faz 0-3) ve
+prediction (Faz A/B) işleri de o zamandan sonra merge oldu. Tam tarama sonucu:
+
+| # | İlk varsayım | Gerçek durum |
+| :--- | :--- | :--- |
+| 1 | **En büyük risk:** `xterm3` buffer'ı dışarıdan serialize edilemeyebilir; fork ya da ikinci `Terminal` gerekebilir | **Çürüdü.** Buffer, hücre, SGR bayrakları, scrollback, imleç ve **tüm mod bayrakları** public + export. Fork da gerekmiyor, ikinci emulator da. Detay Faz 2'de |
+| 2 | (örtük) xterm3'te bir serializer vardır | **Yok.** `EscapeEmitter` export edilmiyor ve yalnızca cevap dizileri üretiyor. SGR run emitter'ı elle yazılacak |
+| 3 | macOS'te `network.server`/`.client` entitlement'ları eklenecek | **Zaten var**, hem `DebugProfile` hem `Release`. macOS tarafında iş yok |
+| 4 | Fan-out noktası `local_pty_manager.dart:39-52` | **:39-53** — ve UTF-8 decode pipeline'ın *içinde*; ham byte musluğu `.transform()`'tan **önce** girmeli |
+| 5 | Mobil terminal `terminal_tab_view.dart`'tan gelir | **Yanlış dosya.** O, girdi almayan masaüstü sekme çubuğu. Gerçek sarmalayıcı `terminal_screen.dart:17` |
+| 6 | Girdi enjeksiyonu için yeni API gerekir | **Gerekmiyor.** `TerminalOutputChain.base` (`:59-62`) tam bunun için var; `bridge.pty` de public |
+| 7 | `basic_utils` X.509 için şart | Muhtemelen değil — `pointycastle` 4.0.0 **ve** `asn1lib` 1.6.5 zaten transitive |
+| 8 | `tool/` altına harness koymak yeni konvansiyon | Zaten kurulu: `tool/mosh/{smoke.dart,Dockerfile,docker-compose.yml,README.md}` |
+| 9 | Migration kuralı `AGENTS.md` §2.4'te | §2.4'te migration maddesi yok. Gerçek hedef `app_database.dart:49` + `:87` |
+| 10 | Predictive local echo kapsam dışı, çakışma yok | Kapsam kararı geçerli, ama `MoshPredictionEngine` artık var ve **iki kod yolunu paylaşıyor**; bkz. "Mosh prediction ile temas" |
+| 11 | (belirsiz) `xterm3` tarafında da iş çıkabilir | **Çıkmıyor.** Tüm değişiklik `terly2` içinde; bkz. "xterm3'te değişiklik gerekiyor mu" |
+
+### xterm3'te değişiklik gerekiyor mu — **hayır**
+
+Tüm iş `terly2` içinde. Export yüzeyi doğrulandı: `core.dart` `buffer.dart`,
+`line.dart`, `cell.dart`, `cursor.dart`, `terminal.dart` dosyalarını dışa
+veriyor; snapshot ve izleyici modu için gereken her API public.
+
+| İhtiyaç | API | Durum |
+| :--- | :--- | :--- |
+| Buffer seçimi + alt screen | `Terminal.buffer/mainBuffer/altBuffer/isUsingAltBuffer` `:499-505` | ✅ |
+| Mod bayrakları | `bracketedPasteMode:479`, `autoWrapMode:434`, `cursorKeysMode:425`, `mouseMode:443`, `mouseReportMode:446`, `cursorVisibleMode:452`, `appKeypadMode:455`, `originMode:431` | ✅ |
+| Satır / imleç | `Buffer.lines:80`, `cursorX:91`, `cursorY:95`, `scrollBack:110`, `height:87` | ✅ |
+| Hücre | `BufferLine.getCodePoint:98`, `getWidth:102`, `getForeground:61`, `getBackground:65`, `getAttributes:69`, `getUnderlineColor:110`, `getCombiningCharacters:106`, `getTrimmedLength:640` | ✅ |
+| Satır sarma | `BufferLine.isWrapped:39` (public field) | ✅ |
+| Snapshot'ı telefona yazma | `Terminal.write(String):531` | ✅ |
+| Resize | `Terminal.resize():739` | ✅ |
+| **İzleyici modu** (reclaim sonrası) | `TerminalView.readOnly` `:128/:224` | ✅ zaten var |
+
+**Tek pürüz, bloklamıyor:** `Buffer.lines`'ın tipi
+`IndexAwareCircularBuffer<BufferLine>` ve o sınıf export edilmiyor
+(`src/utils/circular_buffer.dart:2`). Tip **adlandırılamıyor** — değişken
+bildiriminde ya da fonksiyon imzasında yazılamaz. Kullanım sorunsuz, çıkarım
+çalışıyor:
+
+```dart
+final lines = buffer.lines;               // tip çıkarımı
+for (var i = 0; i < lines.length; i++) {  // Iterable değil → for-in yok
+  final line = lines[i];                  // BufferLine
+}
+```
+
+Serializer imzalarında `List<BufferLine>` taşınacak (girişte tek kopya).
+
+> `core.dart`'a `export 'src/utils/circular_buffer.dart';` eklemek pürüzü
+> kaldırırdı ve paket bizim. **Yapılmayacak:** yeni pub.dev sürümü + `terly2`
+> pubspec bump maliyeti, karşılığında yalnızca ergonomi. `List` kopyası yeterli.
+
+### AGENTS.md §2.3 ile bilinçli sapma
+
+§2.3 "`terminal.onOutput`'u `session.write`'a bağla" diyor. Device Link'ten gelen
+girdi bu slotu **kullanmayacak** — o slot `TerminalOutputChain`'in ve broadcast /
+sticky-modifier interceptor'larının. §2.3 yerel kullanıcının girdi yolunu tarif
+ediyor; uzak cihaz girdisi farklı bir kaynak. Sapma PR açıklamasında açıkça
+belirtilmeli, sessizce yapılmamalı.
+
+### Mosh prediction ile temas
+
+`MoshPredictionEngine` (`lib/core/network/mosh_prediction_engine.dart:31`) ve
+`TerminalView.predictionText` artık repoda. Device Link ikisini de kullanmıyor
+ama iki noktada aynı kod yoluna dokunuyor:
+
+1. **Ham byte `.map()` slotu.** `TerminalMoshBridge` (`terminal_mosh_bridge.dart:65-73`)
+   `.transform(Utf8Decoder)`'dan önce bir `.map()` ile ham byte'ları görüyor.
+   Device Link'in `outputTap`'i PTY bridge'inde **aynı** şekli alacak. Faz 6'da
+   Mosh oturumları aynalanırsa ikisi tek `.map()`'i paylaşır ve sıralama önem
+   kazanır (prediction her byte'ı görmeye devam etmeli).
+2. **`TerminalScreen`'in prop seti** (`terminal_screen.dart:216-247`).
+   Device-link oturumunda `session.isMosh` false olduğu için `predictionText`
+   null kalır — v1'de çakışma yok. İleride Device Link kendi local echo'sunu
+   isterse **aynı** prop'a yazacak; o noktada öncelik kuralı gerekir.
+
+Ayrıca `TerminalMoshBridge.resizeTerminal` (`:131`) prediction engine'i koşulsuz
+`reset()` ediyor. Aynalanan bir Mosh oturumunda attach→reclaim dizisi epoch'u iki
+kez temizler; zararsız (prediction tavsiye niteliğinde) ama bilinerek yapılmalı.
 
 ---
 
@@ -58,8 +147,9 @@ Eksik olan tek şey iki cihaz arasındaki **taşıma katmanı**.
   Bu, feature'ın **bilinen en büyük ergonomi açığı**: uygulama arka plandayken
   "Claude onay bekliyor" bildirimi gönderilemez.
 - **Çoklu izleyici / ekran paylaşımı.** Bir oturuma aynı anda tek cihaz.
-- **Predictive local echo.** LAN'da RTT 2-5ms; gerek yok. (Mosh planındaki
-  Faz 2 predictor'ı ile karıştırılmamalı — ayrı iş.)
+- **Predictive local echo.** LAN'da RTT 2-5ms; gerek yok. Repoda bulunan
+  `MoshPredictionEngine` **bu feature'a bağlanmayacak** — ayrı iş, ayrı taşıma
+  katmanı. Temas noktaları için "Mosh prediction ile temas" bölümüne bakılmalı.
 - **SSH oturumlarının aynalanması.** Mekanizma aynı (`TerminalSSHBridge` de bir
   `Terminal` besliyor) ama Faz 6'ya bırakıldı; v1 yalnızca local PTY.
 
@@ -83,11 +173,12 @@ MASAÜSTÜ                                          TELEFON
                                                        girdi (ham byte)
 ```
 
-Fan-out noktası `TerminalLocalPtyBridge`: bugün `pty.output`'u tek bir yere
-(`terminal.write`) veriyor, ikinci bir tüketici eklenecek. Telefondan gelen
-girdi `pty.write`'a gitmeli — `terminal.onOutput` üzerinden **değil**, çünkü o
-slot `TerminalOutputChain` tarafından yönetiliyor ve interceptor'ları
-(broadcast, sticky modifier) telefondan gelen byte'lara uygulanmamalı.
+Fan-out noktası `TerminalLocalPtyBridge` (`local_pty_manager.dart:40-53`): bugün
+`pty.output`'u tek bir yere (`terminal.write`) veriyor, ikinci bir tüketici
+eklenecek. Telefondan gelen girdi `pty.write`'a gitmeli — `terminal.onOutput`
+üzerinden **değil**, çünkü o slot `TerminalOutputChain` tarafından yönetiliyor ve
+interceptor'ları (broadcast, sticky modifier) telefondan gelen byte'lara
+uygulanmamalı.
 
 ---
 
@@ -100,11 +191,17 @@ slot `TerminalOutputChain` tarafından yönetiliyor ve interceptor'ları
 | `nsd` | mDNS servis kaydı (masaüstü) + keşif (mobil) | Hem `register` hem `discover` destekliyor; `multicast_dns` yalnızca keşif yapabildiği için yetersiz |
 | `qr_flutter` | QR üretimi (masaüstü) | |
 | `mobile_scanner` | QR okuma (mobil) | Kamera izni gerekir |
-| `basic_utils` | Self-signed X.509 üretimi | `pointycastle` üzerine kurulu, o da `dartssh2` ile zaten `pubspec.lock`'ta |
+| `basic_utils` | Self-signed X.509 üretimi | **Önce gereksizliği denensin:** `pointycastle` 4.0.0 *ve* `asn1lib` 1.6.5 `dartssh2` üzerinden zaten `pubspec.lock`'ta. İkisiyle sertifika üretmek ~150 satır; `basic_utils` yalnızca bu deneme başarısız olursa eklenir |
+
+SHA-256 parmak izi için `crypto` zaten transitive; ayrı paket yok.
 
 WebSocket sunucusu için **yeni paket yok**: `dart:io`'nun
 `HttpServer.bindSecure` + `WebSocketTransformer.upgrade` kombinasyonu yeterli.
 `shelf` eklemeye gerek duyulmamalı.
+
+`pubspec.yaml`'da pinleme yorumları var (`:33-34`, `:88`, `:96`, `:102-103`);
+dört yeni paket sıkı bir lock'a giriyor, çözüm çakışması ihtimali hesaba
+katılmalı.
 
 ### Platform yapılandırması
 
@@ -112,20 +209,26 @@ WebSocket sunucusu için **yeni paket yok**: `dart:io`'nun
   `NSBonjourServices` (`_terly._tcp`), `NSCameraUsageDescription`.
   Bugün üçü de yok. Kullanıcı yerel ağ iznini reddederse feature sessizce
   çalışmaz — bu durum tespit edilip anlamlı bir hata gösterilmeli.
-- **macOS**: `com.apple.security.network.server` ve `.client` entitlement'ları;
-  ilk çalıştırmada gelen firewall istemi code signing olmadan her seferinde
-  tekrarlanır.
-- **Android**: `INTERNET`, `CHANGE_WIFI_MULTICAST_STATE` (mDNS için),
-  `CAMERA`.
+- **macOS**: ~~entitlement eklenecek~~ — `com.apple.security.network.server` ve
+  `.client` **hem `DebugProfile.entitlements` hem `Release.entitlements`'ta zaten
+  var**; ayrıca `app-sandbox` her ikisinde de `false`. Bu fazda macOS işi yok.
+  İlk çalıştırmada gelen firewall istemi code signing olmadan her seferinde
+  tekrarlanır — bu hâlâ geçerli.
+- **Android** (`android/app/src/main/AndroidManifest.xml`): `INTERNET` **var**;
+  `CHANGE_WIFI_MULTICAST_STATE` (mDNS için) ve `CAMERA` **yok**, eklenecek.
 - **Windows/Linux**: firewall kuralı kullanıcıya bırakılıyor; bağlantı
   kurulamazsa hata mesajında bundan bahsedilmeli.
 
 ### Doğrulama harness'ı
 
-`tool/` altına, kaynak ağacına değil: iki cihaz gerektirdiği için CI'da
-koşamaz. Elle koşulan bir smoke script + protokol katmanı için gerçek soket
-kullanan entegrasyon testleri (aynı makinede `127.0.0.1` üzerinden
-server↔client). Faz 1'in çıkışı bu testlerin geçmesi.
+`tool/device_link/` altına, kaynak ağacına değil: iki cihaz gerektirdiği için
+CI'da koşamaz. Konvansiyon zaten kurulu — `tool/mosh/` içinde `smoke.dart`,
+`Dockerfile`, `docker-compose.yml`, `README.md` var; aynı düzen izlenecek.
+
+Elle koşulan bir smoke script + protokol katmanı için gerçek soket kullanan
+entegrasyon testleri (aynı makinede `127.0.0.1` üzerinden server↔client).
+Loopback test kalıbı da mevcut: `test/unit/core/network/socks5_proxy_server_test.dart:68`
+(`ServerSocket.bind('127.0.0.1', 0)`). Faz 1'in çıkışı bu testlerin geçmesi.
 
 ---
 
@@ -140,6 +243,16 @@ Yeni dizin: `lib/core/network/device_link/`
 | `device_link_server.dart` | Masaüstü: TLS sunucu, WS upgrade, oturum kayıtları |
 | `device_link_client.dart` | Mobil: bağlanma, pinleme, yeniden bağlanma |
 | `device_discovery.dart` | mDNS kaydı ve keşfi (`nsd` sarmalayıcı) |
+
+`lib/core/network/` konumu `AGENTS.md` §2.1 ile uyumlu ("network isolates, stream
+bridges"). Sınıflar `BuildContext`'e dokunmayacak (§2.2) — `MoshPredictionEngine`
+ile aynı disiplin.
+
+> **Mevcut precedent zayıf.** Repoda `ServerSocket` kullanımı var
+> (`tunnel_engine.dart:155`, `socks5_proxy_server.dart:33`) ama `HttpServer`,
+> `WebSocket`, `SecurityContext`, `X509Certificate` kullanımı **sıfır**. TLS
+> üretimi ve pinleme tamamen yeni zemin; fazın en uzun kalemi burası olacak,
+> protokol şeması değil.
 
 ### Kanal ayrımı
 
@@ -223,6 +336,20 @@ drift'e yazar (düz metin değil). Sonraki bağlanışlarda telefon sırrı `hel
 mesajında sunar. Pinlenmiş TLS altında bearer sır yeterli; mutual TLS ileri bir
 sertleştirme adımı olarak Faz 6'da değerlendirilecek.
 
+İkisi de yeni kod istemiyor:
+
+- **Argon2id** → `lib/core/crypto/encryption_engine.dart:21` (`Argon2id _kdf`,
+  sertleştirilmiş parametreler `:31-40`). Ayrıca `deriveMasterKeyInBackground`
+  `:109-128` isolate'e taşıyor — hash maliyeti UI thread'ini kilitlemesin diye
+  aynı yol kullanılmalı.
+- **Telefon tarafı sır** → `SecureStorageService`
+  (`lib/shared/storage/secure_storage_service.dart:24`); `saveToken` / `getToken`
+  / `deleteToken` (`:94/:102/:110`) `tokenPrefix` ile hazır.
+
+Bu düzen `AGENTS.md` §2.4 ile uyumlu (sır düz metin saklanmıyor). Model,
+`KnownHostsDao`'nun host-key doğrulama şemasının birebir analoğu — SPKI pinlemesi
+de aynı biçimde ele alınmalı.
+
 ---
 
 ## Faz 2 — Fan-out ve snapshot
@@ -230,16 +357,45 @@ sertleştirme adımı olarak Faz 6'da değerlendirilecek.
 ### Fan-out
 
 `TerminalLocalPtyBridge` bugün `pty.output`'u tek tüketiciye veriyor
-(`local_pty_manager.dart:39-52`). İkinci tüketici eklenmeli. Önerilen biçim:
-bridge'e opsiyonel bir çıkış musluğu (`void Function(Uint8List)? outputTap`),
-`Stream.broadcast`'e çevirmek yerine — böylece mevcut UTF-8 decode zinciri
-bozulmaz ve muslukta **ham byte** akar (decode edilmiş `String` değil).
+(`local_pty_manager.dart:40-53`). İkinci tüketici eklenmeli: bridge'e opsiyonel
+bir çıkış musluğu (`void Function(Uint8List)? outputTap`), `Stream.broadcast`'e
+çevirmek yerine — böylece mevcut UTF-8 decode zinciri bozulmaz.
 
-Telefondan gelen girdi doğrudan `pty.write`'a gider. `terminal.onOutput`
+**Musluğun yeri kritik.** Bugünkü boru hattı:
+
+```dart
+pty.output
+    .cast<List<int>>()          // ← musluk BURAYA girer
+    .transform(const Utf8Decoder(allowMalformed: true))
+    .listen((String data) => terminal.write(data));
+```
+
+Decode `.transform()` adımında oluyor, yani listener gövdesinde ham byte
+**kalmıyor**. Musluk `.transform()`'tan önce, `.map()` olarak eklenmeli. Kalıp
+zaten repoda — `TerminalMoshBridge` prediction engine'i tam bu şekilde besliyor
+(`terminal_mosh_bridge.dart:65-73`):
+
+```dart
+session.stdout
+    .map((bytes) { predictionEngine.onServerOutput(bytes); return bytes; })
+    .transform(const Utf8Decoder(allowMalformed: true))
+```
+
+Aynı biçim kopyalanacak; iki bridge stilistik olarak ayrışmamalı.
+
+Telefondan gelen girdi doğrudan `pty.write`'a gider — `bridge.pty` zaten public
+(`local_pty_manager.dart:13`), yeni API gerekmiyor. `terminal.onOutput`
 kullanılmaz: o slot `TerminalOutputChain`'in ve broadcast/sticky-modifier
 interceptor'larının; telefondan gelen byte'ların bunlardan geçmesi yanlış
 davranış üretir (örneğin broadcast açıkken telefon girdisi diğer panellere
 de kopyalanır).
+
+> String yolu tercih edilirse alternatif `TerminalOutputChain.base`
+> (`terminal_output_chain.dart:59-62`) — interceptor'ları atlayarak tek seferlik
+> teslim eden, tam bu amaç için var olan API; `broadcast_input_router.dart:63`
+> kullanıyor. Ham byte korunduğu için **`pty.write` tercih ediliyor**; `base`
+> UTF-8 round-trip'i zorlar ve ikili veride (mouse raporu, kısmi UTF-8) kayıp
+> riski taşır.
 
 ### Paket birleştirme
 
@@ -251,17 +407,50 @@ azalır. Nagle mantığı.
 
 ### Snapshot
 
-`lib/core/network/device_link/terminal_snapshot.dart`
+`lib/core/network/device_link/device_link_snapshot.dart`
+
+> ⚠️ **Dosya/tip adı değişti.** `xterm3` içinde zaten
+> `abstract class TerminalSnapshot` var (`lib/src/core/snapshot.dart:1`, export
+> edilmeyen 3 satırlık alakasız internal arayüz). Kütüphaneler ayrı olduğu için
+> teknik çakışma yok ama okuyucu yanıltıcı; bizim tip `DeviceLinkSnapshot`.
 
 **İkinci bir headless emulator gerekmiyor.** Masaüstündeki `Terminal`
 instance'ı ekranı ve scrollback'i zaten tutuyor; snapshot onun buffer'ının
 ANSI'ye geri serialize edilmesi.
 
-> **Faz 2'nin ilk işi:** `xterm3` 6.x'in buffer API'sinin hücre içeriğine ve
-> stil bayraklarına dışarıdan erişime izin verdiğini doğrulamak. İzin
-> vermiyorsa iki seçenek var — paketi fork edip erişim açmak, ya da PTY
-> çıktısını ayrıca besleyen ikinci bir `Terminal` tutmak (bellek maliyeti var
-> ama API riski yok). Bu doğrulama başarısız olursa faz ~3 gün uzar.
+### Buffer erişimi — doğrulandı, risk kapandı
+
+Planın ilk sürümündeki "buffer'a erişilemeyebilir" riski **çürüdü**. `xterm3`
+6.1.0'da snapshot için gereken her şey public ve `package:xterm3/xterm.dart`
+üzerinden export edilmiş durumda:
+
+| İhtiyaç | API |
+| :--- | :--- |
+| Aktif / ana / alternatif buffer | `Terminal.buffer` `:499`, `.mainBuffer` `:501`, `.altBuffer` `:503` |
+| Alternate screen bayrağı | `Terminal.isUsingAltBuffer` `:505` |
+| Ölçü | `Terminal.viewWidth` `:409`, `.viewHeight` `:413` |
+| Satırlar / scrollback sınırı | `Buffer.lines` `:80`, `.height` `:87`, `.scrollBack` `:110` |
+| İmleç | `Buffer.cursorX` `:91`, `.cursorY` `:95`, `Terminal.cursorVisibleMode` `:452` |
+| Hücre içeriği | `BufferLine.getCodePoint(i)` `:98`, `.getWidth(i)` `:102`, `.getCombiningCharacters(i)` `:106` |
+| Stil | `.getForeground(i)` `:61`, `.getBackground(i)` `:65`, `.getAttributes(i)` `:69`, `.getUnderlineColor(i)` `:110` |
+| Boş kuyruk kırpma | `BufferLine.getTrimmedLength([cols])` `:640` |
+| Satır sarma | `BufferLine.isWrapped` `:39` (public field) |
+| Mod bayrakları | `bracketedPasteMode` `:479`, `autoWrapMode` `:434`, `cursorKeysMode` `:425`, `mouseMode` `:443`, `mouseReportMode` `:446` |
+
+Renk ve stil kodlaması `lib/src/core/cell.dart`'ta belgeli: `CellAttr` bit
+maskeleri (bold 1<<0 … encircled 1<<15) ve `CellColor` tip alanları
+(`named` 1<<25, `palette` 2<<25, `rgb` 3<<25) SGR'ye doğrudan çevrilebiliyor.
+**`CellFlags` kullanılmayacak** — `CellAttr`'ın eksik eski alt kümesi.
+
+> **Ama hazır serializer yok.** `EscapeEmitter` export edilmiyor ve yalnızca
+> device-attribute / status / bracketed-paste cevapları üretiyor. SGR run
+> emitter'ı bu fazda sıfırdan yazılacak — fazın gerçek maliyeti burada, erişim
+> riskinde değil.
+
+> `xterm3` paketinin sahibi biziz (`/Users/mkilic/www/klc/xterm3`, `klc/xterm3`,
+> pub.dev'e 6.1.0 olarak yayınlanmış). API'de bir eksik çıkarsa upstream
+> beklemeden kapatılabilir; bu, kalan tüm buffer risklerini ikinci dereceye
+> indiriyor.
 
 Snapshot'ın taşıması gerekenler:
 
@@ -269,6 +458,9 @@ Snapshot'ın taşıması gerekenler:
   yukarı kaydırabilsin
 - Ekran hücreleri, SGR run'ları halinde sıkıştırılmış
 - İmleç konumu ve görünürlüğü
+- **Satır sarma bayrağı** (`BufferLine.isWrapped:39`). Taşınmazsa telefonda
+  yeniden boyutlandırmada mantıksal satırlar yanlış yerden bölünür — snapshot ilk
+  bakışta doğru görünür, hata ancak resize'da ortaya çıkar.
 - **Mod bayrakları**: alternate screen (`vim` açıksa aktif), bracketed paste,
   autowrap, application cursor keys, mouse tracking. Bunlar taşınmazsa
   snapshot'tan **sonraki** byte'lar telefonda yanlış yorumlanır ve hata çok geç
@@ -286,8 +478,25 @@ kendini onarır.
 
 ## Faz 3 — Boyut sahipliği ve devir
 
-`TerminalTabSession`'a yeni alan: `DeviceLinkAttachment? attachment`
-(bağlı cihaz kimliği, devralınmadan önceki `cols`/`rows`, devir zamanı).
+`TerminalTabSession` (`lib/features/terminal/domain/models/terminal_tab_session.dart:36`)
+yeni alan alır: `DeviceLinkAttachment? attachment` (bağlı cihaz kimliği,
+devralınmadan önceki `cols`/`rows`, devir zamanı).
+
+Bu alan **opsiyonel değil, zorunlu**: bugün `cols`/`rows` hiçbir yerde
+saklanmıyor, yalnızca `terminal.viewWidth` / `viewHeight` üzerinden okunuyor.
+Telefon PTY'yi kendi ölçüsüne çektiği anda eski değer kaybolur; saklanacak
+başka yer yok.
+
+İki bağlantı noktası:
+
+- **Resize tek boğazdan geçer:** `TerminalTabSession.resizeTerminal(w, h, [pw, ph])`
+  (`:156-166`) — `terminal.resize` yapıp `sshBridge` / `moshBridge` / `ptyBridge`'e
+  dağıtıyor. Attach, resize ve reclaim hep buradan geçmeli; bridge'e doğrudan
+  gidilmeyecek.
+- **Teardown sıralaması:** `dispose()` (`:168-209`) prediction reset → outputChain
+  → subscription'lar → bridge'ler → `terminal.dispose()` (`:208`) sırasını
+  izliyor. `attachment` teardown'ı `terminal.dispose()`'dan **önce** yapılmalı
+  (telefona `error`/`detach` gönderip soketi kapatmak için).
 
 | Olay | Davranış |
 | :--- | :--- |
@@ -296,6 +505,12 @@ kendini onarır.
 | **Telefon klavyesi açılır** | **Resize gönderilmez.** Görünür yükseklik yarıya iner ama `rows` sabit kalır; yalnızca görünüm kaydırılır. Aksi halde her klavye açılışında Claude Code yeniden çizer ve ekran zıplar |
 | Masaüstünde tuşa basılır | Kontrol masaüstüne döner, PTY eski ölçüsüne çekilir, telefona `reclaimed` gider, telefon izleyici moda düşer |
 | Telefon detach / 15 sn ping timeout | PTY eski ölçüsüne döner, gösterge kaybolur |
+
+İzleyici modu için `xterm3`'te yeni bir şey gerekmiyor: `TerminalView.readOnly`
+(`terminal_view.dart:128`, `:224`) zaten var ve girdi bağlantısını kapatıyor
+(`custom_text_edit.dart:182`, `gesture_handler`, `scroll_handler`). `reclaimed`
+mesajı geldiğinde telefon bu prop'u `true`'ya çeker — ayrıca byte gönderimi de
+istemci tarafında kesilir (iki katmanlı, UI'a güvenilmez).
 
 Telefonda gerçekçi ölçüler: **portre 45-55 kolon**, yatay 80+. Claude Code 50
 kolonda sıkışık ama kullanılabilir; tasarım portre-dar için yapılmalı, yatay
@@ -323,11 +538,41 @@ Terminal görünümü ve `mobile_extra_keys_bar` **yeniden yazılmaz**, mevcut
 bileşenler kullanılır — Device Link onlara farklı bir byte kaynağı bağlamaktan
 ibaret olmalı.
 
+### Hangi bileşen yeniden kullanılır
+
+Planın ilk sürümü yanlış dosyayı işaret ediyordu. Doğrusu:
+
+| Bileşen | Durum |
+| :--- | :--- |
+| `views/terminal_tab_view.dart:52` | ❌ **Kullanılmaz.** `const TerminalTabView({super.key})` — hiç girdi almıyor, her şeyi Riverpod'dan okuyor; masaüstü sekme çubuğu chrome'u |
+| `screens/terminal_screen.dart:17` | ✅ **Asıl hedef.** `TerminalScreen(session, showExtraKeys)` — `TerminalView`'ı `:216-247` arasında kuran sarmalayıcı |
+| `widgets/mobile_extra_keys_bar.dart:7` | ✅ **Koşulsuz kullanılır.** Düz `StatefulWidget`, Riverpod yok, `TerminalTabSession` bilmiyor; girdileri `terminal` / `outputChain` / `onInput`, üçü de opsiyonel |
+
+`TerminalScreen` bedava değil: `session.id`, `isConnecting`, `sessionType`,
+`host`, `isConnected`, `errorMessage`, `disconnectCause` alanlarını okuyor ve
+`terminalTabsProvider`'a `tapPane` / `reconnectTab` çağırıyor (`:95-97`, `:195-197`).
+
+**Karar: device-link oturumu gerçek bir `TerminalTabSession` olarak
+`terminalTabsProvider`'a kaydedilir.** Telefon, bridge'i WebSocket olan bir sekme
+açmış olur; `TerminalScreen` olduğu gibi çalışır, mobil ekran yalnızca durum
+şeridini ekler. Alternatif (`TerminalView` + `MobileExtraKeysBar`'ı elle kurup
+`TerminalScreen`'i atlamak) yeniden bağlanma bannerını ve pane davranışını
+tekrar yazmayı gerektirir — reddedildi.
+
+Bu kararın yan etkisi: `sessionType` enum'una (`terminal_tab_session.dart:18`,
+bugün `{ssh, local}`) üçüncü bir üye mi ekleneceği, yoksa Mosh gibi bayrakla mı
+(`isMosh` `:90` kalıbı) ayrışacağı Faz 4'ün ilk kararı. **Bayrak tercih ediliyor**
+— enum'a dokunmak tüm switch'leri kırar.
+
 ### Oturum seçici
 
 Masaüstünde birden fazla sekme açık olabilir. "Aktif olana bağlan" varsayımı
 ilk yanlış tahminde can sıkar; `hello_ack` listeyi taşıyor, kullanıcı seçiyor.
 Oturum değiştirme aynı mekanizma: `detach` → `attach` → yeni snapshot.
+
+Liste bedava geliyor: `TerminalTabsNotifier._ownedTabs`
+(`terminal_tabs_notifier.dart:88`) yetkili kayıt; `{id, title, sessionType}`
+doğrudan oradan türetiliyor, yeni tesisat yok.
 
 ### Compose sheet
 
@@ -350,8 +595,24 @@ sarmalama yapılmaz (uygulama modu desteklemiyor demektir).
 ### Drift tablosu
 
 `lib/shared/database/tables.dart` içine `PairedDevices`, DAO'su
-`lib/shared/database/daos/paired_devices_dao.dart`. Schema versiyonu artar,
-migration yazılır (`AGENTS.md` §2.4).
+`lib/shared/database/daos/paired_devices_dao.dart`.
+
+> DAO'nun `lib/shared/database/daos/` altında olması `AGENTS.md` §2.1'in lafzıyla
+> ("DAO'lar `features/<name>/data`") çelişiyor, ama repodaki sekiz DAO'nun tamamı
+> orada. **Repo precedent'i izleniyor**; sapma bilinçli.
+
+Somut adımlar (`AGENTS.md` §2.4 atfı gevşekti — orada migration maddesi yok,
+gerçek kısıt kodda):
+
+1. `PairedDevices` tablosunu `tables.dart`'a ekle (`Hosts:43` kalıbı; `id` PK
+   `text()`, `Set<Column> get primaryKey => {id}`).
+2. `app_database.dart:20-44` — hem `tables:` hem `daos:` listesine ekle.
+3. `app_database.dart:49` — `schemaVersion` **5 → 6**.
+4. `app_database.dart:87` civarı — `if (from < 6) { await m.createTable(pairedDevices); }`.
+   `from < 4` dalı (`:79-80`) birebir örnek.
+5. `build_runner` çalıştır.
+6. Migration testi: `test/unit/shared/database/database_migration_test.dart`
+   zaten var, oraya vaka eklenir.
 
 | Sütun | Tip | Not |
 | :--- | :--- | :--- |
@@ -372,6 +633,11 @@ zorunlu.
 
 Uygulama öne geldiğinde: mDNS keşfi → saklı kimlikle bağlan → `attach` →
 snapshot. Kullanıcı hiçbir şeye basmaz. QR yalnızca ilk eşleştirmede.
+
+Ağ değişimi sinyali hazır: `connectivity_plus` (^7.3.1) zaten bağımlılıkta ve
+`TerminalTabsNotifier._watchConnectivity()` (`terminal_tabs_notifier.dart:123-127`)
+Mosh rehoming'i için `onConnectivityChanged`'i dinliyor. Device Link aynı akıştan
+beslenir — WiFi değişiminde yeniden keşif tetiklenir.
 
 `v1` protokol sürümü uyuşmazlığında (uygulamalar farklı sürümde) `error`
 mesajı net olmalı — sessiz başarısızlık en kötüsü.
@@ -418,7 +684,9 @@ geliştirme makinesi.
 
 | Risk | Etki | Azaltım |
 | :--- | :--- | :--- |
-| `xterm3` buffer'ı dışarıdan serialize edilemiyor | Snapshot yapılamaz, feature'ın temeli gider | Faz 2'nin **ilk** işi bunu doğrulamak; fallback olarak ikinci `Terminal` instance'ı |
+| ~~`xterm3` buffer'ı dışarıdan serialize edilemiyor~~ | — | **Kapandı.** API taraması buffer, hücre, stil ve tüm mod bayraklarının public olduğunu gösterdi; paket zaten bizim fork'umuz |
+| SGR run emitter'ı elle yazılıyor, kenar durumları kaçıyor | Snapshot telefonda bozuk görünür, hata geç fark edilir | Round-trip testi (iki buffer'ın hücre hücre eşitliği) Faz 2 kabul kriteri; wide char, combining char, alternate screen, 256-renk ve RGB ayrı vakalar |
+| TLS + WebSocket için repoda precedent yok | Faz 1 tahminden uzun sürer | Fazın ilk işi sertifika üretimi + pinleme (protokol şeması değil); `pointycastle` + `asn1lib` ile denenip gerekirse `basic_utils`'a düşülür |
 | iOS yerel ağ izni reddi / Bonjour aksaklığı | Mobil hat çalışmaz | QR'daki doğrudan IP listesi mDNS'e bağımlılığı azaltıyor; mDNS yalnızca yeniden bağlanmada kritik |
 | AP isolation (ofis/misafir WiFi) | Bağlantı hiç kurulamaz | Teşhis edilebilir hata mesajı + dokümantasyonda Tailscale önerisi |
 | App Store, uzak kod yürütme gerekçesiyle reddeder | Mobil hat kapanır | Roadmap §7'de zaten izlenen risk; Device Link bunu **artırıyor**, review öncesi hukuki/politika kontrolü |
@@ -435,11 +703,19 @@ geliştirme makinesi.
 
 Faza özel kabul kriterleri:
 
+- **Faz 0** — Dört yeni paket `pubspec.lock`'u kırmadan çözülüyor; iOS/Android
+  izin anahtarları yerinde; `tool/device_link/` iskeleti duruyor.
 - **Faz 1** — `127.0.0.1` üzerinden server↔client entegrasyon testi: eşleştirme,
-  yanlış token reddi, yanlış SPKI reddi, protokol sürüm uyuşmazlığı.
-- **Faz 2** — Snapshot round-trip testi: bilinen bir ANSI dizisiyle beslenen
-  `Terminal`'in serialize edilip ikinci bir `Terminal`'e yazılması, iki buffer'ın
-  hücre hücre eşitliği. Alternate screen ve SGR run'ları ayrı vaka.
+  yanlış token reddi, yanlış SPKI reddi, protokol sürüm uyuşmazlığı, TTL dolmuş
+  token reddi, tek kullanımlık token'ın ikinci kullanımının reddi.
+- **Faz 2** — İki ayrı test kümesi:
+  - *Fan-out:* muslukta akan verinin **ham byte** olduğu (decode edilmiş `String`
+    değil) ve `terminal.write`'ın etkilenmediği.
+  - *Snapshot round-trip:* bilinen bir ANSI dizisiyle beslenen `Terminal`'in
+    serialize edilip ikinci bir `Terminal`'e yazılması, iki buffer'ın hücre hücre
+    eşitliği. Ayrı vakalar: alternate screen, SGR run'ları, 256-renk, 24-bit RGB,
+    çift genişlikli karakter, combining character, **sarılmış satır (`isWrapped`)
+    ve ardından resize**, mod bayraklarının aktarımı.
 - **Faz 3** — Attach/detach/reclaim sonrası PTY ölçüsünün doğru geri alınması.
 - **Faz 4** — Bracketed paste sarmalama testi; çok satırlı metnin tek submit
   üretmesi.
@@ -459,3 +735,9 @@ Faz 1-2-3 birlikte **ince ama uçtan uca çalışan bir iskelet** üretir: QR �
 bağlan → resize → snapshot → ham akış, tek oturum, kalıcı eşleştirme yok.
 Bu iskelet ayakta durmadan Faz 4-5'e geçilmemeli; ikisi de üstüne bağımsız
 olarak binen parçalar.
+
+**Risk profili kaydı.** İlk sürümde en uzun kalem Faz 2 (buffer erişimi
+belirsizdi) sanılıyordu. Doğrulama sonrası ağırlık **Faz 1'e** geçti: TLS
+sertifikası üretimi ve SPKI pinlemesi için repoda hiçbir precedent yok, oysa
+Faz 2'nin buffer tarafı tamamen çözülmüş durumda (kalan iş sadece SGR emitter'ı).
+Sıralama değişmiyor, ama Faz 1'e ayrılan süre artırılmalı.

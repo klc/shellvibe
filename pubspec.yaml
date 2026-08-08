@@ -59,10 +59,17 @@ dependencies:
   # Network-change events, the roaming trigger for Mosh sessions.
   connectivity_plus: ^7.3.1
 
+  # Device Link: LAN discovery and first-time QR pairing.
+  nsd: ^5.0.1
+  qr_flutter: ^4.1.0
+  mobile_scanner: ^7.4.0
+
   # Database & Storage
   drift: ^2.34.3
   flutter_secure_storage: ^10.3.1
   cryptography: ^2.9.0
+  # Device Link self-signed X.509/CSR generation and PEM encoding.
+  basic_utils: ^5.8.2
   local_auth: ^3.0.2
 
   # Desktop & Window Management

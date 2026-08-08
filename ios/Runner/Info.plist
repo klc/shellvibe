@@ -4,6 +4,14 @@
 <dict>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Terly2 uses Face ID to unlock your protected vault.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Terly2 uses your local network to discover and connect to your paired desktop terminal.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_terly._tcp</string>
+	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Terly2 uses the camera to scan a Device Link pairing QR code.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
