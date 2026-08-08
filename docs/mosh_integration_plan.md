@@ -1,6 +1,6 @@
 # Mosh Entegrasyonu — Uygulama Planı
 
-> Tarih: 2026-08-07 · Durum: onay bekliyor · İlgili: `docs/product_roadmap_2026-08-07.md` §5.2
+> Tarih: 2026-08-07 · Durum: Faz 0 tamam, Faz 1 sırada · İlgili: `docs/product_roadmap_2026-08-07.md` §5.2
 
 ## Context
 
@@ -22,7 +22,7 @@ transport kullanılıyor.
 
 | Karar | Seçim |
 |---|---|
-| Protokol motoru | `dart_mosh` pub paketi, exact pin |
+| Protokol motoru | `dart_mosh`, `klc/dart_mosh` fork'undan commit pin'i |
 | Platform kapsamı | Tüm platformlar (pure Dart, ek maliyet yok) |
 | Bootstrap SSH'ı | Açık tut — SFTP ve tüneller mosh sekmesinde de çalışsın |
 | Local echo prediction | Faz 2'ye ertelendi |
@@ -40,17 +40,22 @@ transport kullanılıyor.
 
 ---
 
-## Faz 0 — Bağımlılık ve doğrulama zemini
+## Faz 0 — Bağımlılık ve doğrulama zemini ✅
 
-**`pubspec.yaml`**: `dart_mosh: 0.0.4` (caret **yok** — 0.0.x'te patch bump
-breaking olabilir). Tek transitif bağımlılığı `pointycastle`, zaten
-`pubspec.lock`'ta var.
+**Fork**: paket 0.0.x ve az kullanılıyor, protokol düzeltmelerinin upstream
+sürümü beklemeden inebilmesi için `gwitko/dart_mosh` → `klc/dart_mosh`
+forklandı (Apache-2.0). `pubspec.yaml` sürüm yerine **commit** ile pinliyor
+(`325bc91`), böylece hareketli bir `master` ref'i oluşmuyor. Tek transitif
+bağımlılığı `pointycastle`, zaten `pubspec.lock`'ta vardı.
 
-**Doğrulama harness'ı** (`tool/` altına, kaynak ağacına değil): Docker'da
-`mosh-server` çalıştıran bir compose dosyası + elle koşulan bir smoke script.
-`dart_mosh` 0.0.x ve 3 star — gerçek bir sunucuya karşı wire uyumunu Faz 1'in
-ilk işi olarak kanıtlamalıyız. Bu adım başarısız olursa paketi vendor edip
-düzeltmek Faz 1'i ~1 hafta uzatır; plan bu riski taşıyor.
+**Doğrulama harness'ı** (`tool/mosh/`, kaynak ağacına değil): Docker'da
+`sshd` + `mosh-server` çalıştıran compose dosyası ve elle koşulan
+`tool/mosh/smoke.dart`. Ayrıntı: `tool/mosh/README.md`.
+
+**Sonuç — wire uyumu kanıtlandı** (mosh 1.4.0, Debian bookworm, 6/6):
+bootstrap `exitCode 0`, `MOSH CONNECT` parse, ilk ekran karesi, iki yönlü
+komut round-trip'i, `resize` + `rehome` sonrası oturumun yaşamaya devam etmesi.
+Faz 1'i ~1 hafta uzatacak "paketi düzelt" riski gerçekleşmedi.
 
 ---
 

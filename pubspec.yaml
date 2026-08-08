@@ -47,6 +47,13 @@ dependencies:
   xterm3: ^6.0.1
   dartssh2: ^2.22.5
   flutter_pty: ^0.4.2
+  # Mosh UDP transport. Pinned to our fork by commit, not to the pub.dev
+  # release: the package is at 0.0.x, so protocol fixes have to be able to land
+  # here without waiting on upstream. Sync with upstream before bumping the ref.
+  dart_mosh:
+    git:
+      url: https://github.com/klc/dart_mosh.git
+      ref: 325bc912ecea600b2fbd9d9e0ac7b069baf66af8
 
   # Database & Storage
   drift: ^2.34.3
