@@ -5,6 +5,8 @@ import 'package:flutter/widgets.dart';
 import 'package:xterm3/xterm.dart';
 
 import '../../../../core/models/mosh_prediction_mode.dart';
+import '../../../../core/network/device_link/device_link_attachment.dart';
+import '../../../../core/network/device_link/device_link_session_transport.dart';
 import '../../../../core/network/local_pty_manager.dart';
 import '../../../../core/network/mosh_prediction_engine.dart';
 import '../../../../core/network/mosh_session_manager.dart';
@@ -37,6 +39,11 @@ class TerminalTabSession {
   final String id;
   final String title;
   final TerminalSessionType sessionType;
+
+  /// True for a mobile Device Link tab. It remains a local terminal session
+  /// for existing session-type switches, while this flag identifies the
+  /// mirrored PTY explicitly to shared lifecycle/UI code.
+  final bool isDeviceLink;
 
   /// The host this tab connects to. Not final: a reconnect re-reads the row so
   /// edits made after the tab was opened (a protocol switch, a new port) take
@@ -99,6 +106,8 @@ class TerminalTabSession {
   HostKeyPromptCallback? hostKeyPromptCallback;
 
   TerminalLocalPtyBridge? ptyBridge;
+  DeviceLinkSessionTransport? deviceLinkTransport;
+  DeviceLinkAttachment? attachment;
   bool isConnecting;
   bool isConnected;
   String? errorMessage;
@@ -119,6 +128,7 @@ class TerminalTabSession {
     required this.id,
     required this.title,
     required this.sessionType,
+    this.isDeviceLink = false,
     this.host,
     this.identity,
     required this.terminal,
@@ -128,6 +138,8 @@ class TerminalTabSession {
     this.sshClientChangesSub,
     this.hostKeyPromptCallback,
     this.ptyBridge,
+    this.deviceLinkTransport,
+    this.attachment,
     this.isConnecting = false,
     this.isConnected = false,
     this.errorMessage,
@@ -165,7 +177,42 @@ class TerminalTabSession {
     ptyBridge?.resizeTerminal(width, height);
   }
 
+  /// Records desktop dimensions and gives temporary resize ownership to a
+  /// Device Link client. All PTY/terminal resize operations still go through
+  /// [resizeTerminal], so the local, SSH, and Mosh paths cannot diverge.
+  DeviceLinkAttachment attachDeviceLink({
+    required String deviceId,
+    required int columns,
+    required int rows,
+    DateTime? attachedAt,
+  }) {
+    if (attachment != null) {
+      throw StateError('Terminal session is already attached to Device Link');
+    }
+    final previous = DeviceLinkAttachment(
+      deviceId: deviceId,
+      previousColumns: terminal.viewWidth,
+      previousRows: terminal.viewHeight,
+      attachedAt: attachedAt ?? DateTime.now().toUtc(),
+    );
+    attachment = previous;
+    resizeTerminal(columns, rows);
+    return previous;
+  }
+
+  /// Restores the dimensions captured by [attachDeviceLink].
+  DeviceLinkAttachment? detachDeviceLink() {
+    final current = attachment;
+    if (current == null) return null;
+    attachment = null;
+    resizeTerminal(current.previousColumns, current.previousRows);
+    return current;
+  }
+
   Future<void> dispose() async {
+    await deviceLinkTransport?.dispose();
+    deviceLinkTransport = null;
+    attachment = null;
     moshPredictionEngine.reset();
     refreshMoshPredictionText();
     outputChain.dispose();
