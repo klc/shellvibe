@@ -18,6 +18,7 @@ import 'package:terly2/features/device_link/presentation/screens/pairing_qr_scre
 import 'package:terly2/features/device_link/presentation/screens/scan_pair_screen.dart';
 import 'package:terly2/features/device_link/presentation/widgets/compose_sheet.dart';
 import 'package:terly2/features/device_link/presentation/widgets/session_picker_sheet.dart';
+import 'package:terly2/features/terminal/presentation/widgets/mobile_extra_keys_bar.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -274,6 +275,72 @@ void main() {
     );
   });
 
+  testWidgets('opening the phone keyboard does not resize the desktop PTY', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1170, 2532);
+    tester.view.devicePixelRatio = 3.0;
+    addTearDown(tester.view.reset);
+
+    final connection = _FakeDeviceLinkConnection();
+    addTearDown(connection.close);
+
+    final controller = DeviceLinkLinkedSessionController(
+      connection: connection,
+      session: const DeviceLinkSessionInfo(
+        id: 'local-1',
+        title: 'Desktop shell',
+        type: 'local',
+      ),
+    );
+    addTearDown(controller.close);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          home: DeviceLinkLinkedSessionScreen(
+            controller: controller,
+            showExtraKeys: true,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    connection.controls.add(
+      const DeviceLinkAttached(
+        sessionId: 'local-1',
+        cols: 52,
+        rows: 30,
+        alt: false,
+        bracketedPaste: false,
+        scrollbackLines: 0,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final rowsBeforeKeyboard = controller.terminal.viewHeight;
+    final columnsBeforeKeyboard = controller.terminal.viewWidth;
+    connection.sentResizes.clear();
+
+    // The soft keyboard claims the bottom of the screen. The visible height
+    // shrinks, but the PTY belongs to the desktop until the phone explicitly
+    // resizes, so no resize may leave the device.
+    tester.view.viewInsets = const FakeViewPadding(bottom: 1000);
+    await tester.pumpAndSettle();
+
+    expect(connection.sentResizes, isEmpty);
+    expect(controller.terminal.viewHeight, rowsBeforeKeyboard);
+    expect(controller.terminal.viewWidth, columnsBeforeKeyboard);
+    // The extra-key bar has to ride above the keyboard; otherwise keeping the
+    // layout stable would simply bury it.
+    expect(find.byType(MobileExtraKeysBar), findsOneWidget);
+    final barBottom = tester.getRect(find.byType(MobileExtraKeysBar)).bottom;
+    final keyboardTop =
+        tester.view.physicalSize.height / tester.view.devicePixelRatio -
+        1000 / tester.view.devicePixelRatio;
+    expect(barBottom, lessThanOrEqualTo(keyboardTop + 0.5));
+  });
+
   testWidgets('linked screen becomes read-only when attach is rejected', (
     tester,
   ) async {
@@ -350,6 +417,7 @@ final class _FakeDeviceLinkConnection implements DeviceLinkConnection {
   final StreamController<DeviceLinkBinaryFrame> binaries =
       StreamController<DeviceLinkBinaryFrame>.broadcast();
   final List<DeviceLinkBinaryFrame> sentBinary = [];
+  final List<DeviceLinkResize> sentResizes = [];
   bool closed = false;
 
   @override
@@ -368,7 +436,9 @@ final class _FakeDeviceLinkConnection implements DeviceLinkConnection {
   Future<void> sendAttach(DeviceLinkAttach message) async {}
 
   @override
-  Future<void> sendResize(DeviceLinkResize message) async {}
+  Future<void> sendResize(DeviceLinkResize message) async {
+    sentResizes.add(message);
+  }
 
   @override
   Future<void> sendDetach() async {}

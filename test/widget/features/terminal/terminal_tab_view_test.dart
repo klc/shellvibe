@@ -88,6 +88,71 @@ void main() {
       expect(container.read(terminalTabsProvider).tabs, isEmpty);
     });
 
+    testWidgets(
+      'Shows a Device Link sharing indicator with a disconnect control',
+      (tester) async {
+        final container = ProviderContainer(
+          overrides: [appDatabaseProvider.overrideWithValue(db)],
+        );
+
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: ShadTheme(
+              data: ShadThemeData(
+                colorScheme: const ShadSlateColorScheme.dark(),
+                brightness: Brightness.dark,
+              ),
+              child: const MaterialApp(home: TerminalTabView()),
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 200));
+
+        await tester.tap(find.byKey(const Key('empty_open_local_button')));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 200));
+
+        final shared = container.read(terminalTabsProvider).tabs.single;
+        expect(
+          find.byKey(Key('device_link_attachment_${shared.id}')),
+          findsNothing,
+          reason: 'An unattached session must not claim to be shared',
+        );
+
+        // Byte traffic from a phone runs code on this machine, so an attached
+        // session has to be visible on the desktop and cuttable from there.
+        shared.attachDeviceLink(deviceId: 'phone-1', columns: 52, rows: 30);
+        // Opening a second tab republishes the tab list, which is how the
+        // real attach path also reaches the status bar.
+        await tester.tap(find.byKey(const Key('new_tab_button')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('new_tab_menu_local')));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(Key('device_link_attachment_${shared.id}')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(Key('device_link_disconnect_${shared.id}')),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining('Device Link · ${shared.title}'),
+          findsOneWidget,
+        );
+
+        // The container outlives the widget tree here, so dispose it inside
+        // the test body: the keep-alive tab notifier owns the terminal
+        // sessions and only releases their timers when it is disposed.
+        await tester.pumpWidget(const SizedBox.shrink());
+        container.dispose();
+        await tester.pumpAndSettle();
+      },
+    );
+
     testWidgets('Opens local shell tab on Open Local Shell button tap', (
       tester,
     ) async {
