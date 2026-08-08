@@ -88,10 +88,12 @@ final class DeviceLinkLinkedSessionController extends ChangeNotifier {
     terminal.resize(columns, rows);
     _outputDecoder = const Utf8Decoder(allowMalformed: true)
         .startChunkedConversion(
-          StringConversionSink.withCallback((text) {
-            if (_closed || text.isEmpty) return;
-            terminal.write(text);
-          }),
+          StringConversionSink.from(
+            _DeviceLinkTerminalOutputSink((text) {
+              if (_closed || text.isEmpty) return;
+              terminal.write(text);
+            }),
+          ),
         );
     terminal.onOutput = _handleTerminalOutput;
     // Adopt the handler as the chain base before the mobile extra-keys bar
@@ -284,4 +286,19 @@ final class DeviceLinkLinkedSessionController extends ChangeNotifier {
     unawaited(close());
     super.dispose();
   }
+}
+
+/// Forwards every decoded UTF-8 chunk immediately instead of accumulating it
+/// until the conversion sink is closed. Device Link connections are long
+/// lived, so a callback sink would keep all live PTY output buffered forever.
+final class _DeviceLinkTerminalOutputSink implements Sink<String> {
+  final void Function(String text) _onData;
+
+  _DeviceLinkTerminalOutputSink(this._onData);
+
+  @override
+  void add(String data) => _onData(data);
+
+  @override
+  void close() {}
 }

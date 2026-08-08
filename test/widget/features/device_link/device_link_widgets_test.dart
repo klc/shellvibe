@@ -1,13 +1,16 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:xterm3/xterm.dart';
 
 import 'package:terly2/core/network/device_link/device_link_client.dart';
 import 'package:terly2/core/network/device_link/device_link_protocol.dart';
 import 'package:terly2/core/network/device_link/device_link_server.dart';
+import 'package:terly2/core/network/device_link/device_link_snapshot.dart';
 import 'package:terly2/core/utils/platform_capabilities.dart';
 import 'package:terly2/features/device_link/presentation/controllers/linked_session_controller.dart';
 import 'package:terly2/features/device_link/presentation/screens/linked_session_screen.dart';
@@ -26,6 +29,56 @@ void main() {
       deviceLinkBracketedPaste('echo one\necho two'),
       '\x1b[200~echo one\necho two\x1b[201~',
     );
+  });
+
+  test('linked session renders live PTY output after the snapshot', () async {
+    final connection = _FakeDeviceLinkConnection();
+    final controller = DeviceLinkLinkedSessionController(
+      connection: connection,
+      session: const DeviceLinkSessionInfo(
+        id: 'local-1',
+        title: 'Desktop shell',
+        type: 'local',
+      ),
+    );
+    addTearDown(controller.close);
+
+    await controller.connect();
+    connection.controls.add(
+      const DeviceLinkAttached(
+        sessionId: 'local-1',
+        cols: 52,
+        rows: 30,
+        alt: false,
+        bracketedPaste: false,
+        scrollbackLines: 0,
+      ),
+    );
+    final source = Terminal(maxLines: 100);
+    source.resize(52, 30);
+    source.write('snapshot prompt');
+    final snapshot = DeviceLinkSnapshot.capture(source);
+    connection.binaries.add(
+      DeviceLinkBinaryFrame(
+        type: DeviceLinkBinaryFrameType.snapshot,
+        payload: snapshot.toUtf8Bytes(),
+      ),
+    );
+    await pumpEventQueue();
+
+    connection.binaries.add(
+      DeviceLinkBinaryFrame(
+        type: DeviceLinkBinaryFrameType.ptyOutput,
+        payload: Uint8List.fromList('live output\r\n'.codeUnits),
+      ),
+    );
+    await pumpEventQueue();
+
+    final rendered = controller.terminal.buffer.lines
+        .toList()
+        .map((line) => line.toString())
+        .join('\n');
+    expect(rendered, contains('live output'));
   });
 
   testWidgets('compose sheet emits one bracketed multi-line submission', (

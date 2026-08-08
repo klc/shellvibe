@@ -89,6 +89,11 @@ void main() {
         DeviceLinkBinaryFrameType.snapshot,
       );
 
+      pty.emitOutput(const [0x6f, 0x6b, 0x0a]);
+      final liveOutput = await client.nextBinary(timeout: _timeout);
+      expect(liveOutput.type, DeviceLinkBinaryFrameType.ptyOutput);
+      expect(liveOutput.payload, orderedEquals(const [0x6f, 0x6b, 0x0a]));
+
       await client.sendBinary(
         DeviceLinkBinaryFrame(
           type: DeviceLinkBinaryFrameType.ptyInput,
@@ -209,6 +214,10 @@ final class FakePty implements Pty {
 
   @override
   void ackRead() {}
+
+  void emitOutput(List<int> bytes) {
+    _outputController.add(Uint8List.fromList(bytes));
+  }
 
   Future<void> dispose() => _outputController.close();
 }
