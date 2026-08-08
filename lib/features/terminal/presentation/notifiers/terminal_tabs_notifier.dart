@@ -526,26 +526,30 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
   }
 
   /// Re-establishes the SSH session of a tab whose connection dropped or
-  /// failed, reusing the stored host, identity, and host key prompt
-  /// callback. The old bridge and manager are torn down first so a single
-  /// live session per tab is preserved.
+  /// failed, re-reading the host so any edit made since the tab was opened
+  /// applies, and reusing the stored host key prompt callback. The old bridge
+  /// and manager are torn down first so a single live session per tab is
+  /// preserved.
   Future<void> reconnectTab(String tabId) async {
     final index = state.tabs.indexWhere((t) => t.id == tabId);
     if (index == -1) return;
     final tab = state.tabs[index];
     if (tab.sessionType != TerminalSessionType.ssh) return;
-    final host = tab.host;
-    if (host == null) return;
+    if (tab.host == null) return;
     if (tab.isConnecting) return;
 
-    // Flip the tab state before tearing the old session down: the old
-    // manager's `close()` null emission is then ignored by the drop
-    // listener, and the UI shows the reconnect in flight.
+    // Flip the tab state before anything awaits: the old manager's `close()`
+    // null emission is then ignored by the drop listener, the UI shows the
+    // reconnect in flight straight away, and the guard above rejects a second
+    // reconnect for this tab.
     tab.isConnected = false;
     tab.isConnecting = true;
     tab.errorMessage = null;
     tab.disconnectCause = null;
     state = state.copyWith(tabs: [...state.tabs]);
+
+    await _refreshTabHost(tab);
+    final host = tab.host!;
 
     await tab.sshClientChangesSub?.cancel();
     tab.sshClientChangesSub = null;
@@ -582,6 +586,46 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       tab.identity,
       tab.hostKeyPromptCallback,
     );
+  }
+
+  /// Re-reads [tab]'s host row, and its identity when the host now points at a
+  /// different one, so a reconnect uses the current settings.
+  ///
+  /// A tab holds the host it was opened with. Without this, editing a host and
+  /// reconnecting an open tab silently keeps connecting with the old values —
+  /// switching a host to Mosh and reconnecting would come up on SSH with no
+  /// explanation.
+  ///
+  /// Best-effort by design: the tab's own copy is a valid connection target on
+  /// its own, so a host that has since been deleted, or an identity that cannot
+  /// be decrypted right now, leaves the reconnect to proceed with what the tab
+  /// already holds instead of refusing to reconnect at all.
+  Future<void> _refreshTabHost(TerminalTabSession tab) async {
+    final hostId = tab.host?.id;
+    if (hostId == null) return;
+
+    final HostModel? fresh;
+    try {
+      fresh = await ref.read(hostsRepositoryProvider).getHostById(hostId);
+    } catch (_) {
+      return;
+    }
+    if (fresh == null) return;
+
+    if (fresh.identityId != tab.identity?.id) {
+      try {
+        tab.identity = fresh.identityId == null
+            ? null
+            : await ref
+                  .read(identitiesProvider.notifier)
+                  .getDecryptedIdentity(fresh.identityId!);
+      } catch (_) {
+        // Leave the previous credentials in place; a locked vault surfaces as
+        // an authentication failure from the connect itself, which says more
+        // than anything this could report.
+      }
+    }
+    tab.host = fresh;
   }
 
   /// Reacts to [SSHSessionManager.clientChanges]: a `null` client means the

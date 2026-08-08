@@ -290,6 +290,7 @@ Mevcut Drift şema sürümü **3**'tür. Veritabanı açılırken foreign key de
 - **Mosh (uygulandı):** `protocol: 'mosh'` olan host'lar saf Dart bir UDP transport'u üzerinden bağlanır (`lib/core/network/mosh_session_manager.dart`). `mosh-server` mevcut SSH bağlantısı üzerinden başlatılır; SSH client'ı açık kalır, böylece SFTP ve tüneller aynı sekmeden çalışmaya devam eder. Ağ değişiminde ve app resume'da oturum `rehome()` ile yeni ağ yoluna taşınır — sessizlik bir kopma değildir, durum çubuğunda süresiyle gösterilir.
   - **Kapsam dışı:** local echo / prediction (altyapı hazır, motor yok), jump host üzerinden Mosh (UDP bir SSH kanalından geçmez, UI engelliyor), süreç öldükten sonra reattach (protokol izin vermiyor; karşı önlem `tmux`).
   - `mosh-server` bulunamayan host'ta bağlantı düz SSH'a düşer ve terminale tek satır açıklama yazılır.
+  - **Gerçek cihazda doğrulandı** (2026-08-08, Android): Wi-Fi ↔ hücresel geçişinde oturum sağ kaldı, arka plan/resume sonrası rehome çalıştı. iOS'ta aynı geçiş henüz koşulmadı.
 - **Planlanan:** Platform politikalarına uygun arka plan oturumu/reconnect stratejisi ayrıca tasarlanacaktır. Mosh, uygulama OS tarafından öldürülürse oturumu koruyamaz.
 
 ### 6.4. Mobil Klavye "Sticky Key" Durum Makinesi (Extra Key Bar)

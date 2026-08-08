@@ -1,9 +1,13 @@
+import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:terly2/features/hosts/domain/models/host_model.dart';
+import 'package:terly2/features/hosts/presentation/notifiers/hosts_notifier.dart';
 import 'package:terly2/features/terminal/domain/models/terminal_tab_session.dart';
 import 'package:terly2/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
+import 'package:terly2/shared/database/app_database.dart';
+import 'package:terly2/shared/providers/database_providers.dart';
 
 void main() {
   late ProviderContainer container;
@@ -377,6 +381,73 @@ void main() {
       final finalTab = container.read(terminalTabsProvider).tabs.last;
       expect(finalTab.isConnecting, isFalse);
       expect(finalTab.errorMessage, isNotNull);
+    });
+
+    test('reconnectTab picks up a host edited after the tab was opened',
+        () async {
+      // Needs a real store: the refresh reads the host back out of it.
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      final dbContainer = ProviderContainer(
+        overrides: [appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(dbContainer.dispose);
+
+      final notifier = dbContainer.read(terminalTabsProvider.notifier);
+      final repository = dbContainer.read(hostsRepositoryProvider);
+
+      final saved = await repository.saveHost(
+        workspaceId: 'ws-1',
+        label: 'Editable Host',
+        hostname: '127.0.0.1',
+        port: 1,
+      );
+      await notifier.openTabForHost(saved);
+      final tab = dbContainer.read(terminalTabsProvider).tabs.last;
+      expect(tab.host!.protocol, equals('ssh'));
+
+      // The user switches the host to Mosh while the tab is open. The tab
+      // still holds the copy it was opened with.
+      await repository.saveHost(
+        id: saved.id,
+        workspaceId: saved.workspaceId,
+        label: saved.label,
+        hostname: saved.hostname,
+        port: saved.port,
+        protocol: 'mosh',
+      );
+      expect(tab.host!.protocol, equals('ssh'));
+
+      await notifier.reconnectTab(tab.id);
+
+      // The connect still fails (port 1 is unreachable), but it was attempted
+      // with the current settings rather than the snapshot.
+      final after = dbContainer.read(terminalTabsProvider).tabs.last;
+      expect(after.host!.protocol, equals('mosh'));
+    });
+
+    test('reconnectTab still works when the host row is gone', () async {
+      // The tab's own copy is a valid target on its own, so a deleted host
+      // must not turn reconnect into a dead end.
+      final notifier = container.read(terminalTabsProvider.notifier);
+      final host = HostModel(
+        id: 'host-never-saved',
+        workspaceId: 'ws-1',
+        label: 'Unsaved Host',
+        hostname: '127.0.0.1',
+        port: 1,
+        createdAt: DateTime.now(),
+      );
+
+      await notifier.openTabForHost(host);
+      final tab = container.read(terminalTabsProvider).tabs.last;
+
+      await notifier.reconnectTab(tab.id);
+
+      final after = container.read(terminalTabsProvider).tabs.last;
+      expect(after.host!.id, equals('host-never-saved'));
+      expect(after.isConnecting, isFalse);
+      expect(after.sshSessionManager, isNotNull);
     });
 
     test('rehomeMoshSessions is a no-op when no tab is running Mosh', () {
