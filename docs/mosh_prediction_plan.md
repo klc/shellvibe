@@ -17,7 +17,20 @@ roaming değil. Blink Shell'in mobil kalitesi diye anılan şey büyük ölçüd
 numarası döndürüyor, `echoAcks` sunucunun onayladığı numarayı yayınlıyor.
 Vermediği şey **ekran modeli**: mosh'un `PredictionEngine`'i (~700 satır C++)
 kendi terminal durumu üzerinde çalışır ve tahminleri ayrı bir katmanda tutar.
-Bu planın işi o katmanı Dart'ta ve xterm3'ün üstünde kurmak.
+Bu planın işi o katmanı Dart'ta kurmak.
+
+### Her iki bağımlılık da bizim
+
+- `dart_mosh` → `klc/dart_mosh` (Apache-2.0), commit ile pinli. Faz 1'de zaten
+  bir kez yamalandı (`sinceLastHeard`, `isServerShutdown`).
+- `xterm3` → `klc/xterm3` (AGPL-3.0-or-later), pub.dev'den 6.0.1.
+
+Yani "paket bunu vermiyor" bir duvar değil, bir iş kalemi. Aşağıdaki tasarım
+bunu varsayarak yazıldı: doğru yer neresiyse değişiklik oraya gidiyor.
+
+**Prediction için `dart_mosh`'ta değişiklik gerekmiyor** — `echoAcks` ve
+`send()`'in döndürdüğü durum numarası motorun ihtiyacı olan sinyalin tamamı.
+Değişiklik gereken yer xterm3 ve orada da küçük.
 
 ---
 
@@ -32,8 +45,8 @@ düzeltmez: yanlış tahmin ekranda kalıcı olarak kalır.
 Mosh'un kendisi bu yüzden tahminleri authoritative ekrandan ayrı tutar ve
 render anında üstüne bindirir. Aynısını yapmak zorundayız:
 
-> **Tahminler xterm3 buffer'ına hiçbir koşulda yazılmaz. Ayrı bir overlay
-> katmanında çizilir ve ack gelince kaldırılır.**
+> **Tahminler xterm3 buffer'ına hiçbir koşulda yazılmaz. Boyama katmanında,
+> buffer'ın üstüne çizilir ve ack gelince kaldırılır.**
 
 Bu kısıt planın şeklini belirliyor; pazarlık payı yok.
 
@@ -44,7 +57,7 @@ Bu kısıt planın şeklini belirliyor; pazarlık payı yok.
 | Karar | Öneri | Gerekçe |
 |---|---|---|
 | Kapsam | Yalnızca **imleç satırı** | Tahmin değerinin ~tamamı kabuk girdisinde; tam ekran modeli maliyetin çoğu |
-| Görüntüleme | Overlay `CustomPaint`, `TerminalView` üstünde `Stack` | Buffer'a yazmak protokol olarak yanlış (yukarı bkz.) |
+| Görüntüleme | xterm3'te `predictionText`, IME composing yolunun aynısı | Hizalama inşa gereği doğru; terly2'de piksel matematiği yok |
 | Varsayılan mod | `adaptive` — yalnız RTT eşiği aşılınca | Düşük gecikmede tahmin görsel gürültüden ibaret |
 | Güvenlik varsayılanı | Epoch'ta doğrulanmış echo yoksa **hiçbir şey çizilmez** | Parola istemi (aşağıda) |
 | Ayar | `AppSettingsModel`'e `moshPrediction` enum'u | mosh'un `--predict` davranışıyla eşleşsin |
@@ -72,16 +85,19 @@ sayede tamamı birim testiyle kapanır — Faz B'nin aksine.
 
 ```dart
 class MoshPrediction {
-  final int row;          // imleç satırı, mutlak değil viewport-göreli
-  final int column;
   final String glyph;
   final int inputStateNum; // session.send()'in döndürdüğü numara
   final DateTime queuedAt;
 }
 ```
 
-Motorun tuttukları: bekleyen tahminler, mevcut **epoch** numarası, epoch'ta
-doğrulanmış echo olup olmadığı, son gözlenen imleç konumu.
+Satır/sütun taşınmıyor: kapsam imleç satırı ve çizim imleçten başlıyor, yani
+konum zaten imlecin kendisi. Motorun dışarı verdiği tek şey
+`String get visibleText` — gösterilmesi gereken, henüz onaylanmamış
+karakterler. Faz B'nin beklediği de tam olarak bu.
+
+Motorun içeride tuttukları: bekleyen tahminler, mevcut **epoch** numarası ve
+o epoch'ta doğrulanmış echo olup olmadığı.
 
 ### Akış
 
@@ -92,7 +108,7 @@ doğrulanmış echo olup olmadığı, son gözlenen imleç konumu.
    ne yapacağını bilemeyiz).
 2. **Echo ack** — `echoAcks` `N` yayınladığında `inputStateNum <= N` olan
    tahminler emekli edilir: sunucunun çıktısı o karakterleri zaten getirdi,
-   overlay'in orayı çizmeye devam etmesi çift görüntü olur.
+   `visibleText`'te kalmaları çift görüntü olur.
 3. **Beklenmeyen sunucu çıktısı** — gelen bayt akışı beklenen echo'yla
    uyuşmuyorsa (imleç zıplaması, temizleme dizisi, alternatif ekran) **epoch
    öldürülür**: her şey temizlenir ve yeni bir doğrulanmış echo görülene
@@ -113,37 +129,51 @@ doğrulanmış echo olup olmadığı, son gözlenen imleç konumu.
 
 ---
 
-## Faz B — Overlay çizimi
+## Faz B — Çizim: xterm3'te `predictionText`
 
-`lib/features/terminal/presentation/widgets/mosh_prediction_overlay.dart`
+Araştırırken çıkan şey planı basitleştirdi: **xterm3 bu işi zaten yapıyor.**
+`render.dart:1163` `_paintComposingText`, IME kompozisyon metnini imleçte,
+buffer'a hiç girmeden, **altı çizili** çiziyor. Prediction'ın ihtiyacı olan
+şeklin birebir aynısı — hatta görsel sözleşme bile aynı.
 
-`terminal_screen.dart:217`'deki `TerminalView` bir `Stack` içine alınır;
-üstüne `IgnorePointer` + `CustomPaint` bindirilir. Overlay:
+Tek eksik, o metni dışarıdan verememek: `_composingText` `TerminalView`'ın
+IME geri çağrısıyla set edilen özel durumu (`terminal_view.dart:738`).
 
-- Hücre boyutunu, xterm3'ün kendi `calcCharSize` algoritmasının **birebir
-  aynısıyla** hesaplar (`'mmmmmmmmmm'` paragrafı, `maxIntrinsicWidth / 10`).
-- `terminal.buffer.cursorX` / `cursorY` ile taban konumu alır (ikisi de public).
-- Tahmin edilen glyph'leri **altı çizili** çizer — mosh'un görsel sözleşmesi:
-  altı çizili = henüz sunucu onaylamadı.
-- `scrollOffset` sıfırdan farklıysa hiçbir şey çizmez (kullanıcı geçmişe
-  bakıyorsa tahmin göstermek anlamsız).
+### Değişiklik (fork'ta, ~20 satır)
 
-### Bu fazın gerçek riski
+- `TerminalView`'a `String? predictionText` parametresi
+- `RenderTerminal`'a aynı isimde bir setter, `markNeedsPaint` ile
+- Boyama: `_paintComposingText`'in yanına eşi, aynı imleç ofseti ve aynı
+  `underline: true` stiliyle
+- Çakışma kuralı: **IME kompozisyonu varsa tahmin çizilmez.** Kullanıcı
+  aktif olarak karakter besteliyorsa spekülasyon göstermek karışıklık olur.
 
-`calcCharSize` xterm3'te **export edilmiyor** (`lib/ui.dart` barrel'ında yok).
-Yani 15 satırlık algoritmayı kopyalamak zorundayız. xterm3 bunu ileride
-değiştirirse overlay sessizce kayar — yazı bir piksel sağa/aşağı düşer ve
-kimse fark etmez.
+xterm3 mosh'u öğrenmiyor — aldığı şey "imleçte şu metni göster" gibi genel
+bir kanca. Mosh bilgisi terly2'de kalıyor.
 
-Karşı önlem, tercih sırasıyla:
-1. xterm3'e `calcCharSize`'ı export eden bir PR (proje zaten xterm2'nin
-   devamı olan bir fork'u takip ediyor; kabul şansı iyi).
-2. Kabul edilmezse `xterm3` sürümünü caret yerine tam pin'e almak ve
-   kopyanın yanına "bu sürümden alındı" notu.
+### Neden `Stack` + `CustomPaint` değil
 
-Alternatif olarak render'ı xterm3'ün `TerminalPainter`'ına gömmek düşünülebilir
-ama `RenderTerminal` painter'ı içeride kuruyor, dışarıdan enjekte edilemiyor
-— bu yol fork gerektirir, overlay gerektirmez.
+İlk taslak overlay'i terly2 tarafında, `TerminalView` üstünde bir `Stack`
+içinde çiziyordu. Bunun için hücre boyutunu xterm3'ün `calcCharSize`
+algoritmasıyla **birebir aynı** hesaplamak gerekiyordu; o fonksiyon export
+edilmiyor, yani 15 satır kopyalanacaktı. xterm3 ileride hesabı değiştirirse
+overlay sessizce kayardı — yazı bir piksel oynar, kimse fark etmez.
+
+Fork bizim olduğu için bu yolu tamamen bırakıyoruz. Metni xterm3'ün kendi
+boyama yolundan geçirmek hizalamayı **inşa gereği** doğru yapıyor: aynı
+painter, aynı `cellSize`, aynı imleç ofseti. Kaydırma ve yeniden boyutlandırma
+da mevcut render yolunun zaten çözdüğü şeyler.
+
+`TerminalPainter`'ı dışarıdan enjekte etme fikri de bu yüzden gereksiz kaldı
+(`RenderTerminal` painter'ı içeride kuruyor; o yol fork'ta daha büyük bir
+cerrahi olurdu).
+
+### Lisans notu
+
+xterm3 AGPL-3.0-or-later ve `klc/xterm3` public. Değişiklik oraya iniyor ve
+yayınlanmış oluyor; ek bir yükümlülük doğmuyor. Sürüm pub.dev'e çıkana kadar
+`pubspec.yaml` geçici olarak git ref'ine alınır, sonra tekrar sürüme döner —
+`dart_mosh` için izlenen yolun aynısı.
 
 ---
 
@@ -183,15 +213,15 @@ bu davranış **başka hiçbir optimizasyon için gevşetilmeyecek.**
 
 **Yeni**
 - `lib/core/network/mosh_prediction_engine.dart`
-- `lib/features/terminal/presentation/widgets/mosh_prediction_overlay.dart`
 - `test/unit/network/mosh_prediction_engine_test.dart`
 
 **Değişecek**
+- `klc/xterm3` — `TerminalView.predictionText` + boyama (ayrı repo, ~20 satır)
 - `lib/core/network/terminal_mosh_bridge.dart` — girdi yolunda motor
 - `lib/features/terminal/domain/models/terminal_tab_session.dart` — alan + dispose
-- `lib/features/terminal/presentation/screens/terminal_screen.dart` — Stack + overlay
+- `lib/features/terminal/presentation/screens/terminal_screen.dart` — `predictionText` beslemesi
 - `lib/features/settings/...` — `moshPrediction` ayarı
-- `pubspec.yaml` — (muhtemelen) `xterm3` pin'i
+- `pubspec.yaml` — `xterm3` yeni sürüm (ya da geçici git ref)
 
 ---
 
@@ -243,4 +273,5 @@ başlamak, iki belirsizliği birbirine karıştırmak olur.
 - Mosh paper, §3 "Speculative local echo": <https://mosh.org/mosh-paper.pdf>
 - `mosh` kaynağı `src/frontend/terminaloverlay.cc` — `PredictionEngine`
 - `dart_mosh` `echoAcks` / `MoshHostMessage.echoAck` (fork: `klc/dart_mosh`)
-- xterm3 `lib/src/ui/char_metrics.dart` — `calcCharSize` (export edilmiyor)
+- xterm3 `lib/src/ui/render.dart:1163` — `_paintComposingText`, çizimin emsali
+- Fork'lar: `klc/dart_mosh` (Apache-2.0), `klc/xterm3` (AGPL-3.0-or-later)
