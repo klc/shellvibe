@@ -15,11 +15,15 @@ import '../../../../core/utils/platform_capabilities.dart';
 final class DeviceLinkPairingQrScreen extends StatefulWidget {
   final DeviceLinkQrPayload payload;
   final VoidCallback? onCancel;
+  final Stream<void>? pairingEvents;
+  final VoidCallback? onPaired;
 
   const DeviceLinkPairingQrScreen({
     super.key,
     required this.payload,
     this.onCancel,
+    this.pairingEvents,
+    this.onPaired,
   });
 
   @override
@@ -29,6 +33,7 @@ final class DeviceLinkPairingQrScreen extends StatefulWidget {
 
 class _DeviceLinkPairingQrScreenState extends State<DeviceLinkPairingQrScreen> {
   Timer? _timer;
+  StreamSubscription<void>? _pairingSubscription;
   late int _remainingSeconds;
 
   @override
@@ -36,6 +41,7 @@ class _DeviceLinkPairingQrScreenState extends State<DeviceLinkPairingQrScreen> {
     super.initState();
     _remainingSeconds = _secondsUntil(widget.payload.expiresAt);
     _timer = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
+    _listenForPairing();
   }
 
   @override
@@ -44,12 +50,33 @@ class _DeviceLinkPairingQrScreenState extends State<DeviceLinkPairingQrScreen> {
     if (oldWidget.payload.expiresAt != widget.payload.expiresAt) {
       _remainingSeconds = _secondsUntil(widget.payload.expiresAt);
     }
+    if (oldWidget.pairingEvents != widget.pairingEvents) {
+      _listenForPairing();
+    }
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    unawaited(_pairingSubscription?.cancel());
     super.dispose();
+  }
+
+  void _listenForPairing() {
+    unawaited(_pairingSubscription?.cancel());
+    final events = widget.pairingEvents;
+    if (events == null) {
+      _pairingSubscription = null;
+      return;
+    }
+    _pairingSubscription = events.listen((_) {
+      if (!mounted) return;
+      if (widget.onPaired != null) {
+        widget.onPaired!();
+      } else {
+        Navigator.of(context).maybePop();
+      }
+    });
   }
 
   static int _secondsUntil(DateTime expiry) {

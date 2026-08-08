@@ -80,7 +80,9 @@ class _DeviceLinkComposeSheetState extends State<DeviceLinkComposeSheet> {
       await widget.onSubmit(
         _deviceLinkComposePayload(_controller.text, widget.bracketedPaste),
       );
-      if (mounted) Navigator.of(context).pop(true);
+      if (!mounted) return;
+      _controller.clear();
+      Navigator.of(context).pop(true);
     } finally {
       if (mounted) setState(() => _submitting = false);
     }

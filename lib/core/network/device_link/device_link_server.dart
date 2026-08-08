@@ -29,6 +29,8 @@ typedef DeviceLinkPairedDeviceAuthenticator =
 typedef DeviceLinkPairedDevicePersister =
     FutureOr<void> Function(DeviceLinkPairedDeviceRecord device);
 
+typedef DeviceLinkPairingCompletedCallback = FutureOr<void> Function();
+
 /// Values needed to persist a newly paired device. The [secret] is transient:
 /// a persister must hash it before it reaches durable storage.
 final class DeviceLinkPairedDeviceRecord {
@@ -187,6 +189,7 @@ final class DeviceLinkServer {
   final DeviceLinkBinaryFrameHandler? onBinaryFrame;
   final DeviceLinkPairedDeviceAuthenticator? pairedDeviceAuthenticator;
   final DeviceLinkPairedDevicePersister? pairedDevicePersister;
+  final DeviceLinkPairingCompletedCallback? onPairingCompleted;
 
   late final DeviceLinkPairingTokenStore pairingTokens =
       DeviceLinkPairingTokenStore(ttl: pairingTokenTtl);
@@ -208,6 +211,7 @@ final class DeviceLinkServer {
     this.onBinaryFrame,
     this.pairedDeviceAuthenticator,
     this.pairedDevicePersister,
+    this.onPairingCompleted,
   }) : bindAddress = bindAddress ?? InternetAddress.anyIPv4,
        sessionsProvider = sessionsProvider ?? _emptySessions;
 
@@ -426,6 +430,8 @@ final class DeviceLinkServer {
       await connection.sendControl(
         DeviceLinkPaired(secret: secret, hostName: hostName),
       );
+      final pairingCompleted = onPairingCompleted;
+      if (pairingCompleted != null) await pairingCompleted();
       return;
     }
 

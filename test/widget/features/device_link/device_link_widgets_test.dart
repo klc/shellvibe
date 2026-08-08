@@ -107,6 +107,34 @@ void main() {
     expect(submitted, '\x1b[200~first\nsecond\x1b[201~');
   });
 
+  testWidgets('compose sheet clears its input after a successful send', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Navigator(
+            onGenerateRoute: (_) => _NonPoppingPageRoute(
+              builder: (_) => DeviceLinkComposeSheet(onSubmit: (_) async {}),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(const Key('device_link_compose_field')),
+      'pwd',
+    );
+    await tester.tap(find.byKey(const Key('device_link_compose_submit')));
+    await tester.pumpAndSettle();
+
+    final field = tester.widget<TextField>(
+      find.byKey(const Key('device_link_compose_field')),
+    );
+    expect(field.controller?.text, isEmpty);
+  });
+
   testWidgets('session picker returns the selected hello_ack session', (
     tester,
   ) async {
@@ -184,6 +212,54 @@ void main() {
     expect(find.byType(QrImageView), findsNothing);
   });
 
+  testWidgets('desktop pairing QR closes after pairing completes', (
+    tester,
+  ) async {
+    debugPlatformCapabilitiesOverride = TargetPlatform.macOS;
+    final pairingEvents = StreamController<void>.broadcast();
+    addTearDown(pairingEvents.close);
+    final payload = DeviceLinkQrPayload(
+      version: 1,
+      host: 'desktop-host',
+      addresses: const ['192.168.1.20'],
+      mdns: 'desktop-host._terly._tcp.local',
+      port: 47823,
+      spki: 'pinned-spki',
+      token: 'one-time-token',
+      expiresAt: DateTime.now().toUtc().add(const Duration(minutes: 1)),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: FilledButton(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => DeviceLinkPairingQrScreen(
+                    payload: payload,
+                    pairingEvents: pairingEvents.stream,
+                  ),
+                ),
+              ),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('device_link_qr')), findsOneWidget);
+
+    pairingEvents.add(null);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('device_link_qr')), findsNothing);
+    expect(find.text('open'), findsOneWidget);
+  });
+
   testWidgets('scan screen explains that desktop scanning is unsupported', (
     tester,
   ) async {
@@ -244,6 +320,24 @@ void main() {
     expect(controller.isReadOnly, isTrue);
     expect(find.byKey(const Key('device_link_status')), findsOneWidget);
   });
+}
+
+final class _NonPoppingPageRoute extends PageRouteBuilder<Object?> {
+  _NonPoppingPageRoute({required WidgetBuilder builder})
+    : super(
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            builder(context),
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
+        transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+            child,
+      );
+
+  @override
+  bool didPop(Object? result) {
+    super.didPop(result);
+    return false;
+  }
 }
 
 final class _FakeDeviceLinkConnection implements DeviceLinkConnection {

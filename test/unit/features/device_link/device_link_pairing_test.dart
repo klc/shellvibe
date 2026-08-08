@@ -90,6 +90,7 @@ void main() {
         ),
       );
       final identity = DeviceLinkIdentity.generate();
+      var pairingCompleted = 0;
       final server = DeviceLinkServer(
         identity: identity,
         hostName: 'test-host',
@@ -106,6 +107,7 @@ void main() {
           publicKey: record.publicKey,
           pairedAt: record.pairedAt,
         ),
+        onPairingCompleted: () => pairingCompleted++,
       );
       await server.start();
       addTearDown(server.close);
@@ -129,6 +131,7 @@ void main() {
       );
       final paired = await first.nextControl();
       expect(paired, isA<DeviceLinkPaired>());
+      expect(pairingCompleted, 1);
       final secret = (paired as DeviceLinkPaired).secret;
       await first.close();
 

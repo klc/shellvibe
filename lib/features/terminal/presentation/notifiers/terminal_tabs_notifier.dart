@@ -98,6 +98,8 @@ class TerminalTabsState {
 class TerminalTabsNotifier extends _$TerminalTabsNotifier {
   final Set<TerminalTabSession> _ownedTabs = {};
   final Map<String, DeviceLinkLocalSessionTransport> _deviceLinkTransports = {};
+  final StreamController<void> _deviceLinkPairingEvents =
+      StreamController<void>.broadcast();
   final BroadcastInputRouter _broadcastRouter = BroadcastInputRouter();
   DeviceLinkServer? _deviceLinkServer;
   nsd.Registration? _deviceLinkMdnsRegistration;
@@ -119,6 +121,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       }
       _ownedTabs.clear();
       _deviceLinkTransports.clear();
+      unawaited(_deviceLinkPairingEvents.close());
       final server = _deviceLinkServer;
       _deviceLinkServer = null;
       if (server != null) unawaited(server.close());
@@ -808,6 +811,8 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
   DeviceLinkSessionTransport? deviceLinkSessionTransport(String sessionId) =>
       _deviceLinkTransports[sessionId];
 
+  Stream<void> get deviceLinkPairingEvents => _deviceLinkPairingEvents.stream;
+
   /// Registers a mobile Device Link session in the same owned-tab collection
   /// as local and SSH sessions. The linked screen can therefore reuse the
   /// terminal lifecycle without creating a parallel tab store.
@@ -843,6 +848,11 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
         publicKey: record.publicKey,
         pairedAt: record.pairedAt,
       ),
+      onPairingCompleted: () {
+        if (!_deviceLinkPairingEvents.isClosed) {
+          _deviceLinkPairingEvents.add(null);
+        }
+      },
     );
     await server.start();
     await _ensureDeviceLinkMdnsRegistration(server);
