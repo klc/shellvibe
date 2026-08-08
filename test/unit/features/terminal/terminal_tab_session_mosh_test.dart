@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:terly2/core/models/mosh_prediction_mode.dart';
 import 'package:terly2/core/network/mosh_session_manager.dart';
 import 'package:terly2/core/network/terminal_mosh_bridge.dart';
 import 'package:terly2/features/terminal/domain/models/terminal_tab_session.dart';
@@ -32,6 +35,20 @@ void main() {
 
       tab.moshBridge = null;
       expect(tab.isMosh, isFalse);
+    });
+
+    test('owns the prediction mode and UI projection for the tab', () async {
+      tab.syncMoshPredictionMode(MoshPredictionMode.always);
+      expect(tab.moshPredictionEngine.mode, equals(MoshPredictionMode.always));
+
+      tab.moshPredictionEngine.recordInput('a', 1);
+      tab.moshPredictionEngine.onServerOutput(utf8.encode('a'));
+      tab.moshPredictionEngine.recordInput('b', 2);
+      final change = expectLater(tab.moshPredictionChanges, emits(null));
+      tab.refreshMoshPredictionText();
+
+      expect(tab.moshPredictionEngine.visibleText, equals('b'));
+      await change;
     });
 
     test('resizeTerminal reaches the Mosh session', () {

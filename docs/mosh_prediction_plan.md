@@ -1,6 +1,6 @@
 # Mosh Prediction (Local Echo) — Uygulama Planı
 
-> Tarih: 2026-08-08 · Durum: Faz A tamam, Faz B sırada · Öncül: `docs/mosh_integration_plan.md` Faz 4
+> Tarih: 2026-08-08 · Durum: Faz A–C tamam · Öncül: `docs/mosh_integration_plan.md` Faz 4
 
 ## Context
 
@@ -135,7 +135,7 @@ o epoch'ta doğrulanmış echo olup olmadığı.
 
 ---
 
-## Faz B — Çizim: xterm3'te `predictionText`
+## Faz B — Çizim: xterm3'te `predictionText` ✅
 
 Araştırırken çıkan şey planı basitleştirdi: **xterm3 bu işi zaten yapıyor.**
 `render.dart:1163` `_paintComposingText`, IME kompozisyon metnini imleçte,
@@ -176,21 +176,45 @@ cerrahi olurdu).
 
 ### Lisans notu
 
-xterm3 AGPL-3.0-or-later ve `klc/xterm3` public. Değişiklik oraya iniyor ve
-yayınlanmış oluyor; ek bir yükümlülük doğmuyor. Sürüm pub.dev'e çıkana kadar
-`pubspec.yaml` geçici olarak git ref'ine alınır, sonra tekrar sürüme döner —
-`dart_mosh` için izlenen yolun aynısı.
+xterm3 AGPL-3.0-or-later ve `klc/xterm3` public. Değişiklik oraya indi ve
+**6.1.0 olarak pub.dev'e yayınlandı**, yani `pubspec.yaml` git ref'ine hiç
+ihtiyaç duymadan `^6.1.0` sürüm kısıtına döndü.
+
+**Çizimde plandan bir sapma çıktı.** Boyama `_paintComposingText`'in yanına
+konunca imleç guard'ının (`shouldPaint`) içinde kalıyordu; `shouldPaint`
+`_shouldShowCursor`'ı içerdiği için tahmin edilen metin imleçle birlikte
+yanıp sönüyor, uygulama imleci gizlediğinde hiç görünmüyordu. `_CursorPaintState`
+artık `isRowVisible` taşıyor: tahmin **imlecin satırı ekranda mı** diye bakıyor,
+**imleç çiziliyor mu** diye değil. Kompozisyon eski davranışında kaldı, zaten
+imleci görünür zorluyor.
 
 ---
 
-## Faz C — Ayar ve bağlama
+## Faz C — Ayar ve bağlama ✅
 
 - `AppSettingsModel`'e `moshPrediction` (`never` / `adaptive` / `always`),
-  varsayılan `adaptive`. Ayarlar ekranına bir select.
+  varsayılan `adaptive`, JSON'a yazılıyor ve bilinmeyen değer `adaptive`'e
+  düşüyor. Ayarlar ekranına bir select.
+- Enum `lib/core/models/mosh_prediction_mode.dart`'ta: ayarlar katmanının ağ
+  katmanındaki motor sınıfına bağımlı olmaması için.
 - `TerminalMoshBridge` girdi yolunda motoru çağırır; `TerminalOutputChain`
   zaten `onOutput` slotunu sahiplendiği için broadcast ve mobil tuş barı
   etkilenmez (Faz 1'de doğrulanmıştı).
-- `TerminalTabSession`'a `moshPredictionEngine` alanı, `dispose()`'a bir satır.
+- `TerminalTabSession` motoru **sahiplenir** ve bridge'e geçirir — tek örnek.
+  İkisi ayrı motor yaratsaydı özellik sessizce ölü olurdu: UI'ın okuduğu
+  `visibleText` hiç dolmazdı.
+- Yeniden çizim `Stream<void>` üzerinden: domain modeli Flutter notifier
+  tiplerine bağlanmıyor, ekran `StreamBuilder` ile `predictionText`'i besliyor.
+
+### Faz A'da bırakılmış iki eksik burada kapandı
+
+1. **Parçalı UTF-8 çözme.** Motor her paketi ayrı `utf8.decode` ediyordu; çok
+   baytlı bir karakter iki datagram'a bölündüğünde U+FFFD çıkıyor, eşleşme
+   tutmuyor ve epoch ölüyordu — Türkçe metinde sürekli. Artık chunked decoder
+   kullanılıyor, `reset()` sink'i yeniliyor.
+2. **Ack ertelemesi.** Faz A'daki düzeltme ack'i onaylanmadan önce tamamen
+   atıyordu. Artık en büyük ack saklanıp onay sonrası uygulanıyor: aynı
+   kilitlenme çözülüyor ama bilgi kaybolmuyor.
 
 ---
 

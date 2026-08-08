@@ -75,6 +75,7 @@ class MoshBootstrapException implements Exception {
 /// and the bridge talk to this instead and tests substitute a fake.
 abstract class MoshTransport {
   Stream<List<int>> get stdout;
+  Stream<int> get echoAcks;
   Stream<Object> get errors;
   Future<void> get done;
 
@@ -104,6 +105,9 @@ class MoshSessionTransport implements MoshTransport {
 
   @override
   Stream<List<int>> get stdout => session.stdout;
+
+  @override
+  Stream<int> get echoAcks => session.echoAcks;
 
   @override
   Stream<Object> get errors => session.errors;
@@ -277,7 +281,10 @@ class MoshSessionManager {
 
     transport.errors.listen(_forwardError);
     unawaited(transport.done.then((_) => _handleDone()));
-    _heartbeatTimer = Timer.periodic(heartbeatInterval, (_) => _checkLiveness());
+    _heartbeatTimer = Timer.periodic(
+      heartbeatInterval,
+      (_) => _checkLiveness(),
+    );
 
     return transport;
   }

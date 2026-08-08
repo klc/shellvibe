@@ -18,24 +18,22 @@ class TerminalScreen extends ConsumerStatefulWidget {
   final TerminalTabSession session;
   final bool? showExtraKeys;
 
-  const TerminalScreen({
-    super.key,
-    required this.session,
-    this.showExtraKeys,
-  });
+  const TerminalScreen({super.key, required this.session, this.showExtraKeys});
 
   @override
   ConsumerState<TerminalScreen> createState() => _TerminalScreenState();
 }
 
 class _TerminalScreenState extends ConsumerState<TerminalScreen> {
-
-
   late final FocusNode _terminalFocus;
 
   @override
   void initState() {
     super.initState();
+    ref.listenManual(settingsProvider, (previous, next) {
+      final mode = next.value?.moshPrediction;
+      if (mode != null) widget.session.syncMoshPredictionMode(mode);
+    }, fireImmediately: true);
     // The terminal must own the keystrokes as soon as it mounts. `autofocus`
     // alone is not enough: the pane is often mounted while some other widget
     // (the tab bar, a dialog) holds focus, and a reused element never re-fires
@@ -108,8 +106,7 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
   /// `www.` match from the plain-text detector has no scheme, so it is
   /// treated as https.
   Future<void> _handleHyperlinkTap(String uri) async {
-    final normalized =
-        _uriSchemePattern.hasMatch(uri) ? uri : 'https://$uri';
+    final normalized = _uriSchemePattern.hasMatch(uri) ? uri : 'https://$uri';
     final parsed = Uri.tryParse(normalized);
     if (parsed == null) return;
     const allowedSchemes = {'http', 'https', 'mailto'};
@@ -140,8 +137,8 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
 
     final theme = TerminalPaletteData.themeOf(settings.terminalPalette);
 
-
-    final shouldShowExtraKeys = widget.showExtraKeys ??
+    final shouldShowExtraKeys =
+        widget.showExtraKeys ??
         (defaultTargetPlatform == TargetPlatform.iOS ||
             defaultTargetPlatform == TargetPlatform.android);
 
@@ -183,9 +180,9 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
                     style: TextStyle(
                       color: _isCleanExit(session)
                           ? ShadTheme.of(context).colorScheme.mutedForeground
-                          : ShadTheme.of(context)
-                              .colorScheme
-                              .destructiveForeground,
+                          : ShadTheme.of(
+                              context,
+                            ).colorScheme.destructiveForeground,
                       fontSize: 12,
                     ),
                   ),
@@ -214,33 +211,39 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
                 width: 1.5,
               ),
             ),
-            child: TerminalView(
-              session.terminal,
-              theme: theme,
-              focusNode: _terminalFocus,
-              autofocus: true,
-              deleteDetection: shouldShowExtraKeys,
-              onTapUp: _handleTapUp,
-              onHyperlinkTap: _handleHyperlinkTap,
-              cursorType: switch (settings.cursorStyle) {
-                AppCursorStyle.block => TerminalCursorType.block,
-                AppCursorStyle.underline => TerminalCursorType.underline,
-                AppCursorStyle.bar => TerminalCursorType.verticalBar,
-              },
-              textStyle: TerminalStyle(
-                fontSize: settings.fontSize,
-                fontFamily: resolveTerminalFontFamily(settings.fontFamily),
-                fontFamilyFallback: kTerminalFontFamilyFallback,
-                enableLigatures: settings.enableLigatures,
-                // Configurable in Settings; 1.4 lands on the same 18px pitch
-                // reference terminals use at the default 14px font.
-                height: settings.lineHeightFactor,
-                // Configurable in Settings. Most palettes ship distinct bright
-                // variants, so remapping bold runs from 0-7 onto 8-15 is what
-                // the schemes were authored for; palettes whose brights mirror
-                // the base colors (Rosé Pine, Snazzy, One Light) are unaffected.
-                drawBoldTextWithBrightColors:
-                    settings.drawBoldTextWithBrightColors,
+            child: StreamBuilder<void>(
+              stream: session.moshPredictionChanges,
+              builder: (context, _) => TerminalView(
+                session.terminal,
+                theme: theme,
+                focusNode: _terminalFocus,
+                autofocus: true,
+                deleteDetection: shouldShowExtraKeys,
+                onTapUp: _handleTapUp,
+                onHyperlinkTap: _handleHyperlinkTap,
+                predictionText: session.isMosh
+                    ? session.moshPredictionEngine.visibleText
+                    : null,
+                cursorType: switch (settings.cursorStyle) {
+                  AppCursorStyle.block => TerminalCursorType.block,
+                  AppCursorStyle.underline => TerminalCursorType.underline,
+                  AppCursorStyle.bar => TerminalCursorType.verticalBar,
+                },
+                textStyle: TerminalStyle(
+                  fontSize: settings.fontSize,
+                  fontFamily: resolveTerminalFontFamily(settings.fontFamily),
+                  fontFamilyFallback: kTerminalFontFamilyFallback,
+                  enableLigatures: settings.enableLigatures,
+                  // Configurable in Settings; 1.4 lands on the same 18px pitch
+                  // reference terminals use at the default 14px font.
+                  height: settings.lineHeightFactor,
+                  // Configurable in Settings. Most palettes ship distinct bright
+                  // variants, so remapping bold runs from 0-7 onto 8-15 is what
+                  // the schemes were authored for; palettes whose brights mirror
+                  // the base colors (Rosé Pine, Snazzy, One Light) are unaffected.
+                  drawBoldTextWithBrightColors:
+                      settings.drawBoldTextWithBrightColors,
+                ),
               ),
             ),
           ),

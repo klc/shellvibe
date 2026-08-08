@@ -7,6 +7,7 @@ import 'package:xterm3/xterm.dart';
 
 import '../../../../app/theme/terly_tokens.dart';
 import '../../../../app/widgets/terly_ui.dart';
+import '../../../../core/models/mosh_prediction_mode.dart';
 import '../../../../shared/providers/database_providers.dart';
 import '../../../terminal/domain/models/terminal_font.dart';
 import '../../../terminal/domain/models/terminal_palette.dart';
@@ -508,10 +509,50 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
                   child: _TerminalThemePreview(
-                    theme:
-                        TerminalPaletteData.themeOf(settings.terminalPalette),
-                    fontFamily:
-                        resolveTerminalFontFamily(settings.fontFamily),
+                    theme: TerminalPaletteData.themeOf(
+                      settings.terminalPalette,
+                    ),
+                    fontFamily: resolveTerminalFontFamily(settings.fontFamily),
+                  ),
+                ),
+                const Divider(),
+                ListTile(
+                  title: const Text('Mosh Prediction'),
+                  subtitle: const Text(
+                    'Show locally predicted input on high-latency Mosh links',
+                  ),
+                  trailing: ShadSelect<MoshPredictionMode>(
+                    key: const Key('settings_mosh_prediction_dropdown'),
+                    initialValue: settings.moshPrediction,
+                    selectedOptionBuilder: (context, value) {
+                      switch (value) {
+                        case MoshPredictionMode.never:
+                          return const Text('Never');
+                        case MoshPredictionMode.adaptive:
+                          return const Text('Adaptive');
+                        case MoshPredictionMode.always:
+                          return const Text('Always');
+                      }
+                    },
+                    options: const [
+                      ShadOption(
+                        value: MoshPredictionMode.never,
+                        child: Text('Never'),
+                      ),
+                      ShadOption(
+                        value: MoshPredictionMode.adaptive,
+                        child: Text('Adaptive'),
+                      ),
+                      ShadOption(
+                        value: MoshPredictionMode.always,
+                        child: Text('Always'),
+                      ),
+                    ],
+                    onChanged: (mode) {
+                      if (mode != null) {
+                        notifier.setMoshPrediction(mode);
+                      }
+                    },
                   ),
                 ),
                 const Divider(),
@@ -609,8 +650,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     max: 2.0,
                     divisions: 20,
                     value: settings.lineHeightFactor,
-                    label:
-                        '${settings.lineHeightFactor.toStringAsFixed(2)}x',
+                    label: '${settings.lineHeightFactor.toStringAsFixed(2)}x',
                     onChanged: (val) => notifier.setLineHeightFactor(val),
                   ),
                   trailing: Text(
@@ -1015,23 +1055,23 @@ class _PaletteSwatch extends StatelessWidget {
 
 /// The 16 ANSI colors of a scheme, base then bright.
 List<Color> _themeAnsiColors(TerminalTheme theme) => [
-      theme.black,
-      theme.red,
-      theme.green,
-      theme.yellow,
-      theme.blue,
-      theme.magenta,
-      theme.cyan,
-      theme.white,
-      theme.brightBlack,
-      theme.brightRed,
-      theme.brightGreen,
-      theme.brightYellow,
-      theme.brightBlue,
-      theme.brightMagenta,
-      theme.brightCyan,
-      theme.brightWhite,
-    ];
+  theme.black,
+  theme.red,
+  theme.green,
+  theme.yellow,
+  theme.blue,
+  theme.magenta,
+  theme.cyan,
+  theme.white,
+  theme.brightBlack,
+  theme.brightRed,
+  theme.brightGreen,
+  theme.brightYellow,
+  theme.brightBlue,
+  theme.brightMagenta,
+  theme.brightCyan,
+  theme.brightWhite,
+];
 
 /// Live preview of the selected terminal color scheme.
 class _TerminalThemePreview extends StatelessWidget {
@@ -1121,4 +1161,3 @@ class _FontPreview extends StatelessWidget {
     );
   }
 }
-

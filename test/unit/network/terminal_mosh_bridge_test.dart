@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:terly2/core/models/mosh_prediction_mode.dart';
 import 'package:terly2/core/network/terminal_mosh_bridge.dart';
 import 'package:xterm3/xterm.dart';
 
@@ -32,15 +33,32 @@ void main() {
       expect(utf8.decode(session.sentBytes.first), equals('ls -la\n'));
     });
 
+    test('connects prediction confirmation and echo ack streams', () async {
+      bridge.predictionEngine.mode = MoshPredictionMode.always;
+
+      // The first character confirms the epoch but is removed from the
+      // speculative overlay by the matching host output.
+      terminal.onOutput!('a');
+      expect(bridge.predictionEngine.visibleText, isEmpty);
+      session.emitStdout('a');
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      // The next character is now immediately visible until its input state
+      // is acknowledged by the host.
+      terminal.onOutput!('b');
+      expect(bridge.predictionEngine.visibleText, equals('b'));
+      session.emitAck(2);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(bridge.predictionEngine.visibleText, isEmpty);
+    });
+
     test('host output is written to the terminal', () async {
       session.emitStdout('Hello from mosh!');
 
       await Future.delayed(const Duration(milliseconds: 50));
 
-      expect(
-        terminal.buffer.lines[0].toString(),
-        contains('Hello from mosh!'),
-      );
+      expect(terminal.buffer.lines[0].toString(), contains('Hello from mosh!'));
     });
 
     test('a multi-byte character split across datagrams is decoded', () async {

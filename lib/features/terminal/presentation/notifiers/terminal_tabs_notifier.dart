@@ -169,10 +169,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     _ownedTabs.add(newTab);
 
     final updatedTabs = [...state.tabs, newTab];
-    state = state.copyWith(
-      tabs: updatedTabs,
-      activeTabId: tabId,
-    );
+    state = state.copyWith(tabs: updatedTabs, activeTabId: tabId);
 
     await _connectSshTab(newTab, host, identity, onHostKeyPrompt);
   }
@@ -207,8 +204,8 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
           final jumpIdentity = jumpHost.identityId == null
               ? null
               : await ref
-                  .read(vaultRepositoryProvider)
-                  .getIdentityById(jumpHost.identityId!);
+                    .read(vaultRepositoryProvider)
+                    .getIdentityById(jumpHost.identityId!);
           final jumpManager = SSHSessionManager(
             knownHostsDao: ref.read(knownHostsDaoProvider),
           );
@@ -219,10 +216,14 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
             onHostKeyPrompt: onHostKeyPrompt,
           );
           terminal.write(
-              '\x1b[1;34m[SSH]\x1b[0m Connecting via jump host \x1b[1;36m'
-              '${jumpConfig.username}@${jumpConfig.hostname}:${jumpConfig.port}'
-              '\x1b[0m...\r\n');
-          viaClient = await jumpManager.connect(jumpConfig, viaClient: viaClient);
+            '\x1b[1;34m[SSH]\x1b[0m Connecting via jump host \x1b[1;36m'
+            '${jumpConfig.username}@${jumpConfig.hostname}:${jumpConfig.port}'
+            '\x1b[0m...\r\n',
+          );
+          viaClient = await jumpManager.connect(
+            jumpConfig,
+            viaClient: viaClient,
+          );
         }
       }
 
@@ -238,8 +239,9 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       );
 
       terminal.write(
-          '\x1b[1;34m[SSH]\x1b[0m Connecting to \x1b[1;36m'
-          '${config.username}@${config.hostname}:${config.port}\x1b[0m...\r\n');
+        '\x1b[1;34m[SSH]\x1b[0m Connecting to \x1b[1;36m'
+        '${config.username}@${config.hostname}:${config.port}\x1b[0m...\r\n',
+      );
 
       await sessionManager.connect(config, viaClient: viaClient);
       try {
@@ -294,7 +296,9 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       tab.isConnecting = false;
       tab.isConnected = false;
       tab.errorMessage = e.toString();
-      terminal.write('\r\n\x1b[1;31m[Connection Error]\x1b[0m Failed to connect: $e\r\n');
+      terminal.write(
+        '\r\n\x1b[1;31m[Connection Error]\x1b[0m Failed to connect: $e\r\n',
+      );
       state = state.copyWith(tabs: [...state.tabs]);
       // Not nulled: the error banner/reconnect path expects a failed tab to
       // still carry a (now-closed) session manager, and the next connect
@@ -363,6 +367,8 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       final bridge = TerminalMoshBridge(
         terminal: terminal,
         session: transport,
+        predictionEngine: tab.moshPredictionEngine,
+        onPredictionChanged: tab.refreshMoshPredictionText,
         onClosed: () => _handleRemoteExit(tab),
       );
       tab.moshBridge = bridge;
@@ -504,15 +510,15 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
 
     final hostUser = host.username?.trim();
     final identityUser = identity?.username.trim();
-    final osUser = Platform.environment['USER'] ??
-        Platform.environment['USERNAME'];
+    final osUser =
+        Platform.environment['USER'] ?? Platform.environment['USERNAME'];
     final effectiveUsername = (hostUser != null && hostUser.isNotEmpty)
         ? hostUser
         : ((parsedUser != null && parsedUser.isNotEmpty)
-            ? parsedUser
-            : ((identityUser != null && identityUser.isNotEmpty)
-                ? identityUser
-                : (osUser ?? '')));
+              ? parsedUser
+              : ((identityUser != null && identityUser.isNotEmpty)
+                    ? identityUser
+                    : (osUser ?? '')));
 
     return SSHConnectConfig(
       hostname: cleanHostname,
@@ -580,12 +586,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     }
     tab.jumpSessionManagers = [];
 
-    await _connectSshTab(
-      tab,
-      host,
-      tab.identity,
-      tab.hostKeyPromptCallback,
-    );
+    await _connectSshTab(tab, host, tab.identity, tab.hostKeyPromptCallback);
   }
 
   /// Re-reads [tab]'s host row, and its identity when the host now points at a
@@ -688,10 +689,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     );
 
     final updatedTabs = [...state.tabs, newTab];
-    state = state.copyWith(
-      tabs: updatedTabs,
-      activeTabId: tabId,
-    );
+    state = state.copyWith(tabs: updatedTabs, activeTabId: tabId);
 
     try {
       final manager = ref.read(localPtyManagerProvider);
@@ -742,14 +740,16 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     }
 
     final closingIds = closingTabs.map((t) => t.id).toSet();
-    final remainingTabs =
-        state.tabs.where((t) => !closingIds.contains(t.id)).toList();
+    final remainingTabs = state.tabs
+        .where((t) => !closingIds.contains(t.id))
+        .toList();
     String? newActiveId = state.activeTabId;
 
     if (closingIds.contains(state.activeTabId)) {
       if (remainingTabs.isNotEmpty) {
-        final newIndex =
-            index >= remainingTabs.length ? remainingTabs.length - 1 : index;
+        final newIndex = index >= remainingTabs.length
+            ? remainingTabs.length - 1
+            : index;
         newActiveId = remainingTabs[newIndex].id;
       } else {
         newActiveId = null;
@@ -789,10 +789,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
 
   /// Reconciles installed broadcast interceptors with the current selection.
   void _syncBroadcast() {
-    _broadcastRouter.sync(
-      selectedIds: state.selectedPaneIds,
-      tabs: state.tabs,
-    );
+    _broadcastRouter.sync(selectedIds: state.selectedPaneIds, tabs: state.tabs);
   }
 
   /// Forward handler invoked by installed interceptors with the origin pane
@@ -872,7 +869,8 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     // SSH session to the same host rather than a local shell; this also keeps
     // splits working on mobile, where a local PTY is not available.
     final targetHost = host ?? parentTab.host;
-    final isSshSplit = host != null ||
+    final isSshSplit =
+        host != null ||
         (parentTab.sessionType == TerminalSessionType.ssh &&
             parentTab.host != null);
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:terly2/core/models/mosh_prediction_mode.dart';
 import 'package:terly2/features/settings/domain/models/app_settings_model.dart';
 import 'package:terly2/features/terminal/domain/models/terminal_palette.dart';
 
@@ -16,6 +17,7 @@ void main() {
       expect(settings.cursorStyle, equals(AppCursorStyle.block));
       expect(settings.enableLigatures, isTrue);
       expect(settings.drawBoldTextWithBrightColors, isTrue);
+      expect(settings.moshPrediction, equals(MoshPredictionMode.adaptive));
       expect(settings.autoLockTimerSeconds, equals(0));
       expect(settings.clipboardAutoClearSeconds, equals(30));
       expect(settings.activeWorkspaceId, equals('default'));
@@ -31,6 +33,7 @@ void main() {
         fontSize: 16.0,
         lineHeightFactor: 1.7,
         autoLockTimerSeconds: 60,
+        moshPrediction: MoshPredictionMode.always,
         activeWorkspaceId: 'client-ops',
       );
 
@@ -41,6 +44,7 @@ void main() {
       expect(updated.fontSize, equals(16.0));
       expect(updated.lineHeightFactor, equals(1.7));
       expect(updated.autoLockTimerSeconds, equals(60));
+      expect(updated.moshPrediction, equals(MoshPredictionMode.always));
       expect(updated.fontFamily, equals('RobotoMono'));
       expect(updated.activeWorkspaceId, equals('client-ops'));
     });
@@ -55,6 +59,7 @@ void main() {
         lineHeightFactor: 1.6,
         cursorStyle: AppCursorStyle.underline,
         drawBoldTextWithBrightColors: false,
+        moshPrediction: MoshPredictionMode.never,
         autoLockTimerSeconds: 300,
         clipboardAutoClearSeconds: 15,
         activeWorkspaceId: 'client-ops',
@@ -71,6 +76,7 @@ void main() {
       expect(restored.lineHeightFactor, equals(1.6));
       expect(restored.cursorStyle, equals(AppCursorStyle.underline));
       expect(restored.drawBoldTextWithBrightColors, isFalse);
+      expect(restored.moshPrediction, equals(MoshPredictionMode.never));
       expect(restored.autoLockTimerSeconds, equals(300));
       expect(restored.clipboardAutoClearSeconds, equals(15));
       expect(restored.activeWorkspaceId, equals('client-ops'));
@@ -85,23 +91,27 @@ void main() {
       expect(restored.activeWorkspaceId, equals('default'));
       expect(restored.lineHeightFactor, equals(1.4));
       expect(restored.drawBoldTextWithBrightColors, isTrue);
+      expect(restored.moshPrediction, equals(MoshPredictionMode.adaptive));
     });
 
-    test('serializes and deserializes all new palettes and fonts correctly', () {
-      for (final palette in AppPalette.values) {
-        for (final termPalette in TerminalPalette.values) {
-          final settings = AppSettingsModel(
-            palette: palette,
-            terminalPalette: termPalette,
-            fontFamily: 'JetBrainsMono',
-          );
+    test(
+      'serializes and deserializes all new palettes and fonts correctly',
+      () {
+        for (final palette in AppPalette.values) {
+          for (final termPalette in TerminalPalette.values) {
+            final settings = AppSettingsModel(
+              palette: palette,
+              terminalPalette: termPalette,
+              fontFamily: 'JetBrainsMono',
+            );
 
-          final restored = AppSettingsModel.fromJson(settings.toJson());
-          expect(restored.palette, equals(palette));
-          expect(restored.terminalPalette, equals(termPalette));
-          expect(restored.fontFamily, equals('JetBrainsMono'));
+            final restored = AppSettingsModel.fromJson(settings.toJson());
+            expect(restored.palette, equals(palette));
+            expect(restored.terminalPalette, equals(termPalette));
+            expect(restored.fontFamily, equals('JetBrainsMono'));
+          }
         }
-      }
-    });
+      },
+    );
   });
 }

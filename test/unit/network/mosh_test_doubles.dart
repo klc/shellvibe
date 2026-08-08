@@ -11,6 +11,7 @@ import 'package:terly2/core/network/mosh_session_manager.dart';
 /// shutdown, and rehome without opening a socket.
 class FakeMoshTransport implements MoshTransport {
   final _stdoutController = StreamController<List<int>>.broadcast();
+  final _echoAcksController = StreamController<int>.broadcast();
   final _errorsController = StreamController<Object>.broadcast();
   final _doneCompleter = Completer<void>();
 
@@ -32,6 +33,9 @@ class FakeMoshTransport implements MoshTransport {
 
   @override
   Stream<List<int>> get stdout => _stdoutController.stream;
+
+  @override
+  Stream<int> get echoAcks => _echoAcksController.stream;
 
   @override
   Stream<Object> get errors => _errorsController.stream;
@@ -75,6 +79,7 @@ class FakeMoshTransport implements MoshTransport {
     if (isClosed) return;
     isClosed = true;
     await _stdoutController.close();
+    await _echoAcksController.close();
     await _errorsController.close();
     if (!_doneCompleter.isCompleted) _doneCompleter.complete();
   }
@@ -82,6 +87,8 @@ class FakeMoshTransport implements MoshTransport {
   void emitStdout(String data) => _stdoutController.add(utf8.encode(data));
 
   void emitBytes(List<int> bytes) => _stdoutController.add(bytes);
+
+  void emitAck(int ackNum) => _echoAcksController.add(ackNum);
 
   void emitError(Object error) => _errorsController.add(error);
 
@@ -132,6 +139,5 @@ class FakeBootstrapClient implements SSHClient {
   }
 
   @override
-  dynamic noSuchMethod(Invocation invocation) =>
-      super.noSuchMethod(invocation);
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
