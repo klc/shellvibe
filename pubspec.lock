@@ -237,8 +237,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "325bc912ecea600b2fbd9d9e0ac7b069baf66af8"
-      resolved-ref: "325bc912ecea600b2fbd9d9e0ac7b069baf66af8"
+      ref: "50d786564efcba115ebd4fe889ac3b867c17ec04"
+      resolved-ref: "50d786564efcba115ebd4fe889ac3b867c17ec04"
       url: "https://github.com/klc/dart_mosh.git"
     source: git
     version: "0.0.4"

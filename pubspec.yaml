@@ -53,7 +53,7 @@ dependencies:
   dart_mosh:
     git:
       url: https://github.com/klc/dart_mosh.git
-      ref: 325bc912ecea600b2fbd9d9e0ac7b069baf66af8
+      ref: 50d786564efcba115ebd4fe889ac3b867c17ec04
 
   # Database & Storage
   drift: ^2.34.3

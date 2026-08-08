@@ -59,7 +59,22 @@ Faz 1'i ~1 hafta uzatacak "paketi düzelt" riski gerçekleşmedi.
 
 ---
 
-## Faz 1 — Transport çekirdeği
+## Faz 1 — Transport çekirdeği ✅
+
+### Fork yaması: `sinceLastHeard` ve `isServerShutdown`
+
+Sağlık takibi pakette eksikti. `MoshSession` her kabul edilen datagramın
+zamanını zaten tutuyordu ama dışarı vermiyordu; `done` da sunucu kapanışı ile
+yerel `close()`'u ayırt ettirmiyordu — ikisinde de tamamlanıyor. Fork'a iki
+getter eklendi (`50d7865`), `pubspec.yaml` pin'i oraya alındı. Fork'un ilk
+gerçek işi bu oldu.
+
+### `MoshTransport` soyutlaması
+
+`MoshSession` yalnızca gerçek bir UDP soketi açarak kurulabiliyor. Manager ve
+bridge bu yüzden dar bir `MoshTransport` arayüzüne bakıyor; `MoshSessionTransport`
+gerçek oturumu sarıyor, testler sahte veriyor. Aynı arayüz Faz 2'de sekmenin
+tuttuğu tip olacak.
 
 ### `lib/core/network/mosh_session_manager.dart` (yeni)
 
@@ -86,15 +101,25 @@ final result = await client.runWithResult(
 **UDP oturumu** — `MoshSession.connect(server:, cipher: MoshPacketCipher.aesOcb(cfg.key), columns:, rows:, address:)`.
 
 **Sağlık takibi** — mosh'ta keep-alive/ping yok; heartbeat aralığı 3 sn.
-Manager `stdout`/`errors` üzerinden son duyum zamanını tutar ve bir
+Manager `transport.sinceLastHeard`'ı 3 sn'de bir yoklar ve bir
 `Stream<MoshLinkState>` yayınlar: `live` / `stale(Duration)` / `serverShutdown`.
+Eşik 6 sn (iki kaçan heartbeat: teki normal, ikisi söylenmeye değer).
+`stale` her tıkta yeniden yayılır — rozet sessizliğin ne kadar sürdüğünü
+saydığı için tekrar eden `stale` yeni bilgidir.
 **Kritik davranış farkı:** `stale` oturumu öldürmez — mosh'un tüm olayı budur.
 SSH tarafındaki `_handleClientChange` → `connectionLost` yolu mosh'ta
 kullanılmaz; sadece `serverShutdown` ve `session.done` sekmeyi kapatır.
 
-**Rehome** — `rehome({localAddress, localPort})` çağrısını sarar, eşzamanlı
-çağrıları teke indirir (paket içinde `_rehoming` guard'ı var ama biz de debounce
-edeceğiz; ağ değişimi olayları salkım halinde gelir).
+**Bootstrap hatası** — `MoshBootstrapException` (exitCode + sunucu çıktısı
+olduğu gibi). 127 ayrı mesaj alır. SSH client'a dokunulmaz, çağıran canlı bir
+bağlantıyla fallback yapabilir.
+
+**Rehome** — `rehome()` çağrısını sarar. 300 ms debounce salkım halinde gelen
+ağ olaylarını tek rebind'e indirir. Paketin `_rehoming` guard'ı eşzamanlı
+çağrıyı **düşürüyor**, bu da oturumu en son ağ yolundan bir önceki yolda
+bırakır; manager uçuş sırasında gelen isteği hatırlayıp bir kez daha koşar.
+Dönen future her zaman normal tamamlanır — çağıranlar lifecycle/connectivity
+handler'ları, exception koyacak yerleri yok; hata `errors` stream'ine gider.
 
 ### `lib/core/network/terminal_mosh_bridge.dart` (yeni)
 
@@ -105,7 +130,12 @@ aynası, tek fark alt taşıyıcı:
 - `session.stdout` → `terminal.write(...)` (UTF-8 decode, `allowMalformed: true`)
 - `terminal.onResize` → `session.resize(width, height)`
 - `session.done` → `onClosed?.call()`
+- `session.errors` → terminale sarı uyarı satırı, oturum **yaşamaya devam eder**
 - `dispose({closeSession})` aynı imza
+
+SSH bridge iki stream'in de bitmesini beklerken mosh'ta tek çıkış akışı var;
+sekmeyi kapatan şey `done`. UTF-8 çözme yine stream transformer üzerinden —
+ekran diff'i çok baytlı bir karakteri iki datagram'a bölebiliyor.
 
 `TerminalOutputChain` (`lib/features/terminal/domain/services/terminal_output_chain.dart`)
 `onOutput` slotuna yapılan atamayı kendiliğinden adopte ediyor
