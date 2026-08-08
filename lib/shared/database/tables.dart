@@ -50,6 +50,11 @@ class Hosts extends Table {
   TextColumn get username => text().nullable()();
   IntColumn get port => integer().withDefault(const Constant(22))();
   TextColumn get protocol => text().withDefault(const Constant('ssh'))(); // 'ssh', 'mosh', 'local', 'serial'
+  /// Remote `mosh-server` executable, when it is not on the login PATH.
+  TextColumn get moshServerPath => text().nullable()();
+  /// UDP range `mosh-server` is asked to bind, as `start:end`. Null means the
+  /// mosh default (60000:61000).
+  TextColumn get moshPortRange => text().nullable()();
   TextColumn get colorTag => text().nullable()();
   TextColumn get jumpHostId => text().nullable().references(Hosts, #id, onDelete: KeyAction.setNull)();
   DateTimeColumn get createdAt => dateTime()();

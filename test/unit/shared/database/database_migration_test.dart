@@ -6,6 +6,26 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:terly2/shared/database/app_database.dart';
 
+/// The `hosts` table as it stood at schema v2: after `username` was added and
+/// before the v5 Mosh columns. Fixtures that start at v2 or later need it,
+/// because the migrations from there on alter this table.
+const _hostsTableAtV2 = '''
+  CREATE TABLE IF NOT EXISTS "hosts" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "workspace_id" TEXT NOT NULL,
+    "group_id" TEXT NULL,
+    "identity_id" TEXT NULL,
+    "label" TEXT NOT NULL,
+    "hostname" TEXT NOT NULL,
+    "username" TEXT NULL,
+    "port" INTEGER NOT NULL DEFAULT 22,
+    "protocol" TEXT NOT NULL DEFAULT 'ssh',
+    "color_tag" TEXT NULL,
+    "jump_host_id" TEXT NULL,
+    "created_at" INTEGER NOT NULL
+  );
+''';
+
 void main() {
   late File tempDbFile;
   AppDatabase? db;
@@ -67,7 +87,7 @@ void main() {
       final appDb = AppDatabase(NativeDatabase(tempDbFile));
       db = appDb;
 
-      expect(appDb.schemaVersion, equals(4));
+      expect(appDb.schemaVersion, equals(5));
 
       // 3. Verify existing legacy host record can be fetched.
       final fetchedHost = await appDb.hostsDao.getHostById('host-v1');
@@ -107,6 +127,8 @@ void main() {
       final legacyValue = base64.encode(utf8.encode(plainFingerprint));
 
       final rawDb = sqlite3.open(tempDbFile.path);
+      // A real v2 database always carries hosts; the later migrations alter it.
+      rawDb.execute(_hostsTableAtV2);
       rawDb.execute('''
         CREATE TABLE IF NOT EXISTS "known_hosts" (
           "id" TEXT NOT NULL PRIMARY KEY,
@@ -151,6 +173,7 @@ void main() {
           "created_at" INTEGER NOT NULL
         );
       ''');
+      rawDb.execute(_hostsTableAtV2);
       rawDb.execute('PRAGMA user_version = 3;');
       rawDb.execute('''
         INSERT INTO workspaces (id, name, created_at)
@@ -184,6 +207,54 @@ void main() {
       expect(panes.single.sessionType, equals('local'));
       // Column default, so an older row shape stays readable.
       expect(panes.single.splitRatio, equals(0.5));
+    });
+
+    test('upgrading to v5 adds the Mosh columns and keeps existing hosts',
+        () async {
+      final rawDb = sqlite3.open(tempDbFile.path);
+      rawDb.execute('''
+        CREATE TABLE IF NOT EXISTS "workspaces" (
+          "id" TEXT NOT NULL PRIMARY KEY,
+          "name" TEXT NOT NULL,
+          "color_code" TEXT NULL,
+          "created_at" INTEGER NOT NULL
+        );
+      ''');
+      rawDb.execute(_hostsTableAtV2);
+      rawDb.execute('PRAGMA user_version = 4;');
+      rawDb.execute('''
+        INSERT INTO workspaces (id, name, created_at)
+        VALUES ('ws-1', 'Default Workspace', 1600000000);
+      ''');
+      // A host already stored with protocol 'mosh' back when nothing
+      // implemented it. The migration must leave that column alone.
+      rawDb.execute('''
+        INSERT INTO hosts (id, workspace_id, label, hostname, port, protocol, created_at)
+        VALUES ('host-v4', 'ws-1', 'Old Mosh Host', '10.0.0.9', 22, 'mosh', 1600000000);
+      ''');
+      rawDb.close();
+
+      final appDb = AppDatabase(NativeDatabase(tempDbFile));
+      db = appDb;
+
+      final migrated = await appDb.hostsDao.getHostById('host-v4');
+      expect(migrated, isNotNull);
+      expect(migrated!.protocol, equals('mosh'));
+      // Nullable, so an existing host falls back to the mosh defaults.
+      expect(migrated.moshServerPath, isNull);
+      expect(migrated.moshPortRange, isNull);
+
+      await appDb.hostsDao.updateHostById(
+        'host-v4',
+        migrated.copyWith(
+          moshServerPath: const Value('/opt/bin/mosh-server'),
+          moshPortRange: const Value('61000:61010'),
+        ),
+      );
+
+      final updated = await appDb.hostsDao.getHostById('host-v4');
+      expect(updated!.moshServerPath, equals('/opt/bin/mosh-server'));
+      expect(updated.moshPortRange, equals('61000:61010'));
     });
   });
 }

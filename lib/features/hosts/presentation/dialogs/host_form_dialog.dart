@@ -28,6 +28,8 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
   late TextEditingController _usernameController;
   late TextEditingController _portController;
   late TextEditingController _colorTagController;
+  late TextEditingController _moshServerPathController;
+  late TextEditingController _moshPortRangeController;
   late FocusNode _hostnameFocusNode;
 
   late String _protocol;
@@ -47,6 +49,12 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
       text: (init?.port ?? 22).toString(),
     );
     _colorTagController = TextEditingController(text: init?.colorTag ?? '');
+    _moshServerPathController = TextEditingController(
+      text: init?.moshServerPath ?? '',
+    );
+    _moshPortRangeController = TextEditingController(
+      text: init?.moshPortRange ?? '',
+    );
     _hostnameFocusNode = FocusNode();
 
     _hostnameFocusNode.addListener(() {
@@ -55,12 +63,11 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
       }
     });
 
-    // Mosh transport and Serial are not yet implemented (see tech_spec §6.3).
-    // The form only offers SSH and, on shell-capable platforms, Local. Any
-    // other stored protocol (e.g. a legacy 'mosh' host) falls back to SSH so
-    // the dropdown always holds a value with a matching option.
+    // Serial is not yet implemented (see tech_spec §6.3), so a host stored with
+    // a protocol the form cannot offer falls back to SSH and the dropdown
+    // always holds a value with a matching option.
     final proto = init?.protocol;
-    _protocol = (proto == 'local') ? proto! : 'ssh';
+    _protocol = (proto == 'local' || proto == 'mosh') ? proto! : 'ssh';
     _selectedGroupId = init?.groupId;
     _selectedIdentityId = init?.identityId;
     _selectedJumpHostId = init?.jumpHostId;
@@ -73,8 +80,30 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
     _usernameController.dispose();
     _portController.dispose();
     _colorTagController.dispose();
+    _moshServerPathController.dispose();
+    _moshPortRangeController.dispose();
     _hostnameFocusNode.dispose();
     super.dispose();
+  }
+
+  /// Accepts an empty value (the mosh default 60000:61000 is used) or a
+  /// `start:end` pair inside the UDP port space. A bad range would otherwise
+  /// only surface as a `mosh-server` failure at connect time.
+  String? _validateMoshPortRange(String? value) {
+    final text = (value ?? '').trim();
+    if (text.isEmpty) return null;
+
+    final parts = text.split(':');
+    if (parts.length != 2) return 'Use start:end, e.g. 60000:61000';
+
+    final start = int.tryParse(parts[0].trim());
+    final end = int.tryParse(parts[1].trim());
+    if (start == null || end == null) return 'Ports must be numbers';
+    if (start < 1 || start > 65535 || end < 1 || end > 65535) {
+      return 'Ports must be between 1 and 65535';
+    }
+    if (end < start) return 'End must not be below start';
+    return null;
   }
 
   void _parseHostnameInput() {
@@ -102,6 +131,19 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
       final usernameVal = _usernameController.text.trim().isEmpty
           ? null
           : _usernameController.text.trim();
+      // Only persisted for a Mosh host: leaving them behind on a host switched
+      // back to SSH would silently resurface if it were ever switched again.
+      final isMosh = _protocol == 'mosh';
+      final moshServerPathVal = !isMosh
+          ? null
+          : (_moshServerPathController.text.trim().isEmpty
+                ? null
+                : _moshServerPathController.text.trim());
+      final moshPortRangeVal = !isMosh
+          ? null
+          : (_moshPortRangeController.text.trim().isEmpty
+                ? null
+                : _moshPortRangeController.text.trim());
 
       if (isEditing) {
         await notifier.updateHost(
@@ -114,6 +156,8 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
           username: usernameVal,
           port: portVal,
           protocol: _protocol,
+          moshServerPath: moshServerPathVal,
+          moshPortRange: moshPortRangeVal,
           colorTag: _colorTagController.text.trim().isEmpty
               ? null
               : _colorTagController.text.trim(),
@@ -130,6 +174,8 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
           username: usernameVal,
           port: portVal,
           protocol: _protocol,
+          moshServerPath: moshServerPathVal,
+          moshPortRange: moshPortRangeVal,
           colorTag: _colorTagController.text.trim().isEmpty
               ? null
               : _colorTagController.text.trim(),
@@ -275,6 +321,7 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                             Text(value.toUpperCase()),
                         options: [
                           const ShadOption(value: 'ssh', child: Text('SSH')),
+                          const ShadOption(value: 'mosh', child: Text('Mosh')),
                           if (supportsLocalShell)
                             const ShadOption(
                               value: 'local',
@@ -286,7 +333,16 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                           ),
                         ],
                         onChanged: (val) {
-                          if (val != null) setState(() => _protocol = val);
+                          if (val == null) return;
+                          setState(() {
+                            _protocol = val;
+                            // Mosh carries its session over UDP, which cannot
+                            // be tunneled through an SSH channel. The jump host
+                            // is dropped here rather than at connect time so
+                            // the form never holds a combination that cannot
+                            // work; the note below the field says why.
+                            if (val == 'mosh') _selectedJumpHostId = null;
+                          });
                         },
                       ),
                     ),
@@ -311,6 +367,45 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                     ),
                   ],
                 ),
+                if (_protocol == 'mosh') ...[
+                  const SizedBox(height: 20),
+                  const TerlyFormSectionHeader(
+                    icon: LucideIcons.radio,
+                    title: 'Mosh',
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: ShadInputFormField(
+                          key: const Key('host_mosh_server_path_input'),
+                          controller: _moshServerPathController,
+                          label: const Text('Server binary'),
+                          placeholder: const Text('mosh-server'),
+                          leading: const Icon(LucideIcons.terminal, size: 16),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 1,
+                        child: ShadInputFormField(
+                          key: const Key('host_mosh_port_range_input'),
+                          controller: _moshPortRangeController,
+                          label: const Text('UDP ports'),
+                          placeholder: const Text('60000:61000'),
+                          leading: const Icon(LucideIcons.hash, size: 16),
+                          validator: _validateMoshPortRange,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  const _FieldNote(
+                    'The SSH connection stays open alongside the Mosh session, '
+                    'so SFTP and tunnels keep working.',
+                  ),
+                ],
                 const SizedBox(height: 20),
                 const TerlyFormSectionHeader(
                   icon: LucideIcons.lockKeyhole,
@@ -407,7 +502,15 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                // Jump Host Selection
+                // Jump Host Selection. Not offered on Mosh: UDP does not travel
+                // through an SSH channel, so the two cannot be combined.
+                if (_protocol == 'mosh')
+                  const _FieldNote(
+                    'Jump host is unavailable on Mosh — UDP cannot be tunneled '
+                    'through an SSH connection.',
+                    icon: LucideIcons.info,
+                  )
+                else
                 hostsAsync.when(
                   data: (hosts) {
                     final excludedJumpHostIds = <String>{};
@@ -483,6 +586,35 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
 }
 
 /// Slight placeholder shown while an async select is loading or failed.
+/// A quiet explanatory line under a field, for the cases where a setting is
+/// missing or constrained and the reason is not obvious from the form.
+class _FieldNote extends StatelessWidget {
+  final String text;
+  final IconData icon;
+
+  const _FieldNote(this.text, {this.icon = LucideIcons.info});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 14, color: theme.colorScheme.outline),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.outline,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _SelectStatus extends StatelessWidget {
   final IconData icon;
   final String text;

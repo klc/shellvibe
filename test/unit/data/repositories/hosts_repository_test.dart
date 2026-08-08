@@ -67,6 +67,36 @@ void main() {
       },
     );
 
+    test('round-trips the Mosh settings and clears them on edit', () async {
+      final host = await repository.saveHost(
+        workspaceId: 'workspace-1',
+        label: 'Mosh box',
+        hostname: 'mosh.example.com',
+        protocol: 'mosh',
+        moshServerPath: '/opt/bin/mosh-server',
+        moshPortRange: '61000:61010',
+      );
+
+      final stored = await repository.getHostById(host.id);
+      expect(stored!.protocol, equals('mosh'));
+      expect(stored.moshServerPath, equals('/opt/bin/mosh-server'));
+      expect(stored.moshPortRange, equals('61000:61010'));
+
+      // Switching back to SSH must not leave the Mosh settings behind to
+      // resurface the next time the host is switched over.
+      await repository.saveHost(
+        id: host.id,
+        workspaceId: host.workspaceId,
+        label: host.label,
+        hostname: host.hostname,
+      );
+
+      final cleared = await repository.getHostById(host.id);
+      expect(cleared!.protocol, equals('ssh'));
+      expect(cleared.moshServerPath, isNull);
+      expect(cleared.moshPortRange, isNull);
+    });
+
     test(
       'clears nullable group fields when an existing group is edited',
       () async {

@@ -8,6 +8,7 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../../../../app/theme/terly_tokens.dart';
 import '../../../../app/widgets/terly_ui.dart';
+import '../../../../core/network/mosh_session_manager.dart';
 import '../../../../core/network/ssh_session_manager.dart';
 import '../../../../core/utils/platform_capabilities.dart';
 import '../../../hosts/domain/models/host_model.dart';
@@ -537,6 +538,15 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
         ),
         Text(connectionLabel),
         if (host != null) Text('${host.hostname}:${host.port}'),
+        // Only shown once a Mosh link has gone quiet. Silence is not a
+        // disconnect here — the session is alive and will catch up — but the
+        // difference between "slow" and "dropped" is invisible without it,
+        // and on this protocol the user cannot tell them apart any other way.
+        if (pane.moshLinkState?.status == MoshLinkStatus.stale)
+          Text(
+            'mosh quiet ${pane.moshLinkState!.silence.inSeconds}s',
+            style: TextStyle(color: Theme.of(context).colorScheme.tertiary),
+          ),
         if (tabsState.selectedPaneIds.length >= 2)
           Text(
             'broadcast '
@@ -547,7 +557,9 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
         Text('tunnels ${activeTunnels.length}'),
       ],
       trailing: Text(
-        pane.sessionType == TerminalSessionType.ssh
+        pane.isMosh
+            ? 'UTF-8 · mosh'
+            : pane.sessionType == TerminalSessionType.ssh
             ? 'UTF-8 · ssh'
             : 'UTF-8 · local',
       ),

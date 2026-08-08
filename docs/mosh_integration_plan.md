@@ -1,6 +1,6 @@
 # Mosh Entegrasyonu — Uygulama Planı
 
-> Tarih: 2026-08-07 · Durum: Faz 0–2 tamam, Faz 3 sırada · İlgili: `docs/product_roadmap_2026-08-07.md` §5.2
+> Tarih: 2026-08-07 · Durum: Faz 0–3 tamam; kalan iş Faz 4 (prediction) · İlgili: `docs/product_roadmap_2026-08-07.md` §5.2
 
 ## Context
 
@@ -199,35 +199,56 @@ Mosh olmayan sekmeler için ikisi de no-op.
 
 ---
 
-## Faz 3 — UI ve kalıcılık
+## Faz 3 — UI ve kalıcılık ✅
 
 ### Host formu — `lib/features/hosts/presentation/dialogs/host_form_dialog.dart`
 
-- 56-62. satırlardaki "Mosh henüz yok" düşürmesi kalkar, dropdown'a Mosh gelir.
-- `jumpHostId` seçiliyken Mosh seçilemez (ve tersi) — inline açıklama:
-  *"Mosh, jump host üzerinden çalışmaz (UDP tünellenemez)."*
-- Mosh seçiliyken görünen alanlar: sunucu binary yolu (varsayılan
-  `mosh-server`), UDP port aralığı (varsayılan `60000:61000`).
+- "Mosh henüz yok" düşürmesi kalktı, dropdown'a Mosh geldi. Yalnızca Serial hâlâ
+  düşürülüyor (tech_spec §6.3).
+- Mosh seçilince jump host alanı yerini açıklamaya bırakıyor ve seçim
+  temizleniyor: form hiçbir an çalışamayacak bir kombinasyonu tutmuyor.
+  *"Jump host is unavailable on Mosh — UDP cannot be tunneled through an SSH
+  connection."*
+- Mosh seçiliyken görünen alanlar: sunucu binary yolu (placeholder
+  `mosh-server`) ve UDP port aralığı (placeholder `60000:61000`, `start:end`
+  formatı ve 1–65535 sınırı doğrulanıyor). Boş bırakılan alan mosh
+  varsayılanına düşer.
+- Mosh alanları **yalnızca mosh host'unda** yazılıyor; SSH'a geri alınan bir
+  host'ta temizleniyor, yoksa tekrar mosh'a alındığında sessizce geri gelirdi.
 
 ### Şema — `lib/shared/database/tables.dart` + `app_database.dart`
 
 `Hosts` tablosuna iki nullable sütun: `moshServerPath`, `moshPortRange`.
 `schemaVersion` 4 → 5, `onUpgrade`'e `from < 5` dalında iki `m.addColumn`.
-`HostModel` (`host_model.dart`) ve `hosts_repository.dart` map'lemeleri
-buna göre genişler. Mevcut `protocol` sütununa dokunulmaz.
+`HostModel` ve `hosts_repository.dart` map'lemeleri genişledi. Mevcut `protocol`
+sütununa dokunulmadı — v4'te `'mosh'` yazılmış bir host aynen kalıyor ve artık
+gerçekten çalışıyor.
 
-### Terminal sekmesi göstergesi
+Migration testlerinin v2/v3 fixture'ları `hosts` tablosunu hiç kurmuyordu; yeni
+`addColumn` bunu ortaya çıkardı. Gerçek bir v2/v3 veritabanında o tablo hep var,
+o yüzden migration'a savunma eklemek yerine fixture'lar tamamlandı.
 
-Mosh sekmesinde link durumu görünür: `live` sessiz, `stale` olduğunda
-*"[mosh] son duyum 12s önce"* rozeti (mosh/Blink davranışı). Kullanıcının
-"koptu mu, yavaş mı" ayrımını yapabilmesi bu protokolde SSH'takinden daha
-önemli, çünkü stale bir oturum ölü değil.
+### Bootstrap host ayarlarını kullanıyor
+
+`_buildMoshBootstrap` host'un `moshServerPath`/`moshPortRange` değerlerini
+`MoshSshBootstrap`'e geçiriyor. Aralık burada bir kez daha doğrulanıyor: form
+doğruluyor ama satır import'tan da gelebilir ve `MoshSshBootstrap` kullanamadığı
+aralıkta throw eder — bozuk bir kayıt varsayılana düşmeli, bağlantıyı
+düşürmemeli.
+
+### Terminal durum çubuğu
+
+- Taşıyıcı `UTF-8 · mosh` olarak görünüyor.
+- Link `stale` olduğunda *"mosh quiet 12s"* rozeti çıkıyor (mosh/Blink
+  davranışı). Bağlantı etiketi `connected` kalıyor — çünkü öyle. Kullanıcının
+  "koptu mu, yavaş mı" ayrımını yapabilmesi bu protokolde SSH'takinden daha
+  önemli, çünkü stale bir oturum ölü değil.
 
 ### Dokümantasyon
 
-`docs/tech_spec.md:288` ve `docs/features_and_competitor_analysis.md:62`
-Mosh'u "planlanan" olmaktan çıkarıp gerçek kapsamla (prediction yok,
-ProxyJump yok, reattach yok) günceller.
+`docs/tech_spec.md` §6.3 ve `docs/features_and_competitor_analysis.md` §1.3
+Mosh'u "planlanan" olmaktan çıkarıp gerçek kapsamıyla anlatıyor (prediction yok,
+ProxyJump yok, reattach yok). `docs/product_roadmap_2026-08-07.md` §5.2 kapandı.
 
 ---
 

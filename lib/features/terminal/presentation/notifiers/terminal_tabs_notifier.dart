@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:dart_mosh/dart_mosh.dart';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
@@ -354,6 +355,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       final transport = await manager.connect(
         client: client,
         address: address,
+        bootstrap: _buildMoshBootstrap(host),
         columns: terminal.viewWidth,
         rows: terminal.viewHeight,
       );
@@ -382,6 +384,35 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       tab.moshSessionManager = null;
       return false;
     }
+  }
+
+  /// Builds the `mosh-server` command from the host's own settings, falling
+  /// back to the mosh defaults for anything left blank.
+  ///
+  /// The port range is re-checked here rather than trusted: the form validates
+  /// it, but a row can also arrive from an import or an older write, and
+  /// `MoshSshBootstrap` throws on a range it cannot use — which would turn a
+  /// bad stored value into a failed connect instead of a default one.
+  MoshSshBootstrap _buildMoshBootstrap(HostModel host) {
+    const defaults = MoshSshBootstrap();
+    final binary = host.moshServerPath?.trim();
+    final range = host.moshPortRange?.trim().split(':') ?? const [];
+    final start = range.length == 2 ? int.tryParse(range[0].trim()) : null;
+    final end = range.length == 2 ? int.tryParse(range[1].trim()) : null;
+    final usable =
+        start != null &&
+        end != null &&
+        start >= 1 &&
+        end <= 65535 &&
+        end >= start;
+
+    return MoshSshBootstrap(
+      serverBinary: (binary == null || binary.isEmpty)
+          ? defaults.serverBinary
+          : binary,
+      serverPort: usable ? start : defaults.serverPort,
+      serverPortEnd: usable ? end : defaults.serverPortEnd,
+    );
   }
 
   /// Resolves the address the Mosh datagrams are sent to.

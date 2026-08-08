@@ -31,6 +31,8 @@ class HostsNotifier extends _$HostsNotifier {
     String? username,
     int port = 22,
     String protocol = 'ssh',
+    String? moshServerPath,
+    String? moshPortRange,
     String? colorTag,
     String? jumpHostId,
   }) async {
@@ -46,6 +48,8 @@ class HostsNotifier extends _$HostsNotifier {
         username: username,
         port: port,
         protocol: protocol,
+        moshServerPath: moshServerPath,
+        moshPortRange: moshPortRange,
         colorTag: colorTag,
         jumpHostId: jumpHostId,
       );
@@ -71,6 +75,8 @@ class HostsNotifier extends _$HostsNotifier {
     String? username,
     int port = 22,
     String protocol = 'ssh',
+    String? moshServerPath,
+    String? moshPortRange,
     String? colorTag,
     String? jumpHostId,
   }) async {
@@ -87,6 +93,8 @@ class HostsNotifier extends _$HostsNotifier {
         username: username,
         port: port,
         protocol: protocol,
+        moshServerPath: moshServerPath,
+        moshPortRange: moshPortRange,
         colorTag: colorTag,
         jumpHostId: jumpHostId,
       );

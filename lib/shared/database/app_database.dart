@@ -46,7 +46,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration {
@@ -78,6 +78,12 @@ class AppDatabase extends _$AppDatabase {
         if (from < 4) {
           await m.createTable(templates);
           await m.createTable(templatePanes);
+        }
+        if (from < 5) {
+          // Both nullable: an existing host keeps using the mosh defaults, and
+          // the `protocol` column it may already carry is left untouched.
+          await m.addColumn(hosts, hosts.moshServerPath);
+          await m.addColumn(hosts, hosts.moshPortRange);
         }
       },
     );
