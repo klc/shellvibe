@@ -204,6 +204,8 @@ CREATE TABLE hosts (
     username TEXT,
     port INTEGER NOT NULL DEFAULT 22,
     protocol TEXT NOT NULL DEFAULT 'ssh', -- 'ssh', 'mosh', 'local', 'serial'
+    mosh_server_path TEXT, -- NULL = 'mosh-server' (login PATH)
+    mosh_port_range TEXT,  -- 'start:end'; NULL = mosh varsayılanı 60000:61000
     color_tag TEXT,
     jump_host_id TEXT REFERENCES hosts(id) ON DELETE SET NULL, -- Sıçrama sunucusu (Bastion)
     created_at INTEGER NOT NULL
@@ -285,7 +287,10 @@ Mevcut Drift şema sürümü **3**'tür. Veritabanı açılırken foreign key de
 ### 6.3. Mobil Arka Plan & Uyku Modu Yönetimi (Background Session Persistence)
 - **Sorun:** Cihaz ekranı kapandığında veya uygulama arka plana atıldığında mobil OS (özellikle iOS) TCP soketlerini keser.
 - **Mevcut Davranış:** SSH oturum yöneticisi, uygulama çalışır durumdayken 30 saniyelik keep-alive gönderir. Bu mekanizma sessiz bağlantı kopmalarını algılamaya yardımcı olur ancak iOS/Android'in uygulamayı askıya almasını önleyemez.
-- **Planlanan:** Platform politikalarına uygun arka plan oturumu/reconnect stratejisi ayrıca tasarlanacaktır. Mosh protokolü model ve UI seçeneklerinde yer alsa da mevcut kod tabanında çalışan bir Mosh transport motoru bulunmamaktadır; destek tamamlanana kadar ürün yüzeyinde kullanılabilir özellik olarak sunulmamalıdır.
+- **Mosh (uygulandı):** `protocol: 'mosh'` olan host'lar saf Dart bir UDP transport'u üzerinden bağlanır (`lib/core/network/mosh_session_manager.dart`). `mosh-server` mevcut SSH bağlantısı üzerinden başlatılır; SSH client'ı açık kalır, böylece SFTP ve tüneller aynı sekmeden çalışmaya devam eder. Ağ değişiminde ve app resume'da oturum `rehome()` ile yeni ağ yoluna taşınır — sessizlik bir kopma değildir, durum çubuğunda süresiyle gösterilir.
+  - **Kapsam dışı:** local echo / prediction (altyapı hazır, motor yok), jump host üzerinden Mosh (UDP bir SSH kanalından geçmez, UI engelliyor), süreç öldükten sonra reattach (protokol izin vermiyor; karşı önlem `tmux`).
+  - `mosh-server` bulunamayan host'ta bağlantı düz SSH'a düşer ve terminale tek satır açıklama yazılır.
+- **Planlanan:** Platform politikalarına uygun arka plan oturumu/reconnect stratejisi ayrıca tasarlanacaktır. Mosh, uygulama OS tarafından öldürülürse oturumu koruyamaz.
 
 ### 6.4. Mobil Klavye "Sticky Key" Durum Makinesi (Extra Key Bar)
 - **Sorun:** Dokunmatik mobil klavyede `Ctrl` ve `Alt` tuşları yoktur.

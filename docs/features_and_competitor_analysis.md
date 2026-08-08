@@ -60,8 +60,9 @@ Pulvarize olmuş terminal ekosisteminde kullanıcılar genellikle ikiye ayrılma
 - **SSH Config Import/Export:** Cihazdaki `~/.ssh/config` dosyasını okuyup otomatik host/identity haritası çıkarma.
 
 #### 1.3. Mosh (Mobile Shell) Desteği
-- **Kesintisiz Mobil Bağlantı:** Wi-Fi'dan mobil veriye geçişte (IP değişiminde) veya cihaz uykuya girdiğinde bağlantının kopmaması (UDP tabanlı roaming).
-- **Yerel Ekran Yankısı (Local Echo):** Yüksek gecikmeli (high-latency) ağlarda yazılan karakterlerin anında ekranda görünmesi.
+- **Kesintisiz Mobil Bağlantı (uygulandı):** Wi-Fi'dan mobil veriye geçişte (IP değişiminde) veya cihaz uykuya girdiğinde bağlantının kopmaması (UDP tabanlı roaming). Saf Dart transport; C binary bundle'ı yok, tüm platformlarda çalışır.
+- **Yerel Ekran Yankısı (Local Echo):** Yüksek gecikmeli ağlarda yazılan karakterlerin anında görünmesi. **Henüz yok** — `echoAcks` altyapısı hazır, predictor motoru ayrı iş.
+- **Kapsam sınırları:** Jump host üzerinden Mosh çalışmaz (UDP tünellenemez, UI engelliyor). Uygulama OS tarafından öldürülürse oturuma reattach edilemez (protokol izin vermiyor); karşı önlem `tmux`.
 
 #### 1.4. Serial Port / COM & Network Protocols (İleri Seviye)
 - **Serial Connection:** IoT cihazları, router ve switch'ler için USB-to-Serial (COM port, `/dev/ttyUSB*`) bağlantı arayüzü. Baud rate, parity, stop bits, flow control ayarları.

@@ -1395,6 +1395,28 @@ class $HostsTable extends Hosts with TableInfo<$HostsTable, Host> {
     requiredDuringInsert: false,
     defaultValue: const Constant('ssh'),
   );
+  static const VerificationMeta _moshServerPathMeta = const VerificationMeta(
+    'moshServerPath',
+  );
+  @override
+  late final GeneratedColumn<String> moshServerPath = GeneratedColumn<String>(
+    'mosh_server_path',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _moshPortRangeMeta = const VerificationMeta(
+    'moshPortRange',
+  );
+  @override
+  late final GeneratedColumn<String> moshPortRange = GeneratedColumn<String>(
+    'mosh_port_range',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _colorTagMeta = const VerificationMeta(
     'colorTag',
   );
@@ -1442,6 +1464,8 @@ class $HostsTable extends Hosts with TableInfo<$HostsTable, Host> {
     username,
     port,
     protocol,
+    moshServerPath,
+    moshPortRange,
     colorTag,
     jumpHostId,
     createdAt,
@@ -1520,6 +1544,24 @@ class $HostsTable extends Hosts with TableInfo<$HostsTable, Host> {
         protocol.isAcceptableOrUnknown(data['protocol']!, _protocolMeta),
       );
     }
+    if (data.containsKey('mosh_server_path')) {
+      context.handle(
+        _moshServerPathMeta,
+        moshServerPath.isAcceptableOrUnknown(
+          data['mosh_server_path']!,
+          _moshServerPathMeta,
+        ),
+      );
+    }
+    if (data.containsKey('mosh_port_range')) {
+      context.handle(
+        _moshPortRangeMeta,
+        moshPortRange.isAcceptableOrUnknown(
+          data['mosh_port_range']!,
+          _moshPortRangeMeta,
+        ),
+      );
+    }
     if (data.containsKey('color_tag')) {
       context.handle(
         _colorTagMeta,
@@ -1588,6 +1630,14 @@ class $HostsTable extends Hosts with TableInfo<$HostsTable, Host> {
         DriftSqlType.string,
         data['${effectivePrefix}protocol'],
       )!,
+      moshServerPath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}mosh_server_path'],
+      ),
+      moshPortRange: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}mosh_port_range'],
+      ),
       colorTag: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}color_tag'],
@@ -1619,6 +1669,13 @@ class Host extends DataClass implements Insertable<Host> {
   final String? username;
   final int port;
   final String protocol;
+
+  /// Remote `mosh-server` executable, when it is not on the login PATH.
+  final String? moshServerPath;
+
+  /// UDP range `mosh-server` is asked to bind, as `start:end`. Null means the
+  /// mosh default (60000:61000).
+  final String? moshPortRange;
   final String? colorTag;
   final String? jumpHostId;
   final DateTime createdAt;
@@ -1632,6 +1689,8 @@ class Host extends DataClass implements Insertable<Host> {
     this.username,
     required this.port,
     required this.protocol,
+    this.moshServerPath,
+    this.moshPortRange,
     this.colorTag,
     this.jumpHostId,
     required this.createdAt,
@@ -1654,6 +1713,12 @@ class Host extends DataClass implements Insertable<Host> {
     }
     map['port'] = Variable<int>(port);
     map['protocol'] = Variable<String>(protocol);
+    if (!nullToAbsent || moshServerPath != null) {
+      map['mosh_server_path'] = Variable<String>(moshServerPath);
+    }
+    if (!nullToAbsent || moshPortRange != null) {
+      map['mosh_port_range'] = Variable<String>(moshPortRange);
+    }
     if (!nullToAbsent || colorTag != null) {
       map['color_tag'] = Variable<String>(colorTag);
     }
@@ -1681,6 +1746,12 @@ class Host extends DataClass implements Insertable<Host> {
           : Value(username),
       port: Value(port),
       protocol: Value(protocol),
+      moshServerPath: moshServerPath == null && nullToAbsent
+          ? const Value.absent()
+          : Value(moshServerPath),
+      moshPortRange: moshPortRange == null && nullToAbsent
+          ? const Value.absent()
+          : Value(moshPortRange),
       colorTag: colorTag == null && nullToAbsent
           ? const Value.absent()
           : Value(colorTag),
@@ -1706,6 +1777,8 @@ class Host extends DataClass implements Insertable<Host> {
       username: serializer.fromJson<String?>(json['username']),
       port: serializer.fromJson<int>(json['port']),
       protocol: serializer.fromJson<String>(json['protocol']),
+      moshServerPath: serializer.fromJson<String?>(json['moshServerPath']),
+      moshPortRange: serializer.fromJson<String?>(json['moshPortRange']),
       colorTag: serializer.fromJson<String?>(json['colorTag']),
       jumpHostId: serializer.fromJson<String?>(json['jumpHostId']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -1724,6 +1797,8 @@ class Host extends DataClass implements Insertable<Host> {
       'username': serializer.toJson<String?>(username),
       'port': serializer.toJson<int>(port),
       'protocol': serializer.toJson<String>(protocol),
+      'moshServerPath': serializer.toJson<String?>(moshServerPath),
+      'moshPortRange': serializer.toJson<String?>(moshPortRange),
       'colorTag': serializer.toJson<String?>(colorTag),
       'jumpHostId': serializer.toJson<String?>(jumpHostId),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -1740,6 +1815,8 @@ class Host extends DataClass implements Insertable<Host> {
     Value<String?> username = const Value.absent(),
     int? port,
     String? protocol,
+    Value<String?> moshServerPath = const Value.absent(),
+    Value<String?> moshPortRange = const Value.absent(),
     Value<String?> colorTag = const Value.absent(),
     Value<String?> jumpHostId = const Value.absent(),
     DateTime? createdAt,
@@ -1753,6 +1830,12 @@ class Host extends DataClass implements Insertable<Host> {
     username: username.present ? username.value : this.username,
     port: port ?? this.port,
     protocol: protocol ?? this.protocol,
+    moshServerPath: moshServerPath.present
+        ? moshServerPath.value
+        : this.moshServerPath,
+    moshPortRange: moshPortRange.present
+        ? moshPortRange.value
+        : this.moshPortRange,
     colorTag: colorTag.present ? colorTag.value : this.colorTag,
     jumpHostId: jumpHostId.present ? jumpHostId.value : this.jumpHostId,
     createdAt: createdAt ?? this.createdAt,
@@ -1772,6 +1855,12 @@ class Host extends DataClass implements Insertable<Host> {
       username: data.username.present ? data.username.value : this.username,
       port: data.port.present ? data.port.value : this.port,
       protocol: data.protocol.present ? data.protocol.value : this.protocol,
+      moshServerPath: data.moshServerPath.present
+          ? data.moshServerPath.value
+          : this.moshServerPath,
+      moshPortRange: data.moshPortRange.present
+          ? data.moshPortRange.value
+          : this.moshPortRange,
       colorTag: data.colorTag.present ? data.colorTag.value : this.colorTag,
       jumpHostId: data.jumpHostId.present
           ? data.jumpHostId.value
@@ -1792,6 +1881,8 @@ class Host extends DataClass implements Insertable<Host> {
           ..write('username: $username, ')
           ..write('port: $port, ')
           ..write('protocol: $protocol, ')
+          ..write('moshServerPath: $moshServerPath, ')
+          ..write('moshPortRange: $moshPortRange, ')
           ..write('colorTag: $colorTag, ')
           ..write('jumpHostId: $jumpHostId, ')
           ..write('createdAt: $createdAt')
@@ -1810,6 +1901,8 @@ class Host extends DataClass implements Insertable<Host> {
     username,
     port,
     protocol,
+    moshServerPath,
+    moshPortRange,
     colorTag,
     jumpHostId,
     createdAt,
@@ -1827,6 +1920,8 @@ class Host extends DataClass implements Insertable<Host> {
           other.username == this.username &&
           other.port == this.port &&
           other.protocol == this.protocol &&
+          other.moshServerPath == this.moshServerPath &&
+          other.moshPortRange == this.moshPortRange &&
           other.colorTag == this.colorTag &&
           other.jumpHostId == this.jumpHostId &&
           other.createdAt == this.createdAt);
@@ -1842,6 +1937,8 @@ class HostsCompanion extends UpdateCompanion<Host> {
   final Value<String?> username;
   final Value<int> port;
   final Value<String> protocol;
+  final Value<String?> moshServerPath;
+  final Value<String?> moshPortRange;
   final Value<String?> colorTag;
   final Value<String?> jumpHostId;
   final Value<DateTime> createdAt;
@@ -1856,6 +1953,8 @@ class HostsCompanion extends UpdateCompanion<Host> {
     this.username = const Value.absent(),
     this.port = const Value.absent(),
     this.protocol = const Value.absent(),
+    this.moshServerPath = const Value.absent(),
+    this.moshPortRange = const Value.absent(),
     this.colorTag = const Value.absent(),
     this.jumpHostId = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -1871,6 +1970,8 @@ class HostsCompanion extends UpdateCompanion<Host> {
     this.username = const Value.absent(),
     this.port = const Value.absent(),
     this.protocol = const Value.absent(),
+    this.moshServerPath = const Value.absent(),
+    this.moshPortRange = const Value.absent(),
     this.colorTag = const Value.absent(),
     this.jumpHostId = const Value.absent(),
     required DateTime createdAt,
@@ -1890,6 +1991,8 @@ class HostsCompanion extends UpdateCompanion<Host> {
     Expression<String>? username,
     Expression<int>? port,
     Expression<String>? protocol,
+    Expression<String>? moshServerPath,
+    Expression<String>? moshPortRange,
     Expression<String>? colorTag,
     Expression<String>? jumpHostId,
     Expression<DateTime>? createdAt,
@@ -1905,6 +2008,8 @@ class HostsCompanion extends UpdateCompanion<Host> {
       if (username != null) 'username': username,
       if (port != null) 'port': port,
       if (protocol != null) 'protocol': protocol,
+      if (moshServerPath != null) 'mosh_server_path': moshServerPath,
+      if (moshPortRange != null) 'mosh_port_range': moshPortRange,
       if (colorTag != null) 'color_tag': colorTag,
       if (jumpHostId != null) 'jump_host_id': jumpHostId,
       if (createdAt != null) 'created_at': createdAt,
@@ -1922,6 +2027,8 @@ class HostsCompanion extends UpdateCompanion<Host> {
     Value<String?>? username,
     Value<int>? port,
     Value<String>? protocol,
+    Value<String?>? moshServerPath,
+    Value<String?>? moshPortRange,
     Value<String?>? colorTag,
     Value<String?>? jumpHostId,
     Value<DateTime>? createdAt,
@@ -1937,6 +2044,8 @@ class HostsCompanion extends UpdateCompanion<Host> {
       username: username ?? this.username,
       port: port ?? this.port,
       protocol: protocol ?? this.protocol,
+      moshServerPath: moshServerPath ?? this.moshServerPath,
+      moshPortRange: moshPortRange ?? this.moshPortRange,
       colorTag: colorTag ?? this.colorTag,
       jumpHostId: jumpHostId ?? this.jumpHostId,
       createdAt: createdAt ?? this.createdAt,
@@ -1974,6 +2083,12 @@ class HostsCompanion extends UpdateCompanion<Host> {
     if (protocol.present) {
       map['protocol'] = Variable<String>(protocol.value);
     }
+    if (moshServerPath.present) {
+      map['mosh_server_path'] = Variable<String>(moshServerPath.value);
+    }
+    if (moshPortRange.present) {
+      map['mosh_port_range'] = Variable<String>(moshPortRange.value);
+    }
     if (colorTag.present) {
       map['color_tag'] = Variable<String>(colorTag.value);
     }
@@ -2001,6 +2116,8 @@ class HostsCompanion extends UpdateCompanion<Host> {
           ..write('username: $username, ')
           ..write('port: $port, ')
           ..write('protocol: $protocol, ')
+          ..write('moshServerPath: $moshServerPath, ')
+          ..write('moshPortRange: $moshPortRange, ')
           ..write('colorTag: $colorTag, ')
           ..write('jumpHostId: $jumpHostId, ')
           ..write('createdAt: $createdAt, ')
@@ -7038,6 +7155,8 @@ typedef $$HostsTableCreateCompanionBuilder =
       Value<String?> username,
       Value<int> port,
       Value<String> protocol,
+      Value<String?> moshServerPath,
+      Value<String?> moshPortRange,
       Value<String?> colorTag,
       Value<String?> jumpHostId,
       required DateTime createdAt,
@@ -7054,6 +7173,8 @@ typedef $$HostsTableUpdateCompanionBuilder =
       Value<String?> username,
       Value<int> port,
       Value<String> protocol,
+      Value<String?> moshServerPath,
+      Value<String?> moshPortRange,
       Value<String?> colorTag,
       Value<String?> jumpHostId,
       Value<DateTime> createdAt,
@@ -7188,6 +7309,16 @@ class $$HostsTableFilterComposer extends Composer<_$AppDatabase, $HostsTable> {
 
   ColumnFilters<String> get protocol => $composableBuilder(
     column: $table.protocol,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get moshServerPath => $composableBuilder(
+    column: $table.moshServerPath,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get moshPortRange => $composableBuilder(
+    column: $table.moshPortRange,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -7358,6 +7489,16 @@ class $$HostsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get moshServerPath => $composableBuilder(
+    column: $table.moshServerPath,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get moshPortRange => $composableBuilder(
+    column: $table.moshPortRange,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get colorTag => $composableBuilder(
     column: $table.colorTag,
     builder: (column) => ColumnOrderings(column),
@@ -7487,6 +7628,16 @@ class $$HostsTableAnnotationComposer
 
   GeneratedColumn<String> get protocol =>
       $composableBuilder(column: $table.protocol, builder: (column) => column);
+
+  GeneratedColumn<String> get moshServerPath => $composableBuilder(
+    column: $table.moshServerPath,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get moshPortRange => $composableBuilder(
+    column: $table.moshPortRange,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get colorTag =>
       $composableBuilder(column: $table.colorTag, builder: (column) => column);
@@ -7655,6 +7806,8 @@ class $$HostsTableTableManager
                 Value<String?> username = const Value.absent(),
                 Value<int> port = const Value.absent(),
                 Value<String> protocol = const Value.absent(),
+                Value<String?> moshServerPath = const Value.absent(),
+                Value<String?> moshPortRange = const Value.absent(),
                 Value<String?> colorTag = const Value.absent(),
                 Value<String?> jumpHostId = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -7669,6 +7822,8 @@ class $$HostsTableTableManager
                 username: username,
                 port: port,
                 protocol: protocol,
+                moshServerPath: moshServerPath,
+                moshPortRange: moshPortRange,
                 colorTag: colorTag,
                 jumpHostId: jumpHostId,
                 createdAt: createdAt,
@@ -7685,6 +7840,8 @@ class $$HostsTableTableManager
                 Value<String?> username = const Value.absent(),
                 Value<int> port = const Value.absent(),
                 Value<String> protocol = const Value.absent(),
+                Value<String?> moshServerPath = const Value.absent(),
+                Value<String?> moshPortRange = const Value.absent(),
                 Value<String?> colorTag = const Value.absent(),
                 Value<String?> jumpHostId = const Value.absent(),
                 required DateTime createdAt,
@@ -7699,6 +7856,8 @@ class $$HostsTableTableManager
                 username: username,
                 port: port,
                 protocol: protocol,
+                moshServerPath: moshServerPath,
+                moshPortRange: moshPortRange,
                 colorTag: colorTag,
                 jumpHostId: jumpHostId,
                 createdAt: createdAt,

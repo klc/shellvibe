@@ -75,7 +75,7 @@ final class HostsNotifierProvider
   HostsNotifier create() => HostsNotifier();
 }
 
-String _$hostsNotifierHash() => r'ce8886b410840ab3fbb46c2b4eb59987376fc9b2';
+String _$hostsNotifierHash() => r'612286aa89e91531f379b758c3dc162c80213832';
 
 abstract class _$HostsNotifier extends $AsyncNotifier<List<HostModel>> {
   FutureOr<List<HostModel>> build();

@@ -1,6 +1,6 @@
 # Mosh Entegrasyonu — Uygulama Planı
 
-> Tarih: 2026-08-07 · Durum: onay bekliyor · İlgili: `docs/product_roadmap_2026-08-07.md` §5.2
+> Tarih: 2026-08-07 · Durum: Faz 0–3 tamam; kalan iş Faz 4 (prediction) · İlgili: `docs/product_roadmap_2026-08-07.md` §5.2
 
 ## Context
 
@@ -22,7 +22,7 @@ transport kullanılıyor.
 
 | Karar | Seçim |
 |---|---|
-| Protokol motoru | `dart_mosh` pub paketi, exact pin |
+| Protokol motoru | `dart_mosh`, `klc/dart_mosh` fork'undan commit pin'i |
 | Platform kapsamı | Tüm platformlar (pure Dart, ek maliyet yok) |
 | Bootstrap SSH'ı | Açık tut — SFTP ve tüneller mosh sekmesinde de çalışsın |
 | Local echo prediction | Faz 2'ye ertelendi |
@@ -40,21 +40,41 @@ transport kullanılıyor.
 
 ---
 
-## Faz 0 — Bağımlılık ve doğrulama zemini
+## Faz 0 — Bağımlılık ve doğrulama zemini ✅
 
-**`pubspec.yaml`**: `dart_mosh: 0.0.4` (caret **yok** — 0.0.x'te patch bump
-breaking olabilir). Tek transitif bağımlılığı `pointycastle`, zaten
-`pubspec.lock`'ta var.
+**Fork**: paket 0.0.x ve az kullanılıyor, protokol düzeltmelerinin upstream
+sürümü beklemeden inebilmesi için `gwitko/dart_mosh` → `klc/dart_mosh`
+forklandı (Apache-2.0). `pubspec.yaml` sürüm yerine **commit** ile pinliyor
+(`325bc91`), böylece hareketli bir `master` ref'i oluşmuyor. Tek transitif
+bağımlılığı `pointycastle`, zaten `pubspec.lock`'ta vardı.
 
-**Doğrulama harness'ı** (`tool/` altına, kaynak ağacına değil): Docker'da
-`mosh-server` çalıştıran bir compose dosyası + elle koşulan bir smoke script.
-`dart_mosh` 0.0.x ve 3 star — gerçek bir sunucuya karşı wire uyumunu Faz 1'in
-ilk işi olarak kanıtlamalıyız. Bu adım başarısız olursa paketi vendor edip
-düzeltmek Faz 1'i ~1 hafta uzatır; plan bu riski taşıyor.
+**Doğrulama harness'ı** (`tool/mosh/`, kaynak ağacına değil): Docker'da
+`sshd` + `mosh-server` çalıştıran compose dosyası ve elle koşulan
+`tool/mosh/smoke.dart`. Ayrıntı: `tool/mosh/README.md`.
+
+**Sonuç — wire uyumu kanıtlandı** (mosh 1.4.0, Debian bookworm, 6/6):
+bootstrap `exitCode 0`, `MOSH CONNECT` parse, ilk ekran karesi, iki yönlü
+komut round-trip'i, `resize` + `rehome` sonrası oturumun yaşamaya devam etmesi.
+Faz 1'i ~1 hafta uzatacak "paketi düzelt" riski gerçekleşmedi.
 
 ---
 
-## Faz 1 — Transport çekirdeği
+## Faz 1 — Transport çekirdeği ✅
+
+### Fork yaması: `sinceLastHeard` ve `isServerShutdown`
+
+Sağlık takibi pakette eksikti. `MoshSession` her kabul edilen datagramın
+zamanını zaten tutuyordu ama dışarı vermiyordu; `done` da sunucu kapanışı ile
+yerel `close()`'u ayırt ettirmiyordu — ikisinde de tamamlanıyor. Fork'a iki
+getter eklendi (`50d7865`), `pubspec.yaml` pin'i oraya alındı. Fork'un ilk
+gerçek işi bu oldu.
+
+### `MoshTransport` soyutlaması
+
+`MoshSession` yalnızca gerçek bir UDP soketi açarak kurulabiliyor. Manager ve
+bridge bu yüzden dar bir `MoshTransport` arayüzüne bakıyor; `MoshSessionTransport`
+gerçek oturumu sarıyor, testler sahte veriyor. Aynı arayüz Faz 2'de sekmenin
+tuttuğu tip olacak.
 
 ### `lib/core/network/mosh_session_manager.dart` (yeni)
 
@@ -81,15 +101,25 @@ final result = await client.runWithResult(
 **UDP oturumu** — `MoshSession.connect(server:, cipher: MoshPacketCipher.aesOcb(cfg.key), columns:, rows:, address:)`.
 
 **Sağlık takibi** — mosh'ta keep-alive/ping yok; heartbeat aralığı 3 sn.
-Manager `stdout`/`errors` üzerinden son duyum zamanını tutar ve bir
+Manager `transport.sinceLastHeard`'ı 3 sn'de bir yoklar ve bir
 `Stream<MoshLinkState>` yayınlar: `live` / `stale(Duration)` / `serverShutdown`.
+Eşik 6 sn (iki kaçan heartbeat: teki normal, ikisi söylenmeye değer).
+`stale` her tıkta yeniden yayılır — rozet sessizliğin ne kadar sürdüğünü
+saydığı için tekrar eden `stale` yeni bilgidir.
 **Kritik davranış farkı:** `stale` oturumu öldürmez — mosh'un tüm olayı budur.
 SSH tarafındaki `_handleClientChange` → `connectionLost` yolu mosh'ta
 kullanılmaz; sadece `serverShutdown` ve `session.done` sekmeyi kapatır.
 
-**Rehome** — `rehome({localAddress, localPort})` çağrısını sarar, eşzamanlı
-çağrıları teke indirir (paket içinde `_rehoming` guard'ı var ama biz de debounce
-edeceğiz; ağ değişimi olayları salkım halinde gelir).
+**Bootstrap hatası** — `MoshBootstrapException` (exitCode + sunucu çıktısı
+olduğu gibi). 127 ayrı mesaj alır. SSH client'a dokunulmaz, çağıran canlı bir
+bağlantıyla fallback yapabilir.
+
+**Rehome** — `rehome()` çağrısını sarar. 300 ms debounce salkım halinde gelen
+ağ olaylarını tek rebind'e indirir. Paketin `_rehoming` guard'ı eşzamanlı
+çağrıyı **düşürüyor**, bu da oturumu en son ağ yolundan bir önceki yolda
+bırakır; manager uçuş sırasında gelen isteği hatırlayıp bir kez daha koşar.
+Dönen future her zaman normal tamamlanır — çağıranlar lifecycle/connectivity
+handler'ları, exception koyacak yerleri yok; hata `errors` stream'ine gider.
 
 ### `lib/core/network/terminal_mosh_bridge.dart` (yeni)
 
@@ -100,7 +130,12 @@ aynası, tek fark alt taşıyıcı:
 - `session.stdout` → `terminal.write(...)` (UTF-8 decode, `allowMalformed: true`)
 - `terminal.onResize` → `session.resize(width, height)`
 - `session.done` → `onClosed?.call()`
+- `session.errors` → terminale sarı uyarı satırı, oturum **yaşamaya devam eder**
 - `dispose({closeSession})` aynı imza
+
+SSH bridge iki stream'in de bitmesini beklerken mosh'ta tek çıkış akışı var;
+sekmeyi kapatan şey `done`. UTF-8 çözme yine stream transformer üzerinden —
+ekran diff'i çok baytlı bir karakteri iki datagram'a bölebiliyor.
 
 `TerminalOutputChain` (`lib/features/terminal/domain/services/terminal_output_chain.dart`)
 `onOutput` slotuna yapılan atamayı kendiliğinden adopte ediyor
@@ -109,76 +144,111 @@ değişiklik gerekmiyor.**
 
 ---
 
-## Faz 2 — Sekme entegrasyonu ve roaming
+## Faz 2 — Sekme entegrasyonu ve roaming ✅
 
 ### `terminal_tab_session.dart`
 
-- `MoshSessionManager? moshSessionManager` ve `TerminalMoshBridge? moshBridge`
-  alanları.
-- `resizeTerminal()` ve `dispose()` bunları da kapsayacak (mevcut
-  `sshBridge`/`ptyBridge` satırlarının yanına birer satır).
+- `moshSessionManager`, `moshBridge`, `moshLinkSub`, `moshLinkState` alanları ve
+  `isMosh` getter'ı.
+- `resizeTerminal()` ve `dispose()` bunları da kapsıyor. Mosh, SSH manager'ından
+  **önce** kapanıyor — bootstrap client'ı o.
 - `sshSessionManager` **mosh sekmesinde de dolu kalır** → SFTP
   (`sftp_dual_pane_screen.dart`) ve tüneller (`tunnels_screen.dart`)
   değişmeden çalışır.
 
 ### `terminal_tabs_notifier.dart`
 
-`_connectSshTab` içinde SSH kurulduktan sonra bir dallanma:
-`host.protocol == 'mosh'` ise `openShell()` yerine mosh bootstrap yolu.
-SSH bağlanma, host key doğrulama ve identity çözümleme kodu aynen paylaşılır —
-mosh yalnızca kabuğun *nasıl* açıldığını değiştirir.
+`_connectSshTab` içinde SSH kurulduktan sonra dallanma: `host.protocol == 'mosh'`
+ise `_startMoshShell`, değilse `openShell()`. SSH bağlanma, host key doğrulama ve
+identity çözümleme aynen paylaşılıyor — mosh yalnızca kabuğun *nasıl* açıldığını
+değiştiriyor.
 
-Eklenecekler:
-- `_connectMoshTab(tab, host, identity)` — bootstrap + `MoshSession` +
-  `TerminalMoshBridge` + ilk resize (SSH tarafındaki 219. satırdaki ilk-layout
-  resize düzeltmesi burada da gerekli).
-- Mosh bootstrap başarısız olursa: SSH client zaten canlı, `openShell()` ile
-  düz SSH'a düş ve terminale tek satır uyarı yaz. Kullanıcı bağlantısız kalmaz.
+- `_startMoshShell` bool döner; `false` ise çağıran düz SSH kabuğunu açar.
+  Buradaki her hata kurtarılabilir: SSH client canlı ve boşta, `mosh-server`
+  olmayan host (yaygın vaka) kullanıcıyı hata ekranına değil çalışan bir kabuğa
+  tek satır açıklamayla indirir.
+- **Jump host'ta mosh denenmez** — UDP bir SSH kanalından geçmez. Faz 3'teki UI
+  engeli gelmeden önce burada da kapalı, kayıtlı hostlar için.
+- **`clientChanges` dinleyicisi mosh dalında bilinçli olarak bağlanmıyor.**
+  SSH keep-alive'ın düşmesi SSH sekmesinde ölü sekme demek; mosh sekmesinde
+  hiçbir şey demek değil — tam olarak bunu atlatmak protokolün amacı.
 - `reconnectTab` mosh sekmesinde yeni bir mosh oturumu açar (reattach yok).
+
+**Adres çözümleme** — `_resolveMoshAddress`: IP literal ise (kayıtlı hostların
+çoğu) hiç lookup yok; isim ise bir kez çözülüp manager'a veriliyor, aşağıda ikinci
+kez çözülemiyor. **Planın ilk hâlinden sapma:** adresi SSH soketinden okumak
+gerçeği kapatırdı ama `dartssh2` `SSHSocket`'te peer adresini dışarı vermiyor
+(`_SSHNativeSocket` private). Kalan risk round-robin DNS: `mosh-server` SSH'ın
+geldiği adrese bind ettiği için uyuşmazlık "yanlış makinede kabuk" değil "hiç
+cevap vermeyen oturum" olarak çıkar ve SSH fallback'ine düşer.
 
 ### Roaming tetikleyicileri
 
-İkisi de `MoshSessionManager.rehome()` çağırır:
+İkisi de `TerminalTabsNotifier.rehomeMoshSessions()` üzerinden yürür — sekme
+listesinin sahibi o — ve `MoshSessionManager.rehome()` çağırır:
 
-1. **Ağ değişimi** — yeni bağımlılık `connectivity_plus`.
-   `onConnectivityChanged` → tüm canlı mosh oturumlarında debounce'lu rehome.
-2. **App resume** — `lib/app/app.dart:72` `_onLifecycleChange` zaten var.
-   `AppLifecycleState.resumed` dalında (mevcut auto-lock mantığına dokunmadan)
-   rehome tetiklenir. iOS suspend'de UDP soketi ölür; resume'da rebind şart.
+1. **Ağ değişimi** — `connectivity_plus` `onConnectivityChanged`. Abonelik
+   **ilk mosh oturumunda** kuruluyor, build'de değil: SSH-only ve local shell
+   yolları platform kanalına hiç dokunmuyor (birim testleri de bu yüzden
+   binding'siz koşuyor).
+2. **App resume** — `lib/app/app.dart` `_onLifecycleChange`'in `resumed` dalı,
+   auto-lock mantığına dokunulmadan. iOS suspend'de UDP soketi ölür; resume'da
+   rebind şart.
 
-Her ikisi de `TerminalTabsNotifier` üzerinden yürür — sekme listesinin sahibi o.
+Mosh olmayan sekmeler için ikisi de no-op.
 
 ---
 
-## Faz 3 — UI ve kalıcılık
+## Faz 3 — UI ve kalıcılık ✅
 
 ### Host formu — `lib/features/hosts/presentation/dialogs/host_form_dialog.dart`
 
-- 56-62. satırlardaki "Mosh henüz yok" düşürmesi kalkar, dropdown'a Mosh gelir.
-- `jumpHostId` seçiliyken Mosh seçilemez (ve tersi) — inline açıklama:
-  *"Mosh, jump host üzerinden çalışmaz (UDP tünellenemez)."*
-- Mosh seçiliyken görünen alanlar: sunucu binary yolu (varsayılan
-  `mosh-server`), UDP port aralığı (varsayılan `60000:61000`).
+- "Mosh henüz yok" düşürmesi kalktı, dropdown'a Mosh geldi. Yalnızca Serial hâlâ
+  düşürülüyor (tech_spec §6.3).
+- Mosh seçilince jump host alanı yerini açıklamaya bırakıyor ve seçim
+  temizleniyor: form hiçbir an çalışamayacak bir kombinasyonu tutmuyor.
+  *"Jump host is unavailable on Mosh — UDP cannot be tunneled through an SSH
+  connection."*
+- Mosh seçiliyken görünen alanlar: sunucu binary yolu (placeholder
+  `mosh-server`) ve UDP port aralığı (placeholder `60000:61000`, `start:end`
+  formatı ve 1–65535 sınırı doğrulanıyor). Boş bırakılan alan mosh
+  varsayılanına düşer.
+- Mosh alanları **yalnızca mosh host'unda** yazılıyor; SSH'a geri alınan bir
+  host'ta temizleniyor, yoksa tekrar mosh'a alındığında sessizce geri gelirdi.
 
 ### Şema — `lib/shared/database/tables.dart` + `app_database.dart`
 
 `Hosts` tablosuna iki nullable sütun: `moshServerPath`, `moshPortRange`.
 `schemaVersion` 4 → 5, `onUpgrade`'e `from < 5` dalında iki `m.addColumn`.
-`HostModel` (`host_model.dart`) ve `hosts_repository.dart` map'lemeleri
-buna göre genişler. Mevcut `protocol` sütununa dokunulmaz.
+`HostModel` ve `hosts_repository.dart` map'lemeleri genişledi. Mevcut `protocol`
+sütununa dokunulmadı — v4'te `'mosh'` yazılmış bir host aynen kalıyor ve artık
+gerçekten çalışıyor.
 
-### Terminal sekmesi göstergesi
+Migration testlerinin v2/v3 fixture'ları `hosts` tablosunu hiç kurmuyordu; yeni
+`addColumn` bunu ortaya çıkardı. Gerçek bir v2/v3 veritabanında o tablo hep var,
+o yüzden migration'a savunma eklemek yerine fixture'lar tamamlandı.
 
-Mosh sekmesinde link durumu görünür: `live` sessiz, `stale` olduğunda
-*"[mosh] son duyum 12s önce"* rozeti (mosh/Blink davranışı). Kullanıcının
-"koptu mu, yavaş mı" ayrımını yapabilmesi bu protokolde SSH'takinden daha
-önemli, çünkü stale bir oturum ölü değil.
+### Bootstrap host ayarlarını kullanıyor
+
+`_buildMoshBootstrap` host'un `moshServerPath`/`moshPortRange` değerlerini
+`MoshSshBootstrap`'e geçiriyor. Aralık burada bir kez daha doğrulanıyor: form
+doğruluyor ama satır import'tan da gelebilir ve `MoshSshBootstrap` kullanamadığı
+aralıkta throw eder — bozuk bir kayıt varsayılana düşmeli, bağlantıyı
+düşürmemeli.
+
+### Terminal durum çubuğu
+
+- Taşıyıcı `UTF-8 · mosh` olarak görünüyor.
+- Link `stale` olduğunda *"mosh quiet 12s"* rozeti çıkıyor (mosh/Blink
+  davranışı). Bağlantı etiketi `connected` kalıyor — çünkü öyle. Kullanıcının
+  "koptu mu, yavaş mı" ayrımını yapabilmesi bu protokolde SSH'takinden daha
+  önemli, çünkü stale bir oturum ölü değil.
 
 ### Dokümantasyon
 
-`docs/tech_spec.md:288` ve `docs/features_and_competitor_analysis.md:62`
-Mosh'u "planlanan" olmaktan çıkarıp gerçek kapsamla (prediction yok,
-ProxyJump yok, reattach yok) günceller.
+`docs/tech_spec.md` §6.3 ve `docs/features_and_competitor_analysis.md` §1.3
+Mosh'u "planlanan" olmaktan çıkarıp gerçek kapsamıyla anlatıyor (prediction yok,
+ProxyJump yok, reattach yok). `docs/product_roadmap_2026-08-07.md` §5.2 kapandı.
 
 ---
 

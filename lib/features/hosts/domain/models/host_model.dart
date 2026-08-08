@@ -9,6 +9,15 @@ class HostModel {
   final String? username;
   final int port;
   final String protocol; // 'ssh', 'mosh', 'local', 'serial'
+
+  /// Remote `mosh-server` executable, when it is not on the login PATH.
+  /// Null means `mosh-server`. Only read when [protocol] is `'mosh'`.
+  final String? moshServerPath;
+
+  /// UDP range `mosh-server` is asked to bind, as `start:end`. Null means the
+  /// mosh default of 60000:61000.
+  final String? moshPortRange;
+
   final String? colorTag;
   final String? jumpHostId;
   final DateTime createdAt;
@@ -23,6 +32,8 @@ class HostModel {
     this.username,
     this.port = 22,
     this.protocol = 'ssh',
+    this.moshServerPath,
+    this.moshPortRange,
     this.colorTag,
     this.jumpHostId,
     required this.createdAt,
@@ -38,6 +49,8 @@ class HostModel {
     String? username,
     int? port,
     String? protocol,
+    String? moshServerPath,
+    String? moshPortRange,
     String? colorTag,
     String? jumpHostId,
     DateTime? createdAt,
@@ -52,6 +65,8 @@ class HostModel {
       username: username ?? this.username,
       port: port ?? this.port,
       protocol: protocol ?? this.protocol,
+      moshServerPath: moshServerPath ?? this.moshServerPath,
+      moshPortRange: moshPortRange ?? this.moshPortRange,
       colorTag: colorTag ?? this.colorTag,
       jumpHostId: jumpHostId ?? this.jumpHostId,
       createdAt: createdAt ?? this.createdAt,
@@ -72,6 +87,8 @@ class HostModel {
           username == other.username &&
           port == other.port &&
           protocol == other.protocol &&
+          moshServerPath == other.moshServerPath &&
+          moshPortRange == other.moshPortRange &&
           colorTag == other.colorTag &&
           jumpHostId == other.jumpHostId &&
           createdAt == other.createdAt;
@@ -87,6 +104,8 @@ class HostModel {
       username.hashCode ^
       port.hashCode ^
       protocol.hashCode ^
+      moshServerPath.hashCode ^
+      moshPortRange.hashCode ^
       colorTag.hashCode ^
       jumpHostId.hashCode ^
       createdAt.hashCode;

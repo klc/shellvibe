@@ -55,7 +55,7 @@ Bu tabloda risk şu: son 5 haftadaki hız tamamen *özellik* eklemeye gitti. Ür
 | Vaat | Kod durumu |
 | :--- | :--- |
 | AI asistanı (Natural language → shell, error explain) | `ollama` / `openai` / `anthropic` / `ai_` → **0 dosya** |
-| Mosh (roaming UDP) | Yalnızca `protocol` string'inde bir değer — implementasyon yok |
+| Mosh (roaming UDP) | ~~Yalnızca `protocol` string'inde bir değer~~ → **uygulandı** (2026-08-08, `docs/mosh_integration_plan.md` Faz 0–3). Prediction hâlâ yok |
 | Serial port | Aynı şekilde enum-only |
 | SSH agent forwarding | Yalnızca `~/.ssh/config` parser'ında `ForwardAgent` anahtarı tanınıyor (`ssh_config_resolver.dart:387`) — bağlantı katmanında forwarding yok |
 | Team Vaults / RBAC / audit log | 0 |
@@ -247,7 +247,7 @@ Ağu 7-Eyl 5 Eyl          Eki          Kas           Ara         Oca
 | # | İş | Not |
 | :-- | :--- | :--- |
 | 5.1 | Mobil arka plan davranışı: bağlantı kopma/yeniden kurma, oturum durumu koruma | iOS soketi arka planda kapatır — bugün yanıltıcı |
-| 5.2 | **Mosh veya eşdeğer roaming kararı**: gerçekten uygula ya da UI'dan kaldır | Enum-only bırakmak 5 Ağustos'ta kapattığın hatanın aynısı |
+| 5.2 | ~~**Mosh veya eşdeğer roaming kararı**: gerçekten uygula ya da UI'dan kaldır~~ → **"uygula" seçildi ve yapıldı** | Enum-only bırakmak 5 Ağustos'ta kapattığın hatanın aynısı |
 | 5.3 | Apple IAP + Google Play Billing → entitlement servisine bağla | Dijital abonelikte mağaza kullanımı zorunlu |
 | 5.4 | Mobil UX geçişi: klavye barı, jest, dokunmatik SFTP | |
 | 5.5 | TestFlight + Play internal testing dağıtımı | Review sürecini erken tetikle — sürpriz red riskini öne çek |

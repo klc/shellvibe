@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:dart_mosh/dart_mosh.dart';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
@@ -8,8 +10,10 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:uuid/uuid.dart';
 import 'package:xterm3/xterm.dart';
 
+import '../../../../core/network/mosh_session_manager.dart';
 import '../../../../core/network/providers/network_providers.dart';
 import '../../../../core/network/ssh_session_manager.dart';
+import '../../../../core/network/terminal_mosh_bridge.dart';
 import '../../../../core/network/terminal_ssh_bridge.dart';
 import '../../../../shared/providers/database_providers.dart';
 import '../../../hosts/domain/models/host_model.dart';
@@ -84,11 +88,15 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
   final Set<TerminalTabSession> _ownedTabs = {};
   final BroadcastInputRouter _broadcastRouter = BroadcastInputRouter();
 
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
+
   @override
   TerminalTabsState build() {
     // Interceptors read the notifier's live selection, never a snapshot.
     _broadcastRouter.forwardCallback = _broadcastFrom;
     ref.onDispose(() {
+      unawaited(_connectivitySub?.cancel() ?? Future.value());
+      _connectivitySub = null;
       // Reading `state` is forbidden during life-cycles; drop interceptors
       // from the owned-tab set instead.
       _broadcastRouter.restoreAll(_ownedTabs.toList());
@@ -98,6 +106,43 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       _ownedTabs.clear();
     });
     return const TerminalTabsState();
+  }
+
+  /// Starts watching for network changes, the roaming trigger the whole
+  /// protocol exists for: Wi-Fi to cellular, a tunnel, a lift. The manager
+  /// debounces the burst of events one transition produces, so this stays a
+  /// plain forward.
+  ///
+  /// Subscribed on the first Mosh session rather than at build time, so the
+  /// platform channel is never touched by the SSH-only and local-shell paths
+  /// that make up every other tab.
+  ///
+  /// Wrapped in a try: on a platform without an implementation, a terminal that
+  /// refuses to open because nobody could tell it about the network would be a
+  /// far worse failure than a Mosh session that only rehomes on resume.
+  void _watchConnectivity() {
+    if (_connectivitySub != null) return;
+    try {
+      _connectivitySub = Connectivity().onConnectivityChanged.listen(
+        (_) => rehomeMoshSessions(),
+        onError: (_) {},
+      );
+    } catch (_) {
+      _connectivitySub = null;
+    }
+  }
+
+  /// Asks every live Mosh session to rebind onto the current network path.
+  ///
+  /// Called on a connectivity change and on app resume — iOS tears the UDP
+  /// socket down while suspended, so coming back to the foreground needs a
+  /// rebind even when the network never changed.
+  void rehomeMoshSessions() {
+    for (final tab in _ownedTabs) {
+      final manager = tab.moshSessionManager;
+      if (manager == null || !manager.isConnected) continue;
+      unawaited(manager.rehome());
+    }
   }
 
   Future<void> openTabForHost(
@@ -198,25 +243,39 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
 
       await sessionManager.connect(config, viaClient: viaClient);
       try {
-        final sshSession = await sessionManager.openShell(
-          width: terminal.viewWidth,
-          height: terminal.viewHeight,
-        );
+        // Mosh only changes *how* the shell is opened: the SSH connect, host
+        // key verification, and identity resolution above are shared, and the
+        // client stays live underneath either way.
+        final startedMosh = host.protocol == 'mosh'
+            ? await _startMoshShell(tab, host, config, sessionManager)
+            : false;
 
-        final bridge = TerminalSSHBridge(
-          terminal: terminal,
-          session: sshSession,
-          onClosed: () => _handleRemoteExit(tab),
-        );
+        if (!startedMosh) {
+          final sshSession = await sessionManager.openShell(
+            width: terminal.viewWidth,
+            height: terminal.viewHeight,
+          );
 
-        tab.sshBridge = bridge;
-        tab.sshClientChangesSub = sessionManager.clientChanges.listen(
-          (client) => _handleClientChange(tab, client),
-        );
-        // The view has already sized the terminal by now, so `onResize` — only
-        // wired when the bridge is built — never fires for that first layout
-        // and the remote PTY would stay at whatever openShell requested.
-        bridge.resizeTerminal(terminal.viewWidth, terminal.viewHeight);
+          final bridge = TerminalSSHBridge(
+            terminal: terminal,
+            session: sshSession,
+            onClosed: () => _handleRemoteExit(tab),
+          );
+
+          tab.sshBridge = bridge;
+          // A dropped SSH keep-alive means a dead tab here. On a Mosh tab it
+          // means nothing — surviving exactly that is the point — so the
+          // listener is deliberately not wired in that branch.
+          tab.sshClientChangesSub = sessionManager.clientChanges.listen(
+            (client) => _handleClientChange(tab, client),
+          );
+          // The view has already sized the terminal by now, so `onResize` —
+          // only wired when the bridge is built — never fires for that first
+          // layout and the remote PTY would stay at whatever openShell
+          // requested.
+          bridge.resizeTerminal(terminal.viewWidth, terminal.viewHeight);
+        }
+
         tab.isConnecting = false;
         tab.isConnected = true;
         tab.disconnectCause = null;
@@ -242,11 +301,152 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       // attempt (see `tab.sshSessionManager = sessionManager` above) always
       // overwrites this with a fresh one anyway.
       await tab.sshSessionManager?.close();
+      await tab.moshLinkSub?.cancel();
+      tab.moshLinkSub = null;
+      await tab.moshSessionManager?.close();
+      tab.moshSessionManager = null;
       for (final jumpManager in tab.jumpSessionManagers.reversed) {
         await jumpManager.close();
       }
       tab.jumpSessionManagers = [];
     }
+  }
+
+  /// Starts a Mosh shell on [tab] over the already-authenticated
+  /// [sessionManager], returning false when the caller should open a plain SSH
+  /// shell instead.
+  ///
+  /// Every failure here is recoverable: the SSH client is connected and idle,
+  /// so a host without `mosh-server` — the common case — lands the user in a
+  /// working shell with one line of explanation rather than on an error screen.
+  Future<bool> _startMoshShell(
+    TerminalTabSession tab,
+    HostModel host,
+    SSHConnectConfig config,
+    SSHSessionManager sessionManager,
+  ) async {
+    final terminal = tab.terminal;
+
+    if (host.jumpHostId != null) {
+      // UDP does not travel through an SSH channel, so there is no path for
+      // the Mosh datagrams to take. Saying so beats a session that silently
+      // never comes up.
+      terminal.write(
+        '\r\n\x1b[33m[Mosh]\x1b[0m Not available through a jump host '
+        '(UDP cannot be tunneled). Using SSH.\r\n',
+      );
+      return false;
+    }
+
+    final client = sessionManager.client;
+    if (client == null) return false;
+
+    final manager = MoshSessionManager();
+    tab.moshSessionManager = manager;
+
+    try {
+      final address = await _resolveMoshAddress(config.hostname);
+
+      terminal.write(
+        '\x1b[1;34m[Mosh]\x1b[0m Starting mosh-server on \x1b[1;36m'
+        '${config.hostname}\x1b[0m...\r\n',
+      );
+
+      final transport = await manager.connect(
+        client: client,
+        address: address,
+        bootstrap: _buildMoshBootstrap(host),
+        columns: terminal.viewWidth,
+        rows: terminal.viewHeight,
+      );
+
+      final bridge = TerminalMoshBridge(
+        terminal: terminal,
+        session: transport,
+        onClosed: () => _handleRemoteExit(tab),
+      );
+      tab.moshBridge = bridge;
+      // Same first-layout gap as the SSH branch: the view sized the terminal
+      // before `onResize` existed.
+      bridge.resizeTerminal(terminal.viewWidth, terminal.viewHeight);
+
+      tab.moshLinkSub = manager.linkStates.listen(
+        (linkState) => _handleMoshLinkState(tab, linkState),
+      );
+      _watchConnectivity();
+      return true;
+    } catch (e) {
+      terminal.write(
+        '\r\n\x1b[33m[Mosh]\x1b[0m $e\r\n'
+        '\x1b[33m[Mosh]\x1b[0m Falling back to SSH.\r\n',
+      );
+      await manager.close();
+      tab.moshSessionManager = null;
+      return false;
+    }
+  }
+
+  /// Builds the `mosh-server` command from the host's own settings, falling
+  /// back to the mosh defaults for anything left blank.
+  ///
+  /// The port range is re-checked here rather than trusted: the form validates
+  /// it, but a row can also arrive from an import or an older write, and
+  /// `MoshSshBootstrap` throws on a range it cannot use — which would turn a
+  /// bad stored value into a failed connect instead of a default one.
+  MoshSshBootstrap _buildMoshBootstrap(HostModel host) {
+    const defaults = MoshSshBootstrap();
+    final binary = host.moshServerPath?.trim();
+    final range = host.moshPortRange?.trim().split(':') ?? const [];
+    final start = range.length == 2 ? int.tryParse(range[0].trim()) : null;
+    final end = range.length == 2 ? int.tryParse(range[1].trim()) : null;
+    final usable =
+        start != null &&
+        end != null &&
+        start >= 1 &&
+        end <= 65535 &&
+        end >= start;
+
+    return MoshSshBootstrap(
+      serverBinary: (binary == null || binary.isEmpty)
+          ? defaults.serverBinary
+          : binary,
+      serverPort: usable ? start : defaults.serverPort,
+      serverPortEnd: usable ? end : defaults.serverPortEnd,
+    );
+  }
+
+  /// Resolves the address the Mosh datagrams are sent to.
+  ///
+  /// An IP literal — what most saved hosts are — is used as-is, with no lookup
+  /// at all. A name is resolved once, here, and the result is handed to the
+  /// session manager so nothing downstream can resolve it a second time.
+  ///
+  /// The residual case is round-robin DNS, where this lookup can land on a
+  /// different machine than the SSH connection did. `mosh-server` binds to the
+  /// address SSH arrived on, so the mismatch shows up as a session that never
+  /// answers rather than as a shell on the wrong host, and the connect fails
+  /// into the SSH fallback above. Reading the address off the SSH socket would
+  /// close the gap, but dartssh2 does not expose it.
+  Future<InternetAddress> _resolveMoshAddress(String hostname) async {
+    final literal = InternetAddress.tryParse(hostname);
+    if (literal != null) return literal;
+
+    final addresses = await InternetAddress.lookup(hostname);
+    if (addresses.isEmpty) {
+      throw MoshBootstrapException('Could not resolve $hostname.');
+    }
+    return addresses.first;
+  }
+
+  /// Records a Mosh link update so the tab can show it.
+  ///
+  /// Nothing here changes the connection state. A stale link is a working
+  /// session that has been quiet, and the end of a session arrives through the
+  /// bridge's `onClosed` like any other.
+  void _handleMoshLinkState(TerminalTabSession tab, MoshLinkState linkState) {
+    if (!state.tabs.any((t) => t.id == tab.id)) return;
+    tab.moshLinkState = linkState;
+    state = state.copyWith(tabs: [...state.tabs]);
   }
 
   /// Walks `jumpHostId` outward from [target], returning the hops in
@@ -349,9 +549,23 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
 
     await tab.sshClientChangesSub?.cancel();
     tab.sshClientChangesSub = null;
+    await tab.moshLinkSub?.cancel();
+    tab.moshLinkSub = null;
+    tab.moshLinkState = null;
     if (tab.sshBridge != null) {
       await tab.sshBridge!.dispose(closeSession: true);
       tab.sshBridge = null;
+    }
+    // A Mosh session cannot be reattached — the client holds the OCB counter
+    // state and the server's replay filter rejects an old sequence — so a
+    // reconnect always starts a fresh one.
+    if (tab.moshBridge != null) {
+      await tab.moshBridge!.dispose(closeSession: true);
+      tab.moshBridge = null;
+    }
+    if (tab.moshSessionManager != null) {
+      await tab.moshSessionManager!.close();
+      tab.moshSessionManager = null;
     }
     if (tab.sshSessionManager != null) {
       await tab.sshSessionManager!.close();
@@ -405,6 +619,9 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     tab.disconnectCause = cause;
     unawaited(tab.sshBridge?.dispose(closeSession: true) ?? Future.value());
     tab.sshBridge = null;
+    unawaited(tab.moshBridge?.dispose(closeSession: true) ?? Future.value());
+    tab.moshBridge = null;
+    tab.moshLinkState = null;
     if (cause == TerminalDisconnectCause.connectionLost) {
       tab.terminal.write('\r\n\x1b[1;31m[Connection lost]\x1b[0m\r\n');
     }
