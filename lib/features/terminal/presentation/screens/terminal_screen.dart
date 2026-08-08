@@ -19,11 +19,18 @@ class TerminalScreen extends ConsumerStatefulWidget {
   final bool? showExtraKeys;
   final bool readOnly;
 
+  /// Keeps the terminal viewport dimensions stable while the IME is open and
+  /// overlays the extra-key bar above the keyboard instead of laying it out
+  /// below the terminal. Used by the phone Device Link screen, whose PTY
+  /// dimensions belong to the desktop until the phone explicitly resizes.
+  final bool keepTerminalSizeWhenKeyboardOpens;
+
   const TerminalScreen({
     super.key,
     required this.session,
     this.showExtraKeys,
     this.readOnly = false,
+    this.keepTerminalSizeWhenKeyboardOpens = false,
   });
 
   @override
@@ -148,7 +155,7 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
         (defaultTargetPlatform == TargetPlatform.iOS ||
             defaultTargetPlatform == TargetPlatform.android);
 
-    return Column(
+    final terminalBody = Column(
       children: [
         if (session.isConnecting)
           LinearProgressIndicator(
@@ -255,11 +262,37 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
             ),
           ),
         ),
-        if (shouldShowExtraKeys && !widget.readOnly)
-          MobileExtraKeysBar(
+      ],
+    );
+
+    if (!widget.keepTerminalSizeWhenKeyboardOpens ||
+        !shouldShowExtraKeys ||
+        widget.readOnly) {
+      return Column(
+        children: [
+          Expanded(child: terminalBody),
+          if (shouldShowExtraKeys && !widget.readOnly)
+            MobileExtraKeysBar(
+              terminal: session.terminal,
+              outputChain: session.outputChain,
+            ),
+        ],
+      );
+    }
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        terminalBody,
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: MediaQuery.viewInsetsOf(context).bottom,
+          child: MobileExtraKeysBar(
             terminal: session.terminal,
             outputChain: session.outputChain,
           ),
+        ),
       ],
     );
   }

@@ -163,6 +163,12 @@ final class DeviceLinkLocalSessionTransport
     return attachment;
   }
 
+  /// Closes the owning connection so the server releases the attachment and
+  /// restores the desktop terminal dimensions through the normal close path.
+  Future<void> disconnect() async {
+    await _connection?.close();
+  }
+
   @override
   Future<void> dispose() async {
     if (_disposed) return;

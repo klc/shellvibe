@@ -181,6 +181,7 @@ Future<DeviceLinkClientConnection> _pair(
     ),
   );
   expect(await client.nextControl(timeout: _timeout), isA<DeviceLinkPaired>());
+  await client.nextControl(timeout: _timeout);
   return client;
 }
 

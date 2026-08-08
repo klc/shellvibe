@@ -132,6 +132,12 @@ void main() {
       final paired = await first.nextControl();
       expect(paired, isA<DeviceLinkPaired>());
       expect(pairingCompleted, 1);
+      final authenticatedHello = await first.nextControl();
+      expect(authenticatedHello, isA<DeviceLinkHelloAck>());
+      expect(
+        (authenticatedHello as DeviceLinkHelloAck).sessions.single.id,
+        'session-1',
+      );
       final secret = (paired as DeviceLinkPaired).secret;
       await first.close();
 

@@ -67,7 +67,7 @@ class _DeviceLinkPairingFlowScreenState
       );
       final hello = await connection.nextControl();
       if (hello is! DeviceLinkHelloAck) {
-        throw StateError('Desktop did not return a session list');
+        throw StateError('Desktop did not accept the Device Link hello');
       }
 
       await connection.sendPair(
@@ -85,10 +85,21 @@ class _DeviceLinkPairingFlowScreenState
         throw StateError('Desktop rejected the pairing request');
       }
 
+      final authenticatedHello = await connection.nextControl();
+      if (authenticatedHello is DeviceLinkError) {
+        throw DeviceLinkTransportException(
+          authenticatedHello.code,
+          authenticatedHello.message,
+        );
+      }
+      if (authenticatedHello is! DeviceLinkHelloAck) {
+        throw StateError('Desktop did not return sessions after pairing');
+      }
+
       if (!mounted) return;
       final session = await DeviceLinkSessionPickerSheet.show(
         context,
-        sessions: hello.sessions,
+        sessions: authenticatedHello.sessions,
       );
       if (session == null || !mounted) return;
 

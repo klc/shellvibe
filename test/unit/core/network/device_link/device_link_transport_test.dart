@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:terly2/core/network/device_link/device_link_client.dart';
 import 'package:terly2/core/network/device_link/device_link_identity.dart';
@@ -18,6 +20,9 @@ void main() {
       identity: identity,
       hostName: 'test-host',
       appVersion: 'test',
+      sessionsProvider: () async => const [
+        DeviceLinkSessionInfo(id: 'local-1', title: 'Shell', type: 'local'),
+      ],
       onBinaryFrame: (connection, frame) async {
         receivedFrame = frame;
         await connection.sendBinary(
@@ -45,10 +50,11 @@ void main() {
       await connection.sendHello(
         const DeviceLinkHello(deviceId: 'phone-1', deviceName: 'Phone'),
       );
-      expect(
-        await connection.nextControl(timeout: _timeout),
-        isA<DeviceLinkHelloAck>(),
+      final unauthenticatedHello = await connection.nextControl(
+        timeout: _timeout,
       );
+      expect(unauthenticatedHello, isA<DeviceLinkHelloAck>());
+      expect((unauthenticatedHello as DeviceLinkHelloAck).sessions, isEmpty);
 
       await connection.sendPair(
         DeviceLinkPair(
@@ -60,6 +66,14 @@ void main() {
       final paired = await connection.nextControl(timeout: _timeout);
       expect(paired, isA<DeviceLinkPaired>());
       expect((paired as DeviceLinkPaired).secret, isNotEmpty);
+      final authenticatedHello = await connection.nextControl(
+        timeout: _timeout,
+      );
+      expect(authenticatedHello, isA<DeviceLinkHelloAck>());
+      expect(
+        (authenticatedHello as DeviceLinkHelloAck).sessions.single.id,
+        'local-1',
+      );
     },
     timeout: const Timeout(_timeout),
   );
@@ -104,6 +118,35 @@ void main() {
   );
 
   test(
+    'prefers a diagnostic TLS failure over a fast refused endpoint',
+    () async {
+      late DeviceLinkTransportException failure;
+      try {
+        await DeviceLinkClient(connectionTimeout: _timeout).connect([
+          DeviceLinkEndpoint(
+            host: '127.0.0.1',
+            port: server.port + 1,
+            spkiSha256Base64: identity.spkiSha256Base64,
+          ),
+          DeviceLinkEndpoint(
+            host: '127.0.0.1',
+            port: server.port,
+            spkiSha256Base64: 'wrong-pin',
+          ),
+        ]);
+        fail('Expected all Device Link endpoints to fail');
+      } on DeviceLinkTransportException catch (error) {
+        failure = error;
+      }
+
+      expect(failure.cause, isA<DeviceLinkTransportException>());
+      final selected = failure.cause! as DeviceLinkTransportException;
+      expect(selected.cause, isNot(isA<SocketException>()));
+    },
+    timeout: const Timeout(_timeout),
+  );
+
+  test(
     'rejects wrong and second-use pairing tokens',
     () async {
       final payload = await server.createPairingPayload(
@@ -139,6 +182,7 @@ void main() {
         await connection.nextControl(timeout: _timeout),
         isA<DeviceLinkPaired>(),
       );
+      await connection.nextControl(timeout: _timeout);
 
       await connection.sendPair(
         DeviceLinkPair(

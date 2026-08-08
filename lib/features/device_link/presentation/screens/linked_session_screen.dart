@@ -77,6 +77,7 @@ class _DeviceLinkLinkedSessionScreenState
       builder: (context, _) {
         final readOnly = _controller.isReadOnly;
         return Scaffold(
+          resizeToAvoidBottomInset: false,
           appBar: AppBar(
             title: Text(
               _controller.session.title,
@@ -107,6 +108,7 @@ class _DeviceLinkLinkedSessionScreenState
                   session: _controller.terminalSession,
                   showExtraKeys: showExtraKeys,
                   readOnly: readOnly,
+                  keepTerminalSizeWhenKeyboardOpens: true,
                 ),
               ),
             ],

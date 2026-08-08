@@ -197,6 +197,7 @@ final class DeviceLinkServer {
   HttpServer? _httpServer;
   final Set<DeviceLinkServerConnection> _connections = {};
   final Map<String, _PairedDevice> _pairedDevices = {};
+  final Random _random = Random.secure();
 
   DeviceLinkServer({
     required this.identity,
@@ -335,6 +336,8 @@ final class DeviceLinkServer {
   Future<bool> _authenticate(String deviceId, String secret) async {
     final authenticator = pairedDeviceAuthenticator;
     if (authenticator != null) return authenticator(deviceId, secret);
+    // This is only the in-memory fallback used by pure transport tests. The
+    // production app injects the Argon2id-backed paired-device repository.
     final paired = _pairedDevices[deviceId];
     if (paired == null) return false;
     final actual = CryptoUtils.getHashPlain(
@@ -346,7 +349,7 @@ final class DeviceLinkServer {
 
   String _createSecret() {
     final bytes = Uint8List.fromList(
-      List<int>.generate(32, (_) => Random.secure().nextInt(256)),
+      List<int>.generate(32, (_) => _random.nextInt(256)),
     );
     return base64Url.encode(bytes).replaceAll('=', '');
   }
@@ -374,8 +377,11 @@ final class DeviceLinkServer {
         }
         connection._authenticated = true;
       }
+      final sessions = connection.isAuthenticated
+          ? await _sessions()
+          : const <DeviceLinkSessionInfo>[];
       await connection.sendControl(
-        DeviceLinkHelloAck(appVersion: appVersion, sessions: await _sessions()),
+        DeviceLinkHelloAck(appVersion: appVersion, sessions: sessions),
       );
       return;
     }
@@ -394,7 +400,14 @@ final class DeviceLinkServer {
         return;
       }
       final secret = _createSecret();
-      final deviceId = connection.deviceId ?? message.deviceName;
+      final deviceId = connection.deviceId;
+      if (deviceId == null) {
+        await connection._error(
+          'handshake_required',
+          'A valid Device Link hello is required before pairing',
+        );
+        return;
+      }
       final pairedAt = DateTime.now().toUtc();
       final persister = pairedDevicePersister;
       if (persister != null) {
@@ -417,6 +430,8 @@ final class DeviceLinkServer {
           return;
         }
       } else {
+        // This is only the in-memory fallback used by pure transport tests.
+        // The production app persists an Argon2id hash through its repository.
         final hash = CryptoUtils.getHashPlain(
           Uint8List.fromList(utf8.encode(secret)),
           algorithmName: 'SHA-256',
@@ -429,6 +444,12 @@ final class DeviceLinkServer {
       connection._authenticated = true;
       await connection.sendControl(
         DeviceLinkPaired(secret: secret, hostName: hostName),
+      );
+      // The unauthenticated hello intentionally exposed no session metadata.
+      // Send the list only after the one-time pairing secret has authenticated
+      // this connection so the phone can choose its initial session.
+      await connection.sendControl(
+        DeviceLinkHelloAck(appVersion: appVersion, sessions: await _sessions()),
       );
       final pairingCompleted = onPairingCompleted;
       if (pairingCompleted != null) await pairingCompleted();

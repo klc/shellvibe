@@ -517,6 +517,9 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
     final activeTunnels =
         ref.watch(activeTunnelsStreamProvider).value ?? const [];
     final host = pane.host;
+    final attachedTabs = tabsState.tabs
+        .where((tab) => tab.attachment != null)
+        .toList(growable: false);
     final connectionLabel = pane.errorMessage != null
         ? 'error'
         : pane.isConnecting
@@ -567,6 +570,34 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
           ),
         Text('${pane.terminal.viewWidth}×${pane.terminal.viewHeight}'),
         Text('tunnels ${activeTunnels.length}'),
+        for (final attachedTab in attachedTabs)
+          Row(
+            key: Key('device_link_attachment_${attachedTab.id}'),
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.link,
+                size: 13,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              const SizedBox(width: 4),
+              Text('Device Link · ${attachedTab.title}'),
+              IconButton(
+                key: Key('device_link_disconnect_${attachedTab.id}'),
+                tooltip: 'Disconnect Device Link',
+                onPressed: () => unawaited(
+                  ref
+                      .read(terminalTabsProvider.notifier)
+                      .disconnectDeviceLink(attachedTab.id),
+                ),
+                icon: const Icon(Icons.link_off, size: 14),
+                color: Theme.of(context).colorScheme.error,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
+          ),
       ],
       trailing: Text(
         pane.isMosh

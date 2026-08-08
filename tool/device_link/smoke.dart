@@ -63,6 +63,11 @@ Future<void> main() async {
     );
     final paired = await connection.nextControl(timeout: _timeout);
     checks.expect('pair/paired succeeds', paired is DeviceLinkPaired);
+    final authenticatedHello = await connection.nextControl(timeout: _timeout);
+    checks.expect(
+      'authenticated hello_ack follows pairing',
+      authenticatedHello is DeviceLinkHelloAck,
+    );
 
     await connection.sendPair(
       DeviceLinkPair(

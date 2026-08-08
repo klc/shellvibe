@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:io';
 
 import 'device_link_identity.dart';
@@ -66,7 +67,7 @@ final class DeviceLinkClient {
                 DeviceLinkTransportException(
                   'connection_failed',
                   'Could not connect to any Device Link endpoint',
-                  failures.first,
+                  _selectMostInformativeFailure(failures),
                 ),
                 stack,
               );
@@ -147,13 +148,14 @@ final class DeviceLinkClient {
     _DeviceLinkClientAttempt attempt,
   ) async {
     final endpoint = attempt.endpoint;
-    final httpClient = HttpClient()
-      ..connectionTimeout = connectionTimeout
-      ..badCertificateCallback = (certificate, host, port) =>
-          DeviceLinkIdentity.matchesSpkiPin(
-            certificate.der,
-            endpoint.spkiSha256Base64,
-          );
+    final httpClient =
+        HttpClient(context: SecurityContext(withTrustedRoots: false))
+          ..connectionTimeout = connectionTimeout
+          ..badCertificateCallback = (certificate, host, port) =>
+              DeviceLinkIdentity.matchesSpkiPin(
+                certificate.der,
+                endpoint.spkiSha256Base64,
+              );
     attempt.httpClient = httpClient;
     try {
       // The WebSocket owns the upgraded sink after connect.
@@ -175,6 +177,24 @@ final class DeviceLinkClient {
       httpClient.close(force: true);
     }
   }
+}
+
+Object _selectMostInformativeFailure(List<Object> failures) {
+  if (failures.isEmpty) {
+    return StateError('Device Link connection attempts failed');
+  }
+  for (final failure in failures) {
+    if (!_isTransientConnectionFailure(failure)) return failure;
+  }
+  return failures.first;
+}
+
+bool _isTransientConnectionFailure(Object error) {
+  if (error is DeviceLinkTransportException) {
+    final cause = error.cause;
+    return cause != null && _isTransientConnectionFailure(cause);
+  }
+  return error is SocketException || error is TimeoutException;
 }
 
 /// Connection boundary consumed by the linked-session presentation layer.
@@ -215,8 +235,12 @@ final class DeviceLinkClientConnection implements DeviceLinkConnection {
       StreamController<DeviceLinkControlMessage>.broadcast();
   final StreamController<DeviceLinkBinaryFrame> _binaryFrames =
       StreamController<DeviceLinkBinaryFrame>.broadcast();
-  final List<DeviceLinkControlMessage> _pendingControls = [];
-  final List<DeviceLinkBinaryFrame> _pendingBinaryFrames = [];
+  final Queue<DeviceLinkControlMessage> _pendingControls =
+      Queue<DeviceLinkControlMessage>();
+  final Queue<DeviceLinkBinaryFrame> _pendingBinaryFrames =
+      Queue<DeviceLinkBinaryFrame>();
+  Completer<DeviceLinkControlMessage>? _controlWaiter;
+  Completer<DeviceLinkBinaryFrame>? _binaryWaiter;
   StreamSubscription<Object?>? _subscription;
   bool _closed = false;
   bool _readOnly = false;
@@ -307,10 +331,21 @@ final class DeviceLinkClientConnection implements DeviceLinkConnection {
   }) {
     if (_pendingControls.isNotEmpty) {
       return Future<DeviceLinkControlMessage>.value(
-        _pendingControls.removeAt(0),
+        _pendingControls.removeFirst(),
       );
     }
-    return controlMessages.first.timeout(timeout);
+    if (_controlWaiter != null) {
+      throw StateError('A Device Link control message is already awaited');
+    }
+    final waiter = Completer<DeviceLinkControlMessage>();
+    _controlWaiter = waiter;
+    return waiter.future.timeout(
+      timeout,
+      onTimeout: () {
+        if (identical(_controlWaiter, waiter)) _controlWaiter = null;
+        throw TimeoutException('Timed out waiting for a Device Link control');
+      },
+    );
   }
 
   Future<DeviceLinkBinaryFrame> nextBinary({
@@ -318,10 +353,21 @@ final class DeviceLinkClientConnection implements DeviceLinkConnection {
   }) {
     if (_pendingBinaryFrames.isNotEmpty) {
       return Future<DeviceLinkBinaryFrame>.value(
-        _pendingBinaryFrames.removeAt(0),
+        _pendingBinaryFrames.removeFirst(),
       );
     }
-    return binaryFrames.first.timeout(timeout);
+    if (_binaryWaiter != null) {
+      throw StateError('A Device Link binary frame is already awaited');
+    }
+    final waiter = Completer<DeviceLinkBinaryFrame>();
+    _binaryWaiter = waiter;
+    return waiter.future.timeout(
+      timeout,
+      onTimeout: () {
+        if (identical(_binaryWaiter, waiter)) _binaryWaiter = null;
+        throw TimeoutException('Timed out waiting for a Device Link frame');
+      },
+    );
   }
 
   void _handleMessage(Object? message) {
@@ -331,17 +377,25 @@ final class DeviceLinkClientConnection implements DeviceLinkConnection {
         final control = DeviceLinkControlMessage.decode(message);
         if (control is DeviceLinkAttached) _readOnly = false;
         if (control is DeviceLinkReclaimed) _readOnly = true;
-        if (_controls.hasListener) {
+        final waiter = _controlWaiter;
+        if (waiter != null) {
+          _controlWaiter = null;
+          waiter.complete(control);
+        } else if (_controls.hasListener) {
           _controls.add(control);
         } else {
-          _pendingControls.add(control);
+          _pendingControls.addLast(control);
         }
       } else if (message is List<int>) {
         final frame = DeviceLinkBinaryFrame.decode(message);
-        if (_binaryFrames.hasListener) {
+        final waiter = _binaryWaiter;
+        if (waiter != null) {
+          _binaryWaiter = null;
+          waiter.complete(frame);
+        } else if (_binaryFrames.hasListener) {
           _binaryFrames.add(frame);
         } else {
-          _pendingBinaryFrames.add(frame);
+          _pendingBinaryFrames.addLast(frame);
         }
       } else {
         _controls.addError(
@@ -360,6 +414,14 @@ final class DeviceLinkClientConnection implements DeviceLinkConnection {
   Future<void> close() async {
     if (_closed) return;
     _closed = true;
+    const closeError = DeviceLinkTransportException(
+      'connection_closed',
+      'Device Link connection is closed',
+    );
+    _controlWaiter?.completeError(closeError);
+    _controlWaiter = null;
+    _binaryWaiter?.completeError(closeError);
+    _binaryWaiter = null;
     await _subscription?.cancel();
     _subscription = null;
     await _controls.close();

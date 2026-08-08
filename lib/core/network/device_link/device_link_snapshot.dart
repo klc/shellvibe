@@ -154,7 +154,9 @@ final class DeviceLinkSnapshot {
           ..write(run.text);
       }
     }
-    output.write('\x1b[${cursorY + 1};${cursorX + 1}H');
+    // Do not let the final cell style leak into live PTY bytes written after
+    // the snapshot. CUP itself does not reset SGR state.
+    output.write('\x1b[0m\x1b[${cursorY + 1};${cursorX + 1}H');
     return output.toString();
   }
 
@@ -199,17 +201,8 @@ final class DeviceLinkSnapshot {
       text.clear();
     }
 
-    for (var index = 0; index < width; index++) {
-      if (index >= line.length) {
-        final style = const _AnsiStyle(0, 0, 0, 0);
-        if (style != currentStyle) {
-          flush();
-          currentStyle = style;
-        }
-        text.write(' ');
-        continue;
-      }
-
+    final trimmedLength = math.min(width, line.getTrimmedLength(width));
+    for (var index = 0; index < trimmedLength; index++) {
       final cellWidth = line.getWidth(index);
       // xterm3 represents the second half of a wide glyph as width 0. The
       // lead cell already emits the glyph and must not be duplicated.

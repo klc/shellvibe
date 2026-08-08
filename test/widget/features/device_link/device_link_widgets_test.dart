@@ -299,6 +299,10 @@ void main() {
         ),
       ),
     );
+    expect(
+      tester.widget<Scaffold>(find.byType(Scaffold)).resizeToAvoidBottomInset,
+      isFalse,
+    );
     await tester.pump();
     connection.controls.add(
       const DeviceLinkAttached(

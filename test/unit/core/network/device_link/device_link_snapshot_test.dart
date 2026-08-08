@@ -82,6 +82,47 @@ void main() {
       expect(hasWrappedLine, isTrue);
     });
 
+    test('resets SGR before restoring the cursor position', () {
+      final snapshot = DeviceLinkSnapshot(
+        width: 3,
+        height: 1,
+        scrollbackLines: 0,
+        cursorX: 1,
+        cursorY: 0,
+        cursorVisible: true,
+        usingAlternateBuffer: false,
+        modes: const DeviceLinkSnapshotModes(
+          autoWrap: true,
+          bracketedPaste: false,
+          cursorKeys: false,
+          mouseMode: MouseMode.none,
+          mouseReportMode: MouseReportMode.normal,
+        ),
+        rows: const [
+          DeviceLinkSnapshotRow(
+            isWrapped: false,
+            runs: [DeviceLinkAnsiRun(sgr: '\x1b[0;31m', text: 'red')],
+          ),
+        ],
+      );
+
+      expect(snapshot.toAnsi(), '\x1b[0;31mred\x1b[0m\x1b[1;2H');
+    });
+
+    test('omits trailing blank cells from serialized rows', () {
+      final terminal = Terminal(maxLines: 32);
+      terminal.resize(40, 2);
+      terminal.write('short');
+
+      final snapshot = DeviceLinkSnapshot.capture(terminal);
+      final text = snapshot.rows
+          .expand((row) => row.runs)
+          .map((run) => run.text)
+          .join();
+
+      expect(text, 'short');
+    });
+
     test('carries alternate buffer and input modes', () {
       final source = Terminal(maxLines: 32);
       source.resize(12, 3);

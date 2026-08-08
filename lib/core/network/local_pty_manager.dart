@@ -64,7 +64,7 @@ class TerminalLocalPtyBridge {
         .map<List<int>>((bytes) {
           final rawBytes = Uint8List.fromList(bytes);
           try {
-            outputTap?.call(Uint8List.fromList(rawBytes));
+            outputTap?.call(rawBytes);
           } catch (_) {
             // A diagnostic/transport tap must never break local terminal
             // rendering when its consumer is unavailable.

@@ -813,6 +813,13 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
 
   Stream<void> get deviceLinkPairingEvents => _deviceLinkPairingEvents.stream;
 
+  /// Disconnects the phone currently owning [sessionId], if any. Closing the
+  /// Device Link connection deliberately goes through the server's normal
+  /// release path so the desktop terminal dimensions are restored as well.
+  Future<void> disconnectDeviceLink(String sessionId) async {
+    await _deviceLinkTransports[sessionId]?.disconnect();
+  }
+
   /// Registers a mobile Device Link session in the same owned-tab collection
   /// as local and SSH sessions. The linked screen can therefore reuse the
   /// terminal lifecycle without creating a parallel tab store.
