@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -28,8 +29,8 @@ class _NullPtyManager extends LocalPtyManager {
     Map<String, String>? environment,
     int rows = 24,
     int columns = 80,
-  }) =>
-      null;
+    void Function(Uint8List bytes)? outputTap,
+  }) => null;
 }
 
 void main() {
@@ -100,8 +101,9 @@ void main() {
     expect(find.text('No Active Terminal Sessions'), findsOneWidget);
   });
 
-  testWidgets('TerlyApp does not open the launch shell behind a locked vault',
-      (WidgetTester tester) async {
+  testWidgets('TerlyApp does not open the launch shell behind a locked vault', (
+    WidgetTester tester,
+  ) async {
     // A configured master password that has not been unlocked in memory is a
     // locked vault, without paying for an Argon2id derivation here.
     FlutterSecureStorage.setMockInitialValues({

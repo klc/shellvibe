@@ -12,6 +12,19 @@ class TerminalLocalPtyBridge {
   final Terminal terminal;
   final Pty pty;
 
+  /// Receives a copy of each raw PTY output chunk before UTF-8 decoding.
+  ///
+  /// Device Link uses this tap to forward exact PTY bytes without disturbing
+  /// the terminal's existing decoder and output chain.
+  void Function(Uint8List bytes)? outputTap;
+
+  /// Receives raw desktop input before it is written to the PTY.
+  ///
+  /// Device Link uses this notification to reclaim control when the desktop
+  /// user types. The callback is observational; the local input is still
+  /// written directly to the PTY below.
+  void Function(Uint8List bytes)? inputTap;
+
   StreamSubscription<String>? _outputSubscription;
   bool _isDisposed = false;
 
@@ -21,6 +34,8 @@ class TerminalLocalPtyBridge {
   TerminalLocalPtyBridge({
     required this.terminal,
     required this.pty,
+    this.outputTap,
+    this.inputTap,
   }) {
     _bind();
   }
@@ -30,7 +45,14 @@ class TerminalLocalPtyBridge {
     terminal.onOutput = (String data) {
       if (_isDisposed) return;
       try {
-        pty.write(Uint8List.fromList(utf8.encode(data)));
+        final bytes = Uint8List.fromList(utf8.encode(data));
+        try {
+          inputTap?.call(Uint8List.fromList(bytes));
+        } catch (_) {
+          // A reclaim observer must never prevent desktop input from reaching
+          // the local process.
+        }
+        pty.write(bytes);
       } catch (e) {
         terminal.write('\r\n\x1b[33m[PTY write error: $e]\x1b[0m\r\n');
       }
@@ -39,24 +61,35 @@ class TerminalLocalPtyBridge {
     // 2. Wire local PTY output stream -> xterm Terminal
     _outputSubscription = pty.output
         .cast<List<int>>()
-        .transform(const Utf8Decoder(allowMalformed: true))
+        .map<List<int>>((bytes) {
+          final rawBytes = Uint8List.fromList(bytes);
+          try {
+            outputTap?.call(Uint8List.fromList(rawBytes));
+          } catch (_) {
+            // A diagnostic/transport tap must never break local terminal
+            // rendering when its consumer is unavailable.
+          }
+          return rawBytes;
+        })
+        .transform<String>(const Utf8Decoder(allowMalformed: true))
         .listen(
-      (String data) {
-        if (_isDisposed) return;
-        terminal.write(data);
-      },
-      onError: (Object error) {
-        if (_isDisposed) return;
-        terminal.write('\r\n[PTY stream error: $error]\r\n');
-      },
-      onDone: _onStreamDone,
-    );
+          (String data) {
+            if (_isDisposed) return;
+            terminal.write(data);
+          },
+          onError: (Object error) {
+            if (_isDisposed) return;
+            terminal.write('\r\n[PTY stream error: $error]\r\n');
+          },
+          onDone: _onStreamDone,
+        );
 
     // 3. Wire window resize event from xterm Terminal -> Local PTY resize
     // Note: flutter_pty resize takes (rows, cols)
-    terminal.onResize = (int width, int height, int pixelWidth, int pixelHeight) {
-      resizeTerminal(width, height);
-    };
+    terminal.onResize =
+        (int width, int height, int pixelWidth, int pixelHeight) {
+          resizeTerminal(width, height);
+        };
   }
 
   Future<void> _onStreamDone() async {
@@ -66,10 +99,14 @@ class TerminalLocalPtyBridge {
       // interpolating the value into the message.
       final code = await pty.exitCode;
       if (_isDisposed) return;
-      terminal.write('\r\n\x1b[1;33m[Process exited with code $code]\x1b[0m\r\n');
+      terminal.write(
+        '\r\n\x1b[1;33m[Process exited with code $code]\x1b[0m\r\n',
+      );
     } catch (_) {
       if (_isDisposed) return;
-      terminal.write('\r\n\x1b[1;33m[Session closed / Process exited]\x1b[0m\r\n');
+      terminal.write(
+        '\r\n\x1b[1;33m[Session closed / Process exited]\x1b[0m\r\n',
+      );
     }
     dispose();
   }
@@ -92,6 +129,8 @@ class TerminalLocalPtyBridge {
 
     terminal.onOutput = null;
     terminal.onResize = null;
+    outputTap = null;
+    inputTap = null;
 
     await _outputSubscription?.cancel();
     _outputSubscription = null;
@@ -205,6 +244,7 @@ class LocalPtyManager {
     Map<String, String>? environment,
     int rows = 24,
     int columns = 80,
+    void Function(Uint8List bytes)? outputTap,
   }) {
     if (!isSupportedPlatform) {
       terminal.write(
@@ -225,7 +265,11 @@ class LocalPtyManager {
         columns: columns,
       );
 
-      return TerminalLocalPtyBridge(terminal: terminal, pty: pty);
+      return TerminalLocalPtyBridge(
+        terminal: terminal,
+        pty: pty,
+        outputTap: outputTap,
+      );
     } catch (e) {
       terminal.write('\r\n[PTY execution error: $e]\r\n');
       return null;

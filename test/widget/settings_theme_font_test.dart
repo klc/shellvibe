@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -23,14 +25,15 @@ class _NullPtyManager extends LocalPtyManager {
     Map<String, String>? environment,
     int rows = 24,
     int columns = 80,
-  }) =>
-      null;
+    void Function(Uint8List bytes)? outputTap,
+  }) => null;
 }
 
 void main() {
   testWidgets('settings shows registry-driven theme and font dropdowns '
-      'with previews, and switching theme persists without error',
-      (WidgetTester tester) async {
+      'with previews, and switching theme persists without error', (
+    WidgetTester tester,
+  ) async {
     FlutterSecureStorage.setMockInitialValues({});
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(() => db.close());
@@ -129,16 +132,10 @@ void main() {
     await tester.ensureVisible(lineHeightSlider);
     await tester.pumpAndSettle();
     expect(lineHeightSlider, findsOneWidget);
-    expect(
-      container.read(settingsProvider).value?.lineHeightFactor,
-      1.4,
-    );
+    expect(container.read(settingsProvider).value?.lineHeightFactor, 1.4);
     await tester.drag(lineHeightSlider, const Offset(400, 0));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    expect(
-      container.read(settingsProvider).value?.lineHeightFactor,
-      2.0,
-    );
+    expect(container.read(settingsProvider).value?.lineHeightFactor, 2.0);
   });
 }
