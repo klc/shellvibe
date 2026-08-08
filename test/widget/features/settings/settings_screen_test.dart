@@ -74,6 +74,10 @@ void main() {
         find.byKey(const Key('settings_terminal_palette_dropdown')),
         findsOneWidget,
       );
+      expect(
+        find.byKey(const Key('settings_mosh_prediction_dropdown')),
+        findsOneWidget,
+      );
       // Font, size and ligature changes are reflected in place; there is no
       // save step to confirm them against.
       expect(

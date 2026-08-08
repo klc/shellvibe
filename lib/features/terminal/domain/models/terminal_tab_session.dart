@@ -4,7 +4,9 @@ import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/widgets.dart';
 import 'package:xterm3/xterm.dart';
 
+import '../../../../core/models/mosh_prediction_mode.dart';
 import '../../../../core/network/local_pty_manager.dart';
+import '../../../../core/network/mosh_prediction_engine.dart';
 import '../../../../core/network/mosh_session_manager.dart';
 import '../../../../core/network/ssh_session_manager.dart';
 import '../../../../core/network/terminal_mosh_bridge.dart';
@@ -35,6 +37,7 @@ class TerminalTabSession {
   final String id;
   final String title;
   final TerminalSessionType sessionType;
+
   /// The host this tab connects to. Not final: a reconnect re-reads the row so
   /// edits made after the tab was opened (a protocol switch, a new port) take
   /// effect instead of the snapshot from open time.
@@ -64,6 +67,17 @@ class TerminalTabSession {
   /// tunnels opened from this tab keep using it.
   MoshSessionManager? moshSessionManager;
   TerminalMoshBridge? moshBridge;
+
+  /// Prediction state owned by this tab and shared with its Mosh bridge.
+  /// SSH and local sessions keep the engine available but never render it.
+  final MoshPredictionEngine moshPredictionEngine;
+
+  /// Stream of invalidations for [moshPredictionEngine.visibleText]. It is a
+  /// plain Dart stream so the domain model does not depend on Flutter UI
+  /// notifiers; the terminal screen turns it into a repaint with StreamBuilder.
+  final _moshPredictionChanges = StreamController<void>.broadcast();
+
+  Stream<void> get moshPredictionChanges => _moshPredictionChanges.stream;
 
   /// Subscription to the Mosh link's liveness. Kept so the tab can show how
   /// long the server has been quiet; a stale link is never a disconnect.
@@ -108,6 +122,7 @@ class TerminalTabSession {
     this.host,
     this.identity,
     required this.terminal,
+    MoshPredictionEngine? moshPredictionEngine,
     this.sshSessionManager,
     this.sshBridge,
     this.sshClientChangesSub,
@@ -120,10 +135,30 @@ class TerminalTabSession {
     this.splitParentId,
     this.splitDirection,
     this.splitRatio = 0.5,
-  });
+  }) : moshPredictionEngine = moshPredictionEngine ?? MoshPredictionEngine();
+
+  void syncMoshPredictionMode(MoshPredictionMode mode) {
+    if (moshPredictionEngine.mode != mode) {
+      moshPredictionEngine.mode = mode;
+    }
+    refreshMoshPredictionText();
+  }
+
+  void refreshMoshPredictionText() {
+    // Read once so lazy timeout handling runs before the repaint event.
+    moshPredictionEngine.visibleText;
+    if (!_moshPredictionChanges.isClosed) {
+      _moshPredictionChanges.add(null);
+    }
+  }
 
   /// Resizes the tab terminal and propagates dimensions to the active SSH or PTY session bridge.
-  void resizeTerminal(int width, int height, [int pixelWidth = 0, int pixelHeight = 0]) {
+  void resizeTerminal(
+    int width,
+    int height, [
+    int pixelWidth = 0,
+    int pixelHeight = 0,
+  ]) {
     terminal.resize(width, height);
     sshBridge?.resizeTerminal(width, height, pixelWidth, pixelHeight);
     moshBridge?.resizeTerminal(width, height, pixelWidth, pixelHeight);
@@ -131,6 +166,8 @@ class TerminalTabSession {
   }
 
   Future<void> dispose() async {
+    moshPredictionEngine.reset();
+    refreshMoshPredictionText();
     outputChain.dispose();
     await sshClientChangesSub?.cancel();
     sshClientChangesSub = null;
@@ -165,6 +202,7 @@ class TerminalTabSession {
       await jumpManager.close();
     }
     jumpSessionManagers = [];
+    await _moshPredictionChanges.close();
     // xterm3 guards write() against a disposed terminal, so late writes from
     // an in-flight connect do not crash after disposal.
     terminal.dispose();

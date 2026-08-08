@@ -1,22 +1,6 @@
 import 'dart:convert';
 
-/// Controls when [MoshPredictionEngine] is allowed to show anything at all.
-///
-/// This gate is separate from the byte-for-byte confirmation in
-/// [MoshPredictionEngine.isEpochConfirmed]: it decides whether prediction is
-/// worth the screen noise on a fast link, not whether it is safe.
-enum MoshPredictionMode {
-  /// Never record or show predictions. Equivalent to mosh's `--predict=never`.
-  never,
-
-  /// Predict once the link looks slow enough that local echo would actually
-  /// help. This is the default; on a fast link prediction is visual noise the
-  /// user did not ask for.
-  adaptive,
-
-  /// Always predict once confirmed, regardless of measured RTT.
-  always,
-}
+import '../models/mosh_prediction_mode.dart';
 
 /// One character the user typed, waiting to be confirmed by the server's echo.
 class _Prediction {
@@ -64,7 +48,9 @@ class MoshPredictionEngine {
     // caller outside this library could pass; the public name is `mode`.
     // ignore: prefer_initializing_formals
   }) : _mode = mode,
-       _clock = clock ?? DateTime.now;
+       _clock = clock ?? DateTime.now {
+    _serverOutputDecoder = _newServerOutputDecoder();
+  }
 
   /// When prediction is allowed to record and show anything. Switching to
   /// [MoshPredictionMode.never] drops all state immediately — there is no
@@ -82,9 +68,11 @@ class MoshPredictionEngine {
   final Duration adaptiveRttThreshold;
   final Duration minTimeout;
   final DateTime Function() _clock;
+  late ByteConversionSink _serverOutputDecoder;
 
   final List<_Prediction> _pending = [];
   bool _epochConfirmed = false;
+  int? _deferredEchoAck;
   Duration? _lastRtt;
 
   /// The text that should currently be drawn at the cursor. Empty when
@@ -157,17 +145,21 @@ class MoshPredictionEngine {
   /// anything. An ack never confirms the epoch (rule R3): it says the server
   /// has moved on, not that it echoed the predicted glyph.
   ///
-  /// Ignored entirely while the epoch is unconfirmed, and that is load-bearing
-  /// rather than an optimisation. A mosh host message carries the echoed bytes
-  /// and the ack together, so an ack applied first would retire the very
-  /// prediction the bytes were about to confirm — and since confirmation can
-  /// only ever come from a byte match, the epoch would never be confirmed
-  /// again for the life of the session and nothing would ever be shown.
-  /// Deferring here means the byte match always gets its chance, whichever
-  /// order the caller happens to use.
+  /// Deferred while the epoch is unconfirmed, and that is load-bearing rather
+  /// than an optimisation. A mosh host message carries the echoed bytes and
+  /// the ack together, so an ack applied first would retire the very prediction
+  /// the bytes are about to confirm. Keeping the greatest deferred ack means
+  /// the byte match always gets its chance, whichever order the two stream
+  /// listeners happen to deliver.
   void onEchoAck(int ackNum) {
-    if (!_epochConfirmed) return;
-    _pending.removeWhere((p) => p.inputStateNum <= ackNum);
+    if (!_epochConfirmed) {
+      if (_pending.isEmpty) return;
+      if (_deferredEchoAck == null || ackNum > _deferredEchoAck!) {
+        _deferredEchoAck = ackNum;
+      }
+      return;
+    }
+    _retireThroughAck(ackNum);
   }
 
   /// Feeds raw bytes received from the server through the confirmation
@@ -182,7 +174,10 @@ class MoshPredictionEngine {
   /// position. Only a clean run of printable characters can confirm
   /// anything, and the first mismatch in that run kills the epoch too.
   void onServerOutput(List<int> bytes) {
-    final text = utf8.decode(bytes, allowMalformed: true);
+    _serverOutputDecoder.add(bytes);
+  }
+
+  void _consumeServerOutput(String text) {
     final units = text.codeUnits;
     for (final unit in units) {
       if (unit < 0x20 || unit == 0x7F) {
@@ -196,6 +191,7 @@ class MoshPredictionEngine {
       if (_pending.isEmpty) {
         // No predictions to check against; ordinary output and not an error,
         // so just stop here rather than treating it as a mismatch.
+        _applyDeferredAck();
         return;
       }
       if (_pending.first.glyph.codeUnitAt(0) == unit) {
@@ -208,6 +204,7 @@ class MoshPredictionEngine {
         return;
       }
     }
+    _applyDeferredAck();
   }
 
   /// Records the latest smoothed RTT sample, used by [visibleText]'s
@@ -222,7 +219,13 @@ class MoshPredictionEngine {
   void reset() {
     _pending.clear();
     _epochConfirmed = false;
+    _deferredEchoAck = null;
     _lastRtt = null;
+    // Do not let an incomplete UTF-8 sequence from the previous terminal
+    // epoch leak into the next one. The old sink is intentionally abandoned:
+    // closing it would flush a malformed replacement character into the state
+    // machine during reset.
+    _serverOutputDecoder = _newServerOutputDecoder();
   }
 
   /// Rule R5: a prediction older than `max(2 * srtt, minTimeout)` has almost
@@ -237,7 +240,9 @@ class MoshPredictionEngine {
         ? minTimeout
         : (srtt * 2 > minTimeout ? srtt * 2 : minTimeout);
     final now = _clock();
-    final hadStale = _pending.any((p) => now.difference(p.queuedAt) > threshold);
+    final hadStale = _pending.any(
+      (p) => now.difference(p.queuedAt) > threshold,
+    );
     if (hadStale) {
       _killEpoch();
     }
@@ -246,5 +251,36 @@ class MoshPredictionEngine {
   void _killEpoch() {
     _pending.clear();
     _epochConfirmed = false;
+    _deferredEchoAck = null;
   }
+
+  void _applyDeferredAck() {
+    final ackNum = _deferredEchoAck;
+    _deferredEchoAck = null;
+    if (ackNum != null && _epochConfirmed) {
+      _retireThroughAck(ackNum);
+    }
+  }
+
+  void _retireThroughAck(int ackNum) {
+    _pending.removeWhere((p) => p.inputStateNum <= ackNum);
+  }
+
+  ByteConversionSink _newServerOutputDecoder() {
+    return const Utf8Decoder(
+      allowMalformed: true,
+    ).startChunkedConversion(_ServerOutputSink(_consumeServerOutput));
+  }
+}
+
+final class _ServerOutputSink implements Sink<String> {
+  const _ServerOutputSink(this._onChunk);
+
+  final void Function(String) _onChunk;
+
+  @override
+  void add(String chunk) => _onChunk(chunk);
+
+  @override
+  void close() {}
 }

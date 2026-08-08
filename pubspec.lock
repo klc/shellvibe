@@ -1591,10 +1591,10 @@ packages:
     dependency: "direct main"
     description:
       name: xterm3
-      sha256: bbe78b2cacd08b48cc619147dd8ffc182bb2dc6481ffa2f67f3d9744fb5c1c8c
+      sha256: "1260532b180825222048197d33ea4de623a4901419e9c45a67630b2aceab2292"
       url: "https://pub.dev"
     source: hosted
-    version: "6.0.1"
+    version: "6.1.0"
   yaml:
     dependency: transitive
     description:

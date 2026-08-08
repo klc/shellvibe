@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:terly2/core/models/mosh_prediction_mode.dart';
 import 'package:terly2/core/network/mosh_prediction_engine.dart';
 
 void main() {
@@ -197,13 +198,16 @@ void main() {
         expect(engine.pendingCount, 0);
       });
 
-      test('a negative ack number does not throw and retires nothing extra', () {
-        confirmEpoch();
-        engine.recordInput('a', 1);
+      test(
+        'a negative ack number does not throw and retires nothing extra',
+        () {
+          confirmEpoch();
+          engine.recordInput('a', 1);
 
-        expect(() => engine.onEchoAck(-1), returnsNormally);
-        expect(engine.pendingCount, 1);
-      });
+          expect(() => engine.onEchoAck(-1), returnsNormally);
+          expect(engine.pendingCount, 1);
+        },
+      );
 
       test('an ack is inert while the epoch is unconfirmed', () {
         // A mosh host message carries the echoed bytes and the ack together.
@@ -218,7 +222,7 @@ void main() {
         expect(engine.isEpochConfirmed, isFalse);
       });
 
-      test('confirmation still works when the ack is applied first', () {
+      test('confirmation applies a deferred ack after the matching output', () {
         engine.recordInput('a', 1);
         engine.recordInput('b', 2);
 
@@ -226,7 +230,7 @@ void main() {
         engine.onServerOutput(utf8.encode('a'));
 
         expect(engine.isEpochConfirmed, isTrue);
-        expect(engine.visibleText, 'b');
+        expect(engine.visibleText, isEmpty);
       });
     });
 
@@ -270,7 +274,10 @@ void main() {
       });
 
       test('server output with nothing pending is harmless', () {
-        expect(() => engine.onServerOutput(utf8.encode('hello')), returnsNormally);
+        expect(
+          () => engine.onServerOutput(utf8.encode('hello')),
+          returnsNormally,
+        );
 
         expect(engine.isEpochConfirmed, isFalse);
         expect(engine.pendingCount, 0);
@@ -292,6 +299,18 @@ void main() {
           () => engine.onServerOutput([0xC3, 0x28, 0xFF]),
           returnsNormally,
         );
+      });
+
+      test('a multi-byte echo split across chunks confirms as one glyph', () {
+        engine.recordInput('ğ', 1);
+
+        engine.onServerOutput([0xC4]);
+        expect(engine.isEpochConfirmed, isFalse);
+
+        engine.onServerOutput([0x9F]);
+
+        expect(engine.isEpochConfirmed, isTrue);
+        expect(engine.pendingCount, 0);
       });
     });
 
@@ -364,26 +383,36 @@ void main() {
         expect(adaptive.pendingCount, 0);
       });
 
-      test('adaptive mode hides confirmed predictions below the RTT threshold', () {
-        final adaptive = build(adaptiveRttThreshold: const Duration(milliseconds: 60));
-        adaptive.updateRtt(const Duration(milliseconds: 30));
-        adaptive.recordInput('a', 1);
-        adaptive.recordInput('b', 2);
-        adaptive.onServerOutput(utf8.encode('a'));
+      test(
+        'adaptive mode hides confirmed predictions below the RTT threshold',
+        () {
+          final adaptive = build(
+            adaptiveRttThreshold: const Duration(milliseconds: 60),
+          );
+          adaptive.updateRtt(const Duration(milliseconds: 30));
+          adaptive.recordInput('a', 1);
+          adaptive.recordInput('b', 2);
+          adaptive.onServerOutput(utf8.encode('a'));
 
-        expect(adaptive.isEpochConfirmed, isTrue);
-        expect(adaptive.visibleText, '');
-      });
+          expect(adaptive.isEpochConfirmed, isTrue);
+          expect(adaptive.visibleText, '');
+        },
+      );
 
-      test('adaptive mode shows confirmed predictions above the RTT threshold', () {
-        final adaptive = build(adaptiveRttThreshold: const Duration(milliseconds: 60));
-        adaptive.updateRtt(const Duration(milliseconds: 90));
-        adaptive.recordInput('a', 1);
-        adaptive.recordInput('b', 2);
-        adaptive.onServerOutput(utf8.encode('a'));
+      test(
+        'adaptive mode shows confirmed predictions above the RTT threshold',
+        () {
+          final adaptive = build(
+            adaptiveRttThreshold: const Duration(milliseconds: 60),
+          );
+          adaptive.updateRtt(const Duration(milliseconds: 90));
+          adaptive.recordInput('a', 1);
+          adaptive.recordInput('b', 2);
+          adaptive.onServerOutput(utf8.encode('a'));
 
-        expect(adaptive.visibleText, 'b');
-      });
+          expect(adaptive.visibleText, 'b');
+        },
+      );
 
       test('adaptive mode hides when RTT is unknown', () {
         final adaptive = build();
@@ -394,21 +423,20 @@ void main() {
         expect(adaptive.visibleText, '');
       });
 
-      test(
-        'adaptive mode keeps recording while hidden, so a later RTT rise '
-        'shows it without a fresh keystroke',
-        () {
-          final adaptive = build(adaptiveRttThreshold: const Duration(milliseconds: 60));
-          adaptive.recordInput('a', 1);
-          adaptive.recordInput('b', 2);
-          adaptive.onServerOutput(utf8.encode('a'));
-          expect(adaptive.visibleText, '');
+      test('adaptive mode keeps recording while hidden, so a later RTT rise '
+          'shows it without a fresh keystroke', () {
+        final adaptive = build(
+          adaptiveRttThreshold: const Duration(milliseconds: 60),
+        );
+        adaptive.recordInput('a', 1);
+        adaptive.recordInput('b', 2);
+        adaptive.onServerOutput(utf8.encode('a'));
+        expect(adaptive.visibleText, '');
 
-          adaptive.updateRtt(const Duration(milliseconds: 90));
+        adaptive.updateRtt(const Duration(milliseconds: 90));
 
-          expect(adaptive.visibleText, 'b');
-        },
-      );
+        expect(adaptive.visibleText, 'b');
+      });
 
       test('always mode still hides until confirmed', () {
         final always = build(mode: MoshPredictionMode.always);
@@ -438,25 +466,31 @@ void main() {
     });
 
     group('reset', () {
-      test('clears pending predictions, confirmation, and RTT-driven state', () {
-        engine.updateRtt(const Duration(milliseconds: 90));
-        engine.recordInput('a', 1);
-        engine.onServerOutput(utf8.encode('a'));
-        expect(engine.isEpochConfirmed, isTrue);
+      test(
+        'clears pending predictions, confirmation, and RTT-driven state',
+        () {
+          engine.updateRtt(const Duration(milliseconds: 90));
+          engine.recordInput('a', 1);
+          engine.onServerOutput(utf8.encode('a'));
+          expect(engine.isEpochConfirmed, isTrue);
 
-        engine.reset();
+          engine.reset();
 
-        expect(engine.pendingCount, 0);
-        expect(engine.isEpochConfirmed, isFalse);
-        expect(engine.visibleText, '');
-      });
+          expect(engine.pendingCount, 0);
+          expect(engine.isEpochConfirmed, isFalse);
+          expect(engine.visibleText, '');
+        },
+      );
     });
 
     group('robustness (R8)', () {
       test('no public method throws on adversarial input', () {
         expect(() => engine.recordInput('a', -5), returnsNormally);
         expect(() => engine.onEchoAck(-100), returnsNormally);
-        expect(() => engine.onServerOutput(const [0xFF, 0xFE, 0x00, -1, 300]), returnsNormally);
+        expect(
+          () => engine.onServerOutput(const [0xFF, 0xFE, 0x00, -1, 300]),
+          returnsNormally,
+        );
         expect(() => engine.updateRtt(null), returnsNormally);
         expect(() => engine.reset(), returnsNormally);
       });

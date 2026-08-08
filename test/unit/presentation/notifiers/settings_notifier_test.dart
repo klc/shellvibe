@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:terly2/core/models/mosh_prediction_mode.dart';
 import 'package:terly2/features/settings/domain/models/app_settings_model.dart';
 import 'package:terly2/features/settings/presentation/notifiers/settings_notifier.dart';
 
@@ -80,6 +81,16 @@ void main() {
       final current = container.read(settingsProvider).value!;
       expect(current.cursorStyle, equals(AppCursorStyle.underline));
       expect(current.autoLockTimerSeconds, equals(600));
+    });
+
+    test('setMoshPrediction updates the persisted mode', () async {
+      await container.read(settingsProvider.future);
+      final notifier = container.read(settingsProvider.notifier);
+
+      await notifier.setMoshPrediction(MoshPredictionMode.never);
+
+      final current = container.read(settingsProvider).value!;
+      expect(current.moshPrediction, equals(MoshPredictionMode.never));
     });
   });
 }

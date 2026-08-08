@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/models/mosh_prediction_mode.dart';
 import '../../../terminal/domain/models/terminal_palette.dart';
 
 enum AppPalette {
@@ -27,6 +28,7 @@ class AppSettingsModel {
   final AppCursorStyle cursorStyle;
   final bool enableLigatures;
   final bool drawBoldTextWithBrightColors;
+  final MoshPredictionMode moshPrediction;
   final int autoLockTimerSeconds;
   final int clipboardAutoClearSeconds;
   final String activeWorkspaceId;
@@ -41,6 +43,7 @@ class AppSettingsModel {
     this.cursorStyle = AppCursorStyle.block,
     this.enableLigatures = true,
     this.drawBoldTextWithBrightColors = true,
+    this.moshPrediction = MoshPredictionMode.adaptive,
     this.autoLockTimerSeconds = 0,
     this.clipboardAutoClearSeconds = 30,
     this.activeWorkspaceId = 'default',
@@ -56,6 +59,7 @@ class AppSettingsModel {
     AppCursorStyle? cursorStyle,
     bool? enableLigatures,
     bool? drawBoldTextWithBrightColors,
+    MoshPredictionMode? moshPrediction,
     int? autoLockTimerSeconds,
     int? clipboardAutoClearSeconds,
     String? activeWorkspaceId,
@@ -71,6 +75,7 @@ class AppSettingsModel {
       enableLigatures: enableLigatures ?? this.enableLigatures,
       drawBoldTextWithBrightColors:
           drawBoldTextWithBrightColors ?? this.drawBoldTextWithBrightColors,
+      moshPrediction: moshPrediction ?? this.moshPrediction,
       autoLockTimerSeconds: autoLockTimerSeconds ?? this.autoLockTimerSeconds,
       clipboardAutoClearSeconds:
           clipboardAutoClearSeconds ?? this.clipboardAutoClearSeconds,
@@ -88,6 +93,7 @@ class AppSettingsModel {
     'cursorStyle': cursorStyle.name,
     'enableLigatures': enableLigatures,
     'drawBoldTextWithBrightColors': drawBoldTextWithBrightColors,
+    'moshPrediction': moshPrediction.name,
     'autoLockTimerSeconds': autoLockTimerSeconds,
     'clipboardAutoClearSeconds': clipboardAutoClearSeconds,
     'activeWorkspaceId': activeWorkspaceId,
@@ -109,8 +115,7 @@ class AppSettingsModel {
       ),
       fontFamily: (json['fontFamily'] as String?) ?? 'RobotoMono',
       fontSize: (json['fontSize'] as num?)?.toDouble() ?? 14.0,
-      lineHeightFactor:
-          (json['lineHeightFactor'] as num?)?.toDouble() ?? 1.4,
+      lineHeightFactor: (json['lineHeightFactor'] as num?)?.toDouble() ?? 1.4,
       cursorStyle: AppCursorStyle.values.firstWhere(
         (e) => e.name == json['cursorStyle'],
         orElse: () => AppCursorStyle.block,
@@ -118,6 +123,10 @@ class AppSettingsModel {
       enableLigatures: (json['enableLigatures'] as bool?) ?? true,
       drawBoldTextWithBrightColors:
           (json['drawBoldTextWithBrightColors'] as bool?) ?? true,
+      moshPrediction: MoshPredictionMode.values.firstWhere(
+        (e) => e.name == json['moshPrediction'],
+        orElse: () => MoshPredictionMode.adaptive,
+      ),
       autoLockTimerSeconds: (json['autoLockTimerSeconds'] as int?) ?? 0,
       clipboardAutoClearSeconds:
           (json['clipboardAutoClearSeconds'] as int?) ?? 30,

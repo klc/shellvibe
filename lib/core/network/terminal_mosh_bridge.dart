@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:xterm3/xterm.dart';
 
+import 'mosh_prediction_engine.dart';
 import 'mosh_session_manager.dart';
 
 /// Two-way bridge between an xterm [Terminal] and a Mosh [MoshTransport].
@@ -15,13 +16,21 @@ import 'mosh_session_manager.dart';
 class TerminalMoshBridge {
   final Terminal terminal;
   final MoshTransport session;
+  final MoshPredictionEngine predictionEngine;
+
+  /// Called whenever the engine's visible text may have changed. The tab owns
+  /// the UI-facing notifier; keeping this callback here leaves the network
+  /// bridge independent of Flutter state-management types.
+  final void Function()? onPredictionChanged;
 
   /// Invoked when the remote side ended the session, before the bridge detaches
   /// the terminal handlers. Lets the owner flip its connection state first.
   final void Function()? onClosed;
 
   StreamSubscription<String>? _stdoutSubscription;
+  StreamSubscription<int>? _echoAcksSubscription;
   StreamSubscription<Object>? _errorsSubscription;
+  StreamSubscription<void>? _doneSubscription;
   bool _isDisposed = false;
 
   bool get isDisposed => _isDisposed;
@@ -29,8 +38,10 @@ class TerminalMoshBridge {
   TerminalMoshBridge({
     required this.terminal,
     required this.session,
+    MoshPredictionEngine? predictionEngine,
+    this.onPredictionChanged,
     this.onClosed,
-  }) {
+  }) : predictionEngine = predictionEngine ?? MoshPredictionEngine() {
     _bind();
   }
 
@@ -39,7 +50,10 @@ class TerminalMoshBridge {
     terminal.onOutput = (String data) {
       if (_isDisposed) return;
       try {
-        session.send(utf8.encode(data));
+        final inputStateNum = session.send(utf8.encode(data));
+        predictionEngine.recordInput(data, inputStateNum);
+        predictionEngine.updateRtt(session.smoothedRtt);
+        _notifyPredictionChanged();
       } catch (e) {
         terminal.write('\r\n\x1b[33m[Mosh write error: $e]\x1b[0m\r\n');
       }
@@ -49,6 +63,13 @@ class TerminalMoshBridge {
     // than per chunk: a screen diff can split a multi-byte sequence across
     // datagrams.
     _stdoutSubscription = session.stdout
+        .map((bytes) {
+          if (!_isDisposed) {
+            predictionEngine.onServerOutput(bytes);
+            _notifyPredictionChanged();
+          }
+          return bytes;
+        })
         .transform(const Utf8Decoder(allowMalformed: true))
         .listen(
           (String data) {
@@ -61,27 +82,38 @@ class TerminalMoshBridge {
           },
         );
 
-    // 3. Non-fatal transport errors (a dropped socket, a packet that would not
+    // 3. Echo acknowledgements retire predictions once the server has
+    // processed the corresponding input state.
+    _echoAcksSubscription = session.echoAcks.listen((int ackNum) {
+      if (_isDisposed) return;
+      predictionEngine.onEchoAck(ackNum);
+      predictionEngine.updateRtt(session.smoothedRtt);
+      _notifyPredictionChanged();
+    });
+
+    // 4. Non-fatal transport errors (a dropped socket, a packet that would not
     // decrypt). Surfaced, never fatal — the session outlives them.
     _errorsSubscription = session.errors.listen((Object error) {
       if (_isDisposed) return;
       terminal.write('\r\n\x1b[33m[Mosh: $error]\x1b[0m\r\n');
     });
 
-    // 4. Resize from xterm -> Mosh.
+    // 5. Resize from xterm -> Mosh.
     terminal.onResize =
         (int width, int height, int pixelWidth, int pixelHeight) {
           resizeTerminal(width, height, pixelWidth, pixelHeight);
         };
 
-    // 5. End of session. Silence never gets here: only a server shutdown or a
+    // 6. End of session. Silence never gets here: only a server shutdown or a
     // local close completes `done`.
-    unawaited(session.done.then((_) => _handleDone()));
+    _doneSubscription = session.done.asStream().listen((_) => _handleDone());
   }
 
   void _handleDone() {
     if (_isDisposed) return;
-    terminal.write('\r\n\x1b[1;33m[Session closed / Process exited]\x1b[0m\r\n');
+    terminal.write(
+      '\r\n\x1b[1;33m[Session closed / Process exited]\x1b[0m\r\n',
+    );
     onClosed?.call();
     unawaited(dispose());
   }
@@ -96,6 +128,8 @@ class TerminalMoshBridge {
     int pixelHeight = 0,
   ]) {
     if (_isDisposed) return;
+    predictionEngine.reset();
+    _notifyPredictionChanged();
     try {
       session.resize(width, height);
     } catch (e) {
@@ -115,13 +149,26 @@ class TerminalMoshBridge {
     await _stdoutSubscription?.cancel();
     _stdoutSubscription = null;
 
+    await _echoAcksSubscription?.cancel();
+    _echoAcksSubscription = null;
+
     await _errorsSubscription?.cancel();
     _errorsSubscription = null;
+
+    await _doneSubscription?.cancel();
+    _doneSubscription = null;
+
+    predictionEngine.reset();
+    onPredictionChanged?.call();
 
     if (closeSession) {
       try {
         await session.close();
       } catch (_) {}
     }
+  }
+
+  void _notifyPredictionChanged() {
+    if (!_isDisposed) onPredictionChanged?.call();
   }
 }

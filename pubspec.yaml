@@ -44,7 +44,9 @@ dependencies:
   # Terminal & SSH Engine
   # xterm3 continues the xterm2 fork and is published on pub.dev from 6.0.0 on,
   # so this tracks releases instead of a git ref. It is AGPL-3.0-or-later.
-  xterm3: ^6.0.1
+  # 6.1.0 is the first release carrying TerminalView.predictionText, which the
+  # Mosh local-echo overlay draws through.
+  xterm3: ^6.1.0
   dartssh2: ^2.22.5
   flutter_pty: ^0.4.2
   # Mosh UDP transport. Pinned to our fork by commit, not to the pub.dev

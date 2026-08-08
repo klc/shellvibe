@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../../../core/models/mosh_prediction_mode.dart';
 import '../../../../shared/providers/database_providers.dart';
 import '../../../terminal/domain/models/terminal_palette.dart';
 import '../../data/repositories/settings_repository.dart';
@@ -111,6 +112,11 @@ class SettingsNotifier extends _$SettingsNotifier {
     await updateSettings(
       current.copyWith(drawBoldTextWithBrightColors: enabled),
     );
+  }
+
+  Future<void> setMoshPrediction(MoshPredictionMode mode) async {
+    final current = _base;
+    await updateSettings(current.copyWith(moshPrediction: mode));
   }
 
   Future<void> setAutoLockTimer(int seconds) async {
