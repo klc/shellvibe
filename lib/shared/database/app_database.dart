@@ -9,6 +9,7 @@ import 'tables.dart';
 import 'daos/hosts_dao.dart';
 import 'daos/identities_dao.dart';
 import 'daos/known_hosts_dao.dart';
+import 'daos/paired_devices_dao.dart';
 import 'daos/runbooks_dao.dart';
 import 'daos/snippets_dao.dart';
 import 'daos/templates_dao.dart';
@@ -30,6 +31,7 @@ part 'app_database.g.dart';
     RunbookSteps,
     Templates,
     TemplatePanes,
+    PairedDevices,
   ],
   daos: [
     HostsDao,
@@ -40,13 +42,14 @@ part 'app_database.g.dart';
     SnippetsDao,
     RunbooksDao,
     TemplatesDao,
+    PairedDevicesDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration {
@@ -84,6 +87,9 @@ class AppDatabase extends _$AppDatabase {
           // the `protocol` column it may already carry is left untouched.
           await m.addColumn(hosts, hosts.moshServerPath);
           await m.addColumn(hosts, hosts.moshPortRange);
+        }
+        if (from < 6) {
+          await m.createTable(pairedDevices);
         }
       },
     );

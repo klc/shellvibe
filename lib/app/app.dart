@@ -7,6 +7,7 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 import '../core/utils/platform_capabilities.dart';
 import '../features/settings/domain/models/app_settings_model.dart';
 import '../features/settings/presentation/notifiers/settings_notifier.dart';
+import '../features/device_link/presentation/notifiers/device_link_notifier.dart';
 import '../features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import '../features/vault/presentation/notifiers/vault_notifier.dart';
 import 'router/app_router.dart';
@@ -59,9 +60,13 @@ class _TerlyAppState extends ConsumerState<TerlyApp> {
   /// (the router lets the app through too), so the shell opens.
   void _maybeOpenLaunchShell(AsyncValue<VaultState> vault) {
     if (_launchShellOpened) return;
-    if (!supportsLocalShell) return;
     if (vault.isLoading && !vault.hasValue) return;
     if (vault.value?.status == VaultStatus.locked) return;
+    unawaited(ref.read(deviceLinkProvider.notifier).reconnectStoredProfiles());
+    if (!supportsLocalShell) {
+      _launchShellOpened = true;
+      return;
+    }
     _launchShellOpened = true;
     ref.read(terminalTabsProvider.notifier).openLocalTab();
   }
@@ -86,6 +91,9 @@ class _TerlyAppState extends ConsumerState<TerlyApp> {
       // session needs a rebind on the way back in even when the network never
       // changed. Harmless for every other tab: it only touches live Mosh ones.
       ref.read(terminalTabsProvider.notifier).rehomeMoshSessions();
+      unawaited(
+        ref.read(deviceLinkProvider.notifier).reconnectStoredProfiles(),
+      );
     }
   }
 
@@ -109,12 +117,15 @@ class _TerlyAppState extends ConsumerState<TerlyApp> {
     return ShadApp.router(
       title: 'Terly',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.buildShadTheme(settings.copyWith(themeMode: ThemeMode.light)),
-      darkTheme: AppTheme.buildShadTheme(settings.copyWith(themeMode: ThemeMode.dark)),
+      theme: AppTheme.buildShadTheme(
+        settings.copyWith(themeMode: ThemeMode.light),
+      ),
+      darkTheme: AppTheme.buildShadTheme(
+        settings.copyWith(themeMode: ThemeMode.dark),
+      ),
       themeMode: settings.themeMode,
       materialThemeBuilder: (context, theme) => AppTheme.buildTheme(settings),
       routerConfig: router,
     );
   }
 }
-

@@ -14,7 +14,8 @@ class Workspaces extends Table {
 /// 2. Identities Table (Credentials & SSH Keys)
 class Identities extends Table {
   TextColumn get id => text()();
-  TextColumn get workspaceId => text().references(Workspaces, #id, onDelete: KeyAction.cascade)();
+  TextColumn get workspaceId =>
+      text().references(Workspaces, #id, onDelete: KeyAction.cascade)();
   TextColumn get title => text()();
   TextColumn get username => text()();
   TextColumn get authType => text()(); // 'password', 'key', 'agent'
@@ -30,8 +31,13 @@ class Identities extends Table {
 /// 3. Host Groups Table (Hierarchical Folders)
 class HostGroups extends Table {
   TextColumn get id => text()();
-  TextColumn get workspaceId => text().references(Workspaces, #id, onDelete: KeyAction.cascade)();
-  TextColumn get parentId => text().nullable().references(HostGroups, #id, onDelete: KeyAction.setNull)();
+  TextColumn get workspaceId =>
+      text().references(Workspaces, #id, onDelete: KeyAction.cascade)();
+  TextColumn get parentId => text().nullable().references(
+    HostGroups,
+    #id,
+    onDelete: KeyAction.setNull,
+  )();
   TextColumn get name => text()();
   TextColumn get colorTag => text().nullable()();
 
@@ -42,21 +48,34 @@ class HostGroups extends Table {
 /// 4. Hosts Table (Server List)
 class Hosts extends Table {
   TextColumn get id => text()();
-  TextColumn get workspaceId => text().references(Workspaces, #id, onDelete: KeyAction.cascade)();
-  TextColumn get groupId => text().nullable().references(HostGroups, #id, onDelete: KeyAction.setNull)();
-  TextColumn get identityId => text().nullable().references(Identities, #id, onDelete: KeyAction.setNull)();
+  TextColumn get workspaceId =>
+      text().references(Workspaces, #id, onDelete: KeyAction.cascade)();
+  TextColumn get groupId => text().nullable().references(
+    HostGroups,
+    #id,
+    onDelete: KeyAction.setNull,
+  )();
+  TextColumn get identityId => text().nullable().references(
+    Identities,
+    #id,
+    onDelete: KeyAction.setNull,
+  )();
   TextColumn get label => text()();
   TextColumn get hostname => text()();
   TextColumn get username => text().nullable()();
   IntColumn get port => integer().withDefault(const Constant(22))();
-  TextColumn get protocol => text().withDefault(const Constant('ssh'))(); // 'ssh', 'mosh', 'local', 'serial'
+  TextColumn get protocol => text().withDefault(
+    const Constant('ssh'),
+  )(); // 'ssh', 'mosh', 'local', 'serial'
   /// Remote `mosh-server` executable, when it is not on the login PATH.
   TextColumn get moshServerPath => text().nullable()();
+
   /// UDP range `mosh-server` is asked to bind, as `start:end`. Null means the
   /// mosh default (60000:61000).
   TextColumn get moshPortRange => text().nullable()();
   TextColumn get colorTag => text().nullable()();
-  TextColumn get jumpHostId => text().nullable().references(Hosts, #id, onDelete: KeyAction.setNull)();
+  TextColumn get jumpHostId =>
+      text().nullable().references(Hosts, #id, onDelete: KeyAction.setNull)();
   DateTimeColumn get createdAt => dateTime()();
 
   @override
@@ -77,14 +96,15 @@ class KnownHosts extends Table {
 
   @override
   List<Set<Column>> get uniqueKeys => [
-        {hostname, port}
-      ];
+    {hostname, port},
+  ];
 }
 
 /// 6. Port Forward Rules Table
 class PortForwardRules extends Table {
   TextColumn get id => text()();
-  TextColumn get hostId => text().references(Hosts, #id, onDelete: KeyAction.cascade)();
+  TextColumn get hostId =>
+      text().references(Hosts, #id, onDelete: KeyAction.cascade)();
   TextColumn get type => text()(); // 'local', 'remote', 'dynamic'
   IntColumn get localPort => integer()();
   TextColumn get remoteHost => text().nullable()();
@@ -98,7 +118,8 @@ class PortForwardRules extends Table {
 /// 7. Snippets Table
 class Snippets extends Table {
   TextColumn get id => text()();
-  TextColumn get workspaceId => text().references(Workspaces, #id, onDelete: KeyAction.cascade)();
+  TextColumn get workspaceId =>
+      text().references(Workspaces, #id, onDelete: KeyAction.cascade)();
   TextColumn get title => text()();
   TextColumn get code => text()();
   TextColumn get tags => text().nullable()(); // JSON Array of strings
@@ -110,7 +131,8 @@ class Snippets extends Table {
 /// 8. Runbooks Table
 class Runbooks extends Table {
   TextColumn get id => text()();
-  TextColumn get workspaceId => text().references(Workspaces, #id, onDelete: KeyAction.cascade)();
+  TextColumn get workspaceId =>
+      text().references(Workspaces, #id, onDelete: KeyAction.cascade)();
   TextColumn get title => text()();
   TextColumn get description => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
@@ -122,7 +144,8 @@ class Runbooks extends Table {
 /// 9. Runbook Steps Table
 class RunbookSteps extends Table {
   TextColumn get id => text()();
-  TextColumn get runbookId => text().references(Runbooks, #id, onDelete: KeyAction.cascade)();
+  TextColumn get runbookId =>
+      text().references(Runbooks, #id, onDelete: KeyAction.cascade)();
   IntColumn get stepOrder => integer()();
   TextColumn get command => text()();
   IntColumn get expectedExitCode => integer().withDefault(const Constant(0))();
@@ -136,7 +159,8 @@ class RunbookSteps extends Table {
 /// 10. Templates Table (saved terminal tab/pane layouts)
 class Templates extends Table {
   TextColumn get id => text()();
-  TextColumn get workspaceId => text().references(Workspaces, #id, onDelete: KeyAction.cascade)();
+  TextColumn get workspaceId =>
+      text().references(Workspaces, #id, onDelete: KeyAction.cascade)();
   TextColumn get name => text()();
   TextColumn get description => text().nullable()();
 
@@ -158,7 +182,8 @@ class Templates extends Table {
 /// siblings are rendered in the order they were inserted into the tab list.
 class TemplatePanes extends Table {
   TextColumn get id => text()();
-  TextColumn get templateId => text().references(Templates, #id, onDelete: KeyAction.cascade)();
+  TextColumn get templateId =>
+      text().references(Templates, #id, onDelete: KeyAction.cascade)();
   IntColumn get paneOrder => integer()();
 
   /// Template-local reference to another pane of the same template.
@@ -167,7 +192,8 @@ class TemplatePanes extends Table {
   /// one batch per template, and a self-referencing FK would impose insert
   /// ordering constraints on that batch for no benefit.
   TextColumn get parentPaneId => text().nullable()();
-  TextColumn get splitDirection => text().nullable()(); // 'horizontal', 'vertical'
+  TextColumn get splitDirection =>
+      text().nullable()(); // 'horizontal', 'vertical'
   RealColumn get splitRatio => real().withDefault(const Constant(0.5))();
   TextColumn get sessionType => text()(); // 'ssh', 'local'
 
@@ -183,3 +209,20 @@ class TemplatePanes extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// 12. Paired Devices Table (Device Link authorization records)
+///
+/// The raw Device Link secret never enters SQLite. [secretHash] is an
+/// Argon2id record produced by the pairing repository; the phone keeps the
+/// corresponding secret in platform secure storage.
+class PairedDevices extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  TextColumn get platform => text()();
+  TextColumn get secretHash => text()();
+  TextColumn get publicKey => text()();
+  DateTimeColumn get pairedAt => dateTime()();
+  DateTimeColumn get lastSeenAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}

@@ -16,6 +16,7 @@ abstract class SecureStorageKeys {
   static const String vaultFailedAttempts = 'terly2_vault_failed_attempts';
   static const String vaultLockoutUntil = 'terly2_vault_lockout_until';
   static const String tokenPrefix = 'terly2_token_';
+  static const String deviceLinkServerIdentity = 'device_link_server_identity';
 }
 
 /// Secure Storage Service leveraging hardware-backed secure storage

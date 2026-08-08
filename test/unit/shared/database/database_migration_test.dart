@@ -44,11 +44,13 @@ void main() {
   });
 
   group('AppDatabase Migration Tests', () {
-    test('upgrading schema from v1 to v2 adds username column to hosts cleanly', () async {
-      // 1. Initialize a SQLite database file at schema version 1 without the username column in hosts.
-      final rawDb = sqlite3.open(tempDbFile.path);
-      rawDb.execute('PRAGMA foreign_keys = ON;');
-      rawDb.execute('''
+    test(
+      'upgrading schema from v1 to v2 adds username column to hosts cleanly',
+      () async {
+        // 1. Initialize a SQLite database file at schema version 1 without the username column in hosts.
+        final rawDb = sqlite3.open(tempDbFile.path);
+        rawDb.execute('PRAGMA foreign_keys = ON;');
+        rawDb.execute('''
         CREATE TABLE IF NOT EXISTS "workspaces" (
           "id" TEXT NOT NULL PRIMARY KEY,
           "name" TEXT NOT NULL,
@@ -56,7 +58,7 @@ void main() {
           "created_at" INTEGER NOT NULL
         );
       ''');
-      rawDb.execute('''
+        rawDb.execute('''
         CREATE TABLE IF NOT EXISTS "hosts" (
           "id" TEXT NOT NULL PRIMARY KEY,
           "workspace_id" TEXT NOT NULL,
@@ -71,59 +73,61 @@ void main() {
           "created_at" INTEGER NOT NULL
         );
       ''');
-      rawDb.execute('PRAGMA user_version = 1;');
-      rawDb.execute('''
+        rawDb.execute('PRAGMA user_version = 1;');
+        rawDb.execute('''
         INSERT INTO workspaces (id, name, created_at)
         VALUES ('ws-1', 'Default Workspace', 1600000000);
       ''');
-      rawDb.execute('''
+        rawDb.execute('''
         INSERT INTO hosts (id, workspace_id, label, hostname, port, protocol, created_at)
         VALUES ('host-v1', 'ws-1', 'Legacy Host', '10.0.0.1', 22, 'ssh', 1600000000);
       ''');
-      rawDb.close();
+        rawDb.close();
 
-      // 2. Open the database using AppDatabase, which runs every migration
-      // from v1 up to the current schema version.
-      final appDb = AppDatabase(NativeDatabase(tempDbFile));
-      db = appDb;
+        // 2. Open the database using AppDatabase, which runs every migration
+        // from v1 up to the current schema version.
+        final appDb = AppDatabase(NativeDatabase(tempDbFile));
+        db = appDb;
 
-      expect(appDb.schemaVersion, equals(5));
+        expect(appDb.schemaVersion, equals(6));
 
-      // 3. Verify existing legacy host record can be fetched.
-      final fetchedHost = await appDb.hostsDao.getHostById('host-v1');
-      expect(fetchedHost, isNotNull);
-      expect(fetchedHost!.label, equals('Legacy Host'));
-      expect(fetchedHost.username, isNull);
+        // 3. Verify existing legacy host record can be fetched.
+        final fetchedHost = await appDb.hostsDao.getHostById('host-v1');
+        expect(fetchedHost, isNotNull);
+        expect(fetchedHost!.label, equals('Legacy Host'));
+        expect(fetchedHost.username, isNull);
 
-      // 4. Verify update operation with username column succeeds without SqliteException(1): no such column: username.
-      await appDb.hostsDao.updateHostById(
-        'host-v1',
-        fetchedHost.copyWith(username: Value('admin')),
-      );
+        // 4. Verify update operation with username column succeeds without SqliteException(1): no such column: username.
+        await appDb.hostsDao.updateHostById(
+          'host-v1',
+          fetchedHost.copyWith(username: Value('admin')),
+        );
 
-      final updatedHost = await appDb.hostsDao.getHostById('host-v1');
-      expect(updatedHost, isNotNull);
-      expect(updatedHost!.username, equals('admin'));
+        final updatedHost = await appDb.hostsDao.getHostById('host-v1');
+        expect(updatedHost, isNotNull);
+        expect(updatedHost!.username, equals('admin'));
 
-      // 5. Verify inserting a new host with username works properly.
-      await appDb.hostsDao.insertHost(
-        HostsCompanion.insert(
-          id: 'host-v2',
-          workspaceId: 'ws-1',
-          label: 'New Host v2',
-          hostname: '10.0.0.2',
-          username: const Value('root'),
-          createdAt: DateTime.now(),
-        ),
-      );
+        // 5. Verify inserting a new host with username works properly.
+        await appDb.hostsDao.insertHost(
+          HostsCompanion.insert(
+            id: 'host-v2',
+            workspaceId: 'ws-1',
+            label: 'New Host v2',
+            hostname: '10.0.0.2',
+            username: const Value('root'),
+            createdAt: DateTime.now(),
+          ),
+        );
 
-      final newHost = await appDb.hostsDao.getHostById('host-v2');
-      expect(newHost, isNotNull);
-      expect(newHost!.username, equals('root'));
-    });
+        final newHost = await appDb.hostsDao.getHostById('host-v2');
+        expect(newHost, isNotNull);
+        expect(newHost!.username, equals('root'));
+      },
+    );
 
     test('upgrading to v3 rewrites double-encoded known_hosts fingerprints', () async {
-      const plainFingerprint = 'SHA256:5FSkiWFrH2mFbfCzXhAv9k3PPWQiJRuVpH2vhcaGZ6c';
+      const plainFingerprint =
+          'SHA256:5FSkiWFrH2mFbfCzXhAv9k3PPWQiJRuVpH2vhcaGZ6c';
       final legacyValue = base64.encode(utf8.encode(plainFingerprint));
 
       final rawDb = sqlite3.open(tempDbFile.path);
@@ -154,11 +158,17 @@ void main() {
       final appDb = AppDatabase(NativeDatabase(tempDbFile));
       db = appDb;
 
-      final migrated = await appDb.knownHostsDao.findKnownHost('legacy.example.com', 22);
+      final migrated = await appDb.knownHostsDao.findKnownHost(
+        'legacy.example.com',
+        22,
+      );
       expect(migrated, isNotNull);
       expect(migrated!.fingerprintSha256, equals(plainFingerprint));
 
-      final untouched = await appDb.knownHostsDao.findKnownHost('new.example.com', 22);
+      final untouched = await appDb.knownHostsDao.findKnownHost(
+        'new.example.com',
+        22,
+      );
       expect(untouched, isNotNull);
       expect(untouched!.fingerprintSha256, equals(plainFingerprint));
     });
@@ -209,10 +219,11 @@ void main() {
       expect(panes.single.splitRatio, equals(0.5));
     });
 
-    test('upgrading to v5 adds the Mosh columns and keeps existing hosts',
-        () async {
-      final rawDb = sqlite3.open(tempDbFile.path);
-      rawDb.execute('''
+    test(
+      'upgrading to v5 adds the Mosh columns and keeps existing hosts',
+      () async {
+        final rawDb = sqlite3.open(tempDbFile.path);
+        rawDb.execute('''
         CREATE TABLE IF NOT EXISTS "workspaces" (
           "id" TEXT NOT NULL PRIMARY KEY,
           "name" TEXT NOT NULL,
@@ -220,41 +231,76 @@ void main() {
           "created_at" INTEGER NOT NULL
         );
       ''');
-      rawDb.execute(_hostsTableAtV2);
-      rawDb.execute('PRAGMA user_version = 4;');
-      rawDb.execute('''
+        rawDb.execute(_hostsTableAtV2);
+        rawDb.execute('PRAGMA user_version = 4;');
+        rawDb.execute('''
         INSERT INTO workspaces (id, name, created_at)
         VALUES ('ws-1', 'Default Workspace', 1600000000);
       ''');
-      // A host already stored with protocol 'mosh' back when nothing
-      // implemented it. The migration must leave that column alone.
-      rawDb.execute('''
+        // A host already stored with protocol 'mosh' back when nothing
+        // implemented it. The migration must leave that column alone.
+        rawDb.execute('''
         INSERT INTO hosts (id, workspace_id, label, hostname, port, protocol, created_at)
         VALUES ('host-v4', 'ws-1', 'Old Mosh Host', '10.0.0.9', 22, 'mosh', 1600000000);
       ''');
+        rawDb.close();
+
+        final appDb = AppDatabase(NativeDatabase(tempDbFile));
+        db = appDb;
+
+        final migrated = await appDb.hostsDao.getHostById('host-v4');
+        expect(migrated, isNotNull);
+        expect(migrated!.protocol, equals('mosh'));
+        // Nullable, so an existing host falls back to the mosh defaults.
+        expect(migrated.moshServerPath, isNull);
+        expect(migrated.moshPortRange, isNull);
+
+        await appDb.hostsDao.updateHostById(
+          'host-v4',
+          migrated.copyWith(
+            moshServerPath: const Value('/opt/bin/mosh-server'),
+            moshPortRange: const Value('61000:61010'),
+          ),
+        );
+
+        final updated = await appDb.hostsDao.getHostById('host-v4');
+        expect(updated!.moshServerPath, equals('/opt/bin/mosh-server'));
+        expect(updated.moshPortRange, equals('61000:61010'));
+      },
+    );
+
+    test('upgrading to v6 creates the paired devices table', () async {
+      final rawDb = sqlite3.open(tempDbFile.path);
+      rawDb.execute(_hostsTableAtV2);
+      rawDb.execute(
+        'ALTER TABLE hosts ADD COLUMN "mosh_server_path" TEXT NULL;',
+      );
+      rawDb.execute(
+        'ALTER TABLE hosts ADD COLUMN "mosh_port_range" TEXT NULL;',
+      );
+      rawDb.execute('PRAGMA user_version = 5;');
       rawDb.close();
 
       final appDb = AppDatabase(NativeDatabase(tempDbFile));
       db = appDb;
 
-      final migrated = await appDb.hostsDao.getHostById('host-v4');
-      expect(migrated, isNotNull);
-      expect(migrated!.protocol, equals('mosh'));
-      // Nullable, so an existing host falls back to the mosh defaults.
-      expect(migrated.moshServerPath, isNull);
-      expect(migrated.moshPortRange, isNull);
-
-      await appDb.hostsDao.updateHostById(
-        'host-v4',
-        migrated.copyWith(
-          moshServerPath: const Value('/opt/bin/mosh-server'),
-          moshPortRange: const Value('61000:61010'),
+      expect(await appDb.pairedDevicesDao.getAll(), isEmpty);
+      final now = DateTime.utc(2026, 8, 9, 12);
+      await appDb.pairedDevicesDao.upsert(
+        PairedDevicesCompanion.insert(
+          id: 'phone-1',
+          name: 'iPhone 15',
+          platform: 'ios',
+          secretHash: 'argon2id-v1:test',
+          publicKey: 'phone-public-key',
+          pairedAt: now,
+          lastSeenAt: now,
         ),
       );
 
-      final updated = await appDb.hostsDao.getHostById('host-v4');
-      expect(updated!.moshServerPath, equals('/opt/bin/mosh-server'));
-      expect(updated.moshPortRange, equals('61000:61010'));
+      final devices = await appDb.pairedDevicesDao.getAll();
+      expect(devices.single.id, equals('phone-1'));
+      expect(devices.single.platform, equals('ios'));
     });
   });
 }

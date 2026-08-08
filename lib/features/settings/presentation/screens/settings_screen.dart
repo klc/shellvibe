@@ -15,6 +15,7 @@ import '../../../terminal/domain/models/terminal_palette_data.dart';
 import '../../../terminal/presentation/utils/terminal_font_resolver.dart';
 import '../../../vault/presentation/notifiers/identities_notifier.dart';
 import '../../../vault/presentation/notifiers/vault_notifier.dart';
+import '../../../device_link/presentation/widgets/paired_devices_settings_section.dart';
 import '../../domain/models/app_settings_model.dart';
 import '../notifiers/settings_notifier.dart';
 
@@ -26,6 +27,7 @@ enum SettingsSection {
   appearance('Appearance', LucideIcons.palette),
   terminal('Terminal', LucideIcons.squareTerminal),
   security('Security', LucideIcons.shieldCheck),
+  deviceLink('Device Link', LucideIcons.smartphone),
   vault('Vault', LucideIcons.lockKeyhole),
   sync('Sync', LucideIcons.cloudCog);
 
@@ -796,6 +798,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           // --- Section 3: Vault Master Password ---
           _buildSectionHeader('Vault Master Password', LucideIcons.lockKeyhole),
           _buildVaultMasterPasswordCard(),
+        ];
+      case SettingsSection.deviceLink:
+        return [
+          _buildSectionHeader('Paired Devices', LucideIcons.smartphone),
+          const PairedDevicesSettingsSection(),
         ];
       case SettingsSection.sync:
         return [

@@ -4,6 +4,7 @@ import '../database/app_database.dart';
 import '../database/daos/hosts_dao.dart';
 import '../database/daos/identities_dao.dart';
 import '../database/daos/known_hosts_dao.dart';
+import '../database/daos/paired_devices_dao.dart';
 import '../database/daos/runbooks_dao.dart';
 import '../database/daos/snippets_dao.dart';
 import '../database/daos/templates_dao.dart';
@@ -76,6 +77,13 @@ TemplatesDao templatesDao(Ref ref) {
   return db.templatesDao;
 }
 
+/// Auto-disposing provider for [PairedDevicesDao].
+@riverpod
+PairedDevicesDao pairedDevicesDao(Ref ref) {
+  final db = ref.watch(appDatabaseProvider);
+  return db.pairedDevicesDao;
+}
+
 /// Provider for [EncryptionEngine].
 @riverpod
 EncryptionEngine encryptionEngine(Ref ref) {
@@ -87,4 +95,3 @@ EncryptionEngine encryptionEngine(Ref ref) {
 SecureStorageService secureStorageService(Ref ref) {
   return SecureStorageService();
 }
-

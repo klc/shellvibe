@@ -403,6 +403,57 @@ final class TemplatesDaoProvider
 
 String _$templatesDaoHash() => r'36020e3c565fa67e7fac75aba01d14ab54f84d0a';
 
+/// Auto-disposing provider for [PairedDevicesDao].
+
+@ProviderFor(pairedDevicesDao)
+final pairedDevicesDaoProvider = PairedDevicesDaoProvider._();
+
+/// Auto-disposing provider for [PairedDevicesDao].
+
+final class PairedDevicesDaoProvider
+    extends
+        $FunctionalProvider<
+          PairedDevicesDao,
+          PairedDevicesDao,
+          PairedDevicesDao
+        >
+    with $Provider<PairedDevicesDao> {
+  /// Auto-disposing provider for [PairedDevicesDao].
+  PairedDevicesDaoProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'pairedDevicesDaoProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$pairedDevicesDaoHash();
+
+  @$internal
+  @override
+  $ProviderElement<PairedDevicesDao> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  PairedDevicesDao create(Ref ref) {
+    return pairedDevicesDao(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(PairedDevicesDao value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<PairedDevicesDao>(value),
+    );
+  }
+}
+
+String _$pairedDevicesDaoHash() => r'f7b27c7f91407b303d7eadd28ba9159451bb3fa3';
+
 /// Provider for [EncryptionEngine].
 
 @ProviderFor(encryptionEngine)

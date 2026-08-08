@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -6,18 +7,28 @@ import 'package:dart_mosh/dart_mosh.dart';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+import 'package:nsd/nsd.dart' as nsd;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:uuid/uuid.dart';
 import 'package:xterm3/xterm.dart';
 
+import '../../../../core/network/device_link/device_link_local_session_transport.dart';
+import '../../../../core/network/device_link/device_discovery.dart';
+import '../../../../core/network/device_link/device_link_identity.dart';
+import '../../../../core/network/device_link/device_link_server.dart';
+import '../../../../core/network/device_link/device_link_session_transport.dart';
+import '../../../../core/constants/app_constants.dart';
+import '../../../../core/network/local_pty_manager.dart';
 import '../../../../core/network/mosh_session_manager.dart';
 import '../../../../core/network/providers/network_providers.dart';
 import '../../../../core/network/ssh_session_manager.dart';
 import '../../../../core/network/terminal_mosh_bridge.dart';
 import '../../../../core/network/terminal_ssh_bridge.dart';
 import '../../../../shared/providers/database_providers.dart';
+import '../../../../shared/storage/secure_storage_service.dart';
 import '../../../hosts/domain/models/host_model.dart';
 import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
+import '../../../device_link/data/repositories/device_link_pairing_repository.dart';
 import '../../../vault/domain/models/identity_model.dart';
 import '../../../vault/presentation/notifiers/identities_notifier.dart';
 import '../../domain/models/terminal_tab_session.dart';
@@ -86,7 +97,10 @@ class TerminalTabsState {
 @Riverpod(keepAlive: true)
 class TerminalTabsNotifier extends _$TerminalTabsNotifier {
   final Set<TerminalTabSession> _ownedTabs = {};
+  final Map<String, DeviceLinkLocalSessionTransport> _deviceLinkTransports = {};
   final BroadcastInputRouter _broadcastRouter = BroadcastInputRouter();
+  DeviceLinkServer? _deviceLinkServer;
+  nsd.Registration? _deviceLinkMdnsRegistration;
 
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
 
@@ -104,6 +118,15 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
         tab.dispose();
       }
       _ownedTabs.clear();
+      _deviceLinkTransports.clear();
+      final server = _deviceLinkServer;
+      _deviceLinkServer = null;
+      if (server != null) unawaited(server.close());
+      final registration = _deviceLinkMdnsRegistration;
+      _deviceLinkMdnsRegistration = null;
+      if (registration != null) {
+        unawaited(DeviceDiscovery().unregister(registration));
+      }
     });
     return const TerminalTabsState();
   }
@@ -700,6 +723,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       );
 
       newTab.ptyBridge = bridge;
+      if (bridge != null) _registerDeviceLinkTransport(newTab, bridge);
       // See _connectSsh: the first layout resize happens before the bridge
       // wires `onResize`, so push the current size once by hand.
       bridge?.resizeTerminal(terminal.viewWidth, terminal.viewHeight);
@@ -770,8 +794,139 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
 
     for (final tab in closingTabs) {
       await tab.dispose();
+      _deviceLinkTransports.remove(tab.id);
       _ownedTabs.remove(tab);
     }
+  }
+
+  /// Supplies stable live local-session adapters to the Device Link server.
+  /// Core transport code uses these adapters without depending on Riverpod or
+  /// BuildContext.
+  List<DeviceLinkSessionTransport> deviceLinkSessionTransports() =>
+      List.unmodifiable(_deviceLinkTransports.values);
+
+  DeviceLinkSessionTransport? deviceLinkSessionTransport(String sessionId) =>
+      _deviceLinkTransports[sessionId];
+
+  /// Registers a mobile Device Link session in the same owned-tab collection
+  /// as local and SSH sessions. The linked screen can therefore reuse the
+  /// terminal lifecycle without creating a parallel tab store.
+  void registerDeviceLinkSession(TerminalTabSession tab) {
+    if (_ownedTabs.contains(tab)) return;
+    if (state.tabs.any((candidate) => candidate.id == tab.id)) {
+      throw StateError('A terminal tab with id ${tab.id} already exists');
+    }
+    _ownedTabs.add(tab);
+    state = state.copyWith(tabs: [...state.tabs, tab], activeTabId: tab.id);
+  }
+
+  /// Starts (or reuses) the desktop-side Device Link listener and creates the
+  /// short-lived QR payload used by the first pairing flow. The server stays
+  /// alive after the QR screen closes so the newly paired connection can keep
+  /// using the same listener.
+  Future<DeviceLinkQrPayload> createDeviceLinkPairingPayload() async {
+    final pairingRepository = ref.read(deviceLinkPairingRepositoryProvider);
+    final identity = await _loadDeviceLinkIdentity();
+    final server = _deviceLinkServer ??= DeviceLinkServer(
+      identity: identity,
+      hostName: Platform.localHostname.isEmpty
+          ? 'terly2-desktop'
+          : Platform.localHostname,
+      appVersion: AppConstants.appVersion,
+      sessionTransportsProvider: deviceLinkSessionTransports,
+      pairedDeviceAuthenticator: pairingRepository.authenticate,
+      pairedDevicePersister: (record) => pairingRepository.savePairedDevice(
+        id: record.id,
+        name: record.name,
+        platform: record.platform,
+        secret: record.secret,
+        publicKey: record.publicKey,
+        pairedAt: record.pairedAt,
+      ),
+    );
+    await server.start();
+    await _ensureDeviceLinkMdnsRegistration(server);
+    final registeredName = _deviceLinkMdnsRegistration?.service.name;
+    final mdnsName = registeredName == null
+        ? null
+        : '$registeredName.$deviceLinkMdnsServiceType.local';
+    return server.createPairingPayload(mdnsName: mdnsName);
+  }
+
+  Future<void> _ensureDeviceLinkMdnsRegistration(
+    DeviceLinkServer server,
+  ) async {
+    if (_deviceLinkMdnsRegistration != null) return;
+    final discovery = DeviceDiscovery();
+    if (!discovery.supportsMdns) return;
+    try {
+      _deviceLinkMdnsRegistration = await discovery.register(
+        name: server.hostName,
+        port: server.port,
+      );
+    } on Object catch (error) {
+      // Direct QR addresses remain valid when mDNS is unavailable (Linux,
+      // missing permission, or an isolated Wi-Fi network).
+      debugPrint('[Device Link] mDNS registration unavailable: $error');
+    }
+  }
+
+  Future<DeviceLinkIdentity> _loadDeviceLinkIdentity() async {
+    final storage = ref.read(secureStorageServiceProvider);
+    final stored = await storage.getToken(
+      SecureStorageKeys.deviceLinkServerIdentity,
+    );
+    if (stored != null) {
+      try {
+        final object = jsonDecode(stored);
+        if (object is Map<String, dynamic> &&
+            object['certificatePem'] is String &&
+            object['privateKeyPem'] is String) {
+          return DeviceLinkIdentity.fromPem(
+            certificatePem: object['certificatePem'] as String,
+            privateKeyPem: object['privateKeyPem'] as String,
+          );
+        }
+      } catch (_) {
+        await storage.deleteToken(SecureStorageKeys.deviceLinkServerIdentity);
+      }
+    }
+
+    final identity = DeviceLinkIdentity.generate();
+    await storage.saveToken(
+      SecureStorageKeys.deviceLinkServerIdentity,
+      jsonEncode({
+        'certificatePem': identity.certificatePem,
+        'privateKeyPem': identity.privateKeyPem,
+      }),
+    );
+    return identity;
+  }
+
+  void _registerDeviceLinkTransport(
+    TerminalTabSession tab,
+    TerminalLocalPtyBridge bridge,
+  ) {
+    final transport = DeviceLinkLocalSessionTransport(
+      sessionId: tab.id,
+      title: tab.title,
+      terminal: tab.terminal,
+      ptyBridge: bridge,
+      attachSession: (deviceId, columns, rows) => tab.attachDeviceLink(
+        deviceId: deviceId,
+        columns: columns,
+        rows: rows,
+      ),
+      detachSession: tab.detachDeviceLink,
+      resizeSession: tab.resizeTerminal,
+      onStateChanged: () {
+        if (state.tabs.any((candidate) => candidate.id == tab.id)) {
+          state = state.copyWith(tabs: [...state.tabs]);
+        }
+      },
+    );
+    tab.deviceLinkTransport = transport;
+    _deviceLinkTransports[tab.id] = transport;
   }
 
   void setActiveTab(String tabId) {
@@ -915,6 +1070,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
         columns: terminal.viewWidth,
       );
       splitTab.ptyBridge = bridge;
+      if (bridge != null) _registerDeviceLinkTransport(splitTab, bridge);
       bridge?.resizeTerminal(terminal.viewWidth, terminal.viewHeight);
       splitTab.isConnected = bridge != null;
       if (bridge == null) {

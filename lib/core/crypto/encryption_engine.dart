@@ -12,12 +12,15 @@ class CryptoException implements Exception {
   CryptoException(this.message, [this.cause]);
 
   @override
-  String toString() => 'CryptoException: $message${cause != null ? ' ($cause)' : ''}';
+  String toString() =>
+      'CryptoException: $message${cause != null ? ' ($cause)' : ''}';
 }
 
 /// Zero-Knowledge E2EE Encryption Engine using Argon2id for Key Derivation (KDF)
 /// and AES-256-GCM for payload encryption and decryption.
 class EncryptionEngine {
+  static const String argon2idHashPrefix = 'argon2id-v1';
+
   final Argon2id _kdf;
   final AesGcm _cipher;
 
@@ -27,17 +30,16 @@ class EncryptionEngine {
   /// - iterations: 3
   /// - parallelism: 1
   /// - hashLength: 32 bytes (256 bits)
-  EncryptionEngine({
-    Argon2id? kdf,
-    AesGcm? cipher,
-  })  : _kdf = kdf ??
-            Argon2id(
-              parallelism: 1,
-              memory: 65536,
-              iterations: 3,
-              hashLength: 32,
-            ),
-        _cipher = cipher ?? AesGcm.with256bits();
+  EncryptionEngine({Argon2id? kdf, AesGcm? cipher})
+    : _kdf =
+          kdf ??
+          Argon2id(
+            parallelism: 1,
+            memory: 65536,
+            iterations: 3,
+            hashLength: 32,
+          ),
+      _cipher = cipher ?? AesGcm.with256bits();
 
   /// Derives a 256-bit [SecretKey] from a master password and salt using Argon2id.
   Future<SecretKey> deriveMasterKey({
@@ -47,10 +49,7 @@ class EncryptionEngine {
     try {
       final passwordBytes = utf8.encode(masterPassword);
       final secretKey = SecretKey(passwordBytes);
-      return await _kdf.deriveKey(
-        secretKey: secretKey,
-        nonce: salt,
-      );
+      return await _kdf.deriveKey(secretKey: secretKey, nonce: salt);
     } catch (e) {
       throw CryptoException('Failed to derive master key using Argon2id', e);
     }
@@ -71,6 +70,62 @@ class EncryptionEngine {
       bytes[i] = random.nextInt(256);
     }
     return bytes;
+  }
+
+  /// Creates a self-contained Argon2id password record.
+  ///
+  /// The salt and derived bytes are stored together, but the original secret
+  /// never leaves this method. The format is
+  /// `argon2id-v1:<base64url salt>:<base64url digest>`.
+  Future<String> hashSecret(String secret) async {
+    final salt = generateSalt();
+    final key = await deriveMasterKeyInBackground(
+      masterPassword: secret,
+      salt: salt,
+    );
+    final digest = await key.extractBytes();
+    return [
+      argon2idHashPrefix,
+      base64Url.encode(salt).replaceAll('=', ''),
+      base64Url.encode(digest).replaceAll('=', ''),
+    ].join(':');
+  }
+
+  /// Verifies a secret against a record produced by [hashSecret].
+  Future<bool> verifySecret({
+    required String secret,
+    required String encodedHash,
+  }) async {
+    final parts = encodedHash.split(':');
+    if (parts.length != 3 || parts[0] != argon2idHashPrefix) return false;
+    try {
+      final salt = _decodeBase64Url(parts[1]);
+      final expected = _decodeBase64Url(parts[2]);
+      final key = await deriveMasterKeyInBackground(
+        masterPassword: secret,
+        salt: salt,
+      );
+      final actual = await key.extractBytes();
+      return _constantTimeEquals(actual, expected);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Uint8List _decodeBase64Url(String value) {
+    final padding = (4 - value.length % 4) % 4;
+    return Uint8List.fromList(
+      base64Url.decode('$value${List.filled(padding, '=').join()}'),
+    );
+  }
+
+  static bool _constantTimeEquals(List<int> left, List<int> right) {
+    var difference = left.length ^ right.length;
+    final length = left.length < right.length ? left.length : right.length;
+    for (var i = 0; i < length; i++) {
+      difference |= left[i] ^ right[i];
+    }
+    return difference == 0;
   }
 
   /// Encrypts a UTF-8 plaintext string using AES-256-GCM.
@@ -112,10 +167,7 @@ class EncryptionEngine {
   }) async {
     // Avoid isolate spawning overhead in test environments with low KDF memory
     if (_kdf.memory <= 4096) {
-      return deriveMasterKey(
-        masterPassword: masterPassword,
-        salt: salt,
-      );
+      return deriveMasterKey(masterPassword: masterPassword, salt: salt);
     }
 
     try {
@@ -166,11 +218,7 @@ class EncryptionEngine {
       final macBytes = bytes.sublist(12, 28);
       final cipherText = bytes.sublist(28);
 
-      final secretBox = SecretBox(
-        cipherText,
-        nonce: nonce,
-        mac: Mac(macBytes),
-      );
+      final secretBox = SecretBox(cipherText, nonce: nonce, mac: Mac(macBytes));
 
       final decryptedBytes = await _cipher.decrypt(
         secretBox,

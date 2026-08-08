@@ -5265,6 +5265,475 @@ class TemplatePanesCompanion extends UpdateCompanion<TemplatePane> {
   }
 }
 
+class $PairedDevicesTable extends PairedDevices
+    with TableInfo<$PairedDevicesTable, PairedDevice> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PairedDevicesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _platformMeta = const VerificationMeta(
+    'platform',
+  );
+  @override
+  late final GeneratedColumn<String> platform = GeneratedColumn<String>(
+    'platform',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _secretHashMeta = const VerificationMeta(
+    'secretHash',
+  );
+  @override
+  late final GeneratedColumn<String> secretHash = GeneratedColumn<String>(
+    'secret_hash',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _publicKeyMeta = const VerificationMeta(
+    'publicKey',
+  );
+  @override
+  late final GeneratedColumn<String> publicKey = GeneratedColumn<String>(
+    'public_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _pairedAtMeta = const VerificationMeta(
+    'pairedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> pairedAt = GeneratedColumn<DateTime>(
+    'paired_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _lastSeenAtMeta = const VerificationMeta(
+    'lastSeenAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastSeenAt = GeneratedColumn<DateTime>(
+    'last_seen_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    platform,
+    secretHash,
+    publicKey,
+    pairedAt,
+    lastSeenAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'paired_devices';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PairedDevice> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('platform')) {
+      context.handle(
+        _platformMeta,
+        platform.isAcceptableOrUnknown(data['platform']!, _platformMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_platformMeta);
+    }
+    if (data.containsKey('secret_hash')) {
+      context.handle(
+        _secretHashMeta,
+        secretHash.isAcceptableOrUnknown(data['secret_hash']!, _secretHashMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_secretHashMeta);
+    }
+    if (data.containsKey('public_key')) {
+      context.handle(
+        _publicKeyMeta,
+        publicKey.isAcceptableOrUnknown(data['public_key']!, _publicKeyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_publicKeyMeta);
+    }
+    if (data.containsKey('paired_at')) {
+      context.handle(
+        _pairedAtMeta,
+        pairedAt.isAcceptableOrUnknown(data['paired_at']!, _pairedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_pairedAtMeta);
+    }
+    if (data.containsKey('last_seen_at')) {
+      context.handle(
+        _lastSeenAtMeta,
+        lastSeenAt.isAcceptableOrUnknown(
+          data['last_seen_at']!,
+          _lastSeenAtMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_lastSeenAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  PairedDevice map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PairedDevice(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      platform: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}platform'],
+      )!,
+      secretHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}secret_hash'],
+      )!,
+      publicKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}public_key'],
+      )!,
+      pairedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}paired_at'],
+      )!,
+      lastSeenAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_seen_at'],
+      )!,
+    );
+  }
+
+  @override
+  $PairedDevicesTable createAlias(String alias) {
+    return $PairedDevicesTable(attachedDatabase, alias);
+  }
+}
+
+class PairedDevice extends DataClass implements Insertable<PairedDevice> {
+  final String id;
+  final String name;
+  final String platform;
+  final String secretHash;
+  final String publicKey;
+  final DateTime pairedAt;
+  final DateTime lastSeenAt;
+  const PairedDevice({
+    required this.id,
+    required this.name,
+    required this.platform,
+    required this.secretHash,
+    required this.publicKey,
+    required this.pairedAt,
+    required this.lastSeenAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    map['platform'] = Variable<String>(platform);
+    map['secret_hash'] = Variable<String>(secretHash);
+    map['public_key'] = Variable<String>(publicKey);
+    map['paired_at'] = Variable<DateTime>(pairedAt);
+    map['last_seen_at'] = Variable<DateTime>(lastSeenAt);
+    return map;
+  }
+
+  PairedDevicesCompanion toCompanion(bool nullToAbsent) {
+    return PairedDevicesCompanion(
+      id: Value(id),
+      name: Value(name),
+      platform: Value(platform),
+      secretHash: Value(secretHash),
+      publicKey: Value(publicKey),
+      pairedAt: Value(pairedAt),
+      lastSeenAt: Value(lastSeenAt),
+    );
+  }
+
+  factory PairedDevice.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PairedDevice(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      platform: serializer.fromJson<String>(json['platform']),
+      secretHash: serializer.fromJson<String>(json['secretHash']),
+      publicKey: serializer.fromJson<String>(json['publicKey']),
+      pairedAt: serializer.fromJson<DateTime>(json['pairedAt']),
+      lastSeenAt: serializer.fromJson<DateTime>(json['lastSeenAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'platform': serializer.toJson<String>(platform),
+      'secretHash': serializer.toJson<String>(secretHash),
+      'publicKey': serializer.toJson<String>(publicKey),
+      'pairedAt': serializer.toJson<DateTime>(pairedAt),
+      'lastSeenAt': serializer.toJson<DateTime>(lastSeenAt),
+    };
+  }
+
+  PairedDevice copyWith({
+    String? id,
+    String? name,
+    String? platform,
+    String? secretHash,
+    String? publicKey,
+    DateTime? pairedAt,
+    DateTime? lastSeenAt,
+  }) => PairedDevice(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    platform: platform ?? this.platform,
+    secretHash: secretHash ?? this.secretHash,
+    publicKey: publicKey ?? this.publicKey,
+    pairedAt: pairedAt ?? this.pairedAt,
+    lastSeenAt: lastSeenAt ?? this.lastSeenAt,
+  );
+  PairedDevice copyWithCompanion(PairedDevicesCompanion data) {
+    return PairedDevice(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      platform: data.platform.present ? data.platform.value : this.platform,
+      secretHash: data.secretHash.present
+          ? data.secretHash.value
+          : this.secretHash,
+      publicKey: data.publicKey.present ? data.publicKey.value : this.publicKey,
+      pairedAt: data.pairedAt.present ? data.pairedAt.value : this.pairedAt,
+      lastSeenAt: data.lastSeenAt.present
+          ? data.lastSeenAt.value
+          : this.lastSeenAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PairedDevice(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('platform: $platform, ')
+          ..write('secretHash: $secretHash, ')
+          ..write('publicKey: $publicKey, ')
+          ..write('pairedAt: $pairedAt, ')
+          ..write('lastSeenAt: $lastSeenAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    name,
+    platform,
+    secretHash,
+    publicKey,
+    pairedAt,
+    lastSeenAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PairedDevice &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.platform == this.platform &&
+          other.secretHash == this.secretHash &&
+          other.publicKey == this.publicKey &&
+          other.pairedAt == this.pairedAt &&
+          other.lastSeenAt == this.lastSeenAt);
+}
+
+class PairedDevicesCompanion extends UpdateCompanion<PairedDevice> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<String> platform;
+  final Value<String> secretHash;
+  final Value<String> publicKey;
+  final Value<DateTime> pairedAt;
+  final Value<DateTime> lastSeenAt;
+  final Value<int> rowid;
+  const PairedDevicesCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.platform = const Value.absent(),
+    this.secretHash = const Value.absent(),
+    this.publicKey = const Value.absent(),
+    this.pairedAt = const Value.absent(),
+    this.lastSeenAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PairedDevicesCompanion.insert({
+    required String id,
+    required String name,
+    required String platform,
+    required String secretHash,
+    required String publicKey,
+    required DateTime pairedAt,
+    required DateTime lastSeenAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       name = Value(name),
+       platform = Value(platform),
+       secretHash = Value(secretHash),
+       publicKey = Value(publicKey),
+       pairedAt = Value(pairedAt),
+       lastSeenAt = Value(lastSeenAt);
+  static Insertable<PairedDevice> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<String>? platform,
+    Expression<String>? secretHash,
+    Expression<String>? publicKey,
+    Expression<DateTime>? pairedAt,
+    Expression<DateTime>? lastSeenAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (platform != null) 'platform': platform,
+      if (secretHash != null) 'secret_hash': secretHash,
+      if (publicKey != null) 'public_key': publicKey,
+      if (pairedAt != null) 'paired_at': pairedAt,
+      if (lastSeenAt != null) 'last_seen_at': lastSeenAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PairedDevicesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? name,
+    Value<String>? platform,
+    Value<String>? secretHash,
+    Value<String>? publicKey,
+    Value<DateTime>? pairedAt,
+    Value<DateTime>? lastSeenAt,
+    Value<int>? rowid,
+  }) {
+    return PairedDevicesCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      platform: platform ?? this.platform,
+      secretHash: secretHash ?? this.secretHash,
+      publicKey: publicKey ?? this.publicKey,
+      pairedAt: pairedAt ?? this.pairedAt,
+      lastSeenAt: lastSeenAt ?? this.lastSeenAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (platform.present) {
+      map['platform'] = Variable<String>(platform.value);
+    }
+    if (secretHash.present) {
+      map['secret_hash'] = Variable<String>(secretHash.value);
+    }
+    if (publicKey.present) {
+      map['public_key'] = Variable<String>(publicKey.value);
+    }
+    if (pairedAt.present) {
+      map['paired_at'] = Variable<DateTime>(pairedAt.value);
+    }
+    if (lastSeenAt.present) {
+      map['last_seen_at'] = Variable<DateTime>(lastSeenAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PairedDevicesCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('platform: $platform, ')
+          ..write('secretHash: $secretHash, ')
+          ..write('publicKey: $publicKey, ')
+          ..write('pairedAt: $pairedAt, ')
+          ..write('lastSeenAt: $lastSeenAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -5281,6 +5750,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $RunbookStepsTable runbookSteps = $RunbookStepsTable(this);
   late final $TemplatesTable templates = $TemplatesTable(this);
   late final $TemplatePanesTable templatePanes = $TemplatePanesTable(this);
+  late final $PairedDevicesTable pairedDevices = $PairedDevicesTable(this);
   late final HostsDao hostsDao = HostsDao(this as AppDatabase);
   late final IdentitiesDao identitiesDao = IdentitiesDao(this as AppDatabase);
   late final KnownHostsDao knownHostsDao = KnownHostsDao(this as AppDatabase);
@@ -5289,6 +5759,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final SnippetsDao snippetsDao = SnippetsDao(this as AppDatabase);
   late final RunbooksDao runbooksDao = RunbooksDao(this as AppDatabase);
   late final TemplatesDao templatesDao = TemplatesDao(this as AppDatabase);
+  late final PairedDevicesDao pairedDevicesDao = PairedDevicesDao(
+    this as AppDatabase,
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -5305,6 +5778,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     runbookSteps,
     templates,
     templatePanes,
+    pairedDevices,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -10520,6 +10994,248 @@ typedef $$TemplatePanesTableProcessedTableManager =
       TemplatePane,
       PrefetchHooks Function({bool templateId})
     >;
+typedef $$PairedDevicesTableCreateCompanionBuilder =
+    PairedDevicesCompanion Function({
+      required String id,
+      required String name,
+      required String platform,
+      required String secretHash,
+      required String publicKey,
+      required DateTime pairedAt,
+      required DateTime lastSeenAt,
+      Value<int> rowid,
+    });
+typedef $$PairedDevicesTableUpdateCompanionBuilder =
+    PairedDevicesCompanion Function({
+      Value<String> id,
+      Value<String> name,
+      Value<String> platform,
+      Value<String> secretHash,
+      Value<String> publicKey,
+      Value<DateTime> pairedAt,
+      Value<DateTime> lastSeenAt,
+      Value<int> rowid,
+    });
+
+class $$PairedDevicesTableFilterComposer
+    extends Composer<_$AppDatabase, $PairedDevicesTable> {
+  $$PairedDevicesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get platform => $composableBuilder(
+    column: $table.platform,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get secretHash => $composableBuilder(
+    column: $table.secretHash,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get publicKey => $composableBuilder(
+    column: $table.publicKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get pairedAt => $composableBuilder(
+    column: $table.pairedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastSeenAt => $composableBuilder(
+    column: $table.lastSeenAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PairedDevicesTableOrderingComposer
+    extends Composer<_$AppDatabase, $PairedDevicesTable> {
+  $$PairedDevicesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get platform => $composableBuilder(
+    column: $table.platform,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get secretHash => $composableBuilder(
+    column: $table.secretHash,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get publicKey => $composableBuilder(
+    column: $table.publicKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get pairedAt => $composableBuilder(
+    column: $table.pairedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastSeenAt => $composableBuilder(
+    column: $table.lastSeenAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PairedDevicesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $PairedDevicesTable> {
+  $$PairedDevicesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get platform =>
+      $composableBuilder(column: $table.platform, builder: (column) => column);
+
+  GeneratedColumn<String> get secretHash => $composableBuilder(
+    column: $table.secretHash,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get publicKey =>
+      $composableBuilder(column: $table.publicKey, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get pairedAt =>
+      $composableBuilder(column: $table.pairedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastSeenAt => $composableBuilder(
+    column: $table.lastSeenAt,
+    builder: (column) => column,
+  );
+}
+
+class $$PairedDevicesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $PairedDevicesTable,
+          PairedDevice,
+          $$PairedDevicesTableFilterComposer,
+          $$PairedDevicesTableOrderingComposer,
+          $$PairedDevicesTableAnnotationComposer,
+          $$PairedDevicesTableCreateCompanionBuilder,
+          $$PairedDevicesTableUpdateCompanionBuilder,
+          (
+            PairedDevice,
+            BaseReferences<_$AppDatabase, $PairedDevicesTable, PairedDevice>,
+          ),
+          PairedDevice,
+          PrefetchHooks Function()
+        > {
+  $$PairedDevicesTableTableManager(_$AppDatabase db, $PairedDevicesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PairedDevicesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PairedDevicesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$PairedDevicesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String> platform = const Value.absent(),
+                Value<String> secretHash = const Value.absent(),
+                Value<String> publicKey = const Value.absent(),
+                Value<DateTime> pairedAt = const Value.absent(),
+                Value<DateTime> lastSeenAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PairedDevicesCompanion(
+                id: id,
+                name: name,
+                platform: platform,
+                secretHash: secretHash,
+                publicKey: publicKey,
+                pairedAt: pairedAt,
+                lastSeenAt: lastSeenAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String name,
+                required String platform,
+                required String secretHash,
+                required String publicKey,
+                required DateTime pairedAt,
+                required DateTime lastSeenAt,
+                Value<int> rowid = const Value.absent(),
+              }) => PairedDevicesCompanion.insert(
+                id: id,
+                name: name,
+                platform: platform,
+                secretHash: secretHash,
+                publicKey: publicKey,
+                pairedAt: pairedAt,
+                lastSeenAt: lastSeenAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PairedDevicesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $PairedDevicesTable,
+      PairedDevice,
+      $$PairedDevicesTableFilterComposer,
+      $$PairedDevicesTableOrderingComposer,
+      $$PairedDevicesTableAnnotationComposer,
+      $$PairedDevicesTableCreateCompanionBuilder,
+      $$PairedDevicesTableUpdateCompanionBuilder,
+      (
+        PairedDevice,
+        BaseReferences<_$AppDatabase, $PairedDevicesTable, PairedDevice>,
+      ),
+      PairedDevice,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -10546,4 +11262,6 @@ class $AppDatabaseManager {
       $$TemplatesTableTableManager(_db, _db.templates);
   $$TemplatePanesTableTableManager get templatePanes =>
       $$TemplatePanesTableTableManager(_db, _db.templatePanes);
+  $$PairedDevicesTableTableManager get pairedDevices =>
+      $$PairedDevicesTableTableManager(_db, _db.pairedDevices);
 }
