@@ -230,6 +230,18 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
         onPressed: () =>
             TemplatePickerSheet.show(context, onSelect: _runTemplate),
       ),
+      _TabBarAction(
+        buttonKey: const Key('device_link_action_button'),
+        icon: isMobilePlatform ? LucideIcons.scanQrCode : LucideIcons.qrCode,
+        label: isMobilePlatform ? 'Scan Device Link QR' : 'Show Device Link QR',
+        onPressed: () {
+          if (isMobilePlatform) {
+            unawaited(context.push('/device-link/scan'));
+          } else {
+            unawaited(_openDeviceLinkQr(context, ref));
+          }
+        },
+      ),
     ];
 
     return Container(
@@ -724,8 +736,42 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
           onPressed: () => _showSelectHostModal(context, ref),
           child: const Text('Connect to Host'),
         ),
+        ShadButton.outline(
+          key: const Key('empty_device_link_button'),
+          leading: Icon(
+            isMobilePlatform ? LucideIcons.scanQrCode : LucideIcons.qrCode,
+            size: 16,
+          ),
+          onPressed: () {
+            if (isMobilePlatform) {
+              unawaited(context.push('/device-link/scan'));
+            } else {
+              unawaited(_openDeviceLinkQr(context, ref));
+            }
+          },
+          child: Text(
+            isMobilePlatform ? 'Scan Device Link QR' : 'Show Device Link QR',
+          ),
+        ),
       ],
     );
+  }
+
+  Future<void> _openDeviceLinkQr(BuildContext context, WidgetRef ref) async {
+    try {
+      final payload = await ref
+          .read(terminalTabsProvider.notifier)
+          .createDeviceLinkPairingPayload();
+      if (!context.mounted) return;
+      await context.push('/device-link/pair', extra: payload);
+    } catch (error) {
+      if (!context.mounted) return;
+      ShadToaster.of(context).show(
+        ShadToast.destructive(
+          description: Text('Device Link server could not start: $error'),
+        ),
+      );
+    }
   }
 
   void _showNewTabMenu(BuildContext context, WidgetRef ref) {
@@ -754,6 +800,24 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
             onTap: () {
               Navigator.of(ctx).pop();
               _showSelectHostModal(context, ref);
+            },
+          ),
+          ListTile(
+            key: const Key('new_tab_menu_device_link'),
+            leading: Icon(
+              isMobilePlatform ? LucideIcons.scanQrCode : LucideIcons.qrCode,
+              size: 18,
+            ),
+            title: Text(
+              isMobilePlatform ? 'Scan Device Link QR' : 'Show Device Link QR',
+            ),
+            onTap: () {
+              Navigator.of(ctx).pop();
+              if (isMobilePlatform) {
+                unawaited(context.push('/device-link/scan'));
+              } else {
+                unawaited(_openDeviceLinkQr(context, ref));
+              }
             },
           ),
         ],

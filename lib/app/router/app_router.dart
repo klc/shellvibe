@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/network/device_link/device_link_server.dart';
+import '../../features/device_link/presentation/screens/pairing_qr_screen.dart';
+import '../../features/device_link/presentation/screens/scan_pair_screen.dart';
 import '../../features/hosts/presentation/screens/hosts_screen.dart';
 import '../../features/settings/presentation/screens/settings_screen.dart';
 import '../../features/sftp/presentation/screens/sftp_dual_pane_screen.dart';
@@ -69,6 +72,25 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           sessionTabId: state.uri.queryParameters['tab'],
           hostLabel: state.uri.queryParameters['label'],
         ),
+      ),
+      GoRoute(
+        path: '/device-link/scan',
+        builder: (context, state) => const DeviceLinkPairingFlowScreen(),
+      ),
+      GoRoute(
+        path: '/device-link/pair',
+        builder: (context, state) {
+          final payload = state.extra;
+          if (payload is! DeviceLinkQrPayload) {
+            return const Scaffold(
+              body: Center(child: Text('Device Link pairing data is missing.')),
+            );
+          }
+          return DeviceLinkPairingQrScreen(
+            payload: payload,
+            onCancel: () => context.pop(),
+          );
+        },
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) {

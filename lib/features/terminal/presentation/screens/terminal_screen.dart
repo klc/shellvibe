@@ -17,8 +17,14 @@ import '../widgets/mobile_extra_keys_bar.dart';
 class TerminalScreen extends ConsumerStatefulWidget {
   final TerminalTabSession session;
   final bool? showExtraKeys;
+  final bool readOnly;
 
-  const TerminalScreen({super.key, required this.session, this.showExtraKeys});
+  const TerminalScreen({
+    super.key,
+    required this.session,
+    this.showExtraKeys,
+    this.readOnly = false,
+  });
 
   @override
   ConsumerState<TerminalScreen> createState() => _TerminalScreenState();
@@ -218,7 +224,8 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
                 theme: theme,
                 focusNode: _terminalFocus,
                 autofocus: true,
-                deleteDetection: shouldShowExtraKeys,
+                deleteDetection: shouldShowExtraKeys && !widget.readOnly,
+                readOnly: widget.readOnly,
                 onTapUp: _handleTapUp,
                 onHyperlinkTap: _handleHyperlinkTap,
                 predictionText: session.isMosh
@@ -248,7 +255,7 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
             ),
           ),
         ),
-        if (shouldShowExtraKeys)
+        if (shouldShowExtraKeys && !widget.readOnly)
           MobileExtraKeysBar(
             terminal: session.terminal,
             outputChain: session.outputChain,
