@@ -1,6 +1,6 @@
 # Mosh Prediction (Local Echo) — Uygulama Planı
 
-> Tarih: 2026-08-08 · Durum: **onay bekliyor** · Öncül: `docs/mosh_integration_plan.md` Faz 4
+> Tarih: 2026-08-08 · Durum: Faz A tamam, Faz B sırada · Öncül: `docs/mosh_integration_plan.md` Faz 4
 
 ## Context
 
@@ -73,7 +73,7 @@ Bu kısıt planın şeklini belirliyor; pazarlık payı yok.
 
 ---
 
-## Faz A — Tahmin motoru (saf Dart, UI yok)
+## Faz A — Tahmin motoru (saf Dart, UI yok) ✅
 
 `lib/core/network/mosh_prediction_engine.dart`
 
@@ -109,6 +109,12 @@ o epoch'ta doğrulanmış echo olup olmadığı.
 2. **Echo ack** — `echoAcks` `N` yayınladığında `inputStateNum <= N` olan
    tahminler emekli edilir: sunucunun çıktısı o karakterleri zaten getirdi,
    `visibleText`'te kalmaları çift görüntü olur.
+   **Ama epoch onaylanana kadar ack'ler hiç işlenmez.** `MoshHostMessage`
+   echo ack ile ekran baytlarını aynı pakette taşıyor; ack önce uygulanırsa
+   baytın onaylayacağı tahmini silip götürür ve onay yalnızca bayt
+   eşleşmesinden gelebildiği için epoch oturum boyunca bir daha onaylanmaz —
+   hiçbir şey görünmez. Erteleme çağrı sırasına bağımlılığı tümden kaldırıyor.
+   *(Planın ilk hâlinde yoktu; Faz A yazılırken çıktı.)*
 3. **Beklenmeyen sunucu çıktısı** — gelen bayt akışı beklenen echo'yla
    uyuşmuyorsa (imleç zıplaması, temizleme dizisi, alternatif ekran) **epoch
    öldürülür**: her şey temizlenir ve yeni bir doğrulanmış echo görülene
