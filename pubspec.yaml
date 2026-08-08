@@ -54,6 +54,8 @@ dependencies:
     git:
       url: https://github.com/klc/dart_mosh.git
       ref: 50d786564efcba115ebd4fe889ac3b867c17ec04
+  # Network-change events, the roaming trigger for Mosh sessions.
+  connectivity_plus: ^7.3.1
 
   # Database & Storage
   drift: ^2.34.3

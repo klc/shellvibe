@@ -378,5 +378,39 @@ void main() {
       expect(finalTab.isConnecting, isFalse);
       expect(finalTab.errorMessage, isNotNull);
     });
+
+    test('rehomeMoshSessions is a no-op when no tab is running Mosh', () {
+      final notifier = container.read(terminalTabsProvider.notifier);
+      notifier.openLocalTab(title: 'Local');
+
+      // Roaming reaches for the network stack, which does not exist here.
+      // Nothing may be touched until a Mosh session actually opens.
+      expect(notifier.rehomeMoshSessions, returnsNormally);
+    });
+
+    test('a mosh host whose bootstrap cannot run still ends up on SSH',
+        () async {
+      final notifier = container.read(terminalTabsProvider.notifier);
+      final host = HostModel(
+        id: 'host-mosh',
+        workspaceId: 'ws-1',
+        label: 'Mosh Host',
+        hostname: '127.0.0.1',
+        port: 1,
+        protocol: 'mosh',
+        createdAt: DateTime.now(),
+      );
+
+      // Port 1 refuses the SSH connect, so this only proves the mosh branch
+      // does not change how a failed connect is reported. The Mosh path itself
+      // needs a real server and is covered by tool/mosh/smoke.dart.
+      await notifier.openTabForHost(host);
+
+      final tab = container.read(terminalTabsProvider).tabs.last;
+      expect(tab.isConnected, isFalse);
+      expect(tab.errorMessage, isNotNull);
+      expect(tab.moshSessionManager, isNull);
+      expect(tab.isMosh, isFalse);
+    });
   });
 }

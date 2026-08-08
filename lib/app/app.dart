@@ -82,6 +82,10 @@ class _TerlyAppState extends ConsumerState<TerlyApp> {
     } else if (state == AppLifecycleState.resumed) {
       _autoLockTimer?.cancel();
       _autoLockTimer = null;
+      // iOS tears the UDP socket down while the app is suspended, so a Mosh
+      // session needs a rebind on the way back in even when the network never
+      // changed. Harmless for every other tab: it only touches live Mosh ones.
+      ref.read(terminalTabsProvider.notifier).rehomeMoshSessions();
     }
   }
 

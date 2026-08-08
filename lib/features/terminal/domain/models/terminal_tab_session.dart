@@ -5,7 +5,9 @@ import 'package:flutter/widgets.dart';
 import 'package:xterm3/xterm.dart';
 
 import '../../../../core/network/local_pty_manager.dart';
+import '../../../../core/network/mosh_session_manager.dart';
 import '../../../../core/network/ssh_session_manager.dart';
+import '../../../../core/network/terminal_mosh_bridge.dart';
 import '../../../../core/network/terminal_ssh_bridge.dart';
 import '../../../hosts/domain/models/host_model.dart';
 import '../../../vault/domain/models/identity_model.dart';
@@ -50,6 +52,22 @@ class TerminalTabSession {
   /// through the last of these.
   List<SSHSessionManager> jumpSessionManagers = [];
   TerminalSSHBridge? sshBridge;
+
+  /// Mosh transport for a `protocol: 'mosh'` tab. The SSH manager above stays
+  /// connected alongside it — the bootstrap runs over that client, and SFTP and
+  /// tunnels opened from this tab keep using it.
+  MoshSessionManager? moshSessionManager;
+  TerminalMoshBridge? moshBridge;
+
+  /// Subscription to the Mosh link's liveness. Kept so the tab can show how
+  /// long the server has been quiet; a stale link is never a disconnect.
+  StreamSubscription<MoshLinkState>? moshLinkSub;
+
+  /// Latest Mosh liveness snapshot, null on tabs that are not running Mosh.
+  MoshLinkState? moshLinkState;
+
+  /// True when this tab's shell is carried by Mosh rather than the SSH channel.
+  bool get isMosh => moshBridge != null;
 
   /// Subscription to the session manager's client-change stream, used to
   /// detect a dropped keep-alive connection and flip the tab to
@@ -102,6 +120,7 @@ class TerminalTabSession {
   void resizeTerminal(int width, int height, [int pixelWidth = 0, int pixelHeight = 0]) {
     terminal.resize(width, height);
     sshBridge?.resizeTerminal(width, height, pixelWidth, pixelHeight);
+    moshBridge?.resizeTerminal(width, height, pixelWidth, pixelHeight);
     ptyBridge?.resizeTerminal(width, height);
   }
 
@@ -109,9 +128,21 @@ class TerminalTabSession {
     outputChain.dispose();
     await sshClientChangesSub?.cancel();
     sshClientChangesSub = null;
+    await moshLinkSub?.cancel();
+    moshLinkSub = null;
     if (sshBridge != null) {
       await sshBridge!.dispose(closeSession: true);
       sshBridge = null;
+    }
+    if (moshBridge != null) {
+      await moshBridge!.dispose(closeSession: true);
+      moshBridge = null;
+    }
+    if (moshSessionManager != null) {
+      // Closed before the SSH manager: the bootstrap client is the one below,
+      // and nothing about the UDP session outlives it.
+      await moshSessionManager!.close();
+      moshSessionManager = null;
     }
     if (ptyBridge != null) {
       await ptyBridge!.dispose(killPty: true);

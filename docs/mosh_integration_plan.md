@@ -1,6 +1,6 @@
 # Mosh Entegrasyonu — Uygulama Planı
 
-> Tarih: 2026-08-07 · Durum: Faz 0 tamam, Faz 1 sırada · İlgili: `docs/product_roadmap_2026-08-07.md` §5.2
+> Tarih: 2026-08-07 · Durum: Faz 0–2 tamam, Faz 3 sırada · İlgili: `docs/product_roadmap_2026-08-07.md` §5.2
 
 ## Context
 
@@ -144,44 +144,58 @@ değişiklik gerekmiyor.**
 
 ---
 
-## Faz 2 — Sekme entegrasyonu ve roaming
+## Faz 2 — Sekme entegrasyonu ve roaming ✅
 
 ### `terminal_tab_session.dart`
 
-- `MoshSessionManager? moshSessionManager` ve `TerminalMoshBridge? moshBridge`
-  alanları.
-- `resizeTerminal()` ve `dispose()` bunları da kapsayacak (mevcut
-  `sshBridge`/`ptyBridge` satırlarının yanına birer satır).
+- `moshSessionManager`, `moshBridge`, `moshLinkSub`, `moshLinkState` alanları ve
+  `isMosh` getter'ı.
+- `resizeTerminal()` ve `dispose()` bunları da kapsıyor. Mosh, SSH manager'ından
+  **önce** kapanıyor — bootstrap client'ı o.
 - `sshSessionManager` **mosh sekmesinde de dolu kalır** → SFTP
   (`sftp_dual_pane_screen.dart`) ve tüneller (`tunnels_screen.dart`)
   değişmeden çalışır.
 
 ### `terminal_tabs_notifier.dart`
 
-`_connectSshTab` içinde SSH kurulduktan sonra bir dallanma:
-`host.protocol == 'mosh'` ise `openShell()` yerine mosh bootstrap yolu.
-SSH bağlanma, host key doğrulama ve identity çözümleme kodu aynen paylaşılır —
-mosh yalnızca kabuğun *nasıl* açıldığını değiştirir.
+`_connectSshTab` içinde SSH kurulduktan sonra dallanma: `host.protocol == 'mosh'`
+ise `_startMoshShell`, değilse `openShell()`. SSH bağlanma, host key doğrulama ve
+identity çözümleme aynen paylaşılıyor — mosh yalnızca kabuğun *nasıl* açıldığını
+değiştiriyor.
 
-Eklenecekler:
-- `_connectMoshTab(tab, host, identity)` — bootstrap + `MoshSession` +
-  `TerminalMoshBridge` + ilk resize (SSH tarafındaki 219. satırdaki ilk-layout
-  resize düzeltmesi burada da gerekli).
-- Mosh bootstrap başarısız olursa: SSH client zaten canlı, `openShell()` ile
-  düz SSH'a düş ve terminale tek satır uyarı yaz. Kullanıcı bağlantısız kalmaz.
+- `_startMoshShell` bool döner; `false` ise çağıran düz SSH kabuğunu açar.
+  Buradaki her hata kurtarılabilir: SSH client canlı ve boşta, `mosh-server`
+  olmayan host (yaygın vaka) kullanıcıyı hata ekranına değil çalışan bir kabuğa
+  tek satır açıklamayla indirir.
+- **Jump host'ta mosh denenmez** — UDP bir SSH kanalından geçmez. Faz 3'teki UI
+  engeli gelmeden önce burada da kapalı, kayıtlı hostlar için.
+- **`clientChanges` dinleyicisi mosh dalında bilinçli olarak bağlanmıyor.**
+  SSH keep-alive'ın düşmesi SSH sekmesinde ölü sekme demek; mosh sekmesinde
+  hiçbir şey demek değil — tam olarak bunu atlatmak protokolün amacı.
 - `reconnectTab` mosh sekmesinde yeni bir mosh oturumu açar (reattach yok).
+
+**Adres çözümleme** — `_resolveMoshAddress`: IP literal ise (kayıtlı hostların
+çoğu) hiç lookup yok; isim ise bir kez çözülüp manager'a veriliyor, aşağıda ikinci
+kez çözülemiyor. **Planın ilk hâlinden sapma:** adresi SSH soketinden okumak
+gerçeği kapatırdı ama `dartssh2` `SSHSocket`'te peer adresini dışarı vermiyor
+(`_SSHNativeSocket` private). Kalan risk round-robin DNS: `mosh-server` SSH'ın
+geldiği adrese bind ettiği için uyuşmazlık "yanlış makinede kabuk" değil "hiç
+cevap vermeyen oturum" olarak çıkar ve SSH fallback'ine düşer.
 
 ### Roaming tetikleyicileri
 
-İkisi de `MoshSessionManager.rehome()` çağırır:
+İkisi de `TerminalTabsNotifier.rehomeMoshSessions()` üzerinden yürür — sekme
+listesinin sahibi o — ve `MoshSessionManager.rehome()` çağırır:
 
-1. **Ağ değişimi** — yeni bağımlılık `connectivity_plus`.
-   `onConnectivityChanged` → tüm canlı mosh oturumlarında debounce'lu rehome.
-2. **App resume** — `lib/app/app.dart:72` `_onLifecycleChange` zaten var.
-   `AppLifecycleState.resumed` dalında (mevcut auto-lock mantığına dokunmadan)
-   rehome tetiklenir. iOS suspend'de UDP soketi ölür; resume'da rebind şart.
+1. **Ağ değişimi** — `connectivity_plus` `onConnectivityChanged`. Abonelik
+   **ilk mosh oturumunda** kuruluyor, build'de değil: SSH-only ve local shell
+   yolları platform kanalına hiç dokunmuyor (birim testleri de bu yüzden
+   binding'siz koşuyor).
+2. **App resume** — `lib/app/app.dart` `_onLifecycleChange`'in `resumed` dalı,
+   auto-lock mantığına dokunulmadan. iOS suspend'de UDP soketi ölür; resume'da
+   rebind şart.
 
-Her ikisi de `TerminalTabsNotifier` üzerinden yürür — sekme listesinin sahibi o.
+Mosh olmayan sekmeler için ikisi de no-op.
 
 ---
 
