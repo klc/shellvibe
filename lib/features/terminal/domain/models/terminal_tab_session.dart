@@ -35,8 +35,14 @@ class TerminalTabSession {
   final String id;
   final String title;
   final TerminalSessionType sessionType;
-  final HostModel? host;
-  final IdentityModel? identity;
+  /// The host this tab connects to. Not final: a reconnect re-reads the row so
+  /// edits made after the tab was opened (a protocol switch, a new port) take
+  /// effect instead of the snapshot from open time.
+  HostModel? host;
+
+  /// Decrypted credentials for [host]. Replaced alongside [host] when a
+  /// reconnect finds the host now points at a different identity.
+  IdentityModel? identity;
   final Terminal terminal;
 
   /// Shared owner of `terminal.onOutput`. Broadcast and the mobile extra-keys

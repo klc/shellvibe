@@ -295,8 +295,18 @@ ProxyJump yok, reattach yok). `docs/product_roadmap_2026-08-07.md` §5.2 kapand�
 5. Mosh sekmesinde SFTP ve tünel aç → hâlâ çalışıyor (SSH açık tutma kararı)
 6. Jump host'lu bir hostta Mosh seçmeyi dene → UI engelliyor
 
-**Cihaz**: iOS ve Android'de gerçek Wi-Fi ↔ hücresel geçişi. Simülatör bu yolu
-kapsamıyor; roaming'in tek gerçek testi budur.
+**Cihaz — ✅ doğrulandı (2026-08-08, Android)**: gerçek Wi-Fi ↔ hücresel
+geçişinde oturum sağ kaldı; arka plan/resume sonrası rehome çalıştı. Simülatör
+bu yolu kapsamıyor, roaming'in tek gerçek testi buydu. Test yapısı:
+`mosh-roaming-test-2026-08-08` release'i (`99f18e2`'den, debug anahtarıyla
+imzalı yan yükleme APK'sı).
+
+iOS'ta aynı geçiş henüz koşulmadı.
+
+**Testte çıkan gerçek kusur**: sunucuya `mosh-server` kurulduğu hâlde bağlantı
+SSH'ta kalıyordu. Sebep protokol değil, sekmenin açılışta aldığı host
+kopyasıydı — host'u Mosh'a çevirip **aynı sekmeyi** reconnect etmek eski
+ayarla bağlanıyordu. `reconnectTab` artık satırı yeniden okuyor.
 
 **Her zaman**: `dart analyze` sıfır uyarı, `flutter test` yeşil (AGENTS.md §3).
 
