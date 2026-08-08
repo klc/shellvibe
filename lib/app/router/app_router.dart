@@ -6,7 +6,7 @@ import '../../features/hosts/presentation/screens/hosts_screen.dart';
 import '../../features/settings/presentation/screens/settings_screen.dart';
 import '../../features/sftp/presentation/screens/sftp_dual_pane_screen.dart';
 import '../../features/snippets/presentation/screens/snippets_screen.dart';
-import '../../features/terminal/presentation/screens/terminal_tab_view.dart';
+import '../../features/terminal/presentation/views/terminal_tab_view.dart';
 import '../../features/tunnels/presentation/screens/tunnels_screen.dart';
 import '../../features/vault/presentation/dialogs/vault_unlock_dialog.dart';
 import '../../features/vault/presentation/notifiers/vault_notifier.dart';

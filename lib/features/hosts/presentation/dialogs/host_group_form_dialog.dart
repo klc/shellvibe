@@ -111,12 +111,13 @@ class _HostGroupFormDialogState extends ConsumerState<HostGroupFormDialog> {
         ),
       ],
       child: SizedBox(
-        width: 400,
+        width: 460,
         child: SingleChildScrollView(
           child: Form(
             key: _formKey,
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SizedBox(height: 8),
                 ShadInputFormField(

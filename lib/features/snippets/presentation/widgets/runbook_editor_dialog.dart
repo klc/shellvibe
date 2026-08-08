@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:uuid/uuid.dart';
 
+import 'package:terly2/app/widgets/terly_ui.dart';
+import '../../../../app/theme/terly_tokens.dart';
 import '../../domain/models/runbook_model.dart';
 import '../../domain/models/runbook_step_model.dart';
 
@@ -82,6 +84,7 @@ class _RunbookEditorDialogState extends State<RunbookEditorDialog> {
   @override
   Widget build(BuildContext context) {
     final isEditing = widget.runbook != null;
+    final tokens = TerlyTokens.resolve(context);
 
     return ShadDialog(
       title: Text(isEditing ? 'Edit Runbook' : 'New Runbook'),
@@ -120,7 +123,7 @@ class _RunbookEditorDialogState extends State<RunbookEditorDialog> {
         ),
       ],
       child: SizedBox(
-        width: 550,
+        width: 560,
         child: SingleChildScrollView(
           child: Form(
             key: _formKey,
@@ -128,6 +131,7 @@ class _RunbookEditorDialogState extends State<RunbookEditorDialog> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                const SizedBox(height: 8),
                 ShadInputFormField(
                   key: const Key('runbook_title_field'),
                   controller: _titleController,
@@ -142,20 +146,15 @@ class _RunbookEditorDialogState extends State<RunbookEditorDialog> {
                   label: const Text('Description (optional)'),
                 ),
                 const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Steps (${_steps.length})',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                    ShadButton(
-                      key: const Key('runbook_add_step_button'),
-                      onPressed: _addStep,
-                      leading: const Icon(Icons.add, size: 16),
-                      child: const Text('Add Step'),
-                    ),
-                  ],
+                TerlyFormSectionHeader(
+                  icon: LucideIcons.listOrdered,
+                  title: 'Steps (${_steps.length})',
+                  trailing: ShadButton(
+                    key: const Key('runbook_add_step_button'),
+                    onPressed: _addStep,
+                    leading: const Icon(Icons.add, size: 16),
+                    child: const Text('Add Step'),
+                  ),
                 ),
                 const SizedBox(height: 8),
                 if (_steps.isEmpty)
@@ -183,7 +182,11 @@ class _RunbookEditorDialogState extends State<RunbookEditorDialog> {
                               ),
                               const Spacer(),
                               ShadIconButton.ghost(
-                                icon: const Icon(Icons.delete, color: Colors.red, size: 18),
+                                icon: Icon(
+                                  Icons.delete,
+                                  color: tokens.danger,
+                                  size: 18,
+                                ),
                                 onPressed: () => _removeStep(idx),
                               ),
                             ],

@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
+import '../../../../app/theme/terly_tokens.dart';
 import '../../domain/models/sftp_file_item.dart';
 
 class FilePermissionsResult {
@@ -96,6 +97,7 @@ class _FilePermissionsDialogState extends State<FilePermissionsDialog> {
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final dialogWidth = math.min(screenWidth * 0.9, 400.0);
+    final tokens = TerlyTokens.resolve(context);
 
     return ShadDialog(
       title: Row(
@@ -149,10 +151,10 @@ class _FilePermissionsDialogState extends State<FilePermissionsDialog> {
               ),
               const SizedBox(height: 8),
               Table(
-                border: TableBorder.all(color: Colors.white24),
+                border: TableBorder.all(color: tokens.border),
                 children: [
-                  const TableRow(
-                    decoration: BoxDecoration(color: Colors.black26),
+                  TableRow(
+                    decoration: BoxDecoration(color: tokens.surfaceRaised),
                     children: [
                       Padding(
                         padding: EdgeInsets.all(8),

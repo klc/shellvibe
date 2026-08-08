@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
+import 'package:terly2/app/widgets/terly_ui.dart';
 import '../../domain/models/snippet_model.dart';
 
 /// Form dialog for creating or editing a Snippet.
@@ -100,7 +101,7 @@ class _SnippetFormDialogState extends State<SnippetFormDialog> {
         ),
       ],
       child: SizedBox(
-        width: 440,
+        width: 460,
         child: SingleChildScrollView(
           child: Form(
             key: _formKey,
@@ -116,16 +117,14 @@ class _SnippetFormDialogState extends State<SnippetFormDialog> {
                   validator: (val) => val.trim().isEmpty ? 'Title is required' : null,
                 ),
                 const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('Code Command', style: TextStyle(fontWeight: FontWeight.bold)),
-                    ShadButton.ghost(
-                      onPressed: _insertVariablePlaceholder,
-                      leading: const Icon(Icons.add_link, size: 16),
-                      child: const Text('+ Var'),
-                    ),
-                  ],
+                TerlyFormSectionHeader(
+                  icon: LucideIcons.terminal,
+                  title: 'Code Command',
+                  trailing: ShadButton.ghost(
+                    onPressed: _insertVariablePlaceholder,
+                    leading: const Icon(Icons.add_link, size: 16),
+                    child: const Text('+ Var'),
+                  ),
                 ),
                 const SizedBox(height: 4),
                 ShadInputFormField(

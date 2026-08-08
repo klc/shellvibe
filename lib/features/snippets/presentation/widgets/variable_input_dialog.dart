@@ -72,21 +72,24 @@ class _VariableInputDialogState extends State<VariableInputDialog> {
         ),
       ],
       child: SizedBox(
-        width: 400,
+        width: 460,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: widget.variables.map((v) {
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8.0),
-                child: ShadInput(
-                  key: Key('variable_input_$v'),
-                  controller: _controllers[v],
-                  placeholder: Text('Enter value for \${INPUT:$v} ($v)'),
-                ),
-              );
-            }).toList(),
+            children: [
+              const SizedBox(height: 8),
+              ...widget.variables.map((v) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8.0),
+                  child: ShadInput(
+                    key: Key('variable_input_$v'),
+                    controller: _controllers[v],
+                    placeholder: Text('Enter value for \${INPUT:$v} ($v)'),
+                  ),
+                );
+              }),
+            ],
           ),
         ),
       ),

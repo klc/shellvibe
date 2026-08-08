@@ -82,19 +82,23 @@ class _WorkspaceFormDialogState extends ConsumerState<WorkspaceFormDialog> {
         ),
       ],
       child: SizedBox(
-        width: 400,
+        width: 460,
         child: Form(
           key: _formKey,
-          child: Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: ShadInputFormField(
-              key: const Key('workspace_name_input'),
-              controller: _nameController,
-              label: const Text('Workspace Name'),
-              placeholder: const Text('e.g. Client Infrastructure'),
-              validator: (value) =>
-                  value.trim().isEmpty ? 'Workspace name is required' : null,
-            ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SizedBox(height: 8),
+              ShadInputFormField(
+                key: const Key('workspace_name_input'),
+                controller: _nameController,
+                label: const Text('Workspace Name'),
+                placeholder: const Text('e.g. Client Infrastructure'),
+                validator: (value) =>
+                    value.trim().isEmpty ? 'Workspace name is required' : null,
+              ),
+            ],
           ),
         ),
       ),

@@ -312,17 +312,24 @@ class SftpTransferQueueWorker {
     Stopwatch stopwatch,
     void Function(int transferred, int speed) onProgress,
   ) async {
-    final item = _queue[id]!;
+    final item = _queue[id];
+    if (item == null) return;
+
     final remoteFile = await client.open(
       item.sourcePath,
       mode: SftpFileOpenMode.read,
     );
-    final localFile = File(item.destinationPath);
-    bool completedSuccessfully = false;
+
+    // Never truncate the user's existing destination while a transfer is in
+    // progress. The temporary file is in the same directory so the final
+    // rename remains atomic on every platform this app targets.
+    final temporaryPath = '${item.destinationPath}.terly-part-$id';
+    final tempFile = File(temporaryPath);
+    bool committed = false;
 
     try {
-      await localFile.parent.create(recursive: true);
-      final sink = localFile.openWrite(mode: FileMode.write);
+      await tempFile.parent.create(recursive: true);
+      final sink = tempFile.openWrite(mode: FileMode.write);
 
       int transferred = 0;
       int lastTimeMs = stopwatch.elapsedMilliseconds;
@@ -349,17 +356,23 @@ class SftpTransferQueueWorker {
           onProgress(transferred, speed);
         }
         await sink.flush();
-        if (_cancelFlags[id] != true && _pauseFlags[id] != true) {
-          completedSuccessfully = true;
-        }
       } finally {
         await sink.close();
       }
+
+      if (_cancelFlags[id] != true && _pauseFlags[id] != true) {
+        await tempFile.rename(item.destinationPath);
+        committed = true;
+      }
     } finally {
       await remoteFile.close();
-      if (!completedSuccessfully && await localFile.exists()) {
+      // Only the temporary file belongs to this transfer. On failure,
+      // cancellation, or pause, preserve any pre-existing destination file.
+      if (!committed) {
         try {
-          await localFile.delete();
+          if (await tempFile.exists()) {
+            await tempFile.delete();
+          }
         } catch (_) {}
       }
     }
@@ -371,7 +384,8 @@ class SftpTransferQueueWorker {
     Stopwatch stopwatch,
     void Function(int transferred, int speed) onProgress,
   ) async {
-    final item = _queue[id]!;
+    final item = _queue[id];
+    if (item == null) return;
     final localFile = File(item.sourcePath);
     if (!await localFile.exists()) {
       throw Exception('Local file does not exist: ${item.sourcePath}');

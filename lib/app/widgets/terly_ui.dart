@@ -351,6 +351,50 @@ class TerlySectionLabel extends StatelessWidget {
   }
 }
 
+/// Section title used to group related form fields (icon + primary-colored
+/// label + trailing divider), shared across the app's form dialogs.
+class TerlyFormSectionHeader extends StatelessWidget {
+  final IconData icon;
+  final String title;
+
+  /// Optional control pinned to the right of the header, e.g. an action
+  /// button. When present it replaces the trailing divider's tail end.
+  final Widget? trailing;
+
+  const TerlyFormSectionHeader({
+    super.key,
+    required this.icon,
+    required this.title,
+    this.trailing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      children: [
+        Icon(icon, size: 15, color: theme.colorScheme.primary),
+        const SizedBox(width: 8),
+        Text(
+          title,
+          style: theme.textTheme.labelLarge?.copyWith(
+            color: theme.colorScheme.primary,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Divider(
+            height: 1,
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+          ),
+        ),
+        if (trailing != null) ...[const SizedBox(width: 12), trailing!],
+      ],
+    );
+  }
+}
+
 /// A single entry in a context column or settings section navigation.
 class TerlyNavItem extends StatelessWidget {
   final IconData icon;

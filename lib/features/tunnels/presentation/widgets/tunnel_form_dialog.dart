@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:uuid/uuid.dart';
 
+import 'package:terly2/app/widgets/terly_ui.dart';
+import '../../../../app/theme/terly_tokens.dart';
 import '../../../hosts/domain/models/host_model.dart';
 import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
 import '../../../../shared/providers/workspace_provider.dart';
@@ -84,6 +86,7 @@ class _TunnelFormDialogState extends ConsumerState<TunnelFormDialog> {
   @override
   Widget build(BuildContext context) {
     final isEditing = widget.rule != null;
+    final tokens = TerlyTokens.resolve(context);
 
     return ShadDialog(
       title: Row(
@@ -109,13 +112,13 @@ class _TunnelFormDialogState extends ConsumerState<TunnelFormDialog> {
         ),
       ],
       child: SizedBox(
-        width: 440,
+        width: 460,
         child: SingleChildScrollView(
           child: Form(
             key: _formKey,
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SizedBox(height: 8),
                 // Host Selector
@@ -147,37 +150,40 @@ class _TunnelFormDialogState extends ConsumerState<TunnelFormDialog> {
                   ),
                 const SizedBox(height: 16),
                 // Rule Type Selector
-                const Text(
-                  'Tunnel Type:',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                const TerlyFormSectionHeader(
+                  icon: LucideIcons.arrowLeftRight,
+                  title: 'Tunnel Type',
                 ),
                 const SizedBox(height: 8),
-                SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(
-                      value: 'local',
-                      label: Text('Local (-L)'),
-                      icon: Icon(Icons.arrow_forward),
-                    ),
-                    ButtonSegment(
-                      value: 'remote',
-                      label: Text('Remote (-R)'),
-                      icon: Icon(Icons.arrow_back),
-                    ),
-                    ButtonSegment(
-                      value: 'dynamic',
-                      label: Text('Dynamic (-D)'),
-                      icon: Icon(Icons.sync_alt),
-                    ),
-                  ],
-                  selected: {_ruleType},
-                  onSelectionChanged: (newSelection) {
-                    setState(() {
-                      _ruleType = newSelection.first;
-                    });
-                  },
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(
+                        value: 'local',
+                        label: Text('Local (-L)'),
+                        icon: Icon(Icons.arrow_forward),
+                      ),
+                      ButtonSegment(
+                        value: 'remote',
+                        label: Text('Remote (-R)'),
+                        icon: Icon(Icons.arrow_back),
+                      ),
+                      ButtonSegment(
+                        value: 'dynamic',
+                        label: Text('Dynamic (-D)'),
+                        icon: Icon(Icons.sync_alt),
+                      ),
+                    ],
+                    selected: {_ruleType},
+                    onSelectionChanged: (newSelection) {
+                      setState(() {
+                        _ruleType = newSelection.first;
+                      });
+                    },
+                  ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 // Local Port
                 ShadInputFormField(
                   controller: _localPortController,
@@ -194,7 +200,7 @@ class _TunnelFormDialogState extends ConsumerState<TunnelFormDialog> {
                       _validatePort(val, checkConflict: _ruleType != 'remote'),
                 ),
                 if (_ruleType != 'dynamic') ...[
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                   // Remote Host
                   ShadInputFormField(
                     controller: _remoteHostController,
@@ -214,7 +220,7 @@ class _TunnelFormDialogState extends ConsumerState<TunnelFormDialog> {
                       return null;
                     },
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                   // Remote Port
                   ShadInputFormField(
                     controller: _remotePortController,
@@ -240,22 +246,25 @@ class _TunnelFormDialogState extends ConsumerState<TunnelFormDialog> {
                     },
                   ),
                 ],
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 // Auto-start switch
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Expanded(
+                    Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
+                          const Text(
                             'Auto-start with SSH Connection',
                             style: TextStyle(fontWeight: FontWeight.w500),
                           ),
                           Text(
                             'Automatically open tunnel when host connects',
-                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: tokens.textMuted,
+                            ),
                           ),
                         ],
                       ),

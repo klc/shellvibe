@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
+import 'package:terly2/app/widgets/terly_ui.dart';
 import '../notifiers/identities_notifier.dart';
 import '../../domain/models/identity_model.dart';
 import '../../../../shared/providers/workspace_provider.dart';
@@ -144,7 +145,7 @@ class _IdentityFormDialogState extends ConsumerState<IdentityFormDialog> {
               children: [
                 const SizedBox(height: 8),
                 // ---- Basic details ----
-                const _FormSectionHeader(
+                const TerlyFormSectionHeader(
                   icon: LucideIcons.user,
                   title: 'Basic Details',
                 ),
@@ -159,46 +160,40 @@ class _IdentityFormDialogState extends ConsumerState<IdentityFormDialog> {
                       v.trim().isEmpty ? 'Title is required' : null,
                 ),
                 const SizedBox(height: 12),
-                // ShadInputDecorator start-aligns its child, so the select
-                // shrinks to its default min width. Feed the available width
-                // in as minWidth to match the full-width inputs.
-                LayoutBuilder(
-                  builder: (context, constraints) => ShadSelectFormField<String>(
-                    key: const Key('identity_authtype_dropdown'),
-                    minWidth: constraints.maxWidth,
-                    initialValue: _authType,
-                    label: const Text('Authentication Type'),
-                    selectedOptionBuilder: (context, value) {
-                      switch (value) {
-                        case 'key':
-                          return const Text('SSH Private Key');
-                        case 'agent':
-                          return const Text('SSH Agent');
-                        case 'password':
-                        default:
-                          return const Text('Password');
-                      }
-                    },
-                    options: const [
-                      ShadOption(value: 'password', child: Text('Password')),
-                      ShadOption(value: 'key', child: Text('SSH Private Key')),
-                      ShadOption(value: 'agent', child: Text('SSH Agent')),
-                    ],
-                    onChanged: (val) {
-                      if (val != null) {
-                        setState(() {
-                          _authType = val;
-                          if (val != 'password') {
-                            _usernameController.clear();
-                          }
-                        });
-                      }
-                    },
-                  ),
+                ShadSelectFormField<String>(
+                  key: const Key('identity_authtype_dropdown'),
+                  initialValue: _authType,
+                  label: const Text('Authentication Type'),
+                  selectedOptionBuilder: (context, value) {
+                    switch (value) {
+                      case 'key':
+                        return const Text('SSH Private Key');
+                      case 'agent':
+                        return const Text('SSH Agent');
+                      case 'password':
+                      default:
+                        return const Text('Password');
+                    }
+                  },
+                  options: const [
+                    ShadOption(value: 'password', child: Text('Password')),
+                    ShadOption(value: 'key', child: Text('SSH Private Key')),
+                    ShadOption(value: 'agent', child: Text('SSH Agent')),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) {
+                      setState(() {
+                        _authType = val;
+                        if (val != 'password') {
+                          _usernameController.clear();
+                        }
+                      });
+                    }
+                  },
                 ),
                 const SizedBox(height: 20),
                 // ---- Credentials ----
-                const _FormSectionHeader(
+                const TerlyFormSectionHeader(
                   icon: LucideIcons.lockKeyhole,
                   title: 'Credentials',
                 ),
@@ -277,39 +272,6 @@ class _IdentityFormDialogState extends ConsumerState<IdentityFormDialog> {
           ),
         ),
       ),
-    );
-  }
-}
-
-/// Small section title used to group related form fields.
-class _FormSectionHeader extends StatelessWidget {
-  final IconData icon;
-  final String title;
-
-  const _FormSectionHeader({required this.icon, required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Row(
-      children: [
-        Icon(icon, size: 15, color: theme.colorScheme.primary),
-        const SizedBox(width: 8),
-        Text(
-          title,
-          style: theme.textTheme.labelLarge?.copyWith(
-            color: theme.colorScheme.primary,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Divider(
-            height: 1,
-            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
-          ),
-        ),
-      ],
     );
   }
 }
