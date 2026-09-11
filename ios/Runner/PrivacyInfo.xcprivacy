@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- ShellVibe is a Zero-Knowledge client: credentials, host keys and sync
+	     payloads are encrypted on-device and the app ships no analytics or
+	     advertising SDK, so there is nothing to declare here. -->
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<!-- The SFTP browser's local pane stats every entry in the
+			     directory the user is looking at and renders its modified
+			     date next to the name (see SftpFileItem.fromEntity and the
+			     async stat in sftp_providers.dart). -->
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<!-- Timestamps shown to the person using the device, for
+				     files they navigated to themselves. -->
+				<string>DDA9.1</string>
+				<!-- Timestamps of files inside the app's own container:
+				     the encrypted vault database and its backups. -->
+				<string>C617.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

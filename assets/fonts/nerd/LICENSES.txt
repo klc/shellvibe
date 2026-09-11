@@ -1,0 +1,27 @@
+Nerd Font Licenses — assets/fonts/nerd
+=======================================
+
+All TTFs here are "Nerd Font Mono" (Regular) builds from the Nerd Fonts
+project, v3.5.0 (https://github.com/ryanoasis/nerd-fonts/releases/tag/v3.5.0).
+Each font keeps its upstream base-font license; the Nerd Fonts patch set is
+MIT (Copyright (c) 2016 Ryan L McIntyre) — see the Nerd Fonts repo LICENSE.
+
+| File                                      | Base font          | License            |
+|-------------------------------------------|--------------------|--------------------|
+| JetBrainsMonoNerdFontMono-Regular.ttf     | JetBrains Mono     | SIL OFL 1.1        |
+| FiraCodeNerdFontMono-Regular.ttf          | Fira Code          | SIL OFL 1.1        |
+| MesloLGMNerdFontMono-Regular.ttf          | Meslo LG           | Apache 2.0         |
+| HackNerdFontMono-Regular.ttf              | Hack               | MIT                |
+| CaskaydiaCoveNerdFontMono-Regular.ttf     | Cascadia Code      | SIL OFL 1.1        |
+| UbuntuMonoNerdFontMono-Regular.ttf        | Ubuntu Mono        | Ubuntu Font Licence 1.0 |
+| SauceCodeProNerdFontMono-Regular.ttf      | Source Code Pro    | SIL OFL 1.1        |
+| SymbolsNerdFontMono-Regular.ttf           | — (icons only)     | MIT                |
+
+Full license texts ship with the upstream releases:
+https://github.com/ryanoasis/nerd-fonts/releases (per-font LICENSE files) and
+https://github.com/ryanoasis/nerd-fonts (Nerd Fonts project license).
+
+SIL OFL 1.1: https://openfontlicense.org
+Apache 2.0:  https://www.apache.org/licenses/LICENSE-2.0
+MIT:         https://opensource.org/license/mit
+UFL 1.0:     https://ubuntu.com/legal/font-licence

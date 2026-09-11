@@ -1,0 +1,17 @@
+# Local-only `mosh-server` for the Faz 0 wire-compatibility check.
+#
+#   docker compose -f tool/mosh/docker-compose.yml up -d --build
+#   dart run tool/mosh/smoke.dart
+#   docker compose -f tool/mosh/docker-compose.yml down
+#
+# Every port is bound to 127.0.0.1, so nothing here is reachable off the machine.
+services:
+  mosh-server:
+    build:
+      context: .
+    container_name: shellvibe-mosh-harness
+    ports:
+      - "127.0.0.1:2222:22"
+      # mosh-server picks one port out of this range and reports it in the
+      # MOSH CONNECT line. Published 1:1 so the client can use it verbatim.
+      - "127.0.0.1:60000-60010:60000-60010/udp"

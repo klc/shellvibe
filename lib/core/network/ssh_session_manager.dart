@@ -1,0 +1,518 @@
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:dartssh2/dartssh2.dart';
+import 'package:flutter/foundation.dart';
+import 'package:uuid/uuid.dart';
+
+import '../../shared/database/app_database.dart';
+import '../../shared/database/daos/known_hosts_dao.dart';
+
+/// Upper bound on how long the handshake waits for the user to answer the
+/// host key prompt, so an unanswered dialog cannot hold the socket forever.
+const _kMaxHostKeyPromptWait = Duration(minutes: 3);
+
+/// Status of host key verification during SSH handshake.
+enum HostKeyVerificationStatus {
+  /// The host key is trusted and matches existing record in known_hosts.
+  trusted,
+
+  /// Host is encountered for the first time (Trust On First Use).
+  unknown,
+
+  /// Host key does not match the stored fingerprint (Possible MitM attack!).
+  mismatch,
+}
+
+/// Signature for user prompt callback when host key verification needs confirmation.
+typedef HostKeyPromptCallback =
+    FutureOr<bool> Function(
+      String hostname,
+      int port,
+      String keyType,
+      String fingerprint,
+      HostKeyVerificationStatus status,
+    );
+
+/// Thrown when a connection is refused because the server's host key was not
+/// accepted: it does not match the fingerprint in `known_hosts`, or the host
+/// is unknown and no [SSHHostKeyPromptCallback] was supplied to vouch for it.
+///
+/// A distinct type rather than a bare [Exception] because callers act on this
+/// differently from an auth failure — retrying with other credentials cannot
+/// help, and the only fix is for the user to verify the fingerprint. The MCP
+/// path in particular turns it into an instruction the agent can relay (see
+/// `McpHostConnector.connect`), which string-matching a message would make
+/// fragile.
+class SSHHostKeyRejectedException implements Exception {
+  final String hostname;
+  final int port;
+
+  const SSHHostKeyRejectedException({
+    required this.hostname,
+    required this.port,
+  });
+
+  @override
+  String toString() =>
+      'Host key verification was rejected for $hostname:$port; '
+      'refusing to connect.';
+}
+
+/// Configuration parameters for establishing an SSH connection.
+class SSHConnectConfig {
+  final String hostname;
+  final int port;
+  final String username;
+  final String? password;
+  final String? privateKeyPem;
+  final String? passphrase;
+  final Duration timeout;
+  final Duration? keepAliveInterval;
+  final HostKeyPromptCallback? onHostKeyPrompt;
+
+  const SSHConnectConfig({
+    required this.hostname,
+    this.port = 22,
+    required this.username,
+    this.password,
+    this.privateKeyPem,
+    this.passphrase,
+    this.timeout = const Duration(seconds: 15),
+    this.keepAliveInterval = const Duration(seconds: 30),
+    this.onHostKeyPrompt,
+  });
+}
+
+/// Manages SSH connection lifecycle, authentication, host key verification,
+/// keep-alive pings, and session spawning.
+class SSHSessionManager {
+  final KnownHostsDao? knownHostsDao;
+
+  SSHClient? _client;
+  SSHSocket? _socket;
+  Timer? _keepAliveTimer;
+  bool _isConnected = false;
+  bool _isPromptingHostKey = false;
+
+  /// Set when the current connect attempt failed because host key
+  /// verification returned false, so the generic catch below can report that
+  /// distinctly instead of the misleading "authentication failed".
+  bool _hostKeyRejected = false;
+  StreamController<SSHClient?> _clientChanges =
+      StreamController<SSHClient?>.broadcast();
+
+  /// Set by [close] while a connect is in flight. The pending connect aborts
+  /// at its next checkpoint instead of leaving a live session behind after the
+  /// owning tab was closed.
+  bool _abortRequested = false;
+
+  SSHSessionManager({this.knownHostsDao});
+
+  /// Current active [SSHClient] if connected.
+  SSHClient? get client => _client;
+
+  /// Emits the active client whenever the session connects, disconnects, or
+  /// detects a dropped keep-alive connection.
+  Stream<SSHClient?> get clientChanges => _clientChanges.stream;
+
+  /// Returns true if an active SSH connection is open and authenticated.
+  bool get isConnected => _isConnected && _client != null && !_client!.isClosed;
+
+  /// Establishes an SSH connection and authenticates based on [config].
+  ///
+  /// When [viaClient] is given, the transport socket is opened as a
+  /// forwarded channel through that already-authenticated client (`ssh -J`)
+  /// instead of a direct TCP dial — [viaClient] must stay connected for the
+  /// lifetime of this session, since the channel tunnels through it.
+  Future<SSHClient> connect(
+    SSHConnectConfig config, {
+    SSHClient? viaClient,
+  }) async {
+    await close();
+    _abortRequested = false;
+    _hostKeyRejected = false;
+    if (_clientChanges.isClosed) {
+      _clientChanges = StreamController<SSHClient?>.broadcast();
+    }
+
+    // 1. Parse Private Key if provided
+    List<SSHKeyPair>? identities;
+    if (config.privateKeyPem != null &&
+        config.privateKeyPem!.trim().isNotEmpty) {
+      try {
+        identities = SSHKeyPair.fromPem(
+          config.privateKeyPem!,
+          config.passphrase,
+        );
+      } catch (e) {
+        throw FormatException('Failed to parse SSH private key: $e');
+      }
+    }
+
+    // 2. Open the transport socket: a direct TCP dial, or a forwarded
+    // channel through a jump host's client (SSHForwardChannel implements
+    // SSHSocket, so it drops straight in).
+    try {
+      if (viaClient != null) {
+        _socket = await viaClient
+            .forwardLocal(config.hostname, config.port)
+            .timeout(config.timeout);
+      } else {
+        _socket = await SSHSocket.connect(
+          config.hostname,
+          config.port,
+          timeout: config.timeout,
+        );
+      }
+    } catch (e) {
+      throw Exception(
+        'Failed to connect to ${config.hostname}:${config.port}: $e',
+      );
+    }
+
+    if (_abortRequested) {
+      _socket?.destroy();
+      _socket = null;
+      throw StateError(
+        'SSH connection aborted: session was closed during connect.',
+      );
+    }
+
+    // 3. Create SSH Client with Host Key Verification and Auth handlers
+    //
+    // No keepAliveInterval here: dartssh2's own keep-alive pings the server
+    // but never surfaces a failure to us, so it can't drive the disconnect
+    // detection the UI depends on. The manual `ping()` timer started below
+    // does both jobs, so passing this too would just double the traffic.
+    final client = SSHClient(
+      _socket!,
+      username: config.username,
+      identities: identities,
+      onPasswordRequest: config.password != null
+          ? () => config.password!
+          : null,
+      // `ChallengeResponseAuthentication`/2FA servers use keyboard-interactive
+      // instead of plain password auth; without this handler login fails
+      // even with the right password. Relaying it to every prompt covers the
+      // common single-prompt "Password:" case — there is no UI yet for
+      // servers that ask for something else.
+      onUserInfoRequest: config.password != null
+          ? (request) =>
+                List<String>.filled(request.prompts.length, config.password!)
+          : null,
+      onVerifyHostKey: (String type, Uint8List fingerprintBytes) async {
+        // dartssh2 already hands us the ASCII "SHA256:<base64>" form, i.e. the
+        // exact string `ssh-keygen -lf` prints. Re-encoding it would produce a
+        // value the user cannot compare against anything.
+        final fingerprintStr = utf8.decode(fingerprintBytes);
+        return await _verifyHostKey(
+          hostname: config.hostname,
+          port: config.port,
+          keyType: type,
+          fingerprint: fingerprintStr,
+          promptCallback: config.onHostKeyPrompt,
+        );
+      },
+    );
+
+    // 4. Wait for SSH authentication handshake with timeout
+    try {
+      await _waitForAuthenticated(client, config.timeout);
+
+      if (_abortRequested) {
+        await client.close();
+        _client = null;
+        _socket?.destroy();
+        _socket = null;
+        throw StateError(
+          'SSH connection aborted: session was closed during connect.',
+        );
+      }
+
+      _client = client;
+      _isConnected = true;
+      if (!_clientChanges.isClosed) {
+        _clientChanges.add(client);
+      }
+
+      if (config.keepAliveInterval != null) {
+        startKeepAlive(config.keepAliveInterval!);
+      }
+
+      return client;
+    } catch (e) {
+      final hostKeyRejected = _hostKeyRejected;
+      await close();
+      if (hostKeyRejected) {
+        throw SSHHostKeyRejectedException(
+          hostname: config.hostname,
+          port: config.port,
+        );
+      }
+      throw Exception(
+        'SSH authentication failed for ${config.username}@${config.hostname}: $e',
+      );
+    }
+  }
+
+  Future<void> _waitForAuthenticated(SSHClient client, Duration timeout) async {
+    DateTime deadline = DateTime.now().add(timeout);
+    final promptDeadline = DateTime.now().add(_kMaxHostKeyPromptWait);
+
+    while (true) {
+      if (_abortRequested) {
+        throw StateError(
+          'SSH connection aborted: session was closed during connect.',
+        );
+      }
+      if (_isPromptingHostKey) {
+        if (DateTime.now().isAfter(promptDeadline)) {
+          throw TimeoutException(
+            'Host key confirmation was not answered within '
+            '${_kMaxHostKeyPromptWait.inMinutes} minutes',
+          );
+        }
+        await Future.delayed(const Duration(milliseconds: 200));
+        deadline = DateTime.now().add(timeout);
+        continue;
+      }
+
+      final remaining = deadline.difference(DateTime.now());
+      if (remaining.isNegative) {
+        throw TimeoutException(
+          'SSH authentication handshake timed out after ${timeout.inSeconds}s',
+        );
+      }
+
+      try {
+        await client.authenticated.timeout(remaining);
+        return;
+      } on TimeoutException {
+        if (_isPromptingHostKey) {
+          deadline = DateTime.now().add(timeout);
+          continue;
+        }
+        throw TimeoutException(
+          'SSH authentication handshake timed out after ${timeout.inSeconds}s',
+        );
+      }
+    }
+  }
+
+  /// Host key verification logic using [KnownHostsDao] and optional [promptCallback].
+  @visibleForTesting
+  Future<bool> verifyHostKey({
+    required String hostname,
+    required int port,
+    required String keyType,
+    required String fingerprint,
+    HostKeyPromptCallback? promptCallback,
+  }) async {
+    return _verifyHostKey(
+      hostname: hostname,
+      port: port,
+      keyType: keyType,
+      fingerprint: fingerprint,
+      promptCallback: promptCallback,
+    );
+  }
+
+  Future<bool> _verifyHostKey({
+    required String hostname,
+    required int port,
+    required String keyType,
+    required String fingerprint,
+    HostKeyPromptCallback? promptCallback,
+  }) async {
+    // A closed session must never raise a prompt for a dead tab.
+    if (_abortRequested) return false;
+
+    final dao = knownHostsDao;
+
+    if (dao != null) {
+      final existingHost = await dao.findKnownHost(hostname, port);
+
+      if (existingHost != null) {
+        if (existingHost.fingerprintSha256 == fingerprint) {
+          // Trusted key matches database
+          return true;
+        } else {
+          // A changed key must never be accepted through the normal connect
+          // flow. Updating known_hosts requires a separate, explicitly
+          // verified key-rotation operation; a prompt alone cannot establish
+          // that the new key belongs to the intended server.
+          if (promptCallback != null) {
+            _isPromptingHostKey = true;
+            try {
+              await promptCallback(
+                hostname,
+                port,
+                keyType,
+                fingerprint,
+                HostKeyVerificationStatus.mismatch,
+              );
+            } finally {
+              _isPromptingHostKey = false;
+            }
+          }
+          _hostKeyRejected = true;
+          return false;
+        }
+      } else {
+        // Unknown host (First connection). Without a prompt callback there is
+        // no one to confirm the key, so deny instead of blind TOFU.
+        bool approve = false;
+        if (promptCallback != null) {
+          _isPromptingHostKey = true;
+          try {
+            approve = await promptCallback(
+              hostname,
+              port,
+              keyType,
+              fingerprint,
+              HostKeyVerificationStatus.unknown,
+            );
+          } finally {
+            _isPromptingHostKey = false;
+          }
+        }
+
+        if (approve) {
+          await dao.insertOrUpdateKnownHost(
+            KnownHostsCompanion.insert(
+              id: const Uuid().v4(),
+              hostname: hostname,
+              port: port,
+              keyType: keyType,
+              fingerprintSha256: fingerprint,
+              firstSeenAt: DateTime.now(),
+            ),
+          );
+        }
+        if (!approve) _hostKeyRejected = true;
+        return approve;
+      }
+    }
+
+    // Fallback if no DAO provided
+    if (promptCallback != null) {
+      _isPromptingHostKey = true;
+      bool approve;
+      try {
+        approve = await promptCallback(
+          hostname,
+          port,
+          keyType,
+          fingerprint,
+          HostKeyVerificationStatus.unknown,
+        );
+      } finally {
+        _isPromptingHostKey = false;
+      }
+      if (!approve) _hostKeyRejected = true;
+      return approve;
+    }
+    // Nothing can vouch for this key: neither a known_hosts store nor a user.
+    // Deny rather than silently accepting an unverified host.
+    _hostKeyRejected = true;
+    return false;
+  }
+
+  /// Opens an interactive shell [SSHSession].
+  ///
+  /// [requestPty] controls whether a pseudo-terminal is allocated for the
+  /// shell. It defaults to `true` so every existing caller (the interactive
+  /// terminal) keeps its current behavior unchanged. Passing `false` opens a
+  /// PTY-less channel instead, which programmatic callers (the MCP session
+  /// pool) want for three reasons: no ANSI escape-code noise to strip from
+  /// output meant to be parsed, `stderr` arrives on its own extended-data
+  /// stream instead of being interleaved into the same PTY byte stream as
+  /// stdout, and no interactive progress-bar/spinner redraw spam.
+  Future<SSHSession> openShell({
+    String terminalType = 'xterm-256color',
+    int width = 80,
+    int height = 24,
+    int pixelWidth = 0,
+    int pixelHeight = 0,
+    Map<String, String>? environment,
+    bool requestPty = true,
+  }) async {
+    final activeClient = _client;
+    if (activeClient == null || !_isConnected || activeClient.isClosed) {
+      throw StateError('SSHClient is not connected. Call connect() first.');
+    }
+
+    return await activeClient.shell(
+      pty: requestPty
+          ? SSHPtyConfig(
+              type: terminalType,
+              width: width,
+              height: height,
+              pixelWidth: pixelWidth,
+              pixelHeight: pixelHeight,
+            )
+          : null,
+      environment: environment,
+    );
+  }
+
+  /// Sends a keep-alive ping to the remote server.
+  Future<void> ping() async {
+    final activeClient = _client;
+    if (activeClient != null && _isConnected && !activeClient.isClosed) {
+      try {
+        await activeClient.ping();
+      } catch (_) {
+        _keepAliveTimer?.cancel();
+        _keepAliveTimer = null;
+        _isConnected = false;
+        if (!_clientChanges.isClosed) {
+          _clientChanges.add(null);
+        }
+        // Ping failed, connection may have been dropped
+      }
+    } else {
+      _keepAliveTimer?.cancel();
+      _keepAliveTimer = null;
+      _isConnected = false;
+      if (!_clientChanges.isClosed) {
+        _clientChanges.add(null);
+      }
+    }
+  }
+
+  /// Starts periodic keep-alive ping timer.
+  void startKeepAlive(Duration interval) {
+    _keepAliveTimer?.cancel();
+    _keepAliveTimer = Timer.periodic(interval, (_) => ping());
+  }
+
+  /// Cancels timers and closes active SSH client session and socket.
+  Future<void> close() async {
+    _abortRequested = true;
+    _keepAliveTimer?.cancel();
+    _keepAliveTimer = null;
+    _isConnected = false;
+    if (!_clientChanges.isClosed) {
+      _clientChanges.add(null);
+    }
+
+    if (_client != null) {
+      try {
+        // dartssh2 3.0.0 made this a Future: awaiting it is what lets the
+        // channels and the socket underneath finish closing before the
+        // `_socket!.destroy()` below tears the transport out from under them.
+        await _client!.close();
+      } catch (_) {}
+      _client = null;
+    }
+
+    if (_socket != null) {
+      try {
+        _socket!.destroy();
+      } catch (_) {}
+      _socket = null;
+    }
+  }
+}

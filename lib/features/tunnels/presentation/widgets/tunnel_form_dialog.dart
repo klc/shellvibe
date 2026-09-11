@@ -1,0 +1,339 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
+import 'package:shellvibe/app/widgets/shellvibe_ui.dart';
+import 'package:uuid/uuid.dart';
+
+import '../../../../app/theme/shellvibe_tokens.dart';
+import '../../../../app/widgets/adaptive_modal.dart';
+import '../../../../shared/providers/workspace_provider.dart';
+import '../../../hosts/domain/models/host_model.dart';
+import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
+import '../../domain/models/tunnel_rule_model.dart';
+import '../providers/tunnels_providers.dart';
+
+class TunnelFormDialog extends ConsumerStatefulWidget {
+  final TunnelRuleModel? rule;
+  final String? defaultHostId;
+
+  const TunnelFormDialog({super.key, this.rule, this.defaultHostId});
+
+  @override
+  ConsumerState<TunnelFormDialog> createState() => _TunnelFormDialogState();
+}
+
+class _TunnelFormDialogState extends ConsumerState<TunnelFormDialog> {
+  final _formKey = GlobalKey<FormState>();
+
+  String? _selectedHostId;
+  String _ruleType = 'local'; // 'local', 'remote', 'dynamic'
+  late TextEditingController _localPortController;
+  late TextEditingController _remoteHostController;
+  late TextEditingController _remotePortController;
+  bool _autoStart = false;
+
+  List<HostModel> _hosts = [];
+  bool _isLoadingHosts = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedHostId = widget.rule?.hostId ?? widget.defaultHostId;
+    _ruleType = widget.rule?.type ?? 'local';
+    _localPortController = TextEditingController(
+      text: widget.rule?.localPort.toString() ?? '8080',
+    );
+    _remoteHostController = TextEditingController(
+      text: widget.rule?.remoteHost ?? '127.0.0.1',
+    );
+    _remotePortController = TextEditingController(
+      text: widget.rule?.remotePort?.toString() ?? '80',
+    );
+    _autoStart = widget.rule?.autoStart ?? false;
+
+    _loadHosts();
+  }
+
+  @override
+  void dispose() {
+    _localPortController.dispose();
+    _remoteHostController.dispose();
+    _remotePortController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadHosts() async {
+    try {
+      final hostsRepo = ref.read(hostsRepositoryProvider);
+      final hosts = await hostsRepo.getHostsByWorkspace(
+        ref.read(activeWorkspaceIdProvider),
+      );
+      if (mounted) {
+        setState(() {
+          _hosts = hosts;
+          if (_selectedHostId == null && hosts.isNotEmpty) {
+            _selectedHostId = hosts.first.id;
+          }
+          _isLoadingHosts = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isLoadingHosts = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isEditing = widget.rule != null;
+    final tokens = ShellVibeTokens.resolve(context);
+
+    return ShadDialog(
+      title: Row(
+        children: [
+          const Icon(LucideIcons.gitFork, size: 20),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              isEditing
+                  ? 'Edit Port Forwarding Rule'
+                  : 'New Port Forwarding Rule',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+      actions: adaptiveDialogActions(context, [
+        ShellVibeButton.secondary(
+          label: 'Cancel',
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        ShellVibeButton(
+          label: isEditing ? 'Save Changes' : 'Create Rule',
+          icon: Icons.check,
+          onPressed: _saveForm,
+        ),
+      ]),
+      actionsAxis: adaptiveDialogActionsAxis(context),
+      child: SizedBox(
+        width: 460,
+        child: SingleChildScrollView(
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 8),
+                // Host Selector
+                if (_isLoadingHosts)
+                  const LinearProgressIndicator()
+                else
+                  ShadSelectFormField<String>(
+                    initialValue: _selectedHostId,
+                    label: const Text('SSH Target Host'),
+                    // A new rule starts with no host chosen, and shadcn asserts
+                    // rather than rendering an empty trigger in that state — so
+                    // the empty case has to say what it is waiting for.
+                    placeholder: const Text('Select a host'),
+                    selectedOptionBuilder: (context, value) {
+                      final host = _hosts
+                          .where((h) => h.id == value)
+                          .firstOrNull;
+                      return Text(
+                        host != null
+                            ? '${host.label} (${host.hostname})'
+                            : value,
+                      );
+                    },
+                    options: _hosts.map((host) {
+                      return ShadOption<String>(
+                        value: host.id,
+                        child: Text('${host.label} (${host.hostname})'),
+                      );
+                    }).toList(),
+                    onChanged: (val) => setState(() => _selectedHostId = val),
+                    validator: (val) =>
+                        val == null ? 'Please select a host' : null,
+                  ),
+                const SizedBox(height: 16),
+                // Rule Type Selector
+                const ShellVibeFormSectionHeader(
+                  icon: LucideIcons.arrowLeftRight,
+                  title: 'Tunnel Type',
+                ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(
+                        value: 'local',
+                        label: Text('Local (-L)'),
+                        icon: Icon(Icons.arrow_forward),
+                      ),
+                      ButtonSegment(
+                        value: 'remote',
+                        label: Text('Remote (-R)'),
+                        icon: Icon(Icons.arrow_back),
+                      ),
+                      ButtonSegment(
+                        value: 'dynamic',
+                        label: Text('Dynamic (-D)'),
+                        icon: Icon(Icons.sync_alt),
+                      ),
+                    ],
+                    selected: {_ruleType},
+                    onSelectionChanged: (newSelection) {
+                      setState(() {
+                        _ruleType = newSelection.first;
+                      });
+                    },
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // Local Port
+                ShadInputFormField(
+                  controller: _localPortController,
+                  keyboardType: TextInputType.number,
+                  label: Text(
+                    _ruleType == 'remote'
+                        ? 'Local Destination Port'
+                        : 'Local Listen Port',
+                  ),
+                  placeholder: const Text('e.g. 8080, 1080'),
+                  description: const Text('Port on localhost'),
+                  leading: const Icon(Icons.power_input, size: 16),
+                  validator: (val) =>
+                      _validatePort(val, checkConflict: _ruleType != 'remote'),
+                ),
+                if (_ruleType != 'dynamic') ...[
+                  const SizedBox(height: 12),
+                  // Remote Host
+                  ShadInputFormField(
+                    controller: _remoteHostController,
+                    label: Text(
+                      _ruleType == 'local'
+                          ? 'Remote Target Host'
+                          : 'Local Target IP/Host',
+                    ),
+                    placeholder: const Text(
+                      'e.g. 127.0.0.1 or internal.db.net',
+                    ),
+                    leading: const Icon(Icons.computer, size: 16),
+                    validator: (val) {
+                      if (_ruleType != 'dynamic' && val.trim().isEmpty) {
+                        return 'Host address is required';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  // Remote Port
+                  ShadInputFormField(
+                    controller: _remotePortController,
+                    keyboardType: TextInputType.number,
+                    label: Text(
+                      _ruleType == 'local'
+                          ? 'Remote Target Port'
+                          : 'Remote Listen Port',
+                    ),
+                    placeholder: const Text('e.g. 80, 5432, 3306'),
+                    leading: const Icon(
+                      Icons.settings_input_component,
+                      size: 16,
+                    ),
+                    validator: (val) {
+                      if (_ruleType != 'dynamic') {
+                        return _validatePort(
+                          val,
+                          checkConflict: _ruleType == 'remote',
+                        );
+                      }
+                      return null;
+                    },
+                  ),
+                ],
+                const SizedBox(height: 12),
+                // Auto-start switch
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Auto-start with SSH Connection',
+                            style: TextStyle(fontWeight: FontWeight.w500),
+                          ),
+                          Text(
+                            'Automatically open tunnel when host connects',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: tokens.textMuted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    ShadSwitch(
+                      value: _autoStart,
+                      onChanged: (val) => setState(() => _autoStart = val),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _saveForm() {
+    if (!_formKey.currentState!.validate() || _selectedHostId == null) return;
+
+    final localPort = int.parse(_localPortController.text.trim());
+    final remoteHost = _ruleType != 'dynamic'
+        ? _remoteHostController.text.trim()
+        : null;
+    final remotePort = _ruleType != 'dynamic'
+        ? int.tryParse(_remotePortController.text.trim())
+        : null;
+
+    final rule = TunnelRuleModel(
+      id: widget.rule?.id ?? const Uuid().v4(),
+      hostId: _selectedHostId!,
+      type: _ruleType,
+      localPort: localPort,
+      remoteHost: remoteHost,
+      remotePort: remotePort,
+      autoStart: _autoStart,
+    );
+
+    Navigator.of(context).pop(rule);
+  }
+
+  String? _validatePort(String? value, {required bool checkConflict}) {
+    final port = int.tryParse(value?.trim() ?? '');
+    if (port == null || port < 1 || port > 65535) {
+      return 'Enter valid port (1-65535)';
+    }
+    if (!checkConflict || _selectedHostId == null) return null;
+
+    final isLocalNamespace = _ruleType != 'remote';
+    final inUse = ref.read(tunnelsProvider).rules.any((rule) {
+      if (rule.hostId != _selectedHostId || rule.id == widget.rule?.id) {
+        return false;
+      }
+      if (isLocalNamespace) {
+        return rule.type != 'remote' && rule.localPort == port;
+      }
+      return rule.type == 'remote' && rule.remotePort == port;
+    });
+    return inUse ? 'Port already in use by another rule' : null;
+  }
+}

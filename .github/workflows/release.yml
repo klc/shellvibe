@@ -1,0 +1,372 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version from pubspec.yaml without the build number
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-artifacts-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  metadata:
+    name: Validate release metadata
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Validate version and changelog
+        id: version
+        shell: bash
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          package_version="$(sed -nE 's/^version:[[:space:]]*([^+[:space:]]+).*/\1/p' pubspec.yaml)"
+          if [[ -z "$package_version" ]]; then
+            echo 'pubspec.yaml does not contain a readable version.' >&2
+            exit 1
+          fi
+
+          if [[ "$GITHUB_REF_TYPE" == 'tag' ]]; then
+            requested_version="${GITHUB_REF_NAME#v}"
+          else
+            requested_version="$REQUESTED_VERSION"
+          fi
+
+          if [[ "$requested_version" != "$package_version" ]]; then
+            echo "Requested version $requested_version does not match pubspec.yaml $package_version." >&2
+            exit 1
+          fi
+
+          if [[ "$GITHUB_REF_TYPE" == 'tag' ]] &&
+             ! grep -Eq "^## \\[$package_version\\] - [0-9]{4}-[0-9]{2}-[0-9]{2}$" CHANGELOG.md; then
+            echo "CHANGELOG.md needs a dated ## [$package_version] release heading before tagging." >&2
+            exit 1
+          fi
+
+          echo "version=$package_version" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build ${{ matrix.name }}
+    needs:
+      - metadata
+      - quality
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    # A step's `if:` can read the `env` context but not `secrets`, so anything a
+    # step has to be conditional on is lifted here first. Absent secrets come
+    # through as empty strings, which is what the unsigned path tests for.
+    env:
+      APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
+      APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+      WINDOWS_CERT_BASE64: ${{ secrets.WINDOWS_CERT_BASE64 }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x64
+            os: ubuntu-latest
+            target: linux
+            artifact: shellvibe-linux-x64
+          - name: macOS
+            os: macos-latest
+            target: macos
+            artifact: shellvibe-macos
+          - name: Windows x64
+            # windows-latest moved to Visual Studio 2026, while the current
+            # local_auth_windows plugin still requires the VS 2022 coroutine
+            # toolchain. Keep release builds reproducible until that upstream
+            # dependency migrates to the C++20 coroutine API.
+            os: windows-2022
+            target: windows
+            artifact: shellvibe-windows-x64
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang \
+            cmake \
+            libayatana-appindicator3-dev \
+            libgtk-3-dev \
+            libkeybinder-3.0-dev \
+            liblzma-dev \
+            libsecret-1-dev \
+            ninja-build \
+            pkg-config
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.2
+          cache: true
+          pub-cache: true
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Build Linux release bundle
+        if: matrix.target == 'linux'
+        shell: bash
+        env:
+          SHELLVIBE_VERSION: ${{ needs.metadata.outputs.version }}
+        run: |
+          flutter build linux --release --no-pub
+          tool/build_bridge.sh Release
+          mkdir -p dist
+          tar -C build/linux/x64/release -czf "dist/ShellVibe-${SHELLVIBE_VERSION}-linux-x64.tar.gz" bundle
+          tool/packaging/linux_appimage.sh "$SHELLVIBE_VERSION"
+
+      - name: Import the Developer ID certificate
+        if: matrix.target == 'macos' && env.APPLE_CERTIFICATE_P12 != ''
+        shell: bash
+        env:
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          # An ephemeral keychain, not the login one: the runner is shared
+          # infrastructure and the certificate must not outlive the job.
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          password="$(uuidgen)"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 3600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+
+          cert="$RUNNER_TEMP/certificate.p12"
+          echo "$APPLE_CERTIFICATE_P12" | base64 --decode > "$cert"
+          security import "$cert" -k "$keychain" -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security
+          rm -f "$cert"
+
+          # Without this codesign blocks on a GUI prompt that no one can answer
+          # and the job hangs until it times out.
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain"
+          security list-keychain -d user -s "$keychain" $(security list-keychain -d user | tr -d '"')
+
+      - name: Write the notarization key
+        if: matrix.target == 'macos' && env.APPLE_API_KEY != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "$APPLE_API_KEY" | base64 --decode > "$RUNNER_TEMP/notary.p8"
+          chmod 600 "$RUNNER_TEMP/notary.p8"
+
+      - name: Build and package macOS
+        if: matrix.target == 'macos'
+        shell: bash
+        env:
+          SHELLVIBE_VERSION: ${{ needs.metadata.outputs.version }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${APPLE_SIGNING_IDENTITY:-}" ]]; then
+            export CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+          fi
+          flutter build macos --release --no-pub
+          # Must land in the bundle before it is signed and zipped: the app
+          # looks for the bridge next to its own executable, and a binary added
+          # after codesigning is blocked by Gatekeeper with no visible error,
+          # which looks exactly like the MCP feature being broken.
+          tool/build_bridge.sh Release
+          if [[ -f "$RUNNER_TEMP/notary.p8" ]]; then
+            export APPLE_API_KEY_PATH="$RUNNER_TEMP/notary.p8"
+          fi
+          tool/packaging/macos_package.sh "$SHELLVIBE_VERSION"
+
+      - name: Discard the signing keychain
+        if: always() && matrix.target == 'macos'
+        shell: bash
+        run: |
+          rm -f "$RUNNER_TEMP/notary.p8"
+          security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
+
+      - name: Build and package Windows
+        if: matrix.target == 'windows'
+        shell: pwsh
+        env:
+          SHELLVIBE_VERSION: ${{ needs.metadata.outputs.version }}
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+          WINDOWS_TIMESTAMP_URL: ${{ secrets.WINDOWS_TIMESTAMP_URL }}
+        run: |
+          flutter build windows --release --no-pub
+          # build_bridge.sh is bash and this job runs pwsh, so the one command
+          # it would have run is spelled out here instead.
+          dart compile exe tool/shellvibe_mcp_bridge/bin/shellvibe_mcp.dart `
+            -o build/windows/x64/runner/Release/shellvibe-mcp.exe
+          if ($env:WINDOWS_CERT_BASE64) {
+            $pfx = Join-Path $env:RUNNER_TEMP 'signing.pfx'
+            [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERT_BASE64))
+            $env:WINDOWS_CERT_PATH = $pfx
+          }
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          # The portable zip stays: an installer is not always wanted, and a
+          # zip is what a scripted or locked-down install reaches for.
+          Compress-Archive -Path 'build/windows/x64/runner/Release/*' -DestinationPath "dist/ShellVibe-$env:SHELLVIBE_VERSION-windows-x64-portable.zip"
+          tool/packaging/windows_package.ps1 -Version $env:SHELLVIBE_VERSION
+          if ($env:WINDOWS_CERT_PATH) { Remove-Item -Force $env:WINDOWS_CERT_PATH }
+
+      - name: Upload portable artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
+
+  quality:
+    name: Release quality gate
+    needs: metadata
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.2
+          cache: true
+          pub-cache: true
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: dart analyze
+
+      - name: Test
+        run: flutter test --reporter compact
+
+      - name: Verify generated sources are current
+        shell: bash
+        run: |
+          dart run build_runner build
+          git diff --exit-code
+
+  publish:
+    name: Publish the release
+    # Tags only. A manual run is a rehearsal: it builds and packages everything
+    # so the pipeline is exercised, and stops short of publishing anything.
+    if: github.ref_type == 'tag'
+    needs:
+      - metadata
+      - build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Collect the built artifacts
+        uses: actions/download-artifact@v7
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Checksum everything
+        id: checksums
+        shell: bash
+        env:
+          SHELLVIBE_VERSION: ${{ needs.metadata.outputs.version }}
+        run: |
+          set -euo pipefail
+          cd artifacts
+          # Sorted, and relative: the file has to be verifiable with a plain
+          # `sha256sum -c` in the directory the user downloaded into.
+          sha256sum $(find . -type f ! -name 'SHA256SUMS' -printf '%P\n' | sort) \
+            > SHA256SUMS
+          echo '--- SHA256SUMS ---'
+          cat SHA256SUMS
+
+          # Whether this release is signed decides what the notes have to warn
+          # about, and the packagers already said so in the file names.
+          if ls *unsigned* >/dev/null 2>&1; then
+            echo 'signed=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'signed=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Extract the changelog section
+        id: notes
+        shell: bash
+        env:
+          SHELLVIBE_VERSION: ${{ needs.metadata.outputs.version }}
+        run: |
+          set -euo pipefail
+          # Everything between this version's heading and the next one. The
+          # metadata job already refused to run without a dated heading.
+          awk -v version="$SHELLVIBE_VERSION" '
+            $0 ~ ("^## \\[" version "\\] - ") { capture = 1; next }
+            capture && /^## / { exit }
+            capture { print }
+          ' CHANGELOG.md > release-notes.md
+
+          if [[ ! -s release-notes.md ]]; then
+            echo "CHANGELOG.md has no body under the $SHELLVIBE_VERSION heading." >&2
+            exit 1
+          fi
+
+          {
+            echo
+            echo '## Verifying your download'
+            echo
+            echo 'Every file is listed in `SHA256SUMS`:'
+            echo
+            echo '```'
+            echo 'sha256sum -c SHA256SUMS'
+            echo '```'
+          } >> release-notes.md
+
+          if [[ '${{ steps.checksums.outputs.signed }}' == 'false' ]]; then
+            # Kept as a file rather than inlined here: telling someone a build
+            # is unsigned without telling them how to open it leaves them at a
+            # malware warning with nowhere to go, so the text is long enough to
+            # deserve reviewing on its own.
+            cat .github/release-notes-unsigned.md >> release-notes.md
+          fi
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHELLVIBE_VERSION: ${{ needs.metadata.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # A draft, deliberately. Publishing is a person pressing a button
+          # after looking at the artifacts, not a side effect of pushing a tag.
+          gh release create "v$SHELLVIBE_VERSION" \
+            --draft \
+            --title "ShellVibe $SHELLVIBE_VERSION" \
+            --notes-file release-notes.md \
+            artifacts/*
+          echo "Draft release created. Review it, then publish from the Releases page."

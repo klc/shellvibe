@@ -1,0 +1,35 @@
+{
+    "name": "ShellVibe",
+    "short_name": "ShellVibe",
+    "start_url": ".",
+    "display": "standalone",
+    "background_color": "#101220",
+    "theme_color": "#8B93FF",
+    "description": "ShellVibe — Cross-platform terminal, SSH/SFTP client and remote infrastructure workstation.",
+    "orientation": "portrait-primary",
+    "prefer_related_applications": false,
+    "icons": [
+        {
+            "src": "icons/Icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-maskable-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "maskable"
+        },
+        {
+            "src": "icons/Icon-maskable-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
+        }
+    ]
+}

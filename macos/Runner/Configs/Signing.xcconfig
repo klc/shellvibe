@@ -1,0 +1,14 @@
+// Code-signing settings for the Runner target.
+//
+// Kept out of project.pbxproj so a contributor or CI job can sign with its own
+// Apple Developer team without editing (and dirtying) the checked-in Xcode
+// project. To override, create Runner/Configs/LocalSigning.xcconfig — it is
+// git-ignored — containing:
+//
+//   DEVELOPMENT_TEAM = YOURTEAMID
+//
+// Leaving DEVELOPMENT_TEAM empty falls back to ad-hoc signing, which is enough
+// for a local debug run but not for notarization or hardened-runtime builds.
+DEVELOPMENT_TEAM =
+
+#include? "LocalSigning.xcconfig"

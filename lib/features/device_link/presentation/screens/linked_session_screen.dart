@@ -1,0 +1,189 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../../app/theme/shellvibe_tokens.dart';
+import '../../../../app/widgets/shellvibe_ui.dart';
+import '../../../terminal/presentation/screens/terminal_screen.dart';
+import '../controllers/linked_session_controller.dart';
+import '../widgets/compose_sheet.dart';
+
+/// Terminal surface opened on the phone after a Device Link attach.
+final class DeviceLinkLinkedSessionScreen extends ConsumerStatefulWidget {
+  final DeviceLinkLinkedSessionController controller;
+  final VoidCallback? onClosed;
+  final bool? showExtraKeys;
+
+  const DeviceLinkLinkedSessionScreen({
+    super.key,
+    required this.controller,
+    this.onClosed,
+    this.showExtraKeys,
+  });
+
+  @override
+  ConsumerState<DeviceLinkLinkedSessionScreen> createState() =>
+      _DeviceLinkLinkedSessionScreenState();
+}
+
+class _DeviceLinkLinkedSessionScreenState
+    extends ConsumerState<DeviceLinkLinkedSessionScreen> {
+  DeviceLinkLinkedSessionController get _controller => widget.controller;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        unawaited(_controller.connect());
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    unawaited(_controller.close());
+    super.dispose();
+  }
+
+  Future<void> _compose() async {
+    if (!_controller.canSendInput) return;
+    await DeviceLinkComposeSheet.show(
+      context,
+      onSubmit: _controller.sendText,
+      bracketedPaste: _controller.supportsBracketedPaste,
+    );
+  }
+
+  Future<void> _detach() async {
+    await _controller.detach();
+    if (!mounted) return;
+    if (widget.onClosed != null) {
+      widget.onClosed!();
+    } else {
+      Navigator.of(context).maybePop();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final showExtraKeys =
+        widget.showExtraKeys ??
+        (defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS);
+
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) {
+        final readOnly = _controller.isReadOnly;
+        return Scaffold(
+          resizeToAvoidBottomInset: false,
+          appBar: AppBar(
+            title: Text(
+              _controller.session.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            actions: [
+              if (_controller.canSendInput)
+                ShellVibeIconButton(
+                  key: const Key('device_link_compose_button'),
+                  icon: Icons.edit_note,
+                  tooltip: 'Send text',
+                  onPressed: _compose,
+                ),
+              ShellVibeIconButton(
+                key: const Key('device_link_detach_button'),
+                icon: Icons.link_off,
+                tooltip: 'Disconnect',
+                onPressed: _detach,
+              ),
+            ],
+          ),
+          body: Column(
+            children: [
+              _buildStatusBar(context, readOnly),
+              Expanded(
+                child: TerminalScreen(
+                  session: _controller.terminalSession,
+                  showExtraKeys: showExtraKeys,
+                  readOnly: readOnly,
+                  keepTerminalSizeWhenKeyboardOpens: true,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildStatusBar(BuildContext context, bool readOnly) {
+    final theme = Theme.of(context);
+    final (label, color, icon) = switch (_controller.status) {
+      DeviceLinkLinkedSessionStatus.connecting => (
+        'Connecting…',
+        theme.colorScheme.primary,
+        Icons.sync,
+      ),
+      DeviceLinkLinkedSessionStatus.attached => (
+        'Linked · desktop session is active',
+        ShellVibeTokens.resolve(context).success,
+        Icons.link,
+      ),
+      DeviceLinkLinkedSessionStatus.reclaimed => (
+        'Desktop control reclaimed · read-only',
+        theme.colorScheme.tertiary,
+        Icons.desktop_windows,
+      ),
+      DeviceLinkLinkedSessionStatus.detached => (
+        'Disconnected',
+        theme.colorScheme.onSurfaceVariant,
+        Icons.link_off,
+      ),
+      DeviceLinkLinkedSessionStatus.disconnected => (
+        'Connection lost · read-only',
+        theme.colorScheme.error,
+        Icons.cloud_off,
+      ),
+      DeviceLinkLinkedSessionStatus.error => (
+        _controller.errorMessage ?? 'Device Link error',
+        theme.colorScheme.error,
+        Icons.error_outline,
+      ),
+    };
+    return Material(
+      color: color.withValues(alpha: 0.12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        child: Row(
+          children: [
+            Icon(icon, size: 16, color: color),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                label,
+                key: const Key('device_link_status'),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: color, fontSize: 12),
+              ),
+            ),
+            if (readOnly)
+              Text(
+                'READ ONLY',
+                style: TextStyle(
+                  color: color,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.7,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}

@@ -1,0 +1,10 @@
+// Xcode 26 puts the lazily mounted Metal toolchain first in EFFECTIVE_TOOLCHAINS_DIRS,
+// so TOOLCHAIN_DIR resolves to a cryptex that carries no usr/lib at all. The built-in
+// defaults for the settings below are written in terms of TOOLCHAIN_DIR, so every link
+// of the app gets a -L pointing at a directory that does not exist and the linker warns.
+// DT_TOOLCHAIN_DIR is rejected by Xcode in exactly these two settings, so the Xcode
+// toolchain is spelled out relative to DEVELOPER_DIR instead. No $(inherited) here on
+// purpose: inheriting is what drags the bad path back in.
+SWIFT_TOOLCHAIN_LIB_DIR = $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/$(PLATFORM_NAME)
+LIBRARY_SEARCH_PATHS = $(BUILT_PRODUCTS_DIR) $(SWIFT_TOOLCHAIN_LIB_DIR) $(SDKROOT)/usr/lib/swift /usr/lib/swift
+LD_RUNPATH_SEARCH_PATHS = /usr/lib/swift @executable_path/../Frameworks @loader_path/Frameworks $(SWIFT_TOOLCHAIN_LIB_DIR)

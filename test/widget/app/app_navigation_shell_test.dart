@@ -1,0 +1,364 @@
+import 'package:drift/native.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
+import 'package:window_manager/window_manager.dart';
+import 'package:shellvibe/app/router/app_router.dart';
+import 'package:shellvibe/app/widgets/app_navigation_shell.dart';
+import 'package:shellvibe/app/window/window_chrome.dart';
+import 'package:shellvibe/features/hosts/presentation/screens/hosts_screen.dart';
+import 'package:shellvibe/features/settings/presentation/screens/settings_screen.dart';
+import 'package:shellvibe/features/snippets/presentation/screens/snippets_screen.dart';
+import 'package:shellvibe/features/terminal/presentation/views/terminal_tab_view.dart';
+import 'package:shellvibe/features/tunnels/presentation/screens/tunnels_screen.dart';
+import 'package:shellvibe/features/vault/presentation/notifiers/vault_notifier.dart';
+import 'package:shellvibe/features/vault/presentation/screens/vault_screen.dart';
+import 'package:shellvibe/features/workspaces/presentation/screens/workspace_manager_screen.dart';
+import 'package:shellvibe/shared/database/app_database.dart';
+import 'package:shellvibe/shared/providers/database_providers.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  late AppDatabase db;
+
+  setUp(() async {
+    db = AppDatabase(NativeDatabase.memory());
+    await db.workspacesDao.insertWorkspace(
+      WorkspacesCompanion.insert(
+        id: 'default',
+        name: 'Default Workspace',
+        createdAt: DateTime.now(),
+      ),
+    );
+  });
+
+  tearDown(() async {
+    await db.close();
+  });
+
+  Widget createTestWidget() {
+    return ProviderScope(
+      overrides: [
+        appDatabaseProvider.overrideWithValue(db),
+        vaultProvider.overrideWith(() => _UnlockedVaultNotifier()),
+      ],
+      child: Consumer(
+        builder: (context, ref, _) {
+          final router = ref.watch(appRouterProvider);
+          return ShadTheme(
+            data: ShadThemeData(
+              colorScheme: const ShadSlateColorScheme.light(),
+              brightness: Brightness.light,
+            ),
+            child: MaterialApp.router(routerConfig: router),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> pumpTabTransition(WidgetTester tester) async {
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+  }
+
+  group('AppNavigationShell & GoRouter Integration Tests', () {
+    testWidgets('Renders the persistent rail and the initial Terminal screen', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(createTestWidget());
+      await pumpTabTransition(tester);
+
+      // The rail is the whole desktop chrome: brand, command palette entry,
+      // live status badges and the workspace avatar all live on it.
+      expect(find.byKey(const Key('header_brand_logo')), findsOneWidget);
+      expect(find.byKey(const Key('command_palette_button')), findsOneWidget);
+      expect(find.byKey(const Key('ssh_status_badge')), findsOneWidget);
+      expect(find.byKey(const Key('tunnels_status_badge')), findsOneWidget);
+      expect(
+        find.byKey(const Key('biometric_status_indicator')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('workspace_avatar_button')), findsOneWidget);
+
+      // Default initial tab should be the Terminal screen with the local
+      // shell empty state (this harness pumps the shell without ShellVibeApp,
+      // so the startup auto-open of a local shell does not run here).
+      expect(find.byType(TerminalTabView), findsOneWidget);
+      expect(find.text('No open sessions'), findsOneWidget);
+    });
+
+    testWidgets('macOS hands the window controls a draggable strip', (
+      tester,
+    ) async {
+      debugWindowChromeOverride = TargetPlatform.macOS;
+      addTearDown(() => debugWindowChromeOverride = null);
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(createTestWidget());
+      await pumpTabTransition(tester);
+
+      final strip = find.byType(DragToMoveArea);
+      expect(strip, findsOneWidget);
+      expect(tester.getSize(strip).height, kTrafficLightStripHeight);
+      expect(tester.getTopLeft(strip).dy, 0);
+
+      // The traffic lights are drawn over this strip, so nothing the app draws
+      // may start above it — the rail is only 56px wide and the three buttons
+      // need about 70, which is why the strip spans the shell.
+      expect(
+        tester.getTopLeft(find.byKey(const Key('header_brand_logo'))).dy,
+        greaterThanOrEqualTo(kTrafficLightStripHeight),
+      );
+    });
+
+    testWidgets('Platforms that keep their title bar get no strip', (
+      tester,
+    ) async {
+      debugWindowChromeOverride = TargetPlatform.windows;
+      addTearDown(() => debugWindowChromeOverride = null);
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(createTestWidget());
+      await pumpTabTransition(tester);
+
+      expect(windowChromeTopInset, 0);
+      expect(find.byType(DragToMoveArea), findsNothing);
+    });
+
+    testWidgets('Rail status badges are dots, never empty pills', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(createTestWidget());
+      await pumpTabTransition(tester);
+
+      for (final key in const [
+        Key('ssh_status_badge'),
+        Key('tunnels_status_badge'),
+      ]) {
+        final badge = tester.widget<Badge>(find.byKey(key));
+        // A non-null label — an empty SizedBox included — switches Badge from
+        // the smallSize dot to a largeSize stadium pill, which reads as a
+        // badge with nothing in it.
+        expect(badge.label, isNull, reason: '$key renders as an empty pill');
+        expect(badge.smallSize, 8);
+      }
+    });
+
+    testWidgets('Rail renders the wireframe module order', (tester) async {
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(createTestWidget());
+      await pumpTabTransition(tester);
+
+      final railPaths = kRailLayout.whereType<String>().toList();
+      final renderedOrder = railPaths
+          .map(
+            (path) => tester.getTopLeft(
+              find.byKey(Key('nav_item_${navigationIndexForPath(path)}')),
+            ),
+          )
+          .toList();
+
+      for (var i = 1; i < renderedOrder.length; i++) {
+        expect(
+          renderedOrder[i].dy,
+          greaterThan(renderedOrder[i - 1].dy),
+          reason: 'rail order must follow kRailLayout',
+        );
+      }
+    });
+
+    testWidgets(
+      'Switching tabs via desktop navigation shell loads corresponding screens',
+      (tester) async {
+        await tester.pumpWidget(createTestWidget());
+        await pumpTabTransition(tester);
+
+        // 1. Switch to Terminal (/terminal - Index 1)
+        await tester.tap(find.byKey(const Key('nav_item_1')));
+        await pumpTabTransition(tester);
+        expect(find.byType(TerminalTabView), findsOneWidget);
+
+        // 2. Switch to Vault (/vault - Index 2)
+        await tester.tap(find.byKey(const Key('nav_item_2')));
+        await pumpTabTransition(tester);
+        expect(find.byType(VaultScreen), findsOneWidget);
+
+        // 3. Switch to Tunnels (/tunnels - Index 3)
+        await tester.tap(find.byKey(const Key('nav_item_3')));
+        await pumpTabTransition(tester);
+        expect(find.byType(TunnelsScreen), findsOneWidget);
+
+        // 4. Switch to Snippets (/snippets - Index 4)
+        await tester.tap(find.byKey(const Key('nav_item_4')));
+        await pumpTabTransition(tester);
+        expect(find.byType(SnippetsScreen), findsOneWidget);
+
+        // 5. Switch to Workspaces (/workspaces - Index 5)
+        await tester.tap(find.byKey(const Key('nav_item_5')));
+        await pumpTabTransition(tester);
+        expect(find.byType(WorkspaceManagerScreen), findsOneWidget);
+
+        // 6. Switch to Settings (/settings - Index 6)
+        await tester.tap(find.byKey(const Key('nav_item_6')));
+        await pumpTabTransition(tester);
+        expect(find.byType(SettingsScreen), findsOneWidget);
+
+        // 7. Switch back to Hosts (/hosts - Index 0)
+        await tester.tap(find.byKey(const Key('nav_item_0')));
+        await pumpTabTransition(tester);
+        expect(find.byType(HostsScreen), findsOneWidget);
+      },
+    );
+
+    testWidgets('Rail is icon-only and has no collapse toggle', (tester) async {
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(createTestWidget());
+      await pumpTabTransition(tester);
+
+      // Labels live in the context column now, so the rail has a fixed width
+      // and the collapse affordance is gone.
+      expect(find.byKey(const Key('sidebar_toggle_button')), findsNothing);
+      expect(find.byType(AppNavigationShell), findsOneWidget);
+      expect(
+        tester.getSize(find.byKey(const Key('nav_item_0'))).width,
+        lessThan(56),
+      );
+    });
+
+    testWidgets(
+      'Renders mobile bottom navigation bar on compact screen sizes',
+      (tester) async {
+        // Set small physical screen size for mobile view test
+        tester.view.physicalSize = const Size(400, 800);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() => tester.view.resetPhysicalSize());
+
+        await tester.pumpWidget(createTestWidget());
+        await pumpTabTransition(tester);
+
+        expect(
+          find.byKey(const Key('mobile_bottom_navigation_bar')),
+          findsOneWidget,
+        );
+
+        // Tap mobile navigation item (Terminal)
+        await tester.tap(
+          find.byKey(const Key('mobile_nav_destination_terminal')),
+        );
+        await pumpTabTransition(tester);
+        expect(find.byType(TerminalTabView), findsOneWidget);
+      },
+    );
+
+    testWidgets('Mobile navigation exposes the wireframe tabs in rail order', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(375, 812);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(createTestWidget());
+      await pumpTabTransition(tester);
+
+      // Vault and Settings are first-class tabs rather than sheet entries.
+      expect(
+        find.byType(NavigationDestination),
+        findsNWidgets(kMobileTabPaths.length),
+      );
+      for (final path in kMobileTabPaths) {
+        expect(
+          find.byKey(Key('mobile_nav_destination_${path.substring(1)}')),
+          findsOneWidget,
+        );
+      }
+
+      await tester.tap(find.byKey(const Key('mobile_nav_destination_vault')));
+      await pumpTabTransition(tester);
+      expect(find.byType(VaultScreen), findsOneWidget);
+    });
+
+    testWidgets('Command palette opens from desktop shell', (tester) async {
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(createTestWidget());
+      await pumpTabTransition(tester);
+
+      await tester.tap(find.byKey(const Key('command_palette_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('command_palette_search')), findsOneWidget);
+      expect(find.byType(Dialog), findsOneWidget);
+    });
+
+    // Every module at every breakpoint. The initial route alone used to be
+    // covered, which is exactly where the layout overflows were not.
+    for (final width in [375.0, 768.0, 1024.0, 1440.0]) {
+      testWidgets('Every module lays out cleanly at ${width.toInt()} px', (
+        tester,
+      ) async {
+        tester.view.physicalSize = Size(width, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() => tester.view.resetPhysicalSize());
+
+        await tester.pumpWidget(createTestWidget());
+        await pumpTabTransition(tester);
+        expect(tester.takeException(), isNull, reason: 'initial route');
+
+        final isCompact = find
+            .byKey(const Key('mobile_bottom_navigation_bar'))
+            .evaluate()
+            .isNotEmpty;
+
+        if (isCompact) {
+          for (final path in kMobileTabPaths) {
+            await tester.tap(
+              find.byKey(Key('mobile_nav_destination_${path.substring(1)}')),
+            );
+            await pumpTabTransition(tester);
+            expect(tester.takeException(), isNull, reason: path);
+          }
+        } else {
+          for (final path in kRailLayout.whereType<String>()) {
+            await tester.tap(
+              find.byKey(Key('nav_item_${navigationIndexForPath(path)}')),
+            );
+            await pumpTabTransition(tester);
+            expect(tester.takeException(), isNull, reason: path);
+          }
+        }
+      });
+    }
+  });
+}
+
+/// Test-only notifier that immediately provides an unlocked vault state,
+/// bypassing the vault guard redirect in router tests.
+class _UnlockedVaultNotifier extends VaultNotifier {
+  @override
+  Future<VaultState> build() async {
+    return const VaultState(status: VaultStatus.unlocked);
+  }
+}

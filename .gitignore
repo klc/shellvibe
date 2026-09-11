@@ -1,0 +1,73 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# Agent context scratchpads — kept local, not project state
+/memory-bank/
+/.Jules/
+.flutter-plugins
+
+# Local, per-developer macOS signing overrides (see Configs/Signing.xcconfig)
+macos/Runner/Configs/LocalSigning.xcconfig
+
+# Local scratch/repro tests, not part of the suite
+test/scratch/
+
+# Gradle writes build reports here.
+/android/build/
+
+# Vendored third-party terminal benchmarks and their raw output; both are
+# fetched by tool/bench/setup.sh and are not ours to track.
+tool/bench/vendor/
+tool/bench/results/
+
+# Release artifacts built by tool/packaging/.
+dist/
+
+# Internal planning, product and review documents. Kept locally, not published.
+docs/
+
+# graphify skill cache: local tooling output, carries absolute local paths.
+graphify-out/

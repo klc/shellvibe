@@ -1,0 +1,119 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
+
+import 'package:cryptography/cryptography.dart';
+import 'package:shellvibe/core/crypto/encryption_engine.dart';
+import 'package:shellvibe/shared/providers/database_providers.dart';
+import 'package:shellvibe/features/vault/presentation/dialogs/vault_unlock_dialog.dart';
+import 'package:shellvibe/features/vault/presentation/notifiers/vault_notifier.dart';
+import 'package:shellvibe/app/widgets/shellvibe_ui.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  final fastEngine = EncryptionEngine(
+    kdf: Argon2id(
+      parallelism: 1,
+      memory: 8,
+      iterations: 1,
+      hashLength: 32,
+    ),
+  );
+
+  setUp(() {
+    FlutterSecureStorage.setMockInitialValues({});
+  });
+
+  ProviderContainer createContainer() {
+    return ProviderContainer(
+      overrides: [
+        encryptionEngineProvider.overrideWithValue(fastEngine),
+      ],
+    );
+  }
+
+  Widget createWidgetUnderTest(ProviderContainer container) {
+    return UncontrolledProviderScope(
+      container: container,
+      child: ShadTheme(
+        data: ShadThemeData(
+          colorScheme: const ShadSlateColorScheme.light(),
+          brightness: Brightness.light,
+        ),
+        child: const MaterialApp(
+          home: VaultUnlockDialog(),
+        ),
+      ),
+    );
+  }
+
+  group('VaultUnlockDialog Widget Tests', () {
+    testWidgets('Renders password field and unlock button', (tester) async {
+      final container = createContainer();
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(createWidgetUnderTest(container));
+      await tester.pump();
+
+      expect(find.text('Unlock Vault'), findsOneWidget);
+      expect(find.byType(ShadInput), findsOneWidget);
+      expect(find.widgetWithText(ShellVibeButton, 'Unlock'), findsOneWidget);
+    });
+
+    testWidgets('Displays error feedback when wrong password is submitted', (tester) async {
+      final container = createContainer();
+      addTearDown(container.dispose);
+
+      // Setup vault with password
+      final notifier = container.read(vaultProvider.notifier);
+      await notifier.setup('CorrectPassword123');
+      notifier.lock();
+
+      await tester.pumpWidget(createWidgetUnderTest(container));
+      await tester.pump();
+
+      // Enter wrong password
+      await tester.enterText(find.byType(ShadInput), 'WrongPassword');
+      await tester.tap(find.widgetWithText(ShellVibeButton, 'Unlock'));
+      await tester.idle();
+      await tester.pump();
+
+      expect(find.text('Incorrect password'), findsOneWidget);
+      expect(find.text('Failed attempts: 1'), findsOneWidget);
+    });
+
+    testWidgets('Displays lockout UI when max failed attempts reached', (tester) async {
+      final container = createContainer();
+      addTearDown(container.dispose);
+
+      final notifier = container.read(vaultProvider.notifier);
+      await notifier.setup('CorrectPassword123');
+      notifier.lock();
+
+      // 5 failed unlock attempts
+      for (int i = 0; i < 5; i++) {
+        await notifier.unlock('WrongPassword');
+      }
+
+      await tester.pumpWidget(createWidgetUnderTest(container));
+      await tester.pump();
+
+      expect(find.text('Too Many Attempts'), findsOneWidget);
+      expect(find.textContaining('Please wait'), findsOneWidget);
+
+      // Unlock button should be disabled when locked out
+      final button = tester.widget<ShellVibeButton>(
+        find.byType(ShellVibeButton),
+      );
+      expect(button.onPressed, isNull);
+
+      // Advance time past lockout duration so periodic timer cancels before test teardown
+      await tester.pump(const Duration(seconds: 31));
+    });
+  });
+}
+
+

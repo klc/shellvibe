@@ -1,0 +1,28 @@
+# This file configures the analyzer, which statically analyzes Dart code to
+# check for errors, warnings, and lints.
+#
+# The issues identified by the analyzer are surfaced in the UI of Dart-enabled
+# IDEs (https://dart.dev/tools#ides-and-editors). The analyzer can also be
+# invoked from the command line by running `flutter analyze`.
+
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  # Generated sources are not hand-maintained; linting them only adds noise.
+  exclude:
+    - "**/*.g.dart"
+    - "**/*.freezed.dart"
+  language:
+    strict-casts: true
+
+linter:
+  rules:
+    # Leaked subscriptions/sinks are how terminal tabs keep sockets alive after
+    # the tab is gone.
+    - cancel_subscriptions
+    - close_sinks
+    # Throwing/catching the wrong thing hides real failures.
+    - avoid_catching_errors
+    - only_throw_errors
+    - throw_in_finally
+    - use_super_parameters

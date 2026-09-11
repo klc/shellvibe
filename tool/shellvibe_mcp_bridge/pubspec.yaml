@@ -1,0 +1,22 @@
+name: shellvibe_mcp_bridge
+description: >-
+  Standalone stdio-to-HTTP bridge that lets an MCP client (an AI agent) talk
+  to the ShellVibe desktop app's local MCP server over stdin/stdout.
+publish_to: 'none'
+
+# Kept in lockstep with the root pubspec's environment so both are always
+# built with the same SDK. This package has no Flutter dependency on purpose
+# — it is compiled with `dart compile exe`, not shipped through `flutter build`.
+environment:
+  sdk: ^3.12.2
+
+# Intentionally no runtime dependencies: dart:io's HttpClient and
+# dart:convert cover everything this bridge needs. Every added package is
+# one more thing that can drift from the SDK used to compile the binary, or
+# pull in a transitive dependency that doesn't compile without Flutter's
+# tooling.
+dev_dependencies:
+  # Only a dev dependency (analysis_options.yaml `include:`s it) — it is pure
+  # Dart and never ships in the compiled binary. Same version as root so
+  # `dart analyze` agrees with `flutter analyze` on the rest of the repo.
+  flutter_lints: ^6.0.0

@@ -1,0 +1,21 @@
+# Mirrors the root analysis_options.yaml. This package has no generated
+# sources and no Flutter dependency, but keeping the same lint set means a
+# stray `flutter analyze` (or an IDE pointed at this folder) behaves the same
+# way here as everywhere else in the repo.
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  language:
+    strict-casts: true
+
+linter:
+  rules:
+    # Leaked subscriptions/sinks are how terminal tabs keep sockets alive after
+    # the tab is gone.
+    - cancel_subscriptions
+    - close_sinks
+    # Throwing/catching the wrong thing hides real failures.
+    - avoid_catching_errors
+    - only_throw_errors
+    - throw_in_finally
+    - use_super_parameters

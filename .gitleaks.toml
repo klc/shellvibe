@@ -1,0 +1,37 @@
+# Secret scanning for ShellVibe.
+#
+# The repository is source-available, so a credential that reaches a commit is
+# published the moment it is pushed. This config runs in CI on every push and
+# over the full history, and the allowlist below is the only way past it.
+#
+# Adding a path here is a decision: it says "this file is fixtures, and a real
+# credential in it would be a bug". Never add a path to silence a finding you
+# have not read.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = """
+Redactor tests. The whole point of output_redactor_test.dart is to feed the
+redactor things that look like credentials and assert they come back masked, so
+every secret pattern in it is deliberate. The values are synthetic: a JWT whose
+payload decodes to {"sub":"1234"}, and AKIAIOSFODNN7EXAMPLE, which is AWS's own
+documentation placeholder.
+"""
+paths = ['''^test/unit/features/mcp/output_redactor_test\.dart$''']
+
+[[allowlists]]
+description = """
+SSH key fixtures. Both files store PEM headers with a literal body — 'abc',
+'xyz', or no body at all — because the code under test only needs to recognise
+the envelope, never to parse a key.
+"""
+paths = [
+  '''^test/unit/features/vault/identities_notifier_test\.dart$''',
+  '''^test/unit/features/hosts/ssh_config_import_service_test\.dart$''',
+]
+
+[[allowlists]]
+description = "CocoaPods records a checksum per pod, which reads as an API key."
+paths = ['''^(macos|ios)/Podfile\.lock$''']
