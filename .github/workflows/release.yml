@@ -331,6 +331,11 @@ jobs:
             capture { print }
           ' CHANGELOG.md > release-notes.md
 
+          # The version section is the last one in the file, so the extraction
+          # also swallows the link definitions parked at the bottom. They mean
+          # nothing outside the changelog.
+          sed -i -E '/^\[[^]]+\]: https?:\/\//d' release-notes.md
+
           if [[ ! -s release-notes.md ]]; then
             echo "CHANGELOG.md has no body under the $SHELLVIBE_VERSION heading." >&2
             exit 1
