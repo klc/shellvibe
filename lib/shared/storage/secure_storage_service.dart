@@ -46,6 +46,21 @@ class SecureStorageService {
             ),
             mOptions: MacOsOptions(
               accessibility: KeychainAccessibility.first_unlock,
+              // The data protection keychain, which this defaults to, is
+              // reachable only by a binary whose signature carries a
+              // `keychain-access-groups` entitlement — and that entitlement in
+              // turn needs a team identifier. An ad-hoc signed build has
+              // neither, and every write comes back errSecMissingEntitlement
+              // (-34018): "Save Identity Error" on the first key a user adds.
+              //
+              // The file-based keychain needs no entitlement and works the same
+              // whether or not the app is signed, which is why the choice is
+              // made here rather than left to how a particular build was
+              // produced. Items still live encrypted in the user's login
+              // keychain, gated by their login password and an ACL macOS
+              // prompts about; what is given up is the per-item isolation the
+              // data protection keychain adds on top.
+              usesDataProtectionKeychain: false,
             ),
           );
 
