@@ -33,35 +33,45 @@ class SecureStorageService {
   final FlutterSecureStorage _storage;
   final Map<String, String> _inMemoryFallback = {};
 
+  /// Platform options the app stores secrets under.
+  ///
+  /// Named constants rather than inline arguments so a test can reach the real
+  /// keychain with exactly these, instead of testing a configuration nothing
+  /// ships with.
+  static const macOsOptions = MacOsOptions(
+    accessibility: KeychainAccessibility.first_unlock,
+    // The data protection keychain, which this defaults to, is reachable only
+    // by a binary whose signature carries a `keychain-access-groups`
+    // entitlement — and that entitlement in turn needs a team identifier. An
+    // ad-hoc signed build has neither, and every write comes back
+    // errSecMissingEntitlement (-34018): "Save Identity Error" on the first key
+    // a user adds.
+    //
+    // The file-based keychain needs no entitlement and works the same whether
+    // or not the app is signed, which is why the choice is made here rather
+    // than left to how a particular build was produced. Items still live
+    // encrypted in the user's login keychain, gated by their login password and
+    // an ACL macOS prompts about; what is given up is the per-item isolation
+    // the data protection keychain adds on top.
+    usesDataProtectionKeychain: false,
+  );
+
+  static const iosOptions = IOSOptions(
+    accessibility: KeychainAccessibility.first_unlock,
+  );
+
+  static const androidOptions = AndroidOptions(
+    migrateOnAlgorithmChange: true,
+    migrateWithBackup: true,
+  );
+
   SecureStorageService({FlutterSecureStorage? storage})
     : _storage =
           storage ??
           const FlutterSecureStorage(
-            aOptions: AndroidOptions(
-              migrateOnAlgorithmChange: true,
-              migrateWithBackup: true,
-            ),
-            iOptions: IOSOptions(
-              accessibility: KeychainAccessibility.first_unlock,
-            ),
-            mOptions: MacOsOptions(
-              accessibility: KeychainAccessibility.first_unlock,
-              // The data protection keychain, which this defaults to, is
-              // reachable only by a binary whose signature carries a
-              // `keychain-access-groups` entitlement — and that entitlement in
-              // turn needs a team identifier. An ad-hoc signed build has
-              // neither, and every write comes back errSecMissingEntitlement
-              // (-34018): "Save Identity Error" on the first key a user adds.
-              //
-              // The file-based keychain needs no entitlement and works the same
-              // whether or not the app is signed, which is why the choice is
-              // made here rather than left to how a particular build was
-              // produced. Items still live encrypted in the user's login
-              // keychain, gated by their login password and an ACL macOS
-              // prompts about; what is given up is the per-item isolation the
-              // data protection keychain adds on top.
-              usesDataProtectionKeychain: false,
-            ),
+            aOptions: androidOptions,
+            iOptions: iosOptions,
+            mOptions: macOsOptions,
           );
 
   bool _isEntitlementError(Object e) {

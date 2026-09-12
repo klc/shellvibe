@@ -1,31 +1,43 @@
 @Tags(['integration'])
 library;
 
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:shellvibe/shared/storage/secure_storage_service.dart';
 
 /// Writes to the real keychain on the real platform.
 ///
-/// A Dart VM test reaches no keychain at all, so this is the only level at
-/// which "can the app store a secret" is a question with an answer.
+/// It goes through [FlutterSecureStorage] directly, with the options
+/// [SecureStorageService] would have used, rather than through the service
+/// itself. The service catches an entitlement failure outside release mode and
+/// answers from an in-memory map — deliberately, so a misprovisioned developer
+/// build stays usable — and a test written against it therefore passes while
+/// the keychain is never touched. That is not a hypothetical: the first version
+/// of this test did exactly that and reported success against a build that
+/// could not store a secret at all.
 ///
-/// **What it does not cover.** The 1.0.0 failure — errSecMissingEntitlement
-/// (-34018) on every write, surfacing as "Save Identity Error" the first time
-/// a user added an SSH key — needed the data protection keychain *and* a
-/// binary with no team identifier. `flutter test` builds debug and signs it
-/// with a development certificate, which has one, so that combination cannot
-/// be reproduced here; flipping usesDataProtectionKeychain back to true leaves
-/// this suite green. Verified by doing exactly that.
+/// The failure this exists for shipped in 1.0.0: errSecMissingEntitlement
+/// (-34018) on every write, which a user met as "Save Identity Error" the first
+/// time they saved an SSH key.
 ///
-/// So this catches a keychain that is broken outright, not that specific
-/// interaction. The guard for that one is the entitlements test beside it, and
-/// opening the packaged unsigned build by hand before a release.
+/// It reproduces that failure only when the build under test is ad-hoc signed,
+/// which is what CI produces and what a checkout with no `DEVELOPMENT_TEAM`
+/// gets. On a machine with `Runner/Configs/LocalSigning.xcconfig` naming a
+/// team, the binary carries a team identifier, the data protection keychain
+/// opens, and this suite stays green with the bug present. Both halves were
+/// checked by hand: team aside, the option back to true, -34018 on every
+/// write; option false, green.
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
+  final storage = FlutterSecureStorage(
+    mOptions: SecureStorageService.macOsOptions,
+    iOptions: SecureStorageService.iosOptions,
+    aOptions: SecureStorageService.androidOptions,
+  );
+
   test('a secret survives a write and a read', () async {
-    final storage = SecureStorageService();
     const key = 'shellvibe_integration_probe';
     final value = 'probe-${DateTime.now().microsecondsSinceEpoch}';
 
@@ -35,12 +47,11 @@ void main() {
     expect(
       await storage.read(key: key),
       value,
-      reason: 'the keychain returned something other than what was stored',
+      reason: 'the platform store returned something other than what went in',
     );
   });
 
   test('a deleted secret is gone', () async {
-    final storage = SecureStorageService();
     const key = 'shellvibe_integration_probe_delete';
 
     await storage.write(key: key, value: 'x');
