@@ -1,37 +1,39 @@
 # Secret scanning for ShellVibe.
 #
 # The repository is source-available, so a credential that reaches a commit is
-# published the moment it is pushed. This config runs in CI on every push and
-# over the full history, and the allowlist below is the only way past it.
+# published the moment it is pushed. This config runs in CI on every push, and
+# the allowlist below is the only way past it.
 #
 # Adding a path here is a decision: it says "this file is fixtures, and a real
 # credential in it would be a bug". Never add a path to silence a finding you
 # have not read.
+#
+# Written with the singular `[allowlist]` table rather than the newer
+# `[[allowlists]]` array. Both are understood by current gitleaks; only the
+# singular form is understood by the version the GitHub action installs, which
+# ignored the array silently — the config parsed, the allowlist did nothing, and
+# CI failed on fixtures while the same scan passed locally.
 
 [extend]
 useDefault = true
 
-[[allowlists]]
+[allowlist]
 description = """
-Redactor tests. The whole point of output_redactor_test.dart is to feed the
-redactor things that look like credentials and assert they come back masked, so
-every secret pattern in it is deliberate. The values are synthetic: a JWT whose
-payload decodes to {"sub":"1234"}, and AKIAIOSFODNN7EXAMPLE, which is AWS's own
-documentation placeholder.
-"""
-paths = ['''^test/unit/features/mcp/output_redactor_test\.dart$''']
+Test fixtures, each read before being listed here.
 
-[[allowlists]]
-description = """
-SSH key fixtures. Both files store PEM headers with a literal body — 'abc',
-'xyz', or no body at all — because the code under test only needs to recognise
-the envelope, never to parse a key.
+output_redactor_test.dart exists to feed the redactor things shaped like
+credentials and assert they come back masked, so every secret pattern in it is
+deliberate: a JWT whose payload decodes to {"sub":"1234"}, a github-pat shaped
+string, and AKIAIOSFODNN7EXAMPLE, which is AWS's own documentation placeholder.
+
+The two SSH fixtures store PEM headers with a literal body — 'abc', 'xyz', or no
+body at all — because the code under test only has to recognise the envelope.
+
+Podfile.lock records a checksum per pod, which reads as an API key.
 """
 paths = [
+  '''^test/unit/features/mcp/output_redactor_test\.dart$''',
   '''^test/unit/features/vault/identities_notifier_test\.dart$''',
   '''^test/unit/features/hosts/ssh_config_import_service_test\.dart$''',
+  '''^(macos|ios)/Podfile\.lock$''',
 ]
-
-[[allowlists]]
-description = "CocoaPods records a checksum per pod, which reads as an API key."
-paths = ['''^(macos|ios)/Podfile\.lock$''']

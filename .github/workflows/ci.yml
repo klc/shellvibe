@@ -37,6 +37,12 @@ jobs:
           # touch them. That is how this job stayed green while enforcing
           # nothing.
           GITLEAKS_CONFIG: ${{ github.workspace }}/.gitleaks.toml
+          # Pinned so the scanner here and the one a developer runs are the
+          # same program. They were not: the action installed 8.24.3, which
+          # does not understand the `[[allowlists]]` array the config was first
+          # written with, so it parsed the file, applied nothing, and failed on
+          # fixtures that passed locally under a newer build.
+          GITLEAKS_VERSION: 8.30.1
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: false
           GITLEAKS_ENABLE_SUMMARY: true
 
