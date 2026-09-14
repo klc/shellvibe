@@ -109,10 +109,7 @@ void main() {
       // on a phone, so the row stacks instead: title on its own line, the
       // columns folded into one metadata line under it.
       expect(
-        find.textContaining(
-          'private key · root · unused',
-          findRichText: true,
-        ),
+        find.textContaining('private key · root · unused', findRichText: true),
         findsOneWidget,
       );
       // The title is the regression: as a table column it ellipsised after
@@ -159,10 +156,7 @@ void main() {
       expect(find.text('root'), findsOneWidget);
       expect(find.text('unused'), findsOneWidget);
       expect(
-        find.textContaining(
-          'private key · root · unused',
-          findRichText: true,
-        ),
+        find.textContaining('private key · root · unused', findRichText: true),
         findsNothing,
       );
     });
@@ -199,6 +193,29 @@ void main() {
         find.textContaining('password · ubuntu · unused', findRichText: true),
         findsOneWidget,
       );
+    });
+
+    testWidgets('"Lock now" says so when there is no master password', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1400, 1000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      await tester.tap(find.byKey(const Key('vault_lock_now_button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // An unconfigured vault cannot lock — its key is held by the device
+      // keychain. The button used to do nothing at all and say nothing about
+      // it, while the secrets it looked like it had just locked still copied
+      // straight out.
+      expect(find.text('Nothing to lock yet'), findsOneWidget);
+      expect(find.textContaining('no master password'), findsOneWidget);
     });
 
     testWidgets('An unreadable identity offers repair instead of a dead end', (

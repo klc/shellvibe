@@ -206,11 +206,32 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
       label: 'Add identity',
       onPressed: () => _openIdentityForm(context),
     );
+    // A vault with no master password stays `unconfigured` through a lock:
+    // its key is held by the device keychain, and there is no passphrase to
+    // lock it behind. Saying so beats a button that silently does nothing
+    // while the secrets it claims to have locked still copy out.
+    final canLock =
+        ref.watch(vaultProvider).value?.status != VaultStatus.unconfigured;
     final lockButton = ShellVibeButton.secondary(
       buttonKey: const Key('vault_lock_now_button'),
       icon: LucideIcons.lock,
       label: 'Lock now',
-      onPressed: () => ref.read(vaultProvider.notifier).lock(),
+      onPressed: () {
+        if (!canLock) {
+          ShadToaster.of(context).show(
+            const ShadToast(
+              title: Text('Nothing to lock yet'),
+              description: Text(
+                'This vault has no master password, so its key is protected '
+                'by this device alone. Set one under Settings → Vault Master '
+                'Password to be able to lock it.',
+              ),
+            ),
+          );
+          return;
+        }
+        ref.read(vaultProvider.notifier).lock();
+      },
     );
 
     return Column(
@@ -687,7 +708,12 @@ class _IdentityRow extends ConsumerWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(children: [typeIcon, Expanded(child: title)]),
+          Row(
+            children: [
+              typeIcon,
+              Expanded(child: title),
+            ],
+          ),
           Padding(
             // Hangs off the title, not the glyph.
             padding: const EdgeInsets.only(left: 34),
