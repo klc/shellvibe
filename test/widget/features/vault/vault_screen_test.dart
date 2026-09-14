@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -84,16 +85,12 @@ void main() {
       expect(find.byKey(const Key('identity_save_button')), findsOneWidget);
     });
 
-    testWidgets('Identity row fits a phone width with all three controls', (
-      tester,
-    ) async {
-      // A key identity shows copy + assign + edit + delete; each control
-      // renders 40px wide regardless of the constraints passed to it.
+    testWidgets('Identity row reads in full at a phone width', (tester) async {
       await db.identitiesDao.insertIdentity(
         IdentitiesCompanion.insert(
           id: 'identity-1',
           workspaceId: 'default',
-          title: 'testttt',
+          title: 'Production Server Key',
           username: 'root',
           authType: 'key',
           createdAt: DateTime.now(),
@@ -108,12 +105,100 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
 
-      expect(find.text('testttt'), findsOneWidget);
+      // The four controls take more width than three text columns can spare
+      // on a phone, so the row stacks instead: title on its own line, the
+      // columns folded into one metadata line under it.
+      expect(
+        find.textContaining(
+          'private key · root · unused',
+          findRichText: true,
+        ),
+        findsOneWidget,
+      );
+      // The title is the regression: as a table column it ellipsised after
+      // about seven characters.
+      expect(
+        tester
+            .renderObject<RenderParagraph>(find.text('Production Server Key'))
+            .didExceedMaxLines,
+        isFalse,
+      );
       expect(
         find.byKey(const Key('copy_identity_button_identity-1')),
         findsOneWidget,
       );
+      expect(
+        find.byKey(const Key('delete_identity_button_identity-1')),
+        findsOneWidget,
+      );
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('A wide window keeps the table columns', (tester) async {
+      await db.identitiesDao.insertIdentity(
+        IdentitiesCompanion.insert(
+          id: 'identity-1',
+          workspaceId: 'default',
+          title: 'Production Server Key',
+          username: 'root',
+          authType: 'key',
+          createdAt: DateTime.now(),
+        ),
+      );
+
+      tester.view.physicalSize = const Size(1400, 1000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      // Separate columns, not the stacked metadata line.
+      expect(find.text('private key'), findsOneWidget);
+      expect(find.text('root'), findsOneWidget);
+      expect(find.text('unused'), findsOneWidget);
+      expect(
+        find.textContaining(
+          'private key · root · unused',
+          findRichText: true,
+        ),
+        findsNothing,
+      );
+    });
+
+    testWidgets('A password identity is not labelled "no passphrase"', (
+      tester,
+    ) async {
+      await db.identitiesDao.insertIdentity(
+        IdentitiesCompanion.insert(
+          id: 'pw-1',
+          workspaceId: 'default',
+          title: 'Bastion login',
+          username: 'ubuntu',
+          authType: 'password',
+          createdAt: DateTime.now(),
+        ),
+      );
+
+      tester.view.physicalSize = const Size(411, 915);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      // Passphrases belong to keys. On a password identity the line read as
+      // "no password stored", right after one was.
+      expect(
+        find.textContaining('no passphrase', findRichText: true),
+        findsNothing,
+      );
+      expect(
+        find.textContaining('password · ubuntu · unused', findRichText: true),
+        findsOneWidget,
+      );
     });
 
     testWidgets('An unreadable identity offers repair instead of a dead end', (

@@ -24,6 +24,14 @@ import '../notifiers/vault_notifier.dart';
 /// few pixels short clips them.
 const double _kIdentityActionWidth = 44;
 
+/// Below this width the identity row stops being a table.
+///
+/// The type glyph and four [_kIdentityActionWidth] controls claim 210px of any
+/// row. Under this width the three text columns are left sharing less space
+/// than the controls take, so every one of them collapses to an ellipsis. A
+/// phone gets the stacked form instead.
+const double _kIdentityStackedWidth = 560;
+
 /// The `authType` values the context column filters on, plus an "all" bucket.
 const List<String> _kAuthTypes = ['password', 'key'];
 
@@ -471,45 +479,137 @@ class _IdentityRow extends ConsumerWidget {
         ? tokens.warning
         : tokens.textMuted;
 
+    // Only a key has a passphrase, so only a key gets the line about one:
+    // "no passphrase" under a password identity reads as "no password stored",
+    // which is the opposite of what just happened.
+    final secretLabel = unreadable
+        ? 'secret unreadable'
+        : !isKey
+        ? null
+        : identity.passphrase != null && identity.passphrase!.isNotEmpty
+        ? 'passphrase protected'
+        : 'no passphrase';
+
+    final usageLabel = unused
+        ? 'unused'
+        : usedByHostCount == 1
+        ? '1 host'
+        : '$usedByHostCount hosts';
+
+    final typeIcon = SizedBox(
+      width: 34,
+      child: Icon(
+        isPassword
+            ? LucideIcons.lock
+            : isKey
+            ? LucideIcons.keyRound
+            : LucideIcons.smartphone,
+        size: 16,
+        color: iconColor,
+      ),
+    );
+
+    final title = Text(
+      identity.title,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: Theme.of(context).textTheme.titleSmall,
+    );
+
+    final actions = <Widget>[
+      if (canCopy)
+        ShellVibeIconButton(
+          buttonKey: Key('copy_identity_button_${identity.id}'),
+          icon: LucideIcons.copy,
+          tooltip: isPassword ? 'Copy Password' : 'Copy Key',
+          onPressed: () => _copySecret(context, ref, isPassword),
+        ),
+      ShellVibeIconButton(
+        buttonKey: Key('assign_hosts_button_${identity.id}'),
+        icon: LucideIcons.link,
+        tooltip: 'Assign to hosts',
+        onPressed: onAssignHosts,
+      ),
+      ShellVibeIconButton(
+        buttonKey: Key('edit_identity_button_${identity.id}'),
+        icon: unreadable ? LucideIcons.wrench : LucideIcons.pencil,
+        tooltip: unreadable ? 'Repair secret' : 'Edit',
+        danger: unreadable,
+        onPressed: onEdit,
+      ),
+      ShellVibeIconButton(
+        buttonKey: Key('delete_identity_button_${identity.id}'),
+        icon: LucideIcons.trash2,
+        tooltip: 'Delete',
+        danger: true,
+        onPressed: onDelete,
+      ),
+    ];
+
+    // Reserved at a fixed width in both layouts, so the row never clips a
+    // control it is a few pixels short of.
+    final actionStrip = SizedBox(
+      width: actions.length * _kIdentityActionWidth,
+      child: Row(mainAxisAlignment: MainAxisAlignment.end, children: actions),
+    );
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        height: 52,
-        child: Row(
-          children: [
-            SizedBox(
-              width: 34,
-              child: Icon(
-                isPassword
-                    ? LucideIcons.lock
-                    : isKey
-                    ? LucideIcons.keyRound
-                    : LucideIcons.smartphone,
-                size: 16,
-                color: iconColor,
+      child: LayoutBuilder(
+        builder: (context, constraints) =>
+            constraints.maxWidth < _kIdentityStackedWidth
+            ? _buildStacked(
+                context,
+                tokens: tokens,
+                typeIcon: typeIcon,
+                title: title,
+                actionStrip: actionStrip,
+                secretLabel: secretLabel,
+                usageLabel: usageLabel,
+                usageColor: usageColor,
+              )
+            : _buildTable(
+                context,
+                tokens: tokens,
+                typeIcon: typeIcon,
+                title: title,
+                actionStrip: actionStrip,
+                secretLabel: secretLabel,
+                usageLabel: usageLabel,
+                usageColor: usageColor,
               ),
-            ),
-            Expanded(
-              flex: 5,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    identity.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleSmall,
-                  ),
+      ),
+    );
+  }
+
+  /// The wide form: one 52px line of columns, read across like a table.
+  Widget _buildTable(
+    BuildContext context, {
+    required ShellVibeTokens tokens,
+    required Widget typeIcon,
+    required Widget title,
+    required Widget actionStrip,
+    required String? secretLabel,
+    required String usageLabel,
+    required Color usageColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      height: 52,
+      child: Row(
+        children: [
+          typeIcon,
+          Expanded(
+            flex: 5,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                title,
+                if (secretLabel != null) ...[
                   const SizedBox(height: 2),
                   Text(
-                    unreadable
-                        ? 'secret unreadable'
-                        : identity.passphrase != null &&
-                              identity.passphrase!.isNotEmpty
-                        ? 'passphrase protected'
-                        : 'no passphrase',
+                    secretLabel,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: shellvibeMono(
@@ -519,85 +619,102 @@ class _IdentityRow extends ConsumerWidget {
                     ),
                   ),
                 ],
-              ),
+              ],
             ),
+          ),
+          Expanded(
+            flex: 4,
+            child: Text(
+              _shortKind(identity.authType),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: shellvibeMono(context, size: 12),
+            ),
+          ),
+          // The username column is the first thing to go when the row has to
+          // share its width with the four 44px controls.
+          if (!compact)
             Expanded(
               flex: 4,
               child: Text(
-                _shortKind(identity.authType),
+                identity.username.isEmpty ? '—' : identity.username,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: shellvibeMono(context, size: 12),
-              ),
-            ),
-            // The username column is the first thing to go when the row has to
-            // share its width with three 34px controls.
-            if (!compact)
-              Expanded(
-                flex: 4,
-                child: Text(
-                  identity.username.isEmpty ? '—' : identity.username,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: shellvibeMono(
-                    context,
-                    size: 11.5,
-                    color: tokens.textSubtle,
-                  ),
+                style: shellvibeMono(
+                  context,
+                  size: 11.5,
+                  color: tokens.textSubtle,
                 ),
               ),
-            Expanded(
-              flex: 3,
-              child: Text(
-                unused
-                    ? 'unused'
-                    : usedByHostCount == 1
-                    ? '1 host'
-                    : '$usedByHostCount hosts',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.right,
-                style: TextStyle(fontSize: 12, color: usageColor),
-              ),
             ),
-            const SizedBox(width: 8),
-            SizedBox(
-              width: (canCopy ? 4 : 3) * _kIdentityActionWidth,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+          Expanded(
+            flex: 3,
+            child: Text(
+              usageLabel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.right,
+              style: TextStyle(fontSize: 12, color: usageColor),
+            ),
+          ),
+          const SizedBox(width: 8),
+          actionStrip,
+        ],
+      ),
+    );
+  }
+
+  /// The narrow form: title, metadata, controls, each on its own line.
+  ///
+  /// The controls get a line of their own because sharing one with the title
+  /// leaves it 141px on a 411px phone — still short of a name like
+  /// "Production Server Key", which is the truncation this layout exists to
+  /// end.
+  Widget _buildStacked(
+    BuildContext context, {
+    required ShellVibeTokens tokens,
+    required Widget typeIcon,
+    required Widget title,
+    required Widget actionStrip,
+    required String? secretLabel,
+    required String usageLabel,
+    required Color usageColor,
+  }) {
+    final username = identity.username.isEmpty ? '—' : identity.username;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [typeIcon, Expanded(child: title)]),
+          Padding(
+            // Hangs off the title, not the glyph.
+            padding: const EdgeInsets.only(left: 34),
+            child: Text.rich(
+              TextSpan(
                 children: [
-                  if (canCopy)
-                    ShellVibeIconButton(
-                      buttonKey: Key('copy_identity_button_${identity.id}'),
-                      icon: LucideIcons.copy,
-                      tooltip: isPassword ? 'Copy Password' : 'Copy Key',
-                      onPressed: () => _copySecret(context, ref, isPassword),
-                    ),
-                  ShellVibeIconButton(
-                    buttonKey: Key('assign_hosts_button_${identity.id}'),
-                    icon: LucideIcons.link,
-                    tooltip: 'Assign to hosts',
-                    onPressed: onAssignHosts,
+                  TextSpan(
+                    text: '${_shortKind(identity.authType)} · $username · ',
                   ),
-                  ShellVibeIconButton(
-                    buttonKey: Key('edit_identity_button_${identity.id}'),
-                    icon: unreadable ? LucideIcons.wrench : LucideIcons.pencil,
-                    tooltip: unreadable ? 'Repair secret' : 'Edit',
-                    danger: unreadable,
-                    onPressed: onEdit,
+                  TextSpan(
+                    text: usageLabel,
+                    style: TextStyle(color: usageColor),
                   ),
-                  ShellVibeIconButton(
-                    buttonKey: Key('delete_identity_button_${identity.id}'),
-                    icon: LucideIcons.trash2,
-                    tooltip: 'Delete',
-                    danger: true,
-                    onPressed: onDelete,
-                  ),
+                  if (secretLabel != null) TextSpan(text: ' · $secretLabel'),
                 ],
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: shellvibeMono(
+                context,
+                size: 11.5,
+                color: tokens.textSubtle,
+              ),
             ),
-          ],
-        ),
+          ),
+          Align(alignment: Alignment.centerRight, child: actionStrip),
+        ],
       ),
     );
   }
