@@ -232,6 +232,129 @@ void main() {
       expect(find.text('No hosts match your search.'), findsOneWidget);
     });
 
+    testWidgets('"Save and connect" connects the host it just saved', (
+      tester,
+    ) async {
+      final container = ProviderContainer(
+        overrides: [appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(container.dispose);
+
+      // The dialog and the prompt after it both need room to be tapped.
+      tester.view.physicalSize = const Size(1400, 1000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: ShadTheme(
+            data: ShadThemeData(
+              colorScheme: const ShadSlateColorScheme.light(),
+              brightness: Brightness.light,
+            ),
+            child: const MaterialApp(home: HostsScreen()),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      await tester.tap(find.byKey(const Key('add_host_button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      await tester.enterText(
+        find.byKey(const Key('host_label_input')),
+        'Oracle Ubuntu',
+      );
+      // Unroutable on purpose: the connect this test is about opens a real
+      // socket, and a test has no business reaching a real server.
+      await tester.enterText(
+        find.byKey(const Key('host_hostname_input')),
+        '192.168.1.99',
+      );
+      await tester.enterText(
+        find.byKey(const Key('host_username_input')),
+        'ubuntu',
+      );
+      await tester.tap(find.byKey(const Key('host_save_button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // The button says "Save and connect". It used to only save: the dialog
+      // popped its result into a caller that never looked at it.
+      expect(find.byKey(const Key('connect_password_input')), findsOneWidget);
+      await tester.enterText(
+        find.byKey(const Key('connect_password_input')),
+        'hunter2',
+      );
+      await tester.tap(
+        find.byKey(const Key('connect_credentials_submit_button')),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      final tabs = container.read(terminalTabsProvider).tabs;
+      expect(tabs.length, equals(1));
+      expect(tabs.first.title, equals('Oracle Ubuntu'));
+
+      // Drains the connect attempt's timeout so it does not outlive the test.
+      await container
+          .read(terminalTabsProvider.notifier)
+          .closeTab(tabs.first.id);
+      await tester.pump(const Duration(seconds: 16));
+    });
+
+    testWidgets('Cancelling the credential prompt opens no session', (
+      tester,
+    ) async {
+      await db.hostsDao.insertHost(
+        HostsCompanion.insert(
+          id: 'host-cancel',
+          workspaceId: 'default',
+          label: 'No Identity Host',
+          hostname: '192.168.1.50',
+          username: const Value('root'),
+          createdAt: DateTime.now(),
+        ),
+      );
+
+      final container = ProviderContainer(
+        overrides: [appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: ShadTheme(
+            data: ShadThemeData(
+              colorScheme: const ShadSlateColorScheme.light(),
+              brightness: Brightness.light,
+            ),
+            child: const MaterialApp(home: HostsScreen()),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      await tester.tap(find.byKey(const Key('connect_host_host-cancel')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      await tester.tap(
+        find.byKey(const Key('connect_credentials_cancel_button')),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      // Calling the prompt off calls the connection off: no half-open tab
+      // left behind to report an authentication failure.
+      expect(container.read(terminalTabsProvider).tabs, isEmpty);
+    });
+
     testWidgets('Host row and its action menu fit a phone width', (
       tester,
     ) async {
@@ -368,6 +491,21 @@ void main() {
 
         await tester.tap(connectButton);
         await tester.pump();
+        await tester.pump(const Duration(milliseconds: 200));
+
+        // This host is bound to no identity, which the form calls
+        // "(None - Prompt on Connect)": it is asked for credentials rather
+        // than walked straight into "all authentication methods failed".
+        expect(find.byKey(const Key('connect_password_input')), findsOneWidget);
+        await tester.enterText(
+          find.byKey(const Key('connect_password_input')),
+          'hunter2',
+        );
+        await tester.tap(
+          find.byKey(const Key('connect_credentials_submit_button')),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 200));
 
         final tabsState = container.read(terminalTabsProvider);
         expect(tabsState.tabs.length, equals(1));

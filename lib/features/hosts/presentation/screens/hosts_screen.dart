@@ -26,6 +26,7 @@ import '../../../vault/presentation/notifiers/identities_notifier.dart';
 import '../../data/services/ssh_config_import_service.dart';
 import '../../domain/models/host_group_model.dart';
 import '../../domain/models/host_model.dart';
+import '../dialogs/connect_credentials_dialog.dart';
 import '../dialogs/host_form_dialog.dart';
 import '../dialogs/host_group_form_dialog.dart';
 import '../dialogs/ssh_config_import_dialog.dart';
@@ -791,7 +792,34 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
   Future<({bool ok, IdentityModel? identity})> _resolveIdentity(
     HostModel host,
   ) async {
-    if (host.identityId == null) return (ok: true, identity: null);
+    // "(None — Prompt on Connect)" has to actually prompt. Handing the
+    // handshake no credentials at all just walks into "all authentication
+    // methods failed", with nowhere for the password to have been typed.
+    if (host.identityId == null) {
+      final entered = await ConnectCredentialsDialog.show(
+        context,
+        hostLabel: host.label,
+        hostname: host.hostname,
+        port: host.port,
+        username: host.username ?? '',
+      );
+      // Cancelled: the user called the connection off, so it is not an error.
+      if (entered == null) return (ok: false, identity: null);
+      return (
+        ok: true,
+        // Never persisted, and never given an id that could collide with a
+        // stored identity: it lives for this connection attempt alone.
+        identity: IdentityModel(
+          id: 'prompt:${host.id}',
+          workspaceId: host.workspaceId,
+          title: 'Prompted credentials',
+          username: entered.username,
+          authType: 'password',
+          password: entered.password,
+          createdAt: DateTime.now(),
+        ),
+      );
+    }
     try {
       final identity = await ref
           .read(identitiesProvider.notifier)
@@ -896,14 +924,22 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
     }
   }
 
-  void _openHostForm(BuildContext context, {HostModel? initialHost}) {
-    showDialog(
+  /// Opens the host form and, for a new host, connects to it — which is what
+  /// that form's button says it will do. The dialog pops the saved host; an
+  /// update or a cancel pops null and nothing is connected.
+  Future<void> _openHostForm(
+    BuildContext context, {
+    HostModel? initialHost,
+  }) async {
+    final saved = await showDialog<HostModel>(
       context: context,
       builder: (ctx) => HostFormDialog(
         initialHost: initialHost,
         workspaceId: ref.read(activeWorkspaceIdProvider),
       ),
     );
+    if (saved == null || !mounted) return;
+    await _onConnectHost(saved);
   }
 
   void _openGroupForm(BuildContext context, {HostGroupModel? initialGroup}) {

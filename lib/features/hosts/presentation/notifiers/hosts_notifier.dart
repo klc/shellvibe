@@ -22,7 +22,9 @@ class HostsNotifier extends _$HostsNotifier {
     return await repo.getHostsByWorkspace(workspaceId);
   }
 
-  Future<void> addHost({
+  /// Saves a new host and returns it, so a caller that offered to connect
+  /// after saving has something to connect to.
+  Future<HostModel> addHost({
     required String workspaceId,
     String? groupId,
     String? identityId,
@@ -39,7 +41,7 @@ class HostsNotifier extends _$HostsNotifier {
     final previousState = state;
     try {
       final repo = ref.read(hostsRepositoryProvider);
-      await repo.saveHost(
+      final saved = await repo.saveHost(
         workspaceId: workspaceId,
         groupId: groupId,
         identityId: identityId,
@@ -57,6 +59,7 @@ class HostsNotifier extends _$HostsNotifier {
         ref.read(activeWorkspaceIdProvider),
       );
       state = AsyncData(items);
+      return saved;
     } catch (_) {
       state = previousState;
       // Rethrow so form dialogs can surface the failure instead of popping

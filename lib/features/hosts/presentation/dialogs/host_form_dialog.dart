@@ -143,6 +143,7 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                 ? null
                 : _moshPortRangeController.text.trim());
 
+      HostModel? saved;
       if (isEditing) {
         await notifier.updateHost(
           id: widget.initialHost!.id,
@@ -162,7 +163,7 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
           jumpHostId: _selectedJumpHostId,
         );
       } else {
-        await notifier.addHost(
+        saved = await notifier.addHost(
           workspaceId:
               widget.workspaceId ?? ref.read(activeWorkspaceIdProvider),
           groupId: _selectedGroupId,
@@ -181,7 +182,10 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
         );
       }
 
-      if (mounted) Navigator.of(context).pop(true);
+      // The caller makes good on what this button promised: a new host is
+      // popped back so it can be connected. An update pops null — that host
+      // is already there, and its button only says "Update host".
+      if (mounted) Navigator.of(context).pop(saved);
     } catch (e) {
       if (mounted) {
         ShadToaster.of(context).show(
