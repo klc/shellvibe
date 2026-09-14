@@ -364,11 +364,18 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
 
     final tokens = ShellVibeTokens.resolve(context);
 
+    // The screen insets are spent outside the slab, not inside it. A
+    // NavigationBar wraps its row in a SafeArea, which within a floating bar
+    // padded the gradient with the home indicator below *and* the dynamic
+    // island's 59px above — most of the bar's height was empty. Both are
+    // removed below; the bottom inset is paid once, as the gap under the slab.
+    final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
+
     // On phones the bar is a slab too: it floats clear of the screen edge with
     // the same raised gradient as the desktop overlays, so the night ground
     // stays visible underneath it.
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      padding: EdgeInsets.fromLTRB(16, 6, 16, bottomInset > 0 ? 18 : 14),
       child: Container(
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
@@ -392,41 +399,46 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
           borderRadius: BorderRadius.circular(15),
           border: Border.all(color: tokens.textPrimary.withValues(alpha: 0.08)),
         ),
-        child: NavigationBar(
-          key: const Key('mobile_bottom_navigation_bar'),
-          height: 64,
-          backgroundColor: Colors.transparent,
-          // The floating slab already separates the bar from the content, so
-          // a selection pill on top of it would be a third layer for nothing.
-          indicatorColor: Colors.transparent,
-          overlayColor: WidgetStatePropertyAll(
-            tokens.brand.withValues(alpha: 0.08),
+        child: MediaQuery.removePadding(
+          context: context,
+          removeTop: true,
+          removeBottom: true,
+          child: NavigationBar(
+            key: const Key('mobile_bottom_navigation_bar'),
+            height: 58,
+            backgroundColor: Colors.transparent,
+            // The floating slab already separates the bar from the content, so
+            // a selection pill on top of it would be a third layer for nothing.
+            indicatorColor: Colors.transparent,
+            overlayColor: WidgetStatePropertyAll(
+              tokens.brand.withValues(alpha: 0.08),
+            ),
+            labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+            // Modules outside the five tabs (tunnels, snippets, workspaces) keep
+            // the last tab highlighted rather than clearing the selection.
+            selectedIndex: selectedTab >= 0
+                ? selectedTab
+                : branchIndexes.length - 1,
+            onDestinationSelected: (index) =>
+                _onTabSelected(branchIndexes[index]),
+            destinations: [
+              for (final path in kMobileTabPaths)
+                NavigationDestination(
+                  key: Key('mobile_nav_destination_${path.substring(1)}'),
+                  icon: Icon(
+                    appNavigationItems[navigationIndexForPath(path)].icon,
+                    size: 20,
+                    color: tokens.textMuted,
+                  ),
+                  selectedIcon: Icon(
+                    appNavigationItems[navigationIndexForPath(path)].icon,
+                    size: 20,
+                    color: tokens.brandBright,
+                  ),
+                  label: _mobileTabLabel(path),
+                ),
+            ],
           ),
-          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-          // Modules outside the five tabs (tunnels, snippets, workspaces) keep
-          // the last tab highlighted rather than clearing the selection.
-          selectedIndex: selectedTab >= 0
-              ? selectedTab
-              : branchIndexes.length - 1,
-          onDestinationSelected: (index) =>
-              _onTabSelected(branchIndexes[index]),
-          destinations: [
-            for (final path in kMobileTabPaths)
-              NavigationDestination(
-                key: Key('mobile_nav_destination_${path.substring(1)}'),
-                icon: Icon(
-                  appNavigationItems[navigationIndexForPath(path)].icon,
-                  size: 20,
-                  color: tokens.textMuted,
-                ),
-                selectedIcon: Icon(
-                  appNavigationItems[navigationIndexForPath(path)].icon,
-                  size: 20,
-                  color: tokens.brandBright,
-                ),
-                label: _mobileTabLabel(path),
-              ),
-          ],
         ),
       ),
     );
