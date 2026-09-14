@@ -1022,14 +1022,17 @@ class _HostListHeader extends StatelessWidget {
       child: Row(
         children: [
           SizedBox(width: compact ? 15 : 24),
+          // A phone row stacks its name over its address, so there is no
+          // second column for an ADDRESS label to head.
           Expanded(
             flex: _kHostColumnFlex[0],
             child: Text('NAME', style: style, maxLines: 1),
           ),
-          Expanded(
-            flex: _kHostColumnFlex[1],
-            child: Text('ADDRESS', style: style, maxLines: 1),
-          ),
+          if (!compact)
+            Expanded(
+              flex: _kHostColumnFlex[1],
+              child: Text('ADDRESS', style: style, maxLines: 1),
+            ),
           if (!compact) ...[
             Expanded(
               flex: _kHostColumnFlex[2],
@@ -1137,31 +1140,62 @@ class _HostRow extends StatelessWidget {
                     ),
                   ),
                 ),
-                Expanded(
-                  flex: _kHostColumnFlex[0],
-                  child: Text(
-                    host.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      color: selected
-                          ? tokens.textPrimary
-                          : tokens.textSecondary,
+                // Side by side the two columns split about 250px on a phone,
+                // and `ubuntu@152.70.22.207:22` wants 160 of them on its own.
+                // Stacked, each line gets the row's whole width.
+                if (compact)
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          host.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(
+                                color: selected
+                                    ? tokens.textPrimary
+                                    : tokens.textSecondary,
+                              ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          // Compact drops the last-seen column, so the state
+                          // text that pairs with the bar moves onto the
+                          // address line.
+                          connected ? '$address · connected' : address,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: monoStyle,
+                        ),
+                      ],
+                    ),
+                  )
+                else ...[
+                  Expanded(
+                    flex: _kHostColumnFlex[0],
+                    child: Text(
+                      host.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: selected
+                            ? tokens.textPrimary
+                            : tokens.textSecondary,
+                      ),
                     ),
                   ),
-                ),
-                Expanded(
-                  flex: _kHostColumnFlex[1],
-                  child: Text(
-                    // Compact drops the last-seen column, so the state text
-                    // that pairs with the bar moves onto the address line.
-                    compact && connected ? '$address · connected' : address,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: monoStyle,
+                  Expanded(
+                    flex: _kHostColumnFlex[1],
+                    child: Text(
+                      address,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: monoStyle,
+                    ),
                   ),
-                ),
-                if (!compact) ...[
                   Expanded(
                     flex: _kHostColumnFlex[2],
                     child: groupName == null

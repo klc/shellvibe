@@ -232,6 +232,50 @@ void main() {
       expect(find.text('No hosts match your search.'), findsOneWidget);
     });
 
+    testWidgets('Host row reads its address in full at a phone width', (
+      tester,
+    ) async {
+      await db.hostsDao.insertHost(
+        HostsCompanion.insert(
+          id: 'host-addr',
+          workspaceId: 'default',
+          label: 'Oracle Ubuntu',
+          hostname: '152.70.22.207',
+          username: const Value('ubuntu'),
+          port: const Value(22),
+          createdAt: DateTime.now(),
+        ),
+      );
+
+      tester.view.physicalSize = const Size(411, 915);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      final name = find.text('Oracle Ubuntu');
+      final addressText = find.text('ubuntu@152.70.22.207:22');
+
+      // Beside the name column the address had about 123px of a 411px row and
+      // wanted 160, so it ellipsised mid-IP: "ubuntu@152.70.2…". Stacked under
+      // the name it starts at the same x, one line lower, with the row's whole
+      // width to itself. (Asserted as geometry rather than as
+      // `didExceedMaxLines`, which under the test font measures a width no
+      // real device renders.)
+      expect(
+        tester.getTopLeft(addressText).dy,
+        greaterThan(tester.getTopLeft(name).dy),
+      );
+      expect(
+        tester.getTopLeft(addressText).dx,
+        equals(tester.getTopLeft(name).dx),
+      );
+      expect(tester.getSize(addressText).width, greaterThan(200));
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('"Save and connect" connects the host it just saved', (
       tester,
     ) async {
