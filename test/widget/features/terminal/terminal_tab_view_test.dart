@@ -1,6 +1,7 @@
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -360,6 +361,219 @@ void main() {
       await tester.pump(const Duration(milliseconds: 200));
 
       expect(find.textContaining('BROADCAST'), findsNothing);
+    });
+
+    testWidgets('right-clicking a terminal opens the pane menu', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(2400, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final container = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          localPtyManagerProvider.overrideWithValue(_NoShellPtyManager()),
+        ],
+      );
+      final notifier = container.read(terminalTabsProvider.notifier);
+      notifier.openLocalTab(title: 'A');
+      final first = container.read(terminalTabsProvider).activeTabId!;
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: ShadTheme(
+            data: ShadThemeData(
+              colorScheme: const ShadSlateColorScheme.dark(),
+              brightness: Brightness.dark,
+            ),
+            child: const MaterialApp(home: TerminalTabView()),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byKey(ValueKey(first))),
+        kind: PointerDeviceKind.mouse,
+        buttons: kSecondaryMouseButton,
+      );
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('terminal_menu_copy')), findsOneWidget);
+      expect(find.byKey(const Key('terminal_menu_paste')), findsOneWidget);
+      expect(find.byKey(const Key('terminal_menu_select_all')), findsOneWidget);
+      expect(find.byKey(const Key('terminal_menu_find')), findsOneWidget);
+      expect(find.byKey(const Key('terminal_menu_clear')), findsOneWidget);
+      expect(find.byKey(const Key('terminal_menu_broadcast')), findsOneWidget);
+      // The tab bar's own actions are repeated here, aimed at this pane.
+      expect(
+        find.byKey(const Key('terminal_menu_split_vertical')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('terminal_menu_close_tab')), findsOneWidget);
+      // One pane: closing it is closing the tab, so only one of the two rows
+      // is offered.
+      expect(find.byKey(const Key('terminal_menu_close_pane')), findsNothing);
+      // Nothing is selected, so Copy is shown but cannot be chosen.
+      final copyItem = tester.widget<PopupMenuItem<VoidCallback>>(
+        find.byKey(const Key('terminal_menu_copy')),
+      );
+      expect(copyItem.enabled, isFalse);
+      // A local shell has no remote side to transfer files to.
+      expect(find.byKey(const Key('terminal_menu_sftp')), findsNothing);
+
+      await tester.tap(find.byKey(const Key('terminal_menu_split_vertical')));
+      await tester.pumpAndSettle();
+
+      // The menu row split the pane it was opened on.
+      expect(container.read(terminalTabsProvider).tabs.length, equals(2));
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('pasting multi-line clipboard text asks before running it', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(2400, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      var clipboard = 'echo one\necho two\n';
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.getData') return {'text': clipboard};
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+
+      final container = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          localPtyManagerProvider.overrideWithValue(_NoShellPtyManager()),
+        ],
+      );
+      final notifier = container.read(terminalTabsProvider.notifier);
+      notifier.openLocalTab(title: 'A');
+      final first = container.read(terminalTabsProvider).activeTabId!;
+
+      // The pane has no shell behind it here, so the terminal's output slot
+      // stands in for the PTY that would normally receive the paste.
+      final written = <String>[];
+      container.read(terminalTabsProvider).tabs.single.terminal.onOutput =
+          written.add;
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: ShadTheme(
+            data: ShadThemeData(
+              colorScheme: const ShadSlateColorScheme.dark(),
+              brightness: Brightness.dark,
+            ),
+            child: const MaterialApp(home: TerminalTabView()),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      Future<void> openMenu() async {
+        final gesture = await tester.startGesture(
+          tester.getCenter(find.byKey(ValueKey(first))),
+          kind: PointerDeviceKind.mouse,
+          buttons: kSecondaryMouseButton,
+        );
+        await gesture.up();
+        await tester.pumpAndSettle();
+      }
+
+      await openMenu();
+      await tester.tap(find.byKey(const Key('terminal_menu_paste')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Paste and run?'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('unsafe_paste_cancel_button')));
+      await tester.pumpAndSettle();
+      expect(written, isEmpty);
+
+      // A single line cannot run on its own, so it goes straight through.
+      clipboard = 'echo one';
+      await openMenu();
+      await tester.tap(find.byKey(const Key('terminal_menu_paste')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Paste and run?'), findsNothing);
+      expect(written.join(), contains('echo one'));
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a split tab offers Close Pane in the menu', (tester) async {
+      tester.view.physicalSize = const Size(2400, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final container = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          localPtyManagerProvider.overrideWithValue(_NoShellPtyManager()),
+        ],
+      );
+      final notifier = container.read(terminalTabsProvider.notifier);
+      notifier.openLocalTab(title: 'A');
+      final first = container.read(terminalTabsProvider).activeTabId!;
+      notifier.splitTab(first, direction: Axis.horizontal);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: ShadTheme(
+            data: ShadThemeData(
+              colorScheme: const ShadSlateColorScheme.dark(),
+              brightness: Brightness.dark,
+            ),
+            child: const MaterialApp(home: TerminalTabView()),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byKey(ValueKey(first))),
+        kind: PointerDeviceKind.mouse,
+        buttons: kSecondaryMouseButton,
+      );
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('terminal_menu_close_pane')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('terminal_menu_close_pane')));
+      await tester.pumpAndSettle();
+
+      final state = container.read(terminalTabsProvider);
+      expect(state.tabs.length, equals(1));
+      expect(state.tabs.single.id, isNot(equals(first)));
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
+      await tester.pumpAndSettle();
     });
 
     testWidgets('the Connect to Host panel filters its list as you type', (

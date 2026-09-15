@@ -592,6 +592,126 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
     );
   }
 
+  /// Root pane of the tab [pane] belongs to. The loop is bounded by the list
+  /// length so a corrupted parent link cannot spin forever.
+  TerminalTabSession _rootOfPane(
+    TerminalTabsState tabsState,
+    TerminalTabSession pane,
+  ) {
+    var current = pane;
+    for (var hops = 0; hops < tabsState.tabs.length; hops++) {
+      final parentId = current.splitParentId;
+      if (parentId == null) return current;
+      final parent = tabsState.tabs.firstWhere(
+        (t) => t.id == parentId,
+        orElse: () => current,
+      );
+      if (parent.id == current.id) return current;
+      current = parent;
+    }
+    return current;
+  }
+
+  /// The tab-level half of a pane's right-click menu: the same actions the tab
+  /// bar carries in its top-right cluster, aimed at the pane that was clicked
+  /// rather than at whichever one happens to be focused.
+  ///
+  /// Built when the menu opens, not when the pane is laid out, so it reads the
+  /// live tab state — a split made since the pane was built still counts.
+  List<AdaptiveMenuEntry<VoidCallback>> _paneMenuEntries(
+    TerminalTabSession pane,
+  ) {
+    final tabsState = ref.read(terminalTabsProvider);
+    final notifier = ref.read(terminalTabsProvider.notifier);
+    final root = _rootOfPane(tabsState, pane);
+    final paneCount = tabsState.tabs
+        .where((t) => _rootOfPane(tabsState, t).id == root.id)
+        .length;
+
+    return [
+      const AdaptiveMenuDivider(),
+      // A local shell has no remote side to transfer files to.
+      if (pane.sessionType == TerminalSessionType.ssh)
+        AdaptiveMenuAction(
+          itemKey: const Key('terminal_menu_sftp'),
+          icon: LucideIcons.folderSync,
+          label: 'File Transfer (SFTP)',
+          value: () => _openSftpForPane(pane),
+        ),
+      AdaptiveMenuAction(
+        itemKey: const Key('terminal_menu_split_vertical'),
+        icon: LucideIcons.columns2,
+        label: 'Split Side by Side',
+        value: () => unawaited(
+          notifier.splitTab(
+            pane.id,
+            direction: Axis.horizontal,
+            onHostKeyPrompt: _promptHostKey,
+          ),
+        ),
+      ),
+      AdaptiveMenuAction(
+        itemKey: const Key('terminal_menu_split_horizontal'),
+        icon: LucideIcons.rows2,
+        label: 'Split Top / Bottom',
+        value: () => unawaited(
+          notifier.splitTab(
+            pane.id,
+            direction: Axis.vertical,
+            onHostKeyPrompt: _promptHostKey,
+          ),
+        ),
+      ),
+      AdaptiveMenuAction(
+        itemKey: const Key('terminal_menu_split_host'),
+        icon: LucideIcons.serverCog,
+        label: 'Split with Another Host…',
+        value: () => _startSplitWithHost(pane.id),
+      ),
+      const AdaptiveMenuDivider(),
+      AdaptiveMenuAction(
+        itemKey: const Key('terminal_menu_save_template'),
+        icon: LucideIcons.bookmarkPlus,
+        label: 'Save Tabs & Panes as Template',
+        value: _saveCurrentLayoutAsTemplate,
+      ),
+      AdaptiveMenuAction(
+        itemKey: const Key('terminal_menu_run_template'),
+        icon: LucideIcons.layoutTemplate,
+        label: 'Run Template',
+        value: () => TemplatePickerSheet.show(context, onSelect: _runTemplate),
+      ),
+      AdaptiveMenuAction(
+        itemKey: const Key('terminal_menu_device_link'),
+        icon: isMobilePlatform ? LucideIcons.scanQrCode : LucideIcons.qrCode,
+        label: isMobilePlatform ? 'Scan Device Link QR' : 'Show Device Link QR',
+        value: () {
+          if (isMobilePlatform) {
+            unawaited(context.push('/device-link/scan'));
+          } else {
+            unawaited(_openDeviceLinkQr(context, ref));
+          }
+        },
+      ),
+      const AdaptiveMenuDivider(),
+      // Closing the only pane of a tab is closing the tab, so the two rows
+      // would do the same thing; the pane row appears once there is a split.
+      if (paneCount > 1)
+        AdaptiveMenuAction(
+          itemKey: const Key('terminal_menu_close_pane'),
+          icon: LucideIcons.x,
+          label: 'Close Pane',
+          value: () => unawaited(notifier.closePane(pane.id)),
+        ),
+      AdaptiveMenuAction(
+        itemKey: const Key('terminal_menu_close_tab'),
+        icon: LucideIcons.trash2,
+        label: 'Close Tab',
+        value: () => unawaited(notifier.closeTab(root.id)),
+      ),
+    ];
+  }
+
   /// Depth-first pane ids of the active tab, so pane headers can be numbered
   /// the same way they are laid out.
   List<String> _paneOrder(
@@ -873,6 +993,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
       final screen = TerminalScreen(
         key: ValueKey(paneSession.id),
         session: paneSession,
+        buildPaneMenuEntries: _paneMenuEntries,
         // An AI tab is a window onto an agent's session, not a shell the user
         // drives: the keyboard is off here, so a stray keystroke cannot enter
         // a command the agent never asked for and nobody approved.

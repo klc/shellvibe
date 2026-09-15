@@ -41,13 +41,20 @@ List<Widget> adaptiveDialogActions(
 Axis adaptiveDialogActionsAxis(BuildContext context) =>
     usesDesktopModals(context) ? Axis.horizontal : Axis.vertical;
 
+/// One entry of [showAdaptiveActionMenu]: a row, or a rule between groups.
+sealed class AdaptiveMenuEntry<T> {
+  const AdaptiveMenuEntry();
+}
+
 /// One row of [showAdaptiveActionMenu].
-class AdaptiveMenuAction<T> {
+class AdaptiveMenuAction<T> extends AdaptiveMenuEntry<T> {
   const AdaptiveMenuAction({
     required this.value,
     required this.icon,
     required this.label,
     this.itemKey,
+    this.enabled = true,
+    this.shortcut,
   });
 
   /// Returned from the menu future when this row is chosen.
@@ -58,6 +65,20 @@ class AdaptiveMenuAction<T> {
   /// Carried onto whichever widget the row becomes, so a test finds the same
   /// key in both the desktop menu and the phone sheet.
   final Key? itemKey;
+
+  /// A row that is shown but cannot be chosen — "Copy" with nothing selected.
+  /// Greying it out says the action exists and why it is unavailable right
+  /// now; dropping the row makes the menu change shape between openings.
+  final bool enabled;
+
+  /// Keyboard equivalent, rendered right-aligned ("⌘C"). Only for a shortcut
+  /// that really is bound, since this is where people learn them.
+  final String? shortcut;
+}
+
+/// A rule between two groups of rows.
+class AdaptiveMenuDivider<T> extends AdaptiveMenuEntry<T> {
+  const AdaptiveMenuDivider();
 }
 
 /// A short list of actions: "new tab", "split this way".
@@ -66,9 +87,14 @@ class AdaptiveMenuAction<T> {
 /// that opened it — because that is where a pointer already is and a sheet
 /// sliding up from the bottom of a large window is a long way from the click.
 /// On a phone it stays a bottom sheet.
+///
+/// [globalPosition] opens the menu at a point instead of under [context]'s
+/// widget, which is what a right-click needs: the menu belongs to where the
+/// pointer is, not to the whole pane that was clicked.
 Future<T?> showAdaptiveActionMenu<T>({
   required BuildContext context,
-  required List<AdaptiveMenuAction<T>> actions,
+  required List<AdaptiveMenuEntry<T>> actions,
+  Offset? globalPosition,
 }) {
   final tokens = ShellVibeTokens.resolve(context);
 
@@ -81,20 +107,30 @@ Future<T?> showAdaptiveActionMenu<T>({
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            for (final action in actions)
-              ListTile(
-                key: action.itemKey,
-                leading: Icon(action.icon, size: 18),
-                title: Text(action.label),
-                onTap: () => Navigator.of(sheetContext).pop(action.value),
-              ),
+            for (final entry in actions)
+              switch (entry) {
+                AdaptiveMenuDivider<T>() => Divider(
+                  height: 1,
+                  color: tokens.border,
+                ),
+                AdaptiveMenuAction<T>(:final itemKey, :final enabled) =>
+                  ListTile(
+                    key: itemKey,
+                    enabled: enabled,
+                    leading: Icon(entry.icon, size: 18),
+                    title: Text(entry.label),
+                    onTap: () => Navigator.of(sheetContext).pop(entry.value),
+                  ),
+              },
           ],
         ),
       ),
     );
   }
 
-  final anchor = _anchorRect(context);
+  final anchor = globalPosition == null
+      ? _anchorRect(context)
+      : _pointRect(context, globalPosition);
   return showMenu<T>(
     context: context,
     position: anchor,
@@ -106,29 +142,62 @@ Future<T?> showAdaptiveActionMenu<T>({
       side: BorderSide(color: tokens.border),
     ),
     items: [
-      for (final action in actions)
-        PopupMenuItem<T>(
-          key: action.itemKey,
-          value: action.value,
-          height: tokens.rowHeight,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Row(
-            children: [
-              Icon(action.icon, size: 16, color: tokens.textSecondary),
-              const SizedBox(width: 10),
-              // The menu is capped at Material's max width, and a long label
-              // ("Show Device Link QR") reaches it on a narrow window.
-              Flexible(
-                child: Text(
-                  action.label,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 13, color: tokens.textPrimary),
-                ),
+      for (final entry in actions)
+        switch (entry) {
+          AdaptiveMenuDivider<T>() => const PopupMenuDivider(),
+          AdaptiveMenuAction<T>(:final itemKey, :final enabled) =>
+            PopupMenuItem<T>(
+              key: itemKey,
+              value: entry.value,
+              enabled: enabled,
+              height: tokens.rowHeight,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Row(
+                children: [
+                  Icon(
+                    entry.icon,
+                    size: 16,
+                    color: enabled ? tokens.textSecondary : tokens.textSubtle,
+                  ),
+                  const SizedBox(width: 10),
+                  // The menu is capped at Material's max width, and a long
+                  // label ("Show Device Link QR") reaches it on a narrow
+                  // window.
+                  Flexible(
+                    child: Text(
+                      entry.label,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: enabled ? tokens.textPrimary : tokens.textSubtle,
+                      ),
+                    ),
+                  ),
+                  if (entry.shortcut case final shortcut?) ...[
+                    const SizedBox(width: 18),
+                    Text(
+                      shortcut,
+                      style: TextStyle(fontSize: 12, color: tokens.textSubtle),
+                    ),
+                  ],
+                ],
               ),
-            ],
-          ),
-        ),
+            ),
+        },
     ],
+  );
+}
+
+/// A zero-sized anchor at [globalPosition], so the menu opens from the pointer.
+RelativeRect _pointRect(BuildContext context, Offset globalPosition) {
+  final overlay = Overlay.of(context).context.findRenderObject();
+  if (overlay is! RenderBox) return const RelativeRect.fromLTRB(0, 0, 0, 0);
+  final local = overlay.globalToLocal(globalPosition);
+  return RelativeRect.fromLTRB(
+    local.dx,
+    local.dy,
+    overlay.size.width - local.dx,
+    overlay.size.height - local.dy,
   );
 }
 

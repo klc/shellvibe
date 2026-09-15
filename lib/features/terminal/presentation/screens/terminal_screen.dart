@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:xterm3/xterm.dart';
 
 import '../../../../app/theme/shellvibe_tokens.dart';
+import '../../../../app/widgets/adaptive_modal.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../../settings/domain/models/app_settings_model.dart';
 import '../../../settings/presentation/notifiers/settings_notifier.dart';
@@ -28,12 +30,22 @@ class TerminalScreen extends ConsumerStatefulWidget {
   /// dimensions belong to the desktop until the phone explicitly resizes.
   final bool keepTerminalSizeWhenKeyboardOpens;
 
+  /// Rows appended to the right-click menu by whoever owns the tab: the
+  /// split, transfer and template actions, which are the tab bar's business
+  /// and not this screen's. Null leaves the menu with its terminal rows only,
+  /// which is what an embedded terminal (Device Link) wants.
+  final List<AdaptiveMenuEntry<VoidCallback>> Function(
+    TerminalTabSession session,
+  )?
+  buildPaneMenuEntries;
+
   const TerminalScreen({
     super.key,
     required this.session,
     this.showExtraKeys,
     this.readOnly = false,
     this.keepTerminalSizeWhenKeyboardOpens = false,
+    this.buildPaneMenuEntries,
   });
 
   @override
@@ -263,6 +275,207 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
         .tapPane(widget.session.id, broadcastModifier: broadcastModifier);
   }
 
+  // ── right-click menu ────────────────────────────────────────────────────
+
+  /// Whether this platform writes shortcuts with ⌘ rather than Ctrl+Shift.
+  bool get _isApple =>
+      defaultTargetPlatform == TargetPlatform.macOS ||
+      defaultTargetPlatform == TargetPlatform.iOS;
+
+  String get _copyShortcut => _isApple ? '⌘C' : 'Ctrl+Shift+C';
+  String get _pasteShortcut => _isApple ? '⌘V' : 'Ctrl+Shift+V';
+  String get _selectAllShortcut => _isApple ? '⌘A' : 'Ctrl+Shift+A';
+  String get _findShortcut => _isApple ? '⌘F' : 'Ctrl+F';
+
+  /// The selected text of this pane, or null when nothing is selected.
+  ///
+  /// Read through [TerminalController.selectionFor] so a selection left behind
+  /// on the main buffer is not reported while the alt buffer is on screen.
+  String? _selectedText() {
+    final terminal = widget.session.terminal;
+    final range = _terminalController.selectionFor(terminal.buffer);
+    if (range == null) return null;
+    final text = terminal.buffer.getText(range, true);
+    return text.isEmpty ? null : text;
+  }
+
+  Future<void> _copySelection() async {
+    final text = _selectedText();
+    if (text == null) return;
+    await Clipboard.setData(ClipboardData(text: text));
+  }
+
+  /// Pastes the clipboard, asking first when the payload could run on its own.
+  ///
+  /// [Terminal.isPasteSafe] flags the text that carries its own newline or a
+  /// bracketed-paste terminator — a command copied off a web page, say, which
+  /// would execute the moment it lands rather than waiting to be read.
+  Future<void> _pasteFromClipboard() async {
+    if (widget.readOnly) return;
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = data?.text;
+    if (text == null || text.isEmpty) return;
+    if (!Terminal.isPasteSafe(text) && !await _confirmUnsafePaste(text)) {
+      return;
+    }
+    if (!mounted) return;
+    widget.session.terminal.paste(text);
+    _terminalController.clearSelection();
+  }
+
+  Future<bool> _confirmUnsafePaste(String text) async {
+    final lines = '\n'.allMatches(text).length + 1;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => ShadDialog(
+        title: const Text('Paste and run?'),
+        description: Text(
+          'The clipboard holds $lines lines. Pasting it into the shell runs '
+          'every line but the last one immediately.',
+        ),
+        actions: adaptiveDialogActions(dialogContext, [
+          ShellVibeButton.secondary(
+            buttonKey: const Key('unsafe_paste_cancel_button'),
+            label: 'Cancel',
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+          ),
+          ShellVibeButton(
+            buttonKey: const Key('unsafe_paste_confirm_button'),
+            label: 'Paste',
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+          ),
+        ]),
+        actionsAxis: adaptiveDialogActionsAxis(dialogContext),
+      ),
+    );
+    return confirmed ?? false;
+  }
+
+  void _selectAll() {
+    final terminal = widget.session.terminal;
+    _terminalController.setSelection(
+      terminal.buffer.createAnchor(0, 0),
+      terminal.buffer.createAnchor(
+        terminal.viewWidth,
+        terminal.buffer.height - 1,
+      ),
+      mode: SelectionMode.line,
+    );
+  }
+
+  /// The link under [offset], OSC 8 first and then the plain-text detector,
+  /// or null when that cell carries neither.
+  String? _linkAt(CellOffset offset) {
+    final terminal = widget.session.terminal;
+    return terminal.hyperlinkAt(offset) ?? terminal.urlAt(offset)?.text;
+  }
+
+  Future<void> _showContextMenu(
+    TapDownDetails details,
+    CellOffset offset,
+  ) async {
+    final session = widget.session;
+    final link = _linkAt(offset);
+    final hasSelection = _selectedText() != null;
+    final selection = ref.read(terminalTabsProvider).selectedPaneIds;
+    final inBroadcast = selection.contains(session.id);
+    final canReconnect =
+        session.sessionType == TerminalSessionType.ssh &&
+        session.host != null &&
+        !session.isConnected &&
+        !session.isConnecting;
+
+    final entries = <AdaptiveMenuEntry<VoidCallback>>[
+      // The link rows come first because they are the only ones that describe
+      // the exact cell that was clicked; everything below is about the pane.
+      if (link != null) ...[
+        AdaptiveMenuAction(
+          itemKey: const Key('terminal_menu_open_link'),
+          icon: LucideIcons.externalLink,
+          label: 'Open Link',
+          value: () => unawaited(_handleHyperlinkTap(link)),
+        ),
+        AdaptiveMenuAction(
+          itemKey: const Key('terminal_menu_copy_link'),
+          icon: LucideIcons.link,
+          label: 'Copy Link Address',
+          value: () => unawaited(Clipboard.setData(ClipboardData(text: link))),
+        ),
+        const AdaptiveMenuDivider(),
+      ],
+      AdaptiveMenuAction(
+        itemKey: const Key('terminal_menu_copy'),
+        icon: LucideIcons.copy,
+        label: 'Copy',
+        shortcut: _copyShortcut,
+        enabled: hasSelection,
+        value: () => unawaited(_copySelection()),
+      ),
+      AdaptiveMenuAction(
+        itemKey: const Key('terminal_menu_paste'),
+        icon: LucideIcons.clipboardPaste,
+        label: 'Paste',
+        shortcut: _pasteShortcut,
+        // An AI pane mirrors an agent's session: nothing the user types there
+        // is input, so neither is anything they paste.
+        enabled: !widget.readOnly,
+        value: () => unawaited(_pasteFromClipboard()),
+      ),
+      AdaptiveMenuAction(
+        itemKey: const Key('terminal_menu_select_all'),
+        icon: LucideIcons.textSelect,
+        label: 'Select All',
+        shortcut: _selectAllShortcut,
+        value: _selectAll,
+      ),
+      const AdaptiveMenuDivider(),
+      AdaptiveMenuAction(
+        itemKey: const Key('terminal_menu_find'),
+        icon: LucideIcons.search,
+        label: 'Find…',
+        shortcut: _findShortcut,
+        value: _openSearch,
+      ),
+      AdaptiveMenuAction(
+        itemKey: const Key('terminal_menu_clear'),
+        icon: LucideIcons.eraser,
+        label: 'Clear Scrollback',
+        value: session.terminal.clear,
+      ),
+      if (canReconnect)
+        AdaptiveMenuAction(
+          itemKey: const Key('terminal_menu_reconnect'),
+          icon: LucideIcons.refreshCw,
+          label: 'Reconnect',
+          value: () => unawaited(
+            ref.read(terminalTabsProvider.notifier).reconnectTab(session.id),
+          ),
+        ),
+      // Broadcast is otherwise reachable only by ⌘-clicking a pane, which is
+      // not something the interface says anywhere.
+      if (!session.isMcp)
+        AdaptiveMenuAction(
+          itemKey: const Key('terminal_menu_broadcast'),
+          icon: LucideIcons.radio,
+          label: inBroadcast
+              ? 'Remove from Broadcast'
+              : 'Add to Broadcast Input',
+          value: () => ref
+              .read(terminalTabsProvider.notifier)
+              .togglePaneSelection(session.id),
+        ),
+      ...?widget.buildPaneMenuEntries?.call(session),
+    ];
+
+    final chosen = await showAdaptiveActionMenu<VoidCallback>(
+      context: context,
+      actions: entries,
+      globalPosition: details.globalPosition,
+    );
+    if (chosen == null) return;
+    chosen();
+  }
+
   static final _uriSchemePattern = RegExp(r'^[a-zA-Z][a-zA-Z0-9+.-]*:');
 
   /// Opens a link tapped/clicked in the terminal (OSC 8 hyperlink or a
@@ -362,6 +575,10 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
                       deleteDetection: shouldShowExtraKeys && !widget.readOnly,
                       readOnly: widget.readOnly,
                       onTapUp: _handleTapUp,
+                      // Desktop only: a long press on a phone is how xterm
+                      // starts a text selection, and the pane header and tab
+                      // bar already carry these actions there.
+                      onSecondaryTapDown: _showContextMenu,
                       onHyperlinkTap: _handleHyperlinkTap,
                       predictionText: session.isMosh
                           ? session.moshPredictionEngine.visibleText
