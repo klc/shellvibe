@@ -1,4 +1,4 @@
-platform :osx, '10.15'
+platform :osx, '12.0'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -38,6 +38,18 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_macos_build_settings(target)
+
+    # Xcode 26 refuses to build anything targeting macOS below 12.0, and it
+    # refuses before it compiles a line. Pods that carry an older floor in
+    # their own podspec (HotKey asks for 10.13) are raised here, along with
+    # whatever Flutter's helper above leaves at its own, lower minimum.
+    target.build_configurations.each do |config|
+      current = config.build_settings['MACOSX_DEPLOYMENT_TARGET'].to_s
+      numeric = current =~ /\A\d+(\.\d+)*\z/
+      if !numeric || Gem::Version.new(current) < Gem::Version.new('12.0')
+        config.build_settings['MACOSX_DEPLOYMENT_TARGET'] = '12.0'
+      end
+    end
 
     # HotKey declares a retroactive CustomStringConvertible conformance on
     # NSEvent.ModifierFlags. It is vendored source we cannot annotate, and the
