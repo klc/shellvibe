@@ -334,6 +334,12 @@ class SftpTransferQueueWorker {
       int transferred = 0;
       int lastTimeMs = stopwatch.elapsedMilliseconds;
       int lastTransferred = 0;
+      // The last rate actually measured. Carrying it between samples is what
+      // keeps the reported speed steady: re-reading it off the queue item
+      // would hand back the value captured when the transfer started, which
+      // is always zero, so every chunk between two samples reported 0 B/s.
+      int lastSpeed = 0;
+      bool sawFirstChunk = false;
 
       try {
         final stream = remoteFile.read();
@@ -345,15 +351,23 @@ class SftpTransferQueueWorker {
           transferred += chunk.length;
 
           final nowMs = stopwatch.elapsedMilliseconds;
-          final deltaMs = nowMs - lastTimeMs;
-          int speed = item.speedBytesPerSec;
-          if (deltaMs >= 500) {
-            speed = ((transferred - lastTransferred) * 1000) ~/ deltaMs;
+          if (!sawFirstChunk) {
+            // Start the window at the first byte that arrived. The time
+            // before it is spent opening and stat-ing the remote file, and
+            // charging that to the transfer makes the first sample far too
+            // slow.
+            sawFirstChunk = true;
+            lastTimeMs = nowMs;
+            lastTransferred = transferred;
+          } else if (nowMs - lastTimeMs >= 500) {
+            lastSpeed =
+                ((transferred - lastTransferred) * 1000) ~/
+                (nowMs - lastTimeMs);
             lastTimeMs = nowMs;
             lastTransferred = transferred;
           }
 
-          onProgress(transferred, speed);
+          onProgress(transferred, lastSpeed);
         }
         await sink.flush();
       } finally {
@@ -407,9 +421,12 @@ class SftpTransferQueueWorker {
 
     bool committed = false;
     try {
-      int transferred = 0;
       int lastTimeMs = stopwatch.elapsedMilliseconds;
       int lastTransferred = 0;
+      // See [_performDownload]: the last measured rate has to survive between
+      // samples, otherwise every update in between reports 0 B/s.
+      int lastSpeed = 0;
+      bool sawFirstAck = false;
 
       Stream<Uint8List> buildStream() async* {
         await for (final chunk in localFile.openRead()) {
@@ -417,26 +434,37 @@ class SftpTransferQueueWorker {
             break;
           }
 
-          final uint8Chunk = chunk is Uint8List
-              ? chunk
-              : Uint8List.fromList(chunk);
-          transferred += uint8Chunk.length;
+          yield chunk is Uint8List ? chunk : Uint8List.fromList(chunk);
+        }
+      }
 
+      // Progress follows the bytes the server has acknowledged, not the bytes
+      // read off the local disk. The writer keeps up to a megabyte of requests
+      // in flight, so counting local reads measured disk speed instead of the
+      // link: short uploads jumped straight to 100% at an absurd rate and then
+      // sat there while the pipeline drained.
+      await remoteFile.write(
+        buildStream(),
+        offset: 0,
+        onProgress: (transferred) {
           final nowMs = stopwatch.elapsedMilliseconds;
-          final deltaMs = nowMs - lastTimeMs;
-          int speed = item.speedBytesPerSec;
-          if (deltaMs >= 500) {
-            speed = ((transferred - lastTransferred) * 1000) ~/ deltaMs;
+          if (!sawFirstAck) {
+            // Start the window at the first acknowledgement: the time before
+            // it belongs to opening the remote file, not to the transfer.
+            sawFirstAck = true;
+            lastTimeMs = nowMs;
+            lastTransferred = transferred;
+          } else if (nowMs - lastTimeMs >= 500) {
+            lastSpeed =
+                ((transferred - lastTransferred) * 1000) ~/
+                (nowMs - lastTimeMs);
             lastTimeMs = nowMs;
             lastTransferred = transferred;
           }
 
-          onProgress(transferred, speed);
-          yield uint8Chunk;
-        }
-      }
-
-      await remoteFile.write(buildStream(), offset: 0);
+          onProgress(transferred, lastSpeed);
+        },
+      );
       await remoteFile.close();
       remoteFile = null;
       if (_cancelFlags[id] != true && _pauseFlags[id] != true) {
