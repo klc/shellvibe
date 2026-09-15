@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:shellvibe/core/utils/platform_capabilities.dart';
+import 'package:shellvibe/features/bookmarks/presentation/notifiers/bookmarks_notifier.dart';
 import 'package:shellvibe/features/hosts/presentation/notifiers/hosts_notifier.dart';
 import 'package:shellvibe/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import 'package:shellvibe/features/terminal/presentation/views/terminal_tab_view.dart';
@@ -574,6 +575,81 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       container.dispose();
       await tester.pumpAndSettle();
+    });
+
+    testWidgets('the Connect to Host panel puts favorites first', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(2400, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final container = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          localPtyManagerProvider.overrideWithValue(_NoShellPtyManager()),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final hosts = container.read(hostsProvider.notifier);
+      final alpha = await hosts.addHost(
+        workspaceId: 'default',
+        label: 'Alpha',
+        hostname: 'alpha.internal',
+      );
+      final zulu = await hosts.addHost(
+        workspaceId: 'default',
+        label: 'Zulu',
+        hostname: 'zulu.internal',
+      );
+      await container.read(bookmarksProvider.future);
+      // The one that sorts last is the one that is starred, so leading the
+      // list cannot be an accident of the host order.
+      await container.read(bookmarksProvider.notifier).toggleHost(zulu.id);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: ShadTheme(
+            data: ShadThemeData(
+              colorScheme: const ShadSlateColorScheme.dark(),
+              brightness: Brightness.dark,
+            ),
+            child: const MaterialApp(home: TerminalTabView()),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('empty_select_host_button')));
+      await tester.pumpAndSettle();
+
+      // Scoped to the panel's own list: the empty screen behind the modal
+      // carries a FAVORITES heading of its own over the shortcut chips.
+      Finder heading(String text) =>
+          find.descendant(of: find.byType(ListView), matching: find.text(text));
+      // ShellVibeSectionLabel renders its heading uppercased.
+      expect(heading('FAVORITES'), findsOneWidget);
+      expect(heading('ALL HOSTS'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.byKey(Key('select_host_row_${zulu.id}'))).dy,
+        lessThan(
+          tester.getTopLeft(find.byKey(Key('select_host_row_${alpha.id}'))).dy,
+        ),
+      );
+      // Each host is listed once: a favorite is not repeated below.
+      expect(find.byKey(Key('select_host_row_${zulu.id}')), findsOneWidget);
+
+      // A search that matches only the unstarred host drops the heading with
+      // it, so the panel never shows an empty section.
+      await tester.enterText(
+        find.byKey(const Key('select_host_search_input')),
+        'alpha',
+      );
+      await tester.pumpAndSettle();
+      expect(heading('FAVORITES'), findsNothing);
+      expect(find.byKey(Key('select_host_row_${alpha.id}')), findsOneWidget);
     });
 
     testWidgets('the Connect to Host panel filters its list as you type', (

@@ -1574,9 +1574,34 @@ class _SelectHostPanelState extends ConsumerState<_SelectHostPanel> {
           );
         }
 
-        final matches = hosts
+        // Starred hosts lead, in the order they were starred, exactly as they
+        // do in the ⌘K palette: a picker and a palette that disagree about
+        // where a favourite sits are two things to learn instead of one.
+        final bookmarkedIds = [
+          for (final bookmark in ref.watch(bookmarksProvider).value ?? const [])
+            if (bookmark.hostId != null) bookmark.hostId!,
+        ];
+        final favorites = [
+          for (final id in bookmarkedIds) ...hosts.where((h) => h.id == id),
+        ].where((host) => hostMatchesQuery(host, _query)).toList();
+        final others = hosts
+            .where((host) => !bookmarkedIds.contains(host.id))
             .where((host) => hostMatchesQuery(host, _query))
             .toList();
+
+        Widget row(HostModel host, {required bool favorite}) {
+          return ListTile(
+            key: Key('select_host_row_${host.id}'),
+            leading: Icon(
+              favorite ? LucideIcons.star : LucideIcons.server,
+              size: 18,
+              color: favorite ? tokens.brand : null,
+            ),
+            title: Text(host.label),
+            subtitle: Text('${host.hostname}:${host.port}'),
+            onTap: () => widget.onSelected(host),
+          );
+        }
 
         return Column(
           mainAxisSize: MainAxisSize.min,
@@ -1594,7 +1619,7 @@ class _SelectHostPanelState extends ConsumerState<_SelectHostPanel> {
               ),
             ),
             Flexible(
-              child: matches.isEmpty
+              child: favorites.isEmpty && others.isEmpty
                   ? Padding(
                       padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
                       child: Text(
@@ -1603,19 +1628,27 @@ class _SelectHostPanelState extends ConsumerState<_SelectHostPanel> {
                         style: TextStyle(color: tokens.textSubtle),
                       ),
                     )
-                  : ListView.builder(
+                  : ListView(
                       shrinkWrap: true,
-                      itemCount: matches.length,
-                      itemBuilder: (context, index) {
-                        final host = matches[index];
-                        return ListTile(
-                          key: Key('select_host_row_${host.id}'),
-                          leading: const Icon(LucideIcons.server, size: 18),
-                          title: Text(host.label),
-                          subtitle: Text('${host.hostname}:${host.port}'),
-                          onTap: () => widget.onSelected(host),
-                        );
-                      },
+                      children: [
+                        // The headings only appear once there is something to
+                        // separate: with nothing starred the list is the plain
+                        // one it was.
+                        if (favorites.isNotEmpty) ...[
+                          const ShellVibeSectionLabel(
+                            label: 'Favorites',
+                            padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
+                          ),
+                          for (final host in favorites)
+                            row(host, favorite: true),
+                          if (others.isNotEmpty)
+                            const ShellVibeSectionLabel(
+                              label: 'All hosts',
+                              padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
+                            ),
+                        ],
+                        for (final host in others) row(host, favorite: false),
+                      ],
                     ),
             ),
           ],
