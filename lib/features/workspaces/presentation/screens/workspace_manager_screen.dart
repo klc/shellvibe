@@ -146,98 +146,134 @@ class WorkspaceManagerScreen extends ConsumerWidget {
                   final isActive = workspace.id == activeId;
                   final isDefault = workspace.id == 'default';
 
+                  // The card itself switches workspaces. A row that carried a
+                  // separate "use" button made the obvious gesture — clicking
+                  // the workspace you want — do nothing, and hid the real
+                  // control among the rename and delete icons.
                   return ShellVibeSurface(
                     key: ValueKey('workspace_card_${workspace.id}'),
                     raised: isActive,
-                    padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 38,
-                          height: 38,
-                          decoration: BoxDecoration(
-                            color: isActive
-                                ? tokens.brand.withValues(alpha: 0.14)
-                                : tokens.surfaceRaised,
-                            borderRadius: BorderRadius.circular(
-                              tokens.radiusMedium,
-                            ),
+                    // The surface paints an opaque gradient of its own, and
+                    // ink lands on the nearest Material behind it — the
+                    // scaffold — where the card hides it. This transparent one
+                    // sits above the gradient, so the hover and press states
+                    // are actually seen.
+                    child: Material(
+                      type: MaterialType.transparency,
+                      child: Semantics(
+                        button: !isActive,
+                        selected: isActive,
+                        label: isActive
+                            ? '${workspace.name}, active workspace'
+                            : 'Use workspace ${workspace.name}',
+                        child: InkWell(
+                          key: Key('workspace_select_${workspace.id}'),
+                          // The active card is not a target: switching to the
+                          // workspace already in use is nothing to offer, and a
+                          // null callback is also what drops the pointer cursor
+                          // and the hover highlight from it.
+                          onTap: isActive
+                              ? null
+                              : () => ref
+                                    .read(activeWorkspaceIdProvider.notifier)
+                                    .select(workspace.id),
+                          borderRadius: BorderRadius.circular(
+                            tokens.radiusLarge,
                           ),
-                          child: Icon(
-                            isDefault
-                                ? LucideIcons.house
-                                : LucideIcons.panelTop,
-                            size: 18,
-                            color: isActive ? tokens.brand : tokens.textMuted,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Flexible(
-                                    child: Text(
-                                      workspace.name,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .titleMedium
-                                          ?.copyWith(
-                                            fontWeight: FontWeight.w600,
-                                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 38,
+                                  height: 38,
+                                  decoration: BoxDecoration(
+                                    color: isActive
+                                        ? tokens.brand.withValues(alpha: 0.14)
+                                        : tokens.surfaceRaised,
+                                    borderRadius: BorderRadius.circular(
+                                      tokens.radiusMedium,
                                     ),
                                   ),
-                                  if (isActive) ...[
-                                    const SizedBox(width: 8),
-                                    const ShellVibeStatusChip(
-                                      label: 'Active',
-                                      icon: LucideIcons.check,
-                                      tone: ShellVibeStatusTone.success,
-                                    ),
-                                  ],
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                isDefault
-                                    ? 'Protected default workspace'
-                                    : 'Workspace for an independent operating context',
-                                style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(color: tokens.textMuted),
-                              ),
-                            ],
+                                  child: Icon(
+                                    isDefault
+                                        ? LucideIcons.house
+                                        : LucideIcons.panelTop,
+                                    size: 18,
+                                    color: isActive
+                                        ? tokens.brand
+                                        : tokens.textMuted,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Flexible(
+                                            child: Text(
+                                              workspace.name,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .titleMedium
+                                                  ?.copyWith(
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                            ),
+                                          ),
+                                          if (isActive) ...[
+                                            const SizedBox(width: 8),
+                                            const ShellVibeStatusChip(
+                                              label: 'Active',
+                                              icon: LucideIcons.check,
+                                              tone: ShellVibeStatusTone.success,
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        isDefault
+                                            ? 'Protected default workspace'
+                                            : 'Workspace for an independent operating context',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(color: tokens.textMuted),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                ShellVibeIconButton(
+                                  key: Key('workspace_edit_${workspace.id}'),
+                                  icon: LucideIcons.pencil,
+                                  tooltip: 'Rename workspace',
+                                  onPressed: () =>
+                                      _openForm(context, workspace: workspace),
+                                ),
+                                ShellVibeIconButton(
+                                  key: Key('workspace_delete_${workspace.id}'),
+                                  icon: LucideIcons.trash2,
+                                  tooltip: isDefault
+                                      ? 'Default Workspace cannot be deleted'
+                                      : 'Delete workspace',
+                                  onPressed: isDefault
+                                      ? null
+                                      : () => _deleteWorkspace(
+                                          context,
+                                          ref,
+                                          workspace,
+                                        ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                        if (!isActive)
-                          ShellVibeIconButton(
-                            key: Key('workspace_select_${workspace.id}'),
-                            icon: LucideIcons.radio,
-                            tooltip: 'Use workspace',
-                            onPressed: () => ref
-                                .read(activeWorkspaceIdProvider.notifier)
-                                .select(workspace.id),
-                          ),
-                        ShellVibeIconButton(
-                          key: Key('workspace_edit_${workspace.id}'),
-                          icon: LucideIcons.pencil,
-                          tooltip: 'Rename workspace',
-                          onPressed: () =>
-                              _openForm(context, workspace: workspace),
-                        ),
-                        ShellVibeIconButton(
-                          key: Key('workspace_delete_${workspace.id}'),
-                          icon: LucideIcons.trash2,
-                          tooltip: isDefault
-                              ? 'Default Workspace cannot be deleted'
-                              : 'Delete workspace',
-                          onPressed: isDefault
-                              ? null
-                              : () => _deleteWorkspace(context, ref, workspace),
-                        ),
-                      ],
+                      ),
                     ),
                   );
                 },
