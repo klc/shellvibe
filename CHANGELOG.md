@@ -7,6 +7,60 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-16
+
+**This release raises the minimum macOS version to 12.0 (Monterey).** Xcode 26
+refuses to build for anything older, so 10.15 and 11 are no longer supported
+targets. Windows and Linux requirements are unchanged.
+
+### Added
+
+**Terminal**
+
+- Rearrange split panes by dragging. A pane header dropped on another pane
+  swaps the two; dropped on the outer quarter of a side it moves into that
+  side, splitting the pane it was dropped on. Corners go to the nearer edge.
+- A right-click menu on a pane, carrying Copy, Paste and Select All with the
+  shortcuts they duplicate, Find, Clear Scrollback, Reconnect on a dropped
+  session, the broadcast-input toggle, and the tab bar's own split, transfer
+  and template actions aimed at the pane that was clicked. Right-clicking a
+  link leads with Open Link and Copy Link Address.
+- Pasting clipboard text that carries its own newline now asks first. Such a
+  payload runs the moment it lands rather than waiting to be read.
+
+**Bookmarks**
+
+- Hosts and saved layouts can be starred. The star appears on a host row under
+  the pointer and stays once the row is starred; a phone toggles it from the
+  host's detail panel, and layouts from the template picker.
+- Favorites are a filter of their own beside All and Connected. The host list
+  is never reordered by it.
+- The ⌘K palette now lists bookmarks first and then every other host, so a
+  starred server opens from anywhere without going to Hosts first. The
+  terminal's empty screen offers the same bookmarks as chips.
+- The Connect to Host panel gained a search field, and leads with the same
+  Favorites section in the same order as the palette.
+
+### Changed
+
+- A workspace is switched by clicking its card. The separate "use workspace"
+  button is gone: the obvious gesture did nothing, and the control that worked
+  sat among rename and delete.
+
+### Fixed
+
+- SFTP upload speed is measured on the wire instead of off the local disk.
+  Progress followed bytes read from the file rather than bytes the server had
+  acknowledged, so short uploads jumped to 100% at an impossible rate and then
+  sat there while the pipeline drained. The displayed rate also fell to 0 B/s
+  between samples, in both directions.
+- The mobile tab bar no longer double-counts the screen insets.
+- "Lock now" says why it cannot lock a vault instead of doing nothing.
+- The host row stacks its name over its address on a phone rather than
+  clipping the address.
+- "Save and connect" connects the host it just saved.
+- The vault identity row no longer collapses to stubs on a phone.
+
 ## [1.0.0] - 2026-09-12
 
 First public release. There is no previous version to compare against, so this
@@ -99,5 +153,6 @@ entry describes what ShellVibe is rather than what changed.
 - iOS and Android are not released. The code builds for them and they are not
   part of this release.
 
-[Unreleased]: https://github.com/klc/shellvibe/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/klc/shellvibe/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/klc/shellvibe/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/klc/shellvibe/releases/tag/v1.0.0
