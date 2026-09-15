@@ -808,12 +808,17 @@ class ShellVibeEmptyState extends StatelessWidget {
   final String description;
   final List<Widget> actions;
 
+  /// Shown under the actions, set off by a rule: a shortcut list, or anything
+  /// else that is a way in rather than the way in.
+  final Widget? footer;
+
   const ShellVibeEmptyState({
     super.key,
     required this.icon,
     required this.title,
     required this.description,
     this.actions = const [],
+    this.footer,
   });
 
   @override
@@ -871,6 +876,12 @@ class ShellVibeEmptyState extends StatelessWidget {
                   runSpacing: 8,
                   children: actions,
                 ),
+              ],
+              if (footer != null) ...[
+                const SizedBox(height: 28),
+                Divider(color: tokens.border, height: 1),
+                const SizedBox(height: 20),
+                footer!,
               ],
             ],
           ),

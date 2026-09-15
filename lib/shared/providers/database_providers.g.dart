@@ -173,6 +173,52 @@ final class HostsDaoProvider
 
 String _$hostsDaoHash() => r'0cdd6525a1ccd57c08d2dfcd375d768f664ac1c9';
 
+/// Auto-disposing provider for [BookmarksDao].
+
+@ProviderFor(bookmarksDao)
+final bookmarksDaoProvider = BookmarksDaoProvider._();
+
+/// Auto-disposing provider for [BookmarksDao].
+
+final class BookmarksDaoProvider
+    extends $FunctionalProvider<BookmarksDao, BookmarksDao, BookmarksDao>
+    with $Provider<BookmarksDao> {
+  /// Auto-disposing provider for [BookmarksDao].
+  BookmarksDaoProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'bookmarksDaoProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$bookmarksDaoHash();
+
+  @$internal
+  @override
+  $ProviderElement<BookmarksDao> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  BookmarksDao create(Ref ref) {
+    return bookmarksDao(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(BookmarksDao value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<BookmarksDao>(value),
+    );
+  }
+}
+
+String _$bookmarksDaoHash() => r'1e794e7a9902c7fc12904471f247f5c5bb8f24c7';
+
 /// Auto-disposing provider for [IdentitiesDao].
 
 @ProviderFor(identitiesDao)

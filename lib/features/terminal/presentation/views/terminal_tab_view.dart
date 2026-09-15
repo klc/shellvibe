@@ -13,6 +13,7 @@ import '../../../../core/network/mosh_session_manager.dart';
 import '../../../../core/network/ssh_session_manager.dart';
 import '../../../../core/utils/platform_capabilities.dart';
 import '../../../hosts/domain/models/host_model.dart';
+import '../../../bookmarks/presentation/notifiers/bookmarks_notifier.dart';
 import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
 import '../../../snippets/domain/models/snippet_model.dart';
 import '../../../snippets/domain/services/snippet_variable_parser.dart';
@@ -1183,8 +1184,56 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
     );
   }
 
+  /// Bookmarked hosts as one-tap chips on the empty screen.
+  ///
+  /// This costs nothing while the app is in use — the empty state is only on
+  /// screen when no session is open, which is exactly when a shortcut is what
+  /// is wanted. Returns null when nothing is starred, so the screen keeps the
+  /// shape it had.
+  Widget? _bookmarkShortcuts(BuildContext context) {
+    final bookmarks = ref.watch(bookmarksProvider).value ?? const [];
+    final hosts = ref.watch(hostsProvider).value ?? const <HostModel>[];
+    final starred = [
+      for (final bookmark in bookmarks)
+        if (bookmark.hostId != null)
+          ...hosts.where((host) => host.id == bookmark.hostId),
+    ];
+    if (starred.isEmpty) return null;
+
+    final tokens = ShellVibeTokens.resolve(context);
+    return Column(
+      children: [
+        Text(
+          'FAVORITES',
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.2,
+            color: tokens.textSubtle,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final host in starred)
+              ShellVibeButton.secondary(
+                buttonKey: Key('empty_bookmark_${host.id}'),
+                icon: LucideIcons.star,
+                label: host.label,
+                onPressed: () => unawaited(_connectToHost(host)),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
   Widget _buildEmptyStateBody(BuildContext context, WidgetRef ref) {
     return ShellVibeEmptyState(
+      footer: _bookmarkShortcuts(context),
       icon: LucideIcons.squareTerminal,
       title: 'No open sessions',
       description: isMobilePlatform

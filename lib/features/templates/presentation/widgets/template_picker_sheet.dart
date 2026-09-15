@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../../../../app/widgets/adaptive_modal.dart';
+import '../../../../app/widgets/shellvibe_ui.dart';
+import '../../../bookmarks/presentation/notifiers/bookmarks_notifier.dart';
 import '../../domain/models/template_model.dart';
 import '../notifiers/templates_notifier.dart';
 
@@ -50,6 +54,10 @@ class TemplatePickerSheet extends ConsumerWidget {
         child: Center(child: Text('Error loading templates: $e')),
       ),
       data: (templates) {
+        final bookmarkedIds = (ref.watch(bookmarksProvider).value ?? const [])
+            .where((bookmark) => bookmark.templateId != null)
+            .map((bookmark) => bookmark.templateId!)
+            .toSet();
         if (templates.isEmpty) {
           return const Padding(
             padding: EdgeInsets.all(24),
@@ -78,6 +86,22 @@ class TemplatePickerSheet extends ConsumerWidget {
                     : '${templateSummary(template)} · ${template.description}',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
+              ),
+              // Starring a layout is what puts it in the ⌘K palette, which is
+              // the only place it can be reached without opening this sheet
+              // first.
+              trailing: ShellVibeIconButton(
+                buttonKey: Key('favorite_template_${template.id}'),
+                icon: LucideIcons.star,
+                tooltip: bookmarkedIds.contains(template.id)
+                    ? 'Remove from favorites'
+                    : 'Add to favorites',
+                active: bookmarkedIds.contains(template.id),
+                onPressed: () => unawaited(
+                  ref
+                      .read(bookmarksProvider.notifier)
+                      .toggleTemplate(template.id),
+                ),
               ),
               onTap: () async {
                 Navigator.of(context).pop();

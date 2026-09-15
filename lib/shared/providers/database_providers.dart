@@ -1,6 +1,7 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../core/crypto/encryption_engine.dart';
 import '../database/app_database.dart';
+import '../database/daos/bookmarks_dao.dart';
 import '../database/daos/hosts_dao.dart';
 import '../database/daos/identities_dao.dart';
 import '../database/daos/known_hosts_dao.dart';
@@ -41,6 +42,13 @@ KnownHostsDao knownHostsDao(Ref ref) {
 HostsDao hostsDao(Ref ref) {
   final db = ref.watch(appDatabaseProvider);
   return db.hostsDao;
+}
+
+/// Auto-disposing provider for [BookmarksDao].
+@riverpod
+BookmarksDao bookmarksDao(Ref ref) {
+  final db = ref.watch(appDatabaseProvider);
+  return db.bookmarksDao;
 }
 
 /// Auto-disposing provider for [IdentitiesDao].

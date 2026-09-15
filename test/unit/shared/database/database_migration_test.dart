@@ -89,7 +89,7 @@ void main() {
         final appDb = AppDatabase(NativeDatabase(tempDbFile));
         db = appDb;
 
-        expect(appDb.schemaVersion, equals(8));
+        expect(appDb.schemaVersion, equals(9));
 
         // 3. Verify existing legacy host record can be fetched.
         final fetchedHost = await appDb.hostsDao.getHostById('host-v1');
@@ -301,6 +301,68 @@ void main() {
       final devices = await appDb.pairedDevicesDao.getAll();
       expect(devices.single.id, equals('phone-1'));
       expect(devices.single.platform, equals('ios'));
+    });
+
+    test('upgrading to v9 creates the bookmarks table', () async {
+      final rawDb = sqlite3.open(tempDbFile.path);
+      rawDb.execute(_hostsTableAtV2);
+      rawDb.execute('''
+        CREATE TABLE IF NOT EXISTS "workspaces" (
+          "id" TEXT NOT NULL PRIMARY KEY,
+          "name" TEXT NOT NULL,
+          "color_code" TEXT NULL,
+          "created_at" INTEGER NOT NULL
+        );
+      ''');
+      rawDb.execute('''
+        INSERT INTO workspaces (id, name, created_at)
+        VALUES ('default', 'Default Workspace', 1600000000);
+      ''');
+      rawDb.execute('''
+        INSERT INTO hosts (id, workspace_id, label, hostname, port, protocol, created_at)
+        VALUES ('host-v8', 'default', 'Legacy Host', '10.0.0.1', 22, 'ssh', 1600000000);
+      ''');
+      // A real v8 database has this from the v4 migration, and bookmarks
+      // reference it, so the fixture needs it too.
+      rawDb.execute('''
+        CREATE TABLE IF NOT EXISTS "templates" (
+          "id" TEXT NOT NULL PRIMARY KEY,
+          "workspace_id" TEXT NOT NULL,
+          "name" TEXT NOT NULL,
+          "description" TEXT NULL,
+          "active_pane_id" TEXT NULL,
+          "created_at" INTEGER NOT NULL
+        );
+      ''');
+      rawDb.execute('PRAGMA user_version = 8;');
+      rawDb.close();
+
+      final appDb = AppDatabase(NativeDatabase(tempDbFile));
+      db = appDb;
+
+      expect(
+        await appDb.bookmarksDao.getBookmarksByWorkspace('default'),
+        isEmpty,
+      );
+      await appDb.bookmarksDao.insertBookmark(
+        BookmarksCompanion.insert(
+          id: 'bm-1',
+          workspaceId: 'default',
+          hostId: const Value('host-v8'),
+          createdAt: DateTime.utc(2026),
+        ),
+      );
+      final bookmarks = await appDb.bookmarksDao.getBookmarksByWorkspace(
+        'default',
+      );
+      expect(bookmarks.single.hostId, equals('host-v8'));
+
+      // The cascade is what keeps a bookmark from outliving its host.
+      await appDb.hostsDao.deleteHost('host-v8');
+      expect(
+        await appDb.bookmarksDao.getBookmarksByWorkspace('default'),
+        isEmpty,
+      );
     });
 
     test('upgrading to v7 rewrites removed agent identities to password', () async {

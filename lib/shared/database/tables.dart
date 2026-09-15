@@ -354,3 +354,32 @@ class McpAuditLog extends Table {
   @override
   Set<Column> get primaryKey => {id};
 }
+
+/// 18. Bookmarks Table (starred hosts and layouts, in the user's own order)
+///
+/// One row marks one target. [hostId] and [templateId] are the two kinds a
+/// bookmark can point at and exactly one of them is set; both are real foreign
+/// keys with `onDelete: cascade`, so deleting a host or a template takes its
+/// bookmark with it and no row is ever left pointing at nothing. A single
+/// polymorphic `targetId` column could not be a foreign key at all, and would
+/// need the dangling rows swept up by hand in every delete path.
+///
+/// [position] is the order they were put in, which is the order they are shown
+/// in — a bookmark list people arrange is not a list they want re-sorted.
+class Bookmarks extends Table {
+  TextColumn get id => text()();
+  TextColumn get workspaceId =>
+      text().references(Workspaces, #id, onDelete: KeyAction.cascade)();
+  TextColumn get hostId =>
+      text().nullable().references(Hosts, #id, onDelete: KeyAction.cascade)();
+  TextColumn get templateId => text().nullable().references(
+    Templates,
+    #id,
+    onDelete: KeyAction.cascade,
+  )();
+  IntColumn get position => integer().withDefault(const Constant(0))();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}

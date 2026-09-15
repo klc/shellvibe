@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 
 import 'tables.dart';
+import 'daos/bookmarks_dao.dart';
 import 'daos/hosts_dao.dart';
 import 'daos/identities_dao.dart';
 import 'daos/known_hosts_dao.dart';
@@ -38,6 +39,7 @@ part 'app_database.g.dart';
     McpPolicyRules,
     McpApprovals,
     McpAuditLog,
+    Bookmarks,
   ],
   daos: [
     HostsDao,
@@ -50,13 +52,14 @@ part 'app_database.g.dart';
     TemplatesDao,
     PairedDevicesDao,
     McpDao,
+    BookmarksDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration {
@@ -113,6 +116,9 @@ class AppDatabase extends _$AppDatabase {
           await m.createTable(mcpPolicyRules);
           await m.createTable(mcpApprovals);
           await m.createTable(mcpAuditLog);
+        }
+        if (from < 9) {
+          await m.createTable(bookmarks);
         }
       },
     );

@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -47,6 +48,62 @@ void main() {
       ),
     );
   }
+
+  Future<void> seedHost(String id, String label, String hostname) {
+    return db.hostsDao.insertHost(
+      HostsCompanion.insert(
+        id: id,
+        workspaceId: 'default',
+        label: label,
+        hostname: hostname,
+        createdAt: DateTime.now(),
+      ),
+    );
+  }
+
+  group('Host favorites', () {
+    testWidgets('the star appears on hover and filters the list', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(2400, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await seedHost('host-1', 'Production', '10.0.0.5');
+      await seedHost('host-2', 'Staging', '10.0.0.6');
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      // Nothing starred and no pointer over a row: the list looks as it did.
+      expect(find.byKey(const Key('favorite_host_host-1')), findsNothing);
+
+      final pointer = TestPointer(1, PointerDeviceKind.mouse);
+      await tester.sendEventToBinding(
+        pointer.hover(tester.getCenter(find.text('Production'))),
+      );
+      await tester.pumpAndSettle();
+
+      final star = find.byKey(const Key('favorite_host_host-1'));
+      expect(star, findsOneWidget);
+      await tester.tap(star);
+      await tester.pumpAndSettle();
+
+      // Starred rows keep their star once the pointer leaves.
+      await tester.sendEventToBinding(pointer.hover(const Offset(5, 5)));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('favorite_host_host-1')), findsOneWidget);
+      expect(find.byKey(const Key('favorite_host_host-2')), findsNothing);
+
+      // The filter shows the starred host and only that one. The list itself
+      // was never reordered.
+      await tester.tap(find.byKey(const Key('hosts_filter_favorites')));
+      await tester.pumpAndSettle();
+      expect(find.text('Production'), findsOneWidget);
+      expect(find.text('Staging'), findsNothing);
+    });
+  });
 
   group('HostsScreen Widget Tests', () {
     testWidgets('Renders AppBar title and action buttons', (tester) async {

@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -311,6 +312,64 @@ void main() {
 
       expect(find.byKey(const Key('command_palette_search')), findsOneWidget);
       expect(find.byType(Dialog), findsOneWidget);
+    });
+
+    testWidgets('Command palette lists bookmarks above the other hosts', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      for (final row in [
+        ('host-a', 'Alpha', 'alpha.internal'),
+        ('host-b', 'Bravo', 'bravo.internal'),
+      ]) {
+        await db.hostsDao.insertHost(
+          HostsCompanion.insert(
+            id: row.$1,
+            workspaceId: 'default',
+            label: row.$2,
+            hostname: row.$3,
+            createdAt: DateTime.now(),
+          ),
+        );
+      }
+      await db.bookmarksDao.insertBookmark(
+        BookmarksCompanion.insert(
+          id: 'bm-1',
+          workspaceId: 'default',
+          hostId: const Value('host-b'),
+          createdAt: DateTime.now(),
+        ),
+      );
+
+      await tester.pumpWidget(createTestWidget());
+      await pumpTabTransition(tester);
+
+      await tester.tap(find.byKey(const Key('command_palette_button')));
+      await tester.pumpAndSettle();
+
+      // A bookmark is only reachable from anywhere because of this list.
+      expect(find.byKey(const Key('palette_bookmark_host-b')), findsOneWidget);
+      expect(find.byKey(const Key('palette_host_host-a')), findsOneWidget);
+      // The starred host is not repeated among the rest, and it leads.
+      expect(find.byKey(const Key('palette_host_host-b')), findsNothing);
+      expect(
+        tester.getTopLeft(find.byKey(const Key('palette_bookmark_host-b'))).dy,
+        lessThan(
+          tester.getTopLeft(find.byKey(const Key('palette_host_host-a'))).dy,
+        ),
+      );
+
+      // Typing narrows hosts the same way the host list does.
+      await tester.enterText(
+        find.byKey(const Key('command_palette_search')),
+        'alpha',
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('palette_bookmark_host-b')), findsNothing);
+      expect(find.byKey(const Key('palette_host_host-a')), findsOneWidget);
     });
 
     // Every module at every breakpoint. The initial route alone used to be

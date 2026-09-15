@@ -7,7 +7,13 @@ import 'package:go_router/go_router.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../../features/bookmarks/presentation/notifiers/bookmarks_notifier.dart';
+import '../../features/hosts/domain/models/host_model.dart';
+import '../../features/hosts/domain/services/host_launcher.dart';
+import '../../features/hosts/presentation/notifiers/hosts_notifier.dart';
 import '../../features/settings/presentation/notifiers/settings_notifier.dart';
+import '../../features/templates/domain/models/template_model.dart';
+import '../../features/templates/presentation/notifiers/templates_notifier.dart';
 import '../../features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import '../../features/tunnels/presentation/providers/tunnels_providers.dart';
 import '../../shared/providers/workspace_provider.dart';
@@ -466,8 +472,41 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
           Navigator.of(dialogContext).pop();
           _onTabSelected(index);
         },
+        onHostSelected: (host) {
+          Navigator.of(dialogContext).pop();
+          // The launcher, not a connect written out here: a host with no stored
+          // identity has to be asked for one and an unknown host key has to be
+          // shown, and a second copy of that would be a second chance to get it
+          // wrong.
+          unawaited(HostLauncher(context: context, ref: ref).connect(host));
+        },
+        onTemplateSelected: (template) {
+          Navigator.of(dialogContext).pop();
+          unawaited(_runTemplateFromPalette(template));
+        },
       ),
     );
+  }
+
+  /// Replays a bookmarked layout and moves to the terminal it opened in.
+  Future<void> _runTemplateFromPalette(TemplateModel template) async {
+    final launcher = HostLauncher(context: context, ref: ref);
+    final result = await ref
+        .read(templatesProvider.notifier)
+        .runTemplate(
+          template,
+          resolveIdentity: launcher.resolveIdentity,
+          onHostKeyPrompt: launcher.promptHostKey,
+        );
+    if (!mounted) return;
+    GoRouter.maybeOf(context)?.go('/terminal');
+    if (!result.isComplete) {
+      ShadToaster.of(context).show(
+        ShadToast.destructive(
+          description: Text('Some panes of "${template.name}" could not open.'),
+        ),
+      );
+    }
   }
 }
 
@@ -622,27 +661,71 @@ class _WorkspaceAvatar extends ConsumerWidget {
   }
 }
 
-class _CommandPalette extends StatefulWidget {
+class _CommandPalette extends ConsumerStatefulWidget {
   final ValueChanged<int> onSelected;
+  final ValueChanged<HostModel> onHostSelected;
+  final ValueChanged<TemplateModel> onTemplateSelected;
 
-  const _CommandPalette({required this.onSelected});
+  const _CommandPalette({
+    required this.onSelected,
+    required this.onHostSelected,
+    required this.onTemplateSelected,
+  });
 
   @override
-  State<_CommandPalette> createState() => _CommandPaletteState();
+  ConsumerState<_CommandPalette> createState() => _CommandPaletteState();
 }
 
-class _CommandPaletteState extends State<_CommandPalette> {
+class _CommandPaletteState extends ConsumerState<_CommandPalette> {
   String query = '';
 
   @override
   Widget build(BuildContext context) {
     final tokens = ShellVibeTokens.resolve(context);
+    final value = query.toLowerCase();
     final filtered = appNavigationItems.indexed.where((entry) {
       final item = entry.$2;
-      final value = query.toLowerCase();
       return item.label.toLowerCase().contains(value) ||
           item.tooltip.toLowerCase().contains(value);
     }).toList();
+
+    // The palette is what makes a bookmark reachable from anywhere; without it
+    // a starred host is only a filter on one screen. Bookmarks lead, then the
+    // rest of the hosts, then the modules the palette started out listing.
+    final hosts = ref.watch(hostsProvider).value ?? const <HostModel>[];
+    final templates =
+        ref.watch(templatesProvider).value ?? const <TemplateModel>[];
+    final bookmarks = ref.watch(bookmarksProvider).value ?? const [];
+
+    final bookmarkedHostIds = bookmarks
+        .where((bookmark) => bookmark.hostId != null)
+        .map((bookmark) => bookmark.hostId!)
+        .toList();
+    final bookmarkedTemplateIds = bookmarks
+        .where((bookmark) => bookmark.templateId != null)
+        .map((bookmark) => bookmark.templateId!)
+        .toList();
+
+    // Ordered by the bookmark list, not by the host list: a bookmark bar is
+    // arranged by the person who made it.
+    final bookmarkedHosts = [
+      for (final id in bookmarkedHostIds)
+        ...hosts.where((host) => host.id == id),
+    ].where((host) => hostMatchesQuery(host, value)).toList();
+    final bookmarkedTemplates = [
+      for (final id in bookmarkedTemplateIds)
+        ...templates.where((template) => template.id == id),
+    ].where((template) => template.name.toLowerCase().contains(value)).toList();
+
+    final otherHosts = hosts
+        .where((host) => !bookmarkedHostIds.contains(host.id))
+        .where((host) => hostMatchesQuery(host, value))
+        .toList();
+
+    // Whatever is first is what Enter runs, so the highlight has to be worked
+    // out across the sections rather than per section.
+    final hasBookmarks =
+        bookmarkedHosts.isNotEmpty || bookmarkedTemplates.isNotEmpty;
 
     // Pinned near the top rather than centred: the palette is a jump target,
     // and the eye should land on the query line, not the middle of the screen.
@@ -707,18 +790,75 @@ class _CommandPaletteState extends State<_CommandPalette> {
                   shrinkWrap: true,
                   padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
                   children: [
-                    const ShellVibeSectionLabel(
-                      label: 'Modules',
-                      padding: EdgeInsets.fromLTRB(10, 8, 10, 6),
-                    ),
-                    for (var index = 0; index < filtered.length; index++)
-                      _PaletteRow(
-                        item: filtered[index].$2,
-                        // The first hit is what Enter runs, so it is the only
-                        // row that carries the brand ring and says so.
-                        highlighted: index == 0,
-                        onTap: () => widget.onSelected(filtered[index].$1),
+                    if (hasBookmarks) ...[
+                      const ShellVibeSectionLabel(
+                        label: 'Bookmarks',
+                        padding: EdgeInsets.fromLTRB(10, 8, 10, 6),
                       ),
+                      for (
+                        var index = 0;
+                        index < bookmarkedHosts.length;
+                        index++
+                      )
+                        _PaletteRow(
+                          key: Key(
+                            'palette_bookmark_${bookmarkedHosts[index].id}',
+                          ),
+                          icon: LucideIcons.star,
+                          label: bookmarkedHosts[index].label,
+                          detail: bookmarkedHosts[index].hostname,
+                          trailing: bookmarkedHosts[index].protocol,
+                          // The first row of the whole list is what Enter runs,
+                          // so it is the only one that carries the brand ring
+                          // and says so.
+                          highlighted: index == 0,
+                          onTap: () =>
+                              widget.onHostSelected(bookmarkedHosts[index]),
+                        ),
+                      for (final template in bookmarkedTemplates)
+                        _PaletteRow(
+                          key: Key('palette_bookmark_${template.id}'),
+                          icon: LucideIcons.layoutTemplate,
+                          label: template.name,
+                          detail: 'layout',
+                          highlighted:
+                              bookmarkedHosts.isEmpty &&
+                              template == bookmarkedTemplates.first,
+                          onTap: () => widget.onTemplateSelected(template),
+                        ),
+                    ],
+                    if (otherHosts.isNotEmpty) ...[
+                      const ShellVibeSectionLabel(
+                        label: 'Hosts',
+                        padding: EdgeInsets.fromLTRB(10, 8, 10, 6),
+                      ),
+                      for (var index = 0; index < otherHosts.length; index++)
+                        _PaletteRow(
+                          key: Key('palette_host_${otherHosts[index].id}'),
+                          icon: LucideIcons.server,
+                          label: otherHosts[index].label,
+                          detail: otherHosts[index].hostname,
+                          trailing: otherHosts[index].protocol,
+                          highlighted: !hasBookmarks && index == 0,
+                          onTap: () => widget.onHostSelected(otherHosts[index]),
+                        ),
+                    ],
+                    if (filtered.isNotEmpty) ...[
+                      const ShellVibeSectionLabel(
+                        label: 'Modules',
+                        padding: EdgeInsets.fromLTRB(10, 8, 10, 6),
+                      ),
+                      for (var index = 0; index < filtered.length; index++)
+                        _PaletteRow(
+                          icon: filtered[index].$2.icon,
+                          label: filtered[index].$2.label,
+                          detail: filtered[index].$2.tooltip.split(' (').first,
+                          trailing: filtered[index].$2.shortcut,
+                          highlighted:
+                              !hasBookmarks && otherHosts.isEmpty && index == 0,
+                          onTap: () => widget.onSelected(filtered[index].$1),
+                        ),
+                    ],
                   ],
                 ),
               ),
@@ -764,12 +904,23 @@ class _CommandPaletteState extends State<_CommandPalette> {
 
 /// One 44px result row in the command palette.
 class _PaletteRow extends StatelessWidget {
-  final NavigationItemData item;
+  final IconData icon;
+  final String label;
+
+  /// The mono line after the label: what the row is, or where it points.
+  final String detail;
+
+  /// Right-aligned hint shown when the row is not the one Enter would run.
+  final String trailing;
   final bool highlighted;
   final VoidCallback onTap;
 
   const _PaletteRow({
-    required this.item,
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.detail,
+    this.trailing = '',
     required this.highlighted,
     required this.onTap,
   });
@@ -799,13 +950,13 @@ class _PaletteRow extends StatelessWidget {
           child: Row(
             children: [
               Icon(
-                item.icon,
+                icon,
                 size: 16,
                 color: highlighted ? tokens.brandBright : tokens.textMuted,
               ),
               const SizedBox(width: 12),
               Text(
-                item.label,
+                label,
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
@@ -817,7 +968,7 @@ class _PaletteRow extends StatelessWidget {
               const SizedBox(width: 12),
               Flexible(
                 child: Text(
-                  item.tooltip.split(' (').first,
+                  detail,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: shellvibeMono(context, size: 11),
@@ -836,7 +987,7 @@ class _PaletteRow extends StatelessWidget {
                 const SizedBox(width: 10),
                 const _PaletteKeyCap(label: '↵', brand: true),
               ] else
-                Text(item.shortcut, style: shellvibeMono(context, size: 11)),
+                Text(trailing, style: shellvibeMono(context, size: 11)),
             ],
           ),
         ),
