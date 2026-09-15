@@ -1363,43 +1363,96 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
       context: context,
       title: 'Connect to Host',
       desktopHeight: 420,
-      builder: (ctx) {
-        return Consumer(
-          builder: (context, ref, _) {
-            final hostsAsync = ref.watch(hostsProvider);
-            return hostsAsync.when(
-              data: (hosts) {
-                if (hosts.isEmpty) {
-                  return const Padding(
-                    padding: EdgeInsets.all(24.0),
-                    child: Center(
-                      child: Text('No hosts available. Create one first.'),
-                    ),
-                  );
-                }
-                return ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: hosts.length,
-                  itemBuilder: (context, index) {
-                    final host = hosts[index];
-                    return ListTile(
-                      leading: const Icon(LucideIcons.server, size: 18),
-                      title: Text(host.label),
-                      subtitle: Text('${host.hostname}:${host.port}'),
-                      onTap: () async {
-                        Navigator.of(ctx).pop();
-                        await (onSelect ?? _connectToHost)(host);
+      builder: (ctx) => _SelectHostPanel(
+        onSelected: (host) async {
+          Navigator.of(ctx).pop();
+          await (onSelect ?? _connectToHost)(host);
+        },
+      ),
+    );
+  }
+}
+
+/// Host picker shown by the "Connect to Host" panel.
+///
+/// Stateful for the query alone: the list it filters is long enough on a real
+/// workspace that scrolling it is the slow way to reach a host, and typing is
+/// the fast one.
+class _SelectHostPanel extends ConsumerStatefulWidget {
+  final Future<void> Function(HostModel host) onSelected;
+
+  const _SelectHostPanel({required this.onSelected});
+
+  @override
+  ConsumerState<_SelectHostPanel> createState() => _SelectHostPanelState();
+}
+
+class _SelectHostPanelState extends ConsumerState<_SelectHostPanel> {
+  String _query = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = ShellVibeTokens.resolve(context);
+    final hostsAsync = ref.watch(hostsProvider);
+
+    return hostsAsync.when(
+      data: (hosts) {
+        if (hosts.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.all(24.0),
+            child: Center(child: Text('No hosts available. Create one first.')),
+          );
+        }
+
+        final matches = hosts
+            .where((host) => hostMatchesQuery(host, _query))
+            .toList();
+
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: ShellVibeSearchField(
+                fieldKey: const Key('select_host_search_input'),
+                hintText: 'Search hosts, addresses and protocols…',
+                // On a phone this panel is a sheet, and a keyboard raised over
+                // the list on open hides the very rows it filters.
+                autofocus: !isMobilePlatform,
+                onChanged: (value) => setState(() => _query = value),
+              ),
+            ),
+            Flexible(
+              child: matches.isEmpty
+                  ? Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+                      child: Text(
+                        'No hosts match that search.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: tokens.textSubtle),
+                      ),
+                    )
+                  : ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: matches.length,
+                      itemBuilder: (context, index) {
+                        final host = matches[index];
+                        return ListTile(
+                          key: Key('select_host_row_${host.id}'),
+                          leading: const Icon(LucideIcons.server, size: 18),
+                          title: Text(host.label),
+                          subtitle: Text('${host.hostname}:${host.port}'),
+                          onTap: () => widget.onSelected(host),
+                        );
                       },
-                    );
-                  },
-                );
-              },
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, s) => Center(child: Text('Error loading hosts: $e')),
-            );
-          },
+                    ),
+            ),
+          ],
         );
       },
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, s) => Center(child: Text('Error loading hosts: $e')),
     );
   }
 }

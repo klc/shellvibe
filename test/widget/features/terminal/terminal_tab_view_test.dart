@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:shellvibe/core/utils/platform_capabilities.dart';
+import 'package:shellvibe/features/hosts/presentation/notifiers/hosts_notifier.dart';
 import 'package:shellvibe/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import 'package:shellvibe/features/terminal/presentation/views/terminal_tab_view.dart';
 import 'package:shellvibe/features/terminal/presentation/widgets/resizable_split.dart';
@@ -359,6 +360,88 @@ void main() {
       await tester.pump(const Duration(milliseconds: 200));
 
       expect(find.textContaining('BROADCAST'), findsNothing);
+    });
+
+    testWidgets('the Connect to Host panel filters its list as you type', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(2400, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final container = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          localPtyManagerProvider.overrideWithValue(_NoShellPtyManager()),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final hosts = container.read(hostsProvider.notifier);
+      await hosts.addHost(
+        workspaceId: 'default',
+        label: 'Production web',
+        hostname: '10.0.0.5',
+        username: 'deploy',
+      );
+      await hosts.addHost(
+        workspaceId: 'default',
+        label: 'Staging web',
+        hostname: 'staging.internal',
+        username: 'deploy',
+      );
+      await hosts.addHost(
+        workspaceId: 'default',
+        label: 'Database',
+        hostname: 'db.internal',
+        username: 'postgres',
+      );
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: ShadTheme(
+            data: ShadThemeData(
+              colorScheme: const ShadSlateColorScheme.dark(),
+              brightness: Brightness.dark,
+            ),
+            child: const MaterialApp(home: TerminalTabView()),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('empty_select_host_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ListTile), findsNWidgets(3));
+
+      // Matches the hostname, not the label, so the search has to look past
+      // the name the row leads with.
+      await tester.enterText(
+        find.byKey(const Key('select_host_search_input')),
+        'db.',
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Database'), findsOneWidget);
+      expect(find.text('Production web'), findsNothing);
+      expect(find.text('Staging web'), findsNothing);
+
+      await tester.enterText(
+        find.byKey(const Key('select_host_search_input')),
+        'deploy',
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(ListTile), findsNWidgets(2));
+
+      await tester.enterText(
+        find.byKey(const Key('select_host_search_input')),
+        'nothing here',
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(ListTile), findsNothing);
+      expect(find.text('No hosts match that search.'), findsOneWidget);
     });
 
     testWidgets('dragging a pane header onto another pane swaps them', (

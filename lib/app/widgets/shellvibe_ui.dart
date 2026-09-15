@@ -762,12 +762,18 @@ class ShellVibeSearchField extends StatelessWidget {
   final String hintText;
   final ValueChanged<String>? onChanged;
 
+  /// Takes focus as soon as it is shown. For a field that opens with a panel
+  /// on a phone, where it would raise the keyboard over the list it filters,
+  /// leave this off.
+  final bool autofocus;
+
   const ShellVibeSearchField({
     super.key,
     this.fieldKey,
     this.controller,
     required this.hintText,
     this.onChanged,
+    this.autofocus = false,
   });
 
   @override
@@ -781,6 +787,7 @@ class ShellVibeSearchField extends StatelessWidget {
         key: fieldKey,
         controller: controller,
         onChanged: onChanged,
+        autofocus: autofocus,
         textAlignVertical: TextAlignVertical.center,
         decoration: InputDecoration(
           hintText: hintText,

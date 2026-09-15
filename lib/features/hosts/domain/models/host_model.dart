@@ -110,3 +110,21 @@ class HostModel {
       jumpHostId.hashCode ^
       createdAt.hashCode;
 }
+
+/// Whether [host] should be listed for the free-text search [query].
+///
+/// Shared so the host list and the pickers that open over it agree on what a
+/// query means: an empty query matches everything, and anything else is matched
+/// case-insensitively against the fields a person would type from memory — what
+/// they called it, where it is, who they log in as, and how.
+///
+/// [query] is matched as given, so a caller that already lower-cased it is not
+/// charged for doing so twice per host.
+bool hostMatchesQuery(HostModel host, String query) {
+  final needle = query.trim().toLowerCase();
+  if (needle.isEmpty) return true;
+  return host.label.toLowerCase().contains(needle) ||
+      host.hostname.toLowerCase().contains(needle) ||
+      (host.username ?? '').toLowerCase().contains(needle) ||
+      host.protocol.toLowerCase().contains(needle);
+}

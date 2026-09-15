@@ -686,11 +686,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
 
   List<HostModel> _visibleHosts(List<HostModel> hosts) {
     return _scopedHosts(hosts).where((host) {
-      if (_searchQuery.isEmpty) return true;
-      return host.label.toLowerCase().contains(_searchQuery) ||
-          host.hostname.toLowerCase().contains(_searchQuery) ||
-          (host.username ?? '').toLowerCase().contains(_searchQuery) ||
-          host.protocol.toLowerCase().contains(_searchQuery);
+      return hostMatchesQuery(host, _searchQuery);
     }).toList();
   }
 
