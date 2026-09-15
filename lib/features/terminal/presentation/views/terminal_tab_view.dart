@@ -29,6 +29,7 @@ import '../../domain/models/terminal_tab_session.dart';
 import '../dialogs/host_key_prompt_dialog.dart';
 import '../notifiers/terminal_tabs_notifier.dart';
 import '../screens/terminal_screen.dart';
+import '../widgets/pane_drop_target.dart';
 import '../widgets/resizable_split.dart';
 
 /// Below this bar width the trailing actions collapse into one overflow menu.
@@ -938,49 +939,50 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
         );
       }
 
-      Widget paneBox(Color ringColor) {
-        final radius = Radius.circular(tokens.radiusLarge);
-        // A corner cannot curve away underneath the tab that is supposed to be
-        // growing out of it, so the merged tab squares the one it covers.
-        final paneRadius = BorderRadius.only(
-          topLeft: squareTopLeft ? Radius.zero : radius,
-          topRight: radius,
-          bottomLeft: radius,
-          bottomRight: radius,
-        );
-        return Container(
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            color: tokens.terminalBg,
-            borderRadius: paneRadius,
-            boxShadow: tokens.shadowPanel,
-          ),
-          // The ring is painted over the child, not behind it. A clipped child
-          // fills the whole rounded box, so a border in the background
-          // decoration survives only where the content happens to be inset —
-          // along the corner arcs the terminal painted straight over it and the
-          // outline broke.
-          foregroundDecoration: BoxDecoration(
-            borderRadius: paneRadius,
-            border: Border.all(color: ringColor),
-          ),
-          child: body,
-        );
-      }
+      final radius = Radius.circular(tokens.radiusLarge);
+      // A corner cannot curve away underneath the tab that is supposed to be
+      // growing out of it, so the merged tab squares the one it covers.
+      final paneRadius = BorderRadius.only(
+        topLeft: squareTopLeft ? Radius.zero : radius,
+        topRight: radius,
+        bottomLeft: radius,
+        bottomRight: radius,
+      );
+      final paneBox = Container(
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: tokens.terminalBg,
+          borderRadius: paneRadius,
+          boxShadow: tokens.shadowPanel,
+        ),
+        // The ring is painted over the child, not behind it. A clipped child
+        // fills the whole rounded box, so a border in the background
+        // decoration survives only where the content happens to be inset —
+        // along the corner arcs the terminal painted straight over it and the
+        // outline broke.
+        foregroundDecoration: BoxDecoration(
+          borderRadius: paneRadius,
+          border: Border.all(color: baseRingColor),
+        ),
+        child: body,
+      );
 
-      // A single-pane tab has no header to drag and nothing to swap with.
-      if (paneOrder.length < 2) return paneBox(baseRingColor);
+      // A single-pane tab has no header to drag and nothing to drop on.
+      if (paneOrder.length < 2) return paneBox;
 
       // The whole pane is the drop target, not just its header: aiming at a
       // 34px strip is far harder than aiming at the pane it belongs to.
-      return DragTarget<String>(
-        onWillAcceptWithDetails: (details) =>
-            details.data != paneSession.id && paneOrder.contains(details.data),
-        onAcceptWithDetails: (details) => ref
+      return PaneDropTarget(
+        acceptedPaneIds: paneOrder.where((id) => id != paneSession.id).toSet(),
+        borderRadius: paneRadius,
+        tokens: tokens,
+        onSwap: (draggedId) => ref
             .read(terminalTabsProvider.notifier)
-            .swapPanes(details.data, paneSession.id),
-        builder: (context, candidates, _) =>
-            paneBox(candidates.isEmpty ? baseRingColor : tokens.brand),
+            .swapPanes(draggedId, paneSession.id),
+        onDock: (draggedId, edge) => ref
+            .read(terminalTabsProvider.notifier)
+            .movePaneTo(draggedId, paneSession.id, edge),
+        child: paneBox,
       );
     }
 

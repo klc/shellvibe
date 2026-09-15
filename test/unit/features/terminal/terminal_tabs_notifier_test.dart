@@ -465,6 +465,118 @@ void main() {
       );
     });
 
+    test('movePaneTo docks a pane against the trailing edge of another', () {
+      final notifier = container.read(terminalTabsProvider.notifier);
+
+      notifier.openLocalTab(title: 'A');
+      final root = container.read(terminalTabsProvider).activeTabId!;
+      notifier.splitTab(root, direction: Axis.horizontal);
+      final second = container.read(terminalTabsProvider).tabs.last.id;
+      notifier.splitTab(second, direction: Axis.horizontal);
+      final third = container.read(terminalTabsProvider).tabs.last.id;
+
+      notifier.movePaneTo(third, root, PaneDockEdge.bottom);
+
+      final state = container.read(terminalTabsProvider);
+      final moved = state.tabs.firstWhere((t) => t.id == third);
+      expect(moved.splitParentId, equals(root));
+      expect(moved.splitDirection, equals(Axis.vertical));
+      expect(moved.splitRatio, equals(0.5));
+      // Innermost child of its new parent, so it splits the root pane's own
+      // rectangle rather than the root plus the pane already split off it.
+      final rootChildren = state.tabs
+          .where((t) => t.splitParentId == root)
+          .map((t) => t.id)
+          .toList();
+      expect(rootChildren, equals([second, third]));
+      expect(
+        state.tabs.firstWhere((t) => t.id == second).splitDirection,
+        equals(Axis.horizontal),
+      );
+    });
+
+    test('movePaneTo docking to a leading edge puts the pane in front', () {
+      final notifier = container.read(terminalTabsProvider.notifier);
+
+      notifier.openLocalTab(title: 'A');
+      final root = container.read(terminalTabsProvider).activeTabId!;
+      notifier.splitTab(root, direction: Axis.horizontal);
+      final second = container.read(terminalTabsProvider).tabs.last.id;
+      notifier.splitTab(second, direction: Axis.horizontal);
+      final third = container.read(terminalTabsProvider).tabs.last.id;
+
+      notifier.movePaneTo(third, root, PaneDockEdge.left);
+
+      // A leading dock is the trailing one with the two panes exchanged: the
+      // arriving pane takes the target's slot and the target hangs off it.
+      final state = container.read(terminalTabsProvider);
+      final arrived = state.tabs.firstWhere((t) => t.id == third);
+      final displaced = state.tabs.firstWhere((t) => t.id == root);
+      expect(arrived.splitParentId, isNull);
+      expect(displaced.splitParentId, equals(third));
+      expect(displaced.splitDirection, equals(Axis.horizontal));
+      // The pane that was already split off the root stays outside both, so
+      // the dock cut the root's rectangle and nothing else.
+      final outer = state.tabs.firstWhere((t) => t.id == second);
+      expect(outer.splitParentId, equals(third));
+      final arrivedChildren = state.tabs
+          .where((t) => t.splitParentId == third)
+          .map((t) => t.id)
+          .toList();
+      expect(arrivedChildren, equals([second, root]));
+    });
+
+    test('movePaneTo leaves the children of the moved pane behind', () {
+      final notifier = container.read(terminalTabsProvider.notifier);
+
+      notifier.openLocalTab(title: 'A');
+      final root = container.read(terminalTabsProvider).activeTabId!;
+      notifier.splitTab(root, direction: Axis.horizontal);
+      final middle = container.read(terminalTabsProvider).tabs.last.id;
+      notifier.splitTab(middle, direction: Axis.vertical);
+      final leaf = container.read(terminalTabsProvider).tabs.last.id;
+
+      notifier.movePaneTo(middle, leaf, PaneDockEdge.right);
+
+      // The child is promoted into the slot the moved pane vacated, exactly as
+      // closePane promotes it, and the moved pane arrives as a leaf.
+      final state = container.read(terminalTabsProvider);
+      final promoted = state.tabs.firstWhere((t) => t.id == leaf);
+      final moved = state.tabs.firstWhere((t) => t.id == middle);
+      expect(promoted.splitParentId, equals(root));
+      expect(promoted.splitDirection, equals(Axis.horizontal));
+      expect(moved.splitParentId, equals(leaf));
+      expect(moved.splitDirection, equals(Axis.horizontal));
+      expect(state.tabs.where((t) => t.splitParentId == middle), isEmpty);
+      moved.terminal.write('alive');
+      expect(_bufferText(moved.terminal), contains('alive'));
+    });
+
+    test('movePaneTo refuses panes of different tabs and unknown ids', () {
+      final notifier = container.read(terminalTabsProvider.notifier);
+
+      notifier.openLocalTab(title: 'One');
+      final firstRoot = container.read(terminalTabsProvider).activeTabId!;
+      notifier.openLocalTab(title: 'Two');
+      final secondRoot = container.read(terminalTabsProvider).activeTabId!;
+      notifier.splitTab(secondRoot, direction: Axis.horizontal);
+      final secondPane = container.read(terminalTabsProvider).tabs.last.id;
+
+      notifier.movePaneTo(firstRoot, secondPane, PaneDockEdge.left);
+      notifier.movePaneTo(firstRoot, 'does-not-exist', PaneDockEdge.top);
+      notifier.movePaneTo(firstRoot, firstRoot, PaneDockEdge.right);
+
+      final state = container.read(terminalTabsProvider);
+      expect(
+        state.tabs.firstWhere((t) => t.id == firstRoot).splitParentId,
+        isNull,
+      );
+      expect(
+        state.tabs.firstWhere((t) => t.id == secondPane).splitParentId,
+        equals(secondRoot),
+      );
+    });
+
     test('closePane promotes the children of a closed root pane', () async {
       final notifier = container.read(terminalTabsProvider.notifier);
 

@@ -34,6 +34,23 @@ enum TerminalDisconnectCause {
 const double kSplitPaneMinRatio = 0.15;
 const double kSplitPaneMaxRatio = 0.85;
 
+/// Which side of a pane another pane is being docked against.
+enum PaneDockEdge {
+  left,
+  right,
+  top,
+  bottom;
+
+  /// The axis a split along this edge lays its two panes out on.
+  Axis get axis => this == PaneDockEdge.left || this == PaneDockEdge.right
+      ? Axis.horizontal
+      : Axis.vertical;
+
+  /// Whether the docked pane takes the leading side (left, or top) of the
+  /// split rather than the trailing one.
+  bool get isLeading => this == PaneDockEdge.left || this == PaneDockEdge.top;
+}
+
 /// Model representing an active terminal tab session.
 class TerminalTabSession {
   final String id;

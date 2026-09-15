@@ -380,6 +380,9 @@ void main() {
       final first = container.read(terminalTabsProvider).activeTabId!;
       notifier.splitTab(first, direction: Axis.horizontal);
       final second = container.read(terminalTabsProvider).tabs.last.id;
+      // A ratio the dock path would not produce, so this asserts a swap and
+      // not merely a rearrangement that happens to look like one.
+      notifier.setSplitRatio(second, 0.3);
 
       await tester.pumpWidget(
         UncontrolledProviderScope(
@@ -403,11 +406,9 @@ void main() {
 
       final gesture = await tester.startGesture(tester.getCenter(handle));
       await tester.pump();
-      // Dropped on the other pane's header, which is inside that pane's own
-      // drop target.
-      await gesture.moveTo(
-        tester.getCenter(find.byKey(Key('pane_label_$first'))),
-      );
+      // The middle of the other pane, well inside the region that swaps rather
+      // than docking.
+      await gesture.moveTo(tester.getCenter(find.byKey(ValueKey(first))));
       await tester.pump();
       await gesture.up();
       await tester.pumpAndSettle();
@@ -418,7 +419,68 @@ void main() {
       expect(movedUp.splitParentId, isNull);
       expect(movedDown.splitParentId, equals(second));
       expect(movedDown.splitDirection, equals(Axis.horizontal));
+      expect(movedDown.splitRatio, equals(0.3));
       // Neither terminal was rebuilt away by the swap.
+      expect(find.byType(TerminalView), findsNWidgets(2));
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('dropping a pane on the edge of another docks it there', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(2400, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final container = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          localPtyManagerProvider.overrideWithValue(_NoShellPtyManager()),
+        ],
+      );
+      final notifier = container.read(terminalTabsProvider.notifier);
+
+      notifier.openLocalTab(title: 'A');
+      final first = container.read(terminalTabsProvider).activeTabId!;
+      notifier.splitTab(first, direction: Axis.horizontal);
+      final second = container.read(terminalTabsProvider).tabs.last.id;
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: ShadTheme(
+            data: ShadThemeData(
+              colorScheme: const ShadSlateColorScheme.dark(),
+              brightness: Brightness.dark,
+            ),
+            child: const MaterialApp(home: TerminalTabView()),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      final handle = find.byWidgetPredicate(
+        (widget) => widget is Draggable<String> && widget.data == second,
+      );
+      final targetRect = tester.getRect(find.byKey(ValueKey(first)));
+
+      final gesture = await tester.startGesture(tester.getCenter(handle));
+      await tester.pump();
+      await gesture.moveTo(Offset(targetRect.center.dx, targetRect.bottom - 8));
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      // Side by side became stacked: the dragged pane now splits the other
+      // one's rectangle along the edge it was dropped on.
+      final state = container.read(terminalTabsProvider);
+      final docked = state.tabs.firstWhere((t) => t.id == second);
+      expect(docked.splitParentId, equals(first));
+      expect(docked.splitDirection, equals(Axis.vertical));
       expect(find.byType(TerminalView), findsNWidgets(2));
 
       await tester.pumpWidget(const SizedBox.shrink());

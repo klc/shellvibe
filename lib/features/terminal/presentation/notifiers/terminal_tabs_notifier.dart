@@ -1437,6 +1437,74 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     state = state.copyWith(tabs: reordered);
   }
 
+  /// Moves [paneId] out of its slot and splits [targetId] with it, along
+  /// [edge].
+  ///
+  /// The pane travels alone. Its own children stay behind and are promoted into
+  /// the slot it vacates, exactly as [closePane] promotes them — a pane's
+  /// children describe how its rectangle is subdivided, so they belong to the
+  /// slot rather than to the pane that happens to sit in it.
+  ///
+  /// A pane always joins its parent's split on the trailing side (the fold that
+  /// lays panes out puts the newest child there), so docking to the left or the
+  /// top is the trailing case followed by a swap: the arriving pane takes the
+  /// target's slot and the target becomes the child. That leaves the same two
+  /// rectangles with their occupants exchanged, which is what the leading edges
+  /// mean, and it costs nothing in the model — no pane has to record which side
+  /// of its split it is on.
+  void movePaneTo(String paneId, String targetId, PaneDockEdge edge) {
+    if (paneId == targetId) return;
+
+    final pane = _findInList(state.tabs, paneId);
+    final target = _findInList(state.tabs, targetId);
+    if (pane == null || target == null) return;
+    if (_rootIdOf(pane, state.tabs) != _rootIdOf(target, state.tabs)) return;
+
+    var tabs = [...state.tabs];
+    final children = tabs.where((t) => t.splitParentId == paneId).toList();
+
+    if (children.isEmpty) {
+      tabs.removeWhere((t) => t.id == paneId);
+    } else {
+      // Same heir rule as closePane: the last child is the one laid out
+      // directly against the departing pane, so it takes the vacated slot and
+      // the earlier children hang off it, preserving their nesting and their
+      // order on screen.
+      final heir = children.last;
+      heir.splitParentId = pane.splitParentId;
+      heir.splitDirection = pane.splitDirection;
+      heir.splitRatio = pane.splitRatio;
+      for (final child in children) {
+        if (identical(child, heir)) continue;
+        child.splitParentId = heir.id;
+      }
+      final rebuilt = <TerminalTabSession>[];
+      for (final tab in tabs) {
+        if (tab.id == paneId) {
+          rebuilt.add(heir);
+          continue;
+        }
+        if (identical(tab, heir)) continue;
+        rebuilt.add(tab);
+      }
+      tabs = rebuilt;
+    }
+
+    pane.splitParentId = targetId;
+    pane.splitDirection = edge.axis;
+    pane.splitRatio = 0.5;
+    // Appended last so it is the innermost child of its new parent: it splits
+    // the target's own rectangle rather than the target plus everything already
+    // split off it.
+    tabs.add(pane);
+
+    state = state.copyWith(tabs: tabs);
+
+    if (edge.isLeading) {
+      swapPanes(paneId, targetId);
+    }
+  }
+
   void setSplitRatio(String tabId, double ratio) {
     final index = state.tabs.indexWhere((t) => t.id == tabId);
     if (index == -1) return;
