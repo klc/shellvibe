@@ -375,6 +375,96 @@ void main() {
       expect(splitTab.sessionType, equals(TerminalSessionType.local));
     });
 
+    test('swapPanes exchanges two panes without moving the layout', () {
+      final notifier = container.read(terminalTabsProvider.notifier);
+
+      notifier.openLocalTab(title: 'Main Tab');
+      final root = container.read(terminalTabsProvider).activeTabId!;
+      notifier.splitTab(root, direction: Axis.horizontal);
+      final second = container.read(terminalTabsProvider).tabs.last.id;
+      notifier.setSplitRatio(second, 0.3);
+      notifier.splitTab(second, direction: Axis.vertical);
+      final third = container.read(terminalTabsProvider).tabs.last.id;
+      notifier.setSplitRatio(third, 0.7);
+
+      notifier.swapPanes(second, third);
+
+      final state = container.read(terminalTabsProvider);
+      final movedDown = state.tabs.firstWhere((t) => t.id == second);
+      final movedUp = state.tabs.firstWhere((t) => t.id == third);
+      // The slots keep their shape: the middle one is still a horizontal split
+      // at 0.3 of the root, the inner one still a vertical split at 0.7 of the
+      // middle. Only which pane sits in each has changed.
+      expect(movedUp.splitParentId, equals(root));
+      expect(movedUp.splitDirection, equals(Axis.horizontal));
+      expect(movedUp.splitRatio, equals(0.3));
+      expect(movedDown.splitParentId, equals(third));
+      expect(movedDown.splitDirection, equals(Axis.vertical));
+      expect(movedDown.splitRatio, equals(0.7));
+      // Both sessions stay live: a swap moves positions, never terminals.
+      movedUp.terminal.write('alive');
+      expect(_bufferText(movedUp.terminal), contains('alive'));
+    });
+
+    test('swapPanes keeps the tree walkable when a root pane moves', () {
+      final notifier = container.read(terminalTabsProvider.notifier);
+
+      notifier.openLocalTab(title: 'Main Tab');
+      final root = container.read(terminalTabsProvider).activeTabId!;
+      notifier.splitTab(root, direction: Axis.horizontal);
+      final middle = container.read(terminalTabsProvider).tabs.last.id;
+      notifier.splitTab(middle, direction: Axis.vertical);
+      final leaf = container.read(terminalTabsProvider).tabs.last.id;
+
+      // Root and grandchild: the pair that a naive parent-link swap turns into
+      // a cycle, which the layout fold would then walk forever.
+      notifier.swapPanes(root, leaf);
+
+      final state = container.read(terminalTabsProvider);
+      final roots = state.tabs.where((t) => t.splitParentId == null).toList();
+      expect(roots.length, equals(1));
+      expect(roots.single.id, equals(leaf));
+      for (final tab in state.tabs) {
+        var current = tab;
+        var hops = 0;
+        while (current.splitParentId != null) {
+          hops++;
+          expect(hops, lessThanOrEqualTo(state.tabs.length));
+          current = state.tabs.firstWhere((t) => t.id == current.splitParentId);
+        }
+      }
+      // The chain still has one pane per level, in the same shape as before.
+      final middlePane = state.tabs.firstWhere((t) => t.id == middle);
+      final rootPane = state.tabs.firstWhere((t) => t.id == root);
+      expect(middlePane.splitParentId, equals(leaf));
+      expect(rootPane.splitParentId, equals(middle));
+    });
+
+    test('swapPanes refuses panes of different tabs and unknown ids', () {
+      final notifier = container.read(terminalTabsProvider.notifier);
+
+      notifier.openLocalTab(title: 'One');
+      final firstRoot = container.read(terminalTabsProvider).activeTabId!;
+      notifier.openLocalTab(title: 'Two');
+      final secondRoot = container.read(terminalTabsProvider).activeTabId!;
+      notifier.splitTab(secondRoot, direction: Axis.horizontal);
+      final secondPane = container.read(terminalTabsProvider).tabs.last.id;
+
+      notifier.swapPanes(firstRoot, secondPane);
+      notifier.swapPanes(firstRoot, 'does-not-exist');
+      notifier.swapPanes(firstRoot, firstRoot);
+
+      final state = container.read(terminalTabsProvider);
+      expect(
+        state.tabs.firstWhere((t) => t.id == firstRoot).splitParentId,
+        isNull,
+      );
+      expect(
+        state.tabs.firstWhere((t) => t.id == secondPane).splitParentId,
+        equals(secondRoot),
+      );
+    });
+
     test('closePane promotes the children of a closed root pane', () async {
       final notifier = container.read(terminalTabsProvider.notifier);
 

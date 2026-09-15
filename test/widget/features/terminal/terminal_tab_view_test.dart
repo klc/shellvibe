@@ -62,9 +62,9 @@ void main() {
       debugPlatformCapabilitiesOverride = TargetPlatform.android;
       final container = ProviderContainer(
         overrides: [
-        appDatabaseProvider.overrideWithValue(db),
-        localPtyManagerProvider.overrideWithValue(_NoShellPtyManager()),
-      ],
+          appDatabaseProvider.overrideWithValue(db),
+          localPtyManagerProvider.overrideWithValue(_NoShellPtyManager()),
+        ],
       );
       addTearDown(container.dispose);
 
@@ -105,9 +105,9 @@ void main() {
       (tester) async {
         final container = ProviderContainer(
           overrides: [
-        appDatabaseProvider.overrideWithValue(db),
-        localPtyManagerProvider.overrideWithValue(_NoShellPtyManager()),
-      ],
+            appDatabaseProvider.overrideWithValue(db),
+            localPtyManagerProvider.overrideWithValue(_NoShellPtyManager()),
+          ],
         );
 
         await tester.pumpWidget(
@@ -361,6 +361,71 @@ void main() {
       expect(find.textContaining('BROADCAST'), findsNothing);
     });
 
+    testWidgets('dragging a pane header onto another pane swaps them', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(2400, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final container = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          localPtyManagerProvider.overrideWithValue(_NoShellPtyManager()),
+        ],
+      );
+      final notifier = container.read(terminalTabsProvider.notifier);
+
+      notifier.openLocalTab(title: 'A');
+      final first = container.read(terminalTabsProvider).activeTabId!;
+      notifier.splitTab(first, direction: Axis.horizontal);
+      final second = container.read(terminalTabsProvider).tabs.last.id;
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: ShadTheme(
+            data: ShadThemeData(
+              colorScheme: const ShadSlateColorScheme.dark(),
+              brightness: Brightness.dark,
+            ),
+            child: const MaterialApp(home: TerminalTabView()),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      final handle = find.byWidgetPredicate(
+        (widget) => widget is Draggable<String> && widget.data == second,
+      );
+      expect(handle, findsOneWidget);
+
+      final gesture = await tester.startGesture(tester.getCenter(handle));
+      await tester.pump();
+      // Dropped on the other pane's header, which is inside that pane's own
+      // drop target.
+      await gesture.moveTo(
+        tester.getCenter(find.byKey(Key('pane_label_$first'))),
+      );
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      final state = container.read(terminalTabsProvider);
+      final movedUp = state.tabs.firstWhere((t) => t.id == second);
+      final movedDown = state.tabs.firstWhere((t) => t.id == first);
+      expect(movedUp.splitParentId, isNull);
+      expect(movedDown.splitParentId, equals(second));
+      expect(movedDown.splitDirection, equals(Axis.horizontal));
+      // Neither terminal was rebuilt away by the swap.
+      expect(find.byType(TerminalView), findsNWidgets(2));
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('a split cuts only the pane it was taken from', (tester) async {
       tester.view.physicalSize = const Size(2400, 1600);
       tester.view.devicePixelRatio = 1.0;
@@ -368,9 +433,9 @@ void main() {
 
       final container = ProviderContainer(
         overrides: [
-        appDatabaseProvider.overrideWithValue(db),
-        localPtyManagerProvider.overrideWithValue(_NoShellPtyManager()),
-      ],
+          appDatabaseProvider.overrideWithValue(db),
+          localPtyManagerProvider.overrideWithValue(_NoShellPtyManager()),
+        ],
       );
       final notifier = container.read(terminalTabsProvider.notifier);
 
@@ -434,9 +499,9 @@ void main() {
     ) async {
       final container = ProviderContainer(
         overrides: [
-        appDatabaseProvider.overrideWithValue(db),
-        localPtyManagerProvider.overrideWithValue(_NoShellPtyManager()),
-      ],
+          appDatabaseProvider.overrideWithValue(db),
+          localPtyManagerProvider.overrideWithValue(_NoShellPtyManager()),
+        ],
       );
 
       final tabId = container
@@ -483,9 +548,9 @@ void main() {
     testWidgets('closing the tab ends the agent session', (tester) async {
       final container = ProviderContainer(
         overrides: [
-        appDatabaseProvider.overrideWithValue(db),
-        localPtyManagerProvider.overrideWithValue(_NoShellPtyManager()),
-      ],
+          appDatabaseProvider.overrideWithValue(db),
+          localPtyManagerProvider.overrideWithValue(_NoShellPtyManager()),
+        ],
       );
       var sessionClosed = false;
 

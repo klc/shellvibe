@@ -733,6 +733,124 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
     );
   }
 
+  /// Title bar of one pane of a split tab. Also its drag handle.
+  Widget _paneHeader(
+    BuildContext context,
+    WidgetRef ref,
+    ShellVibeTokens tokens,
+    TerminalTabSession paneSession, {
+    required String paneLabel,
+    required Color paneLabelColor,
+    required bool isBroadcastSelected,
+  }) {
+    return Container(
+      height: 34,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      color: isBroadcastSelected
+          ? tokens.brand.withValues(alpha: 0.08)
+          : tokens.terminalChrome,
+      child: Row(
+        children: [
+          ShellVibeStatusDot(
+            state: paneSession.errorMessage != null
+                ? ShellVibeDotState.error
+                : paneSession.isConnected
+                ? ShellVibeDotState.online
+                : ShellVibeDotState.idle,
+            size: 6,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              paneSession.title,
+              style: shellvibeMono(
+                context,
+                size: 11,
+                color: tokens.textSecondary,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Text(
+            paneLabel,
+            key: Key('pane_label_${paneSession.id}'),
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 1,
+              color: paneLabelColor,
+            ),
+          ),
+          // Every pane of a split tab closes on its own, the root one
+          // included — closing it promotes a split into its place
+          // instead of taking the tab down.
+          const SizedBox(width: 10),
+          Semantics(
+            label: 'Close split pane ${paneSession.title}',
+            button: true,
+            child: InkWell(
+              key: Key('close_split_${paneSession.id}'),
+              onTap: () => ref
+                  .read(terminalTabsProvider.notifier)
+                  .closePane(paneSession.id),
+              child: Padding(
+                padding: const EdgeInsets.all(2.0),
+                child: Icon(LucideIcons.x, size: 13, color: tokens.textSubtle),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// What follows the pointer while a pane header is being dragged.
+  ///
+  /// It rides under the finger rather than keeping the grab offset, so on a
+  /// phone the chip is not hidden by the hand holding it. The header itself is
+  /// as wide as its pane, which would be a feedback widget wider than the
+  /// screen; this is a chip that just names what is being carried.
+  Widget _paneDragFeedback(
+    BuildContext context,
+    ShellVibeTokens tokens,
+    TerminalTabSession paneSession,
+  ) {
+    return Material(
+      color: Colors.transparent,
+      child: Transform.translate(
+        offset: const Offset(-24, -18),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 220),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: tokens.terminalChrome,
+            borderRadius: BorderRadius.circular(tokens.radiusSmall),
+            border: Border.all(color: tokens.brand.withValues(alpha: 0.55)),
+            boxShadow: tokens.shadowPanel,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(LucideIcons.gripVertical, size: 13, color: tokens.brand),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  paneSession.title,
+                  style: shellvibeMono(
+                    context,
+                    size: 11,
+                    color: tokens.textPrimary,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildSessionTree(
     BuildContext context,
     WidgetRef ref,
@@ -761,7 +879,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
       );
       final isActivePane = paneSession.id == activePaneId;
       final isBroadcastSelected = selectedPaneIds.contains(paneSession.id);
-      final ringColor = paneSession.errorMessage != null
+      final baseRingColor = paneSession.errorMessage != null
           ? tokens.danger.withValues(alpha: 0.30)
           : paneSession.isConnecting
           ? tokens.warning.withValues(alpha: 0.28)
@@ -784,69 +902,35 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
         final paneLabelColor = isBroadcastSelected || isActivePane
             ? tokens.brand
             : tokens.textSubtle;
+        // The header doubles as the pane's drag handle: dropping it on another
+        // pane swaps the two. The terminal below is never the handle — a drag
+        // starting there is a text selection.
         body = Column(
           children: [
-            Container(
-              height: 34,
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              color: isBroadcastSelected
-                  ? tokens.brand.withValues(alpha: 0.08)
-                  : tokens.terminalChrome,
-              child: Row(
-                children: [
-                  ShellVibeStatusDot(
-                    state: paneSession.errorMessage != null
-                        ? ShellVibeDotState.error
-                        : paneSession.isConnected
-                        ? ShellVibeDotState.online
-                        : ShellVibeDotState.idle,
-                    size: 6,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      paneSession.title,
-                      style: shellvibeMono(
-                        context,
-                        size: 11,
-                        color: tokens.textSecondary,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  Text(
-                    paneLabel,
-                    key: Key('pane_label_${paneSession.id}'),
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 1,
-                      color: paneLabelColor,
-                    ),
-                  ),
-                  // Every pane of a split tab closes on its own, the root one
-                  // included — closing it promotes a split into its place
-                  // instead of taking the tab down.
-                  const SizedBox(width: 10),
-                  Semantics(
-                    label: 'Close split pane ${paneSession.title}',
-                    button: true,
-                    child: InkWell(
-                      key: Key('close_split_${paneSession.id}'),
-                      onTap: () => ref
-                          .read(terminalTabsProvider.notifier)
-                          .closePane(paneSession.id),
-                      child: Padding(
-                        padding: const EdgeInsets.all(2.0),
-                        child: Icon(
-                          LucideIcons.x,
-                          size: 13,
-                          color: tokens.textSubtle,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+            Draggable<String>(
+              data: paneSession.id,
+              dragAnchorStrategy: pointerDragAnchorStrategy,
+              feedback: _paneDragFeedback(context, tokens, paneSession),
+              childWhenDragging: Opacity(
+                opacity: 0.4,
+                child: _paneHeader(
+                  context,
+                  ref,
+                  tokens,
+                  paneSession,
+                  paneLabel: paneLabel,
+                  paneLabelColor: paneLabelColor,
+                  isBroadcastSelected: isBroadcastSelected,
+                ),
+              ),
+              child: _paneHeader(
+                context,
+                ref,
+                tokens,
+                paneSession,
+                paneLabel: paneLabel,
+                paneLabelColor: paneLabelColor,
+                isBroadcastSelected: isBroadcastSelected,
               ),
             ),
             Expanded(child: body),
@@ -854,32 +938,49 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
         );
       }
 
-      final radius = Radius.circular(tokens.radiusLarge);
-      // A corner cannot curve away underneath the tab that is supposed to be
-      // growing out of it, so the merged tab squares the one it covers.
-      final paneRadius = BorderRadius.only(
-        topLeft: squareTopLeft ? Radius.zero : radius,
-        topRight: radius,
-        bottomLeft: radius,
-        bottomRight: radius,
-      );
-      return Container(
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
-          color: tokens.terminalBg,
-          borderRadius: paneRadius,
-          boxShadow: tokens.shadowPanel,
-        ),
-        // The ring is painted over the child, not behind it. A clipped child
-        // fills the whole rounded box, so a border in the background
-        // decoration survives only where the content happens to be inset —
-        // along the corner arcs the terminal painted straight over it and the
-        // outline broke.
-        foregroundDecoration: BoxDecoration(
-          borderRadius: paneRadius,
-          border: Border.all(color: ringColor),
-        ),
-        child: body,
+      Widget paneBox(Color ringColor) {
+        final radius = Radius.circular(tokens.radiusLarge);
+        // A corner cannot curve away underneath the tab that is supposed to be
+        // growing out of it, so the merged tab squares the one it covers.
+        final paneRadius = BorderRadius.only(
+          topLeft: squareTopLeft ? Radius.zero : radius,
+          topRight: radius,
+          bottomLeft: radius,
+          bottomRight: radius,
+        );
+        return Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: tokens.terminalBg,
+            borderRadius: paneRadius,
+            boxShadow: tokens.shadowPanel,
+          ),
+          // The ring is painted over the child, not behind it. A clipped child
+          // fills the whole rounded box, so a border in the background
+          // decoration survives only where the content happens to be inset —
+          // along the corner arcs the terminal painted straight over it and the
+          // outline broke.
+          foregroundDecoration: BoxDecoration(
+            borderRadius: paneRadius,
+            border: Border.all(color: ringColor),
+          ),
+          child: body,
+        );
+      }
+
+      // A single-pane tab has no header to drag and nothing to swap with.
+      if (paneOrder.length < 2) return paneBox(baseRingColor);
+
+      // The whole pane is the drop target, not just its header: aiming at a
+      // 34px strip is far harder than aiming at the pane it belongs to.
+      return DragTarget<String>(
+        onWillAcceptWithDetails: (details) =>
+            details.data != paneSession.id && paneOrder.contains(details.data),
+        onAcceptWithDetails: (details) => ref
+            .read(terminalTabsProvider.notifier)
+            .swapPanes(details.data, paneSession.id),
+        builder: (context, candidates, _) =>
+            paneBox(candidates.isEmpty ? baseRingColor : tokens.brand),
       );
     }
 

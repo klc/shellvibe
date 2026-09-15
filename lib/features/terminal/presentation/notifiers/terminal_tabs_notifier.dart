@@ -1372,6 +1372,71 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     }
   }
 
+  /// Exchanges the positions of two panes of the same tab.
+  ///
+  /// This is a swap of what each slot *shows*, not a rearrangement of the
+  /// layout: the split directions, the ratios and the nesting all stay exactly
+  /// where they are, and only the two sessions trade places. So the children of
+  /// each pane stay with the slot rather than travelling with their parent,
+  /// which is why they are re-pointed at the other pane before the two slot
+  /// descriptions (parent, direction, ratio) are exchanged.
+  ///
+  /// Keeping the shape of the tree fixed is also what makes this always safe.
+  /// Swapping only the parent links would relabel edges the rest of the tree
+  /// still points at, and for an ancestor and a descendant two levels apart
+  /// that closes a cycle (`a -> b -> a`) and the layout fold never terminates.
+  /// Permuting two positions of an unchanged tree cannot.
+  ///
+  /// Panes of different tabs are refused: only one tab is on screen, so such a
+  /// drop cannot be aimed, and it would move a pane out from under the
+  /// selection and focus state of the tab it was in.
+  void swapPanes(String paneId, String otherPaneId) {
+    if (paneId == otherPaneId) return;
+
+    final index = state.tabs.indexWhere((t) => t.id == paneId);
+    final otherIndex = state.tabs.indexWhere((t) => t.id == otherPaneId);
+    if (index == -1 || otherIndex == -1) return;
+
+    final pane = state.tabs[index];
+    final other = state.tabs[otherIndex];
+    if (_rootIdOf(pane, state.tabs) != _rootIdOf(other, state.tabs)) return;
+
+    for (final tab in state.tabs) {
+      if (tab.id == paneId || tab.id == otherPaneId) continue;
+      if (tab.splitParentId == paneId) {
+        tab.splitParentId = otherPaneId;
+      } else if (tab.splitParentId == otherPaneId) {
+        tab.splitParentId = paneId;
+      }
+    }
+
+    final paneParentId = pane.splitParentId;
+    final paneDirection = pane.splitDirection;
+    final paneRatio = pane.splitRatio;
+
+    // When one pane is the other's parent, the slot it is moving into hangs off
+    // the slot it is vacating — which the other pane now holds.
+    pane.splitParentId = other.splitParentId == paneId
+        ? otherPaneId
+        : other.splitParentId;
+    pane.splitDirection = other.splitDirection;
+    pane.splitRatio = other.splitRatio;
+
+    other.splitParentId = paneParentId == otherPaneId ? paneId : paneParentId;
+    other.splitDirection = paneDirection;
+    other.splitRatio = paneRatio;
+
+    // Sibling order is read off this list by the layout fold, so the two panes
+    // have to take each other's place here as well. Leaving the order alone
+    // would move a pane into a slot and then lay it out on the wrong side of
+    // the sibling it shares that slot's container with.
+    final reordered = [...state.tabs];
+    reordered[index] = other;
+    reordered[otherIndex] = pane;
+
+    state = state.copyWith(tabs: reordered);
+  }
+
   void setSplitRatio(String tabId, double ratio) {
     final index = state.tabs.indexWhere((t) => t.id == tabId);
     if (index == -1) return;
