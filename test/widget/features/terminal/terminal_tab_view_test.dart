@@ -410,6 +410,10 @@ void main() {
       expect(find.byKey(const Key('terminal_menu_find')), findsOneWidget);
       expect(find.byKey(const Key('terminal_menu_clear')), findsOneWidget);
       expect(find.byKey(const Key('terminal_menu_broadcast')), findsOneWidget);
+      // Snippets live here (and on ⌘⇧S) rather than in a strip pinned under
+      // the panes, so they cost no terminal rows when nobody is sending one.
+      expect(find.byKey(const Key('terminal_menu_snippets')), findsOneWidget);
+      expect(find.byKey(const Key('terminal_snippet_drawer')), findsNothing);
       // The tab bar's own actions are repeated here, aimed at this pane.
       expect(
         find.byKey(const Key('terminal_menu_split_vertical')),

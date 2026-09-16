@@ -29,8 +29,22 @@ void main() {
     await db.close();
   });
 
+  // The header's "Add Snippet" button only appears once the library has
+  // something in it — an empty library carries its own add button in the
+  // empty state, and two of them on one blank page was the bug. Tests that
+  // want the header button therefore have to seed a snippet first.
+  Future<void> seedSnippet() => db.snippetsDao.insertSnippet(
+    SnippetsCompanion.insert(
+      id: 'seed',
+      workspaceId: 'default',
+      title: 'Uptime',
+      code: 'uptime',
+    ),
+  );
+
   group('SnippetsScreen Widget Tests', () {
     testWidgets('Renders SnippetsScreen with title and search field', (tester) async {
+      await seedSnippet();
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
@@ -56,6 +70,7 @@ void main() {
     });
 
     testWidgets('Opens SnippetFormDialog on add button tap', (tester) async {
+      await seedSnippet();
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
@@ -129,6 +144,7 @@ void main() {
     });
 
     testWidgets('Section switcher swaps the library half', (tester) async {
+      await seedSnippet();
       await tester.pumpWidget(
         ProviderScope(
           overrides: [appDatabaseProvider.overrideWithValue(db)],
@@ -149,8 +165,33 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('add_snippet_button')), findsNothing);
-      expect(find.byKey(const Key('add_runbook_button')), findsOneWidget);
+      // No runbooks yet, so the header stands down and the empty state's own
+      // "Add runbook" button is the only one on the page.
+      expect(find.byKey(const Key('add_runbook_button')), findsNothing);
       expect(find.text('No runbooks defined.'), findsOneWidget);
+      expect(find.text('Add runbook'), findsOneWidget);
+    });
+
+    testWidgets('Empty library shows only the empty state add button', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [appDatabaseProvider.overrideWithValue(db)],
+          child: ShadTheme(
+            data: ShadThemeData(
+              colorScheme: const ShadSlateColorScheme.light(),
+              brightness: Brightness.light,
+            ),
+            child: const MaterialApp(home: SnippetsScreen()),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('add_snippet_button')), findsNothing);
+      expect(find.text('No snippets yet.'), findsOneWidget);
+      expect(find.text('Add snippet'), findsOneWidget);
     });
   });
 }

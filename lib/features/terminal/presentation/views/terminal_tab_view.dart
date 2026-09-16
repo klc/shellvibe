@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,7 +18,7 @@ import '../../../bookmarks/presentation/notifiers/bookmarks_notifier.dart';
 import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
 import '../../../snippets/domain/models/snippet_model.dart';
 import '../../../snippets/domain/services/snippet_variable_parser.dart';
-import '../../../snippets/presentation/notifiers/snippets_notifier.dart';
+import '../../../snippets/presentation/widgets/snippet_picker_sheet.dart';
 import '../../../snippets/presentation/widgets/variable_input_dialog.dart';
 import '../../../templates/domain/models/template_model.dart';
 import '../../../templates/presentation/dialogs/save_template_dialog.dart';
@@ -32,6 +33,11 @@ import '../notifiers/terminal_tabs_notifier.dart';
 import '../screens/terminal_screen.dart';
 import '../widgets/pane_drop_target.dart';
 import '../widgets/resizable_split.dart';
+
+/// Whether this platform writes shortcuts with ⌘ rather than Ctrl+Shift.
+bool get _isApplePlatform =>
+    defaultTargetPlatform == TargetPlatform.macOS ||
+    defaultTargetPlatform == TargetPlatform.iOS;
 
 /// Below this bar width the trailing actions collapse into one overflow menu.
 ///
@@ -137,6 +143,20 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
                   .closeTab(activeRootTab.id);
             }
           },
+          // Snippets used to sit in a strip pinned under the panes, which cost
+          // every session three rows of terminal for something reached once in
+          // a while. They are now summoned instead — here, and from the pane's
+          // context menu.
+          const SingleActivator(
+            LogicalKeyboardKey.keyS,
+            meta: true,
+            shift: true,
+          ): _openSnippetPicker,
+          const SingleActivator(
+            LogicalKeyboardKey.keyS,
+            control: true,
+            shift: true,
+          ): _openSnippetPicker,
         },
         child: Scaffold(
           // The shell already painted the canvas; the terminal contributes the
@@ -183,10 +203,8 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
                   ],
                 ),
               ),
-              if (activeRootTab != null) ...[
-                _SnippetDrawer(onSend: (code) => _sendToPanes(tabsState, code)),
+              if (activeRootTab != null)
                 _buildStatusBar(context, tabsState, activeRootTab),
-              ],
             ],
           ),
         ),
@@ -671,6 +689,14 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
       ),
       const AdaptiveMenuDivider(),
       AdaptiveMenuAction(
+        itemKey: const Key('terminal_menu_snippets'),
+        icon: LucideIcons.codeXml,
+        label: 'Send Snippet…',
+        shortcut: _isApplePlatform ? '⌘⇧S' : 'Ctrl+Shift+S',
+        value: _openSnippetPicker,
+      ),
+      const AdaptiveMenuDivider(),
+      AdaptiveMenuAction(
         itemKey: const Key('terminal_menu_save_template'),
         icon: LucideIcons.bookmarkPlus,
         label: 'Save Tabs & Panes as Template',
@@ -745,6 +771,46 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
         (tabsState.tabs.isEmpty ? null : tabsState.tabs.first);
     if (target == null) return;
     target.terminal.paste(code);
+  }
+
+  /// Opens the snippet picker for whatever the next send would target, and
+  /// sends the chosen snippet.
+  void _openSnippetPicker() {
+    final tabsState = ref.read(terminalTabsProvider);
+    if (tabsState.tabs.isEmpty) return;
+    final selectedCount = tabsState.selectedPaneIds.length;
+    SnippetPickerSheet.show(
+      context,
+      targetLabel: tabsState.isBroadcasting
+          ? 'Send to $selectedCount panes'
+          : 'Send to the active pane',
+      onSelect: (snippet) => _runSnippet(snippet),
+    );
+  }
+
+  /// Fills a snippet's `\${INPUT:…}` placeholders, then sends it.
+  ///
+  /// The tabs state is re-read at send time rather than captured when the
+  /// picker opened: filling variables is a second dialog, and the user can
+  /// change the active pane or the broadcast selection while it is up.
+  Future<void> _runSnippet(SnippetModel snippet) async {
+    final variables = SnippetVariableParser.extractVariables(snippet.code);
+    var values = <String, String>{};
+    if (variables.isNotEmpty) {
+      if (!mounted) return;
+      final entered = await VariableInputDialog.show(
+        context,
+        variables: variables,
+        title: 'Fill variables for "${snippet.title}"',
+      );
+      if (entered == null) return;
+      values = entered;
+    }
+    if (!mounted) return;
+    _sendToPanes(
+      ref.read(terminalTabsProvider),
+      SnippetVariableParser.substituteVariables(snippet.code, values),
+    );
   }
 
   /// Of the selected panes, how many have a live session handler (i.e. can
@@ -1664,11 +1730,6 @@ class _SelectHostPanelState extends ConsumerState<_SelectHostPanel> {
 /// on one host and a sheet on another.
 enum _NewTabAction { localShell, connectToHost, deviceLink }
 
-/// Persistent one-row snippet strip under the panes.
-///
-/// The wireframe keeps it visible rather than behind a menu, and shows the
-/// `${INPUT:…}` placeholders inline so a parameterised command is recognisable
-/// before it is sent.
 /// A 32px quiet icon action in the terminal's top strip.
 ///
 /// [boxed] gives it its own hairline, shaped like a tab — rounded on top,
@@ -1717,99 +1778,6 @@ class _TabBarIconButton extends StatelessWidget {
               : null,
           child: Icon(icon, size: boxed ? 17 : 16, color: tokens.textMuted),
         ),
-      ),
-    );
-  }
-}
-
-class _SnippetDrawer extends ConsumerWidget {
-  final void Function(String code) onSend;
-
-  const _SnippetDrawer({required this.onSend});
-
-  Future<void> _run(BuildContext context, SnippetModel snippet) async {
-    final variables = SnippetVariableParser.extractVariables(snippet.code);
-    var values = <String, String>{};
-    if (variables.isNotEmpty) {
-      final entered = await VariableInputDialog.show(
-        context,
-        variables: variables,
-        title: 'Fill variables for "${snippet.title}"',
-      );
-      if (entered == null) return;
-      values = entered;
-    }
-    onSend(SnippetVariableParser.substituteVariables(snippet.code, values));
-  }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final tokens = ShellVibeTokens.resolve(context);
-    final snippets =
-        ref.watch(snippetsProvider).value ?? const <SnippetModel>[];
-    if (snippets.isEmpty) return const SizedBox.shrink();
-    final selectedCount = ref.watch(
-      terminalTabsProvider.select((s) => s.selectedPaneIds.length),
-    );
-    final sendLabel = selectedCount >= 2
-        ? 'SNIPPET · SEND TO $selectedCount PANES'
-        : 'SNIPPET · SEND TO ACTIVE PANE';
-
-    return Container(
-      key: const Key('terminal_snippet_drawer'),
-      padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
-      decoration: BoxDecoration(
-        color: tokens.surface,
-        border: Border(top: BorderSide(color: tokens.border)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                sendLabel,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  fontSize: 10,
-                  letterSpacing: 0.8,
-                  color: tokens.textMuted,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 7),
-          SizedBox(
-            height: 26,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: snippets.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 6),
-              itemBuilder: (context, index) {
-                final snippet = snippets[index];
-                final firstLine = snippet.code.split('\n').first.trim();
-                return InkWell(
-                  key: Key('snippet_chip_${snippet.id}'),
-                  onTap: () => _run(context, snippet),
-                  borderRadius: BorderRadius.circular(tokens.radiusPill),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(tokens.radiusPill),
-                      border: Border.all(color: tokens.border),
-                    ),
-                    child: Text(
-                      firstLine.isEmpty ? snippet.title : firstLine,
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: tokens.textPrimary,
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
       ),
     );
   }

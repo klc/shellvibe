@@ -1,6 +1,7 @@
 import '../../../../core/mcp/mcp_protocol.dart';
 import '../../../../shared/database/app_database.dart' show Host;
 import '../../../../shared/database/daos/hosts_dao.dart';
+import '../../../../shared/database/daos/workspaces_dao.dart';
 import '../../../hosts/data/repositories/hosts_repository.dart';
 import '../../domain/models/mcp_enums.dart';
 import '../../domain/models/mcp_models.dart';
@@ -43,11 +44,13 @@ class ListHostsTool with McpArgReaders implements McpToolHandler {
   final HostsRepository hostsRepository;
   final HostsDao hostsDao;
   final McpGrantRepository grantRepository;
+  final WorkspacesDao workspacesDao;
 
   const ListHostsTool({
     required this.hostsRepository,
     required this.hostsDao,
     required this.grantRepository,
+    required this.workspacesDao,
   });
 
   @override
@@ -59,13 +62,20 @@ class ListHostsTool with McpArgReaders implements McpToolHandler {
     description:
         'Lists every host registered in this client\'s workspace that is '
         'visible to MCP agents (a host owner can hide any host from agents '
-        'entirely; hidden hosts never appear here). For each host this '
-        'reports whether the caller currently has access ("granted"/"none") '
-        'and, if granted, the access mode. The hostId returned here is the '
-        'ONLY handle any MCP tool ever gives you on a host: hostname, port, '
-        'username, and credentials are never returned by this or any other '
-        'tool. To act on a host, request access with request_host_access, '
-        'then open_session with its hostId.',
+        'entirely; hidden hosts never appear here). Returns '
+        '{"workspace": {"id", "name"}, "hosts": [...]}. IMPORTANT: this '
+        'token is bound to ONE workspace for its whole life, named in '
+        '"workspace" — switching workspaces in the ShellVibe window does not '
+        'change what this tool returns, and hosts saved in another workspace '
+        'are never listed here. If the user asks for a host that is missing, '
+        'tell them which workspace you can see and that the host may live in '
+        'a different one, which needs its own token from Settings -> AI '
+        'Access. For each host this reports whether the caller currently has '
+        'access ("granted"/"none") and, if granted, the access mode. The '
+        'hostId returned here is the ONLY handle any MCP tool ever gives you '
+        'on a host: hostname, port, username, and credentials are never '
+        'returned by this or any other tool. To act on a host, request access '
+        'with request_host_access, then open_session with its hostId.',
     inputSchema: const {
       'type': 'object',
       'properties': <String, Object?>{},
@@ -97,7 +107,19 @@ class ListHostsTool with McpArgReaders implements McpToolHandler {
       });
     }
 
-    return result;
+    // The workspace travels with the list rather than being left implicit.
+    // A token is pinned to the workspace it was issued in, so an agent that
+    // cannot find a host has no way to tell "it is hidden" from "it is in the
+    // workspace next door" — and neither did the user, who saw the app
+    // showing one workspace and the agent answering about another.
+    final workspace = await workspacesDao.getWorkspaceById(ctx.workspaceId);
+    return {
+      'workspace': {
+        'id': ctx.workspaceId,
+        'name': workspace?.name ?? ctx.workspaceId,
+      },
+      'hosts': result,
+    };
   }
 
   Future<String?> _groupNameOf(String? groupId) async {

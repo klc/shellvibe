@@ -20,6 +20,7 @@
 // as (or corrupt) a protocol frame. All diagnostics go to stderr, which the
 // client ignores.
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -37,6 +38,7 @@ const String _bridgeOrigin = 'shellvibe-bridge';
 
 Future<void> main(List<String> arguments) async {
   final endpointPath = _resolveEndpointPath(arguments);
+  final orphanWatch = _watchForOrphaning();
 
   // Sequential by design: the bridge is a 1:1 relay, not a scheduler. MCP
   // clients send one request and await one response before sending the
@@ -48,6 +50,51 @@ Future<void> main(List<String> arguments) async {
       continue;
     }
     await _handleLine(line, endpointPath);
+  }
+
+  orphanWatch?.cancel();
+}
+
+/// Exits once this process has been orphaned, i.e. the MCP client that
+/// launched it is gone.
+///
+/// Normally the client closing our stdin ends the loop in [main] and the
+/// process exits on its own. That does not happen when the client dies
+/// without closing the pipe, or when a copy of the write end was inherited by
+/// something still running: stdin never reaches EOF, and the bridge sits
+/// there forever. A long session that reconnects a few times then accumulates
+/// one idle `shellvibe-mcp` per reconnect.
+///
+/// Being orphaned is the reliable signal for that: on POSIX an orphan is
+/// reparented to init/launchd, so a parent pid of 1 means nobody is on the
+/// other end of the pipe any more. Windows has no equivalent reparenting
+/// rule, so the watch simply does not run there.
+Timer? _watchForOrphaning() {
+  if (!Platform.isLinux && !Platform.isMacOS) {
+    return null;
+  }
+  return Timer.periodic(const Duration(seconds: 30), (timer) async {
+    final parentPid = await _parentPid();
+    // Unknown (`ps` missing or refused) is not a reason to kill a working
+    // bridge; only an answer of "1" is.
+    if (parentPid == 1) {
+      timer.cancel();
+      stderr.writeln(
+        'shellvibe-mcp: parent process is gone; exiting instead of '
+        'lingering.',
+      );
+      exit(0);
+    }
+  });
+}
+
+Future<int?> _parentPid() async {
+  try {
+    final result = await Process.run('ps', ['-o', 'ppid=', '-p', '$pid']);
+    if (result.exitCode != 0) return null;
+    return int.tryParse((result.stdout as String).trim());
+  } catch (_) {
+    return null;
   }
 }
 

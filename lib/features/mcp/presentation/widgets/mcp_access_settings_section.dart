@@ -11,6 +11,7 @@ import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/widgets/adaptive_modal.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../../../shared/database/app_database.dart';
+import '../../../../shared/providers/workspace_provider.dart';
 import '../../data/mcp_server_controller.dart';
 import '../notifiers/mcp_settings_notifier.dart';
 import 'mcp_activity_panel.dart';
@@ -154,12 +155,30 @@ final class McpAccessSettingsSection extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(16, 14, 8, 8),
             child: Row(
               children: [
-                const Expanded(
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text('Clients'),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('Clients'),
+                      const SizedBox(height: 2),
+                      // A token is minted for one workspace and stays bound to
+                      // it: switching workspaces in the window does not change
+                      // what an already-issued token can see, which is
+                      // otherwise invisible from both sides — the app shows one
+                      // workspace while the agent answers about another.
+                      Text(
+                        'Tokens issued here only ever see '
+                        '${_activeWorkspaceName(ref)}. A host in another '
+                        'workspace needs a client registered there.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: tokens.textMuted,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
+                const SizedBox(width: 8),
                 ShellVibeButton.secondary(
                   key: const Key('mcp_add_client_button'),
                   label: 'Add client',
@@ -201,6 +220,16 @@ final class McpAccessSettingsSection extends ConsumerWidget {
   List<McpClient> _userClients(McpSettingsState settings) => settings.clients
       .where((c) => c.name != McpServerController.systemClientName)
       .toList(growable: false);
+
+  /// The workspace new tokens will be bound to, by name.
+  String _activeWorkspaceName(WidgetRef ref) {
+    final id = ref.watch(activeWorkspaceIdProvider);
+    final workspaces = ref.watch(workspacesProvider).value ?? const [];
+    for (final workspace in workspaces) {
+      if (workspace.id == id) return 'the "${workspace.name}" workspace';
+    }
+    return 'this workspace';
+  }
 
   Widget _buildClientRow(
     BuildContext context,

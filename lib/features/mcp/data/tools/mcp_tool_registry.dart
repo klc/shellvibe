@@ -79,6 +79,7 @@ McpToolRegistry mcpToolRegistry(Ref ref) {
       hostsRepository: hostsRepository,
       hostsDao: hostsDao,
       grantRepository: grantRepository,
+      workspacesDao: ref.watch(appDatabaseProvider).workspacesDao,
     ),
     DescribeHostTool(
       hostsRepository: hostsRepository,
