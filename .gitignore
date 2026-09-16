@@ -67,7 +67,9 @@ tool/bench/results/
 dist/
 
 # Internal planning, product and review documents. Kept locally, not published.
-docs/
+docs/*
+# …except the README's screenshots, which have to ship with the repository.
+!docs/screenshots/
 
 # graphify skill cache: local tooling output, carries absolute local paths.
 graphify-out/

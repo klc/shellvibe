@@ -7,17 +7,70 @@
 
 ShellVibe brings modern, hardware-accelerated terminal rendering, a Zero-Knowledge encrypted identity vault, dual-pane SFTP, visual port-forwarding tunnels and multi-step runbook automation to **five platforms from a single codebase** — competing with Termius, Warp, Tabby, Blink Shell and MobaXterm.
 
+## 📸 Screenshots
+
+| Terminal — split panes | Hosts — with favourites |
+| :--- | :--- |
+| ![Split terminal panes running a git log and htop side by side](docs/screenshots/terminal-split.png) | ![Host list with two starred hosts and a Favorites filter](docs/screenshots/hosts.png) |
+
+| Dual-pane SFTP | Command palette (⌘K) |
+| :--- | :--- |
+| ![SFTP browser with the local workstation on the left and the remote host on the right, over a transfer queue](docs/screenshots/sftp.png) | ![Command palette listing bookmarks first, then hosts, then modules](docs/screenshots/command-palette.png) |
+
+<details>
+<summary>More screens — pane menu, tunnels, snippets, vault, AI access, settings, workspaces</summary>
+
+**Right-click menu on a pane** — terminal actions and the tab bar's own split, template and transfer actions, aimed at the pane you clicked.
+
+![Terminal pane context menu](docs/screenshots/pane-menu.png)
+
+**Empty terminal screen** — a local shell, a saved server or a session handed over from your phone, with starred hosts as chips.
+
+![Terminal screen with no open sessions, offering Local shell, Connect to host, Device Link and two favourite hosts](docs/screenshots/terminal-empty.png)
+
+**Port-forwarding tunnels** — local, remote and dynamic SOCKS5 rules with live state.
+
+![Tunnel list showing a local forward from 127.0.0.1:8080 to 127.0.0.1:80](docs/screenshots/tunnels.png)
+
+**Snippets** — parameterised commands (`${INPUT:name}`) reusable across every host in the workspace.
+
+![Snippet list with three parameterised commands and their tags](docs/screenshots/snippets.png)
+
+**Identity vault** — Argon2id + AES-256-GCM, master-password gated.
+
+![Vault identity list showing one stored password identity](docs/screenshots/vault.png)
+
+**AI access** — an MCP server, off by default, that lets an agent reach registered hosts under per-host approval, never with the credential itself.
+
+![AI Access settings with the agent toggle, registered clients, live activity and a kill switch](docs/screenshots/ai-access.png)
+
+**Terminal settings** — palette, font, ligatures, cursor; applied to open sessions immediately.
+
+![Terminal settings with a colour-scheme preview and font sample](docs/screenshots/terminal-settings.png)
+
+**Workspaces** — hosts, credentials, tunnels and automation scoped by context.
+
+![Workspace list with one marked active](docs/screenshots/workspaces.png)
+
+</details>
+
 ## ✨ Features
 
 - **Local Shell** — `flutter_pty` powered local terminal (zsh/bash/pwsh) on macOS, Windows, Linux & Android (iOS sandbox aware).
 - **SSHv2** — Pure Dart `dart_ssh2` engine with isolate-offloaded Key Exchange (jank-free) and TOFU host-key verification against a `known_hosts` store.
+- **Split panes & layouts** — Tabs split side by side or top/bottom, panes rearranged by dragging their header, a right-click menu on every pane, broadcast input, and a whole tab-and-pane arrangement saved as a template to run again.
+- **Bookmarks & command palette** — Star a host or a saved layout and it leads the ⌘K palette, the Connect to Host panel and the terminal's empty screen, so a server opens from anywhere.
 - **Dual-pane SFTP** — Background transfer queue, atomic uploads (temp + rename), in-app remote file editor, chmod/chown, path-traversal protection.
 - **Visual Tunnels** — Local (`-L`), Remote (`-R`) and Dynamic SOCKS5 (`-D`) port forwarding with live throughput stats.
 - **Identity Vault** — Argon2id + AES-256-GCM Zero-Knowledge encryption. Master password protected DEK/KEK architecture, brute-force lockout and auto-lock on background.
 - **Snippets & Runbooks** — `${INPUT:variable}` parameterised commands and multi-step runbook execution with exit-code / regex output verification.
-- **Workspaces** — Isolated workspace scoping for hosts, identities and snippets.
+- **Workspaces** — Isolated workspace scoping for hosts, identities, tunnels and automation; switched by clicking the workspace card.
+- **AI access (MCP)** — A localhost-only MCP server, off by default per workspace, that gives an agent (Claude Code, Claude Desktop, any MCP client) `list_hosts`, `describe_host`, `request_host_access`, `open_session`, `run_command`, `interrupt`, `close_session` and `list_sessions` — under per-host approval and policy, with an audit log and a kill switch, and never a stored credential.
+- **Device Link** — Pair a phone over your own LAN with a QR code and take a session over from the other device.
 - **E2EE Cloud Sync** — Self-contained encrypted backup export/import (DEK wrapped with backup password, re-wrapping of secrets across devices).
 - **Design System** — "Quiet Ops" theme with 7+ dark palettes (OLED, Catppuccin, Nord, Dracula, Solarized, TokyoNight, Gruvbox) via Shadcn UI.
+
+Release-by-release detail lives in [`CHANGELOG.md`](CHANGELOG.md).
 
 ## 🧱 Tech Stack
 
@@ -28,7 +81,7 @@ ShellVibe brings modern, hardware-accelerated terminal rendering, a Zero-Knowled
 | Terminal UI | `xterm3` (maintained fork) |
 | SSH / SFTP | `dart_ssh2` (Pure Dart) |
 | Local PTY | `flutter_pty` |
-| Database | `drift` (SQLite) — 9 tables, schema-versioned migrations |
+| Database | `drift` (SQLite) — 18 tables, schema version 9, migrated in place |
 | Secure Storage | `flutter_secure_storage` (Keychain / KeyStore / Credential Manager) |
 | Crypto | `cryptography` — AES-256-GCM + Argon2id |
 | Routing | `go_router` (declarative, vault-gated) |
@@ -42,8 +95,9 @@ shellvibe/
 └── lib/
     ├── main.dart
     ├── app/            # router, theme, navigation shell
-    ├── core/           # crypto, network (SSH/SOCKS5/PTY), sync, utils
-    ├── features/       # terminal, hosts, sftp, tunnels, vault, snippets, settings, workspaces
+    ├── core/           # crypto, network (SSH/SOCKS5/PTY), mcp, sync, utils
+    ├── features/       # terminal, hosts, sftp, tunnels, vault, snippets, templates,
+    │                   # bookmarks, workspaces, device_link, mcp, settings
     │   └── <feature>/{data,domain,presentation}
     └── shared/         # drift database (tables/DAOs), providers, secure storage
 ```
@@ -54,7 +108,8 @@ See [`AGENTS.md`](AGENTS.md) for the architecture map and the conventions this c
 
 Builds for macOS, Windows and Linux are attached to each
 [release](https://github.com/klc/shellvibe/releases), with a `SHA256SUMS` file
-to check them against.
+to check them against. The macOS build requires **macOS 12 (Monterey) or
+newer**; Windows and Linux carry no version floor beyond a current desktop.
 
 **They are not code-signed yet**, so your operating system will warn you that it
 cannot tell who built them. The warning is accurate — verify the checksums
@@ -95,6 +150,7 @@ flutter test
 - Identity secrets (passwords, private keys, passphrases) are encrypted with a random Data Encryption Key (DEK). With a master password configured, the DEK is stored only in its AES-256-GCM wrapped form and the plaintext copy is purged from the keychain.
 - Failed unlock attempts trigger exponential back-off lockout (30s → … → 1h).
 - SFTP operations mitigate path-traversal (slip) attacks and uploads use atomic temp-file + rename commits.
+- AI access is off by default in every workspace. When it is on, the MCP server listens on `127.0.0.1` only, an agent sees a host as an opaque id rather than a hostname or credential, each host is granted read-only or read-write by hand, every tool call is written to an audit log, and one button cuts all agent access.
 
 ### macOS App Sandbox is disabled
 
