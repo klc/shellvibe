@@ -160,23 +160,39 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
     final snippetsAsync = ref.watch(snippetsProvider);
     final runbooksAsync = ref.watch(runbooksProvider);
 
+    // An empty library already offers its own "Add …" button in the empty
+    // state, right where the user is looking. Keeping the header button as
+    // well put two identical calls to action on one otherwise blank page, so
+    // the header one stands down until there is a list to add to.
+    final isSectionEmpty = switch (_section) {
+      AutomationSection.snippets => snippetsAsync.maybeWhen(
+        data: (snippets) => snippets.isEmpty,
+        orElse: () => false,
+      ),
+      AutomationSection.runbooks => runbooksAsync.maybeWhen(
+        data: (runbooks) => runbooks.isEmpty,
+        orElse: () => false,
+      ),
+    };
+
     // Flexible, not a bare Text: a shadcn button shrink-wraps its label, so at
     // a large system text scale an unbounded one overflows its own button.
     final actions = <Widget>[
-      switch (_section) {
-        AutomationSection.snippets => ShellVibeButton(
-          key: const Key('add_snippet_button'),
-          label: 'Add Snippet',
-          icon: LucideIcons.plus,
-          onPressed: _openSnippetForm,
-        ),
-        AutomationSection.runbooks => ShellVibeButton(
-          key: const Key('add_runbook_button'),
-          label: 'Add Runbook',
-          icon: LucideIcons.plus,
-          onPressed: _openRunbookEditor,
-        ),
-      },
+      if (!isSectionEmpty)
+        switch (_section) {
+          AutomationSection.snippets => ShellVibeButton(
+            key: const Key('add_snippet_button'),
+            label: 'Add Snippet',
+            icon: LucideIcons.plus,
+            onPressed: _openSnippetForm,
+          ),
+          AutomationSection.runbooks => ShellVibeButton(
+            key: const Key('add_runbook_button'),
+            label: 'Add Runbook',
+            icon: LucideIcons.plus,
+            onPressed: _openRunbookEditor,
+          ),
+        },
     ];
 
     return Column(

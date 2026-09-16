@@ -56,6 +56,17 @@ void main() {
     testWidgets('Automation library opens RunbookEditorDialog from the shell', (
       tester,
     ) async {
+      // The header's add button only appears once the library is non-empty;
+      // on an empty one the empty state owns that call to action.
+      await db.runbooksDao.insertRunbook(
+        RunbooksCompanion.insert(
+          id: 'seed',
+          workspaceId: 'default',
+          title: 'Nightly checks',
+          createdAt: DateTime.now(),
+        ),
+      );
+
       await tester.pumpWidget(
         wrap(
           const SnippetsScreen(
