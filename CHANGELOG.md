@@ -7,6 +7,49 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-09-17
+
+### Added
+
+**Port forwarding**
+
+- A forward starts without a terminal session. It needs an authenticated SSH
+  client and nothing else, so it now opens one in the background instead of
+  refusing until a terminal happened to be connected to the right host. A
+  connected tab for that host is still reused, one background connection is
+  shared by every rule on a host, and it closes once the last of them stops.
+  Jump hosts are dialed through the same chain the terminal walks.
+
+**Terminal**
+
+- Snippets are sent from a picker — ⌘⇧S / Ctrl+Shift+S, or "Send Snippet…" in
+  a pane's right-click menu — which searches title, body and tags, and names
+  whether the next send lands on the active pane or on a broadcast selection.
+
+**AI access**
+
+- `list_hosts` reports the workspace the calling token is bound to, and
+  Settings → AI Access says the same where the token is minted. A token is
+  pinned to one workspace for its whole life, so a host saved in another one
+  is invisible to it however the window is switched — which used to look
+  exactly like a host that had been hidden or had gone missing.
+
+### Changed
+
+- The snippet strip that sat permanently under the panes is gone, and the
+  terminal takes those rows back. See the picker above.
+- An empty Automation Library draws its "Add" button once, in the empty state,
+  rather than there and in the page header.
+
+### Fixed
+
+- A forward started while a terminal was open on a *different* host tunneled
+  through that host. The session it reuses is now matched on the rule's own
+  host.
+- `shellvibe-mcp` exits once the client that launched it is gone. A client
+  that died without closing the pipe left the bridge running, so reconnecting
+  a few times in one session left a process behind each time.
+
 ## [1.1.0] - 2026-09-16
 
 **This release raises the minimum macOS version to 12.0 (Monterey).** Xcode 26
@@ -153,6 +196,7 @@ entry describes what ShellVibe is rather than what changed.
 - iOS and Android are not released. The code builds for them and they are not
   part of this release.
 
-[Unreleased]: https://github.com/klc/shellvibe/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/klc/shellvibe/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/klc/shellvibe/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/klc/shellvibe/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/klc/shellvibe/releases/tag/v1.0.0
