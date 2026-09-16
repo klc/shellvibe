@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -10,17 +9,16 @@ import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../../../core/network/tunnel_engine.dart';
 import '../../../../shared/providers/workspace_provider.dart';
 import '../../../hosts/domain/models/host_model.dart';
+import '../../../hosts/domain/services/host_launcher.dart';
 import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
-import '../../../terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import '../../domain/models/tunnel_rule_model.dart';
 import '../providers/tunnels_providers.dart';
 import '../widgets/tunnel_form_dialog.dart';
 
 class TunnelsScreen extends ConsumerStatefulWidget {
-  final SSHClient? activeSshClient;
   final String? filterHostId;
 
-  const TunnelsScreen({super.key, this.activeSshClient, this.filterHostId});
+  const TunnelsScreen({super.key, this.filterHostId});
 
   @override
   ConsumerState<TunnelsScreen> createState() => _TunnelsScreenState();
@@ -28,6 +26,11 @@ class TunnelsScreen extends ConsumerStatefulWidget {
 
 class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
   final Map<String, HostModel> _hostsMap = {};
+
+  /// Rules whose SSH connection is being dialed right now. A background
+  /// connect can take seconds and produces nothing visible until it lands, so
+  /// the card shows it rather than looking like a dead button.
+  final Set<String> _startingRuleIds = {};
 
   @override
   void initState() {
@@ -180,8 +183,10 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
                   padding: EdgeInsets.fromLTRB(14, 0, 14, tokens.panelGap + 4),
                   child: ShellVibeInfoNote(
                     message:
-                        'Tunnels stay open after their session closes; they '
-                        'stop when the app quits.',
+                        'Starting a forward opens its own SSH session when no '
+                        'terminal is connected to that host. Tunnels stay open '
+                        'after their session closes; they stop when the app '
+                        'quits.',
                   ),
                 ),
               ],
@@ -211,6 +216,7 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
     final tokens = ShellVibeTokens.resolve(context);
     final isActive = activeTunnel?.isActive ?? false;
     final hasError = activeTunnel?.error != null;
+    final isStarting = _startingRuleIds.contains(rule.id);
     final isDynamic = rule.type == 'dynamic';
 
     final accent = hasError
@@ -229,12 +235,16 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
         ? 'failed'
         : isActive
         ? 'active'
+        : isStarting
+        ? 'connecting'
         : 'stopped';
     final detailLabel = hasError
         ? activeTunnel!.error!
         : isActive
         ? '${activeTunnel!.formattedSpeed} · '
               '${activeTunnel.formattedBytes} transferred'
+        : isStarting
+        ? 'opening an SSH session'
         : 'not running';
 
     return Container(
@@ -342,16 +352,29 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
             ),
           ),
           const SizedBox(width: 14),
-          ShellVibeIconButton(
-            icon: hasError
-                ? LucideIcons.refreshCw
-                : isActive
-                ? LucideIcons.square
-                : LucideIcons.play,
-            tooltip: isActive ? 'Stop tunnel' : 'Start tunnel',
-            ringed: true,
-            onPressed: () => unawaited(_toggleRule(rule, start: !isActive)),
-          ),
+          if (isStarting)
+            const SizedBox(
+              width: 34,
+              height: 34,
+              child: Center(
+                child: SizedBox(
+                  width: 15,
+                  height: 15,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            )
+          else
+            ShellVibeIconButton(
+              icon: hasError
+                  ? LucideIcons.refreshCw
+                  : isActive
+                  ? LucideIcons.square
+                  : LucideIcons.play,
+              tooltip: isActive ? 'Stop tunnel' : 'Start tunnel',
+              ringed: true,
+              onPressed: () => unawaited(_toggleRule(rule, start: !isActive)),
+            ),
           const SizedBox(width: 7),
           PopupMenuButton<String>(
             padding: EdgeInsets.zero,
@@ -392,27 +415,41 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
     );
   }
 
-  /// Starts or stops a rule, reporting the one failure the user can act on:
-  /// a tunnel needs a live SSH session to ride.
+  /// Starts or stops a rule.
+  ///
+  /// Starting no longer requires a terminal session: the notifier reuses a
+  /// connected tab for this host when there is one and otherwise dials in the
+  /// background, so the only thing left here is the waiting state and the
+  /// prompts — credentials and an unknown host key — that need a widget to
+  /// show them in.
   Future<void> _toggleRule(TunnelRuleModel rule, {required bool start}) async {
     final notifier = ref.read(tunnelsProvider.notifier);
     if (!start) {
       await notifier.stopRule(rule.id);
       return;
     }
-    final activeClient =
-        widget.activeSshClient ??
-        ref.read(terminalTabsProvider).activeTab?.sshSessionManager?.client;
-    if (activeClient == null || activeClient.isClosed) {
+    if (_startingRuleIds.contains(rule.id)) return;
+    setState(() => _startingRuleIds.add(rule.id));
+    final launcher = HostLauncher(context: context, ref: ref);
+    try {
+      await notifier.startRule(
+        rule,
+        resolveIdentity: launcher.resolveIdentity,
+        onHostKeyPrompt: launcher.promptHostKey,
+      );
+    } catch (e) {
       if (!mounted) return;
       ShadToaster.of(context).show(
-        const ShadToast.destructive(
-          description: Text('Active SSH Connection required to start tunnel'),
+        ShadToast.destructive(
+          title: const Text('Tunnel could not start'),
+          description: Text('$e'),
         ),
       );
-      return;
+    } finally {
+      if (mounted) {
+        setState(() => _startingRuleIds.remove(rule.id));
+      }
     }
-    await notifier.startRule(rule, activeClient);
   }
 }
 

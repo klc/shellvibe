@@ -105,6 +105,67 @@ final class TunnelEngineProvider
 
 String _$tunnelEngineHash() => r'7aa0beb251d42456ace1deeef18e015a6ab575c7';
 
+/// Provider for [TunnelSshPool].
+///
+/// `keepAlive` for the same reason [tunnelEngineProvider] is: the connections
+/// it holds outlive whatever screen started them, and an auto-disposing pool
+/// would drop a live forward's transport the moment the Tunnels screen was
+/// popped.
+
+@ProviderFor(tunnelSshPool)
+final tunnelSshPoolProvider = TunnelSshPoolProvider._();
+
+/// Provider for [TunnelSshPool].
+///
+/// `keepAlive` for the same reason [tunnelEngineProvider] is: the connections
+/// it holds outlive whatever screen started them, and an auto-disposing pool
+/// would drop a live forward's transport the moment the Tunnels screen was
+/// popped.
+
+final class TunnelSshPoolProvider
+    extends $FunctionalProvider<TunnelSshPool, TunnelSshPool, TunnelSshPool>
+    with $Provider<TunnelSshPool> {
+  /// Provider for [TunnelSshPool].
+  ///
+  /// `keepAlive` for the same reason [tunnelEngineProvider] is: the connections
+  /// it holds outlive whatever screen started them, and an auto-disposing pool
+  /// would drop a live forward's transport the moment the Tunnels screen was
+  /// popped.
+  TunnelSshPoolProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'tunnelSshPoolProvider',
+        isAutoDispose: false,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$tunnelSshPoolHash();
+
+  @$internal
+  @override
+  $ProviderElement<TunnelSshPool> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  TunnelSshPool create(Ref ref) {
+    return tunnelSshPool(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(TunnelSshPool value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<TunnelSshPool>(value),
+    );
+  }
+}
+
+String _$tunnelSshPoolHash() => r'70d271ff3b987d962887d60b648cfa0e1151b588';
+
 /// Stream provider for active tunnels from [TunnelEngine]
 
 @ProviderFor(activeTunnelsStream)
@@ -184,7 +245,7 @@ final class TunnelsNotifierProvider
   }
 }
 
-String _$tunnelsNotifierHash() => r'7357fec4d91437f6afd1aba639d3636768901233';
+String _$tunnelsNotifierHash() => r'854a85b9dd3bbb6902446e271af0ef4c1578f9a2';
 
 abstract class _$TunnelsNotifier extends $Notifier<TunnelsState> {
   TunnelsState build();
