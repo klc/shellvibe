@@ -24,6 +24,25 @@ abstract class SecureStorageKeys {
   /// on every pairing — one that cannot take back the session its previous
   /// identity still holds.
   static const String deviceLinkClientDeviceId = 'device_link_client_device_id';
+
+  /// Sanctum bearer token for the ShellVibe Server account session.
+  static const String accountToken = 'shellvibe_account_token';
+
+  /// The server's ULID for *this* install's device record.
+  ///
+  /// Has to be durable across sign-ins: `POST /auth/login` opens a brand new
+  /// device record whenever the request arrives without a `device_id`, so an
+  /// install that forgets this id shows up as a new device on every sign-in
+  /// and inflates the account's device list.
+  static const String accountDeviceId = 'shellvibe_account_device_id';
+
+  /// The server's ULID for the signed-in user. Also the RevenueCat
+  /// `appUserId`, which is how a purchase webhook finds the right account.
+  static const String accountUserId = 'shellvibe_account_user_id';
+
+  /// Cached account email, so the sign-in form can prefill after a token is
+  /// revoked. Not a credential.
+  static const String accountEmail = 'shellvibe_account_email';
 }
 
 /// Secure Storage Service leveraging hardware-backed secure storage
