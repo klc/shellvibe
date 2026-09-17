@@ -242,8 +242,12 @@ class ShellVibeTokens extends ThemeExtension<ShellVibeTokens> {
     surface: Color(0xFFFFFFFF),
     surfaceLow: Color(0xFFF7F8FB),
     surfaceRaised: Color(0xFFFFFFFF),
-    terminalBg: Color(0xFF101218),
-    terminalChrome: Color(0xFF151827),
+    // Daylight has its own terminal chrome. These two used to carry the dark
+    // theme's values verbatim, which painted a pane header and the bottom of
+    // the active tab's gradient near-black on a white app — and put dark text
+    // on a dark fill wherever else they are used.
+    terminalBg: Color(0xFFF2F4F8),
+    terminalChrome: Color(0xFFE9ECF2),
     railBg: Color(0xFFFFFFFF),
     border: Color(0x14101218),
     textPrimary: Color(0xFF171B21),

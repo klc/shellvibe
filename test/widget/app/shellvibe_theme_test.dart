@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shellvibe/app/theme/app_palette_definitions.dart';
 import 'package:shellvibe/app/theme/app_theme.dart';
 import 'package:shellvibe/app/theme/shellvibe_tokens.dart';
 import 'package:shellvibe/features/settings/domain/models/app_settings_model.dart';
@@ -101,5 +102,25 @@ void main() {
 
     expect(tokens, ShellVibeTokens.light);
     expect(theme.scaffoldBackgroundColor, const Color(0xFFF2F4F8));
+  });
+
+  test('Every palette keeps its terminal chrome light in daylight', () {
+    // These two used to be copied from the dark contract and never overridden,
+    // which painted the pane header and the bottom of the active tab's
+    // gradient near-black on an otherwise white app.
+    for (final palette in AppPalette.values) {
+      final tokens = AppPaletteDefinition.forPalette(palette).lightTokens;
+
+      for (final entry in {
+        'terminalBg': tokens.terminalBg,
+        'terminalChrome': tokens.terminalChrome,
+      }.entries) {
+        expect(
+          entry.value.computeLuminance(),
+          greaterThan(0.5),
+          reason: '${palette.name} light ${entry.key} is a dark colour',
+        );
+      }
+    }
   });
 }
