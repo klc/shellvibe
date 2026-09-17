@@ -53,7 +53,7 @@ dependencies:
   # width: at a 204-column grid holding 10000 lines, 60-column output retains
   # 24 MB less and 90-column output 20 MB less, which is memory a mobile
   # session keeps.
-  xterm3: ^6.3.0
+  xterm3: ^6.3.1
   # Back on the pub.dev release: every fix we carried on our fork landed
   # upstream by 4.0.1 (the transport, KEX, SFTP, web and HTTP work in #229,
   # #230 and #231), so there is nothing left for a pin to hold.
