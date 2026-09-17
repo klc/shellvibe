@@ -13,6 +13,7 @@ import '../../../../core/constants/app_constants.dart';
 import '../../../../core/models/mosh_prediction_mode.dart';
 import '../../../../core/utils/platform_capabilities.dart';
 import '../../../../shared/providers/database_providers.dart';
+import '../../../account/presentation/widgets/account_settings_section.dart';
 import '../../../device_link/presentation/widgets/paired_devices_settings_section.dart';
 import '../../../mcp/presentation/widgets/mcp_access_settings_section.dart';
 import '../../../terminal/domain/models/terminal_font.dart';
@@ -35,6 +36,7 @@ enum SettingsSection {
   deviceLink('Device Link', LucideIcons.smartphone),
   aiAccess('AI Access', LucideIcons.bot),
   vault('Vault', LucideIcons.lockKeyhole),
+  account('Account', LucideIcons.circleUser),
   sync('Sync', LucideIcons.cloudCog),
   about('About', LucideIcons.info);
 
@@ -320,6 +322,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     SettingsSection.aiAccess =>
       'AI agent access, registered clients, and the kill switch.',
     SettingsSection.vault => 'Master password and auto-lock.',
+    SettingsSection.account =>
+      'Optional. Only cloud backup needs one.',
     SettingsSection.sync => 'Backup and restore.',
     SettingsSection.about => 'Version, updates and licenses.',
   };
@@ -954,6 +958,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         return [
           _buildSectionHeader('AI Access', LucideIcons.bot),
           const McpAccessSettingsSection(),
+        ];
+      case SettingsSection.account:
+        return [
+          _buildSectionHeader('Account', LucideIcons.circleUser),
+          const AccountSettingsSection(),
         ];
       case SettingsSection.sync:
         return [
