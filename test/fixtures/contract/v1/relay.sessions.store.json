@@ -1,0 +1,28 @@
+{
+    "status": 201,
+    "body": {
+        "data": {
+            "session": {
+                "id": "<ulid>",
+                "user_id": "<ulid>",
+                "host_device_id": "<ulid>",
+                "guest_device_id": null,
+                "channel_name": "private-device-link-<ulid>",
+                "status": "active",
+                "bytes_transferred": null,
+                "started_at": "<timestamp>",
+                "ended_at": null,
+                "termination_reason": null,
+                "created_at": "<timestamp>"
+            },
+            "channel_name": "private-device-link-<ulid>",
+            "ticket": "<ticket>",
+            "realtime": {
+                "app_key": "<app_key>",
+                "host": "<host>",
+                "port": "<port>",
+                "scheme": "<scheme>"
+            }
+        }
+    }
+}

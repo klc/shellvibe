@@ -1,0 +1,25 @@
+{
+    "status": 201,
+    "body": {
+        "data": [
+            {
+                "id": "<ulid>",
+                "workspace_id": "<ulid>",
+                "key_version": 1,
+                "recipient_device_id": "<ulid>",
+                "recipient_key_fingerprint": "SHA256:memberfingerprint...",
+                "crypto_suite": "HPKE-X25519-ChaCha20Poly1305",
+                "encapsulated_key": "encapsulated_key_bytes...",
+                "ciphertext": "wrapped_wdek_bytes...",
+                "creator_device_id": "<ulid>",
+                "signature": "signature_bytes...",
+                "created_at": "<timestamp>"
+            }
+        ],
+        "meta": {
+            "count": 1,
+            "workspace_status": "active",
+            "current_key_version": 1
+        }
+    }
+}

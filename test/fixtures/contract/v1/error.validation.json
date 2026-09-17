@@ -1,0 +1,16 @@
+{
+    "status": 422,
+    "body": {
+        "code": "validation_failed",
+        "message": "The given data was invalid.",
+        "details": {
+            "email": [
+                "The email field is required."
+            ],
+            "password": [
+                "The password field is required."
+            ]
+        },
+        "request_id": "<ulid>"
+    }
+}

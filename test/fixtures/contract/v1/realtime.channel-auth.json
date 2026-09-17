@@ -1,0 +1,7 @@
+{
+    "status": 200,
+    "body": {
+        "auth": "<auth>",
+        "channel_data": "{\"user_id\":\"<ulid>\",\"device_id\":\"<ulid>\",\"role\":\"host\"}"
+    }
+}

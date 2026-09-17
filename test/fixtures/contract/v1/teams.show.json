@@ -1,0 +1,18 @@
+{
+    "status": 200,
+    "body": {
+        "data": {
+            "id": "<ulid>",
+            "owner_user_id": "<ulid>",
+            "encrypted_metadata": "encrypted_team_name_blob",
+            "status": "active",
+            "members_count": 1,
+            "workspaces_count": 0,
+            "created_at": "<timestamp>",
+            "updated_at": "<timestamp>"
+        },
+        "meta": {
+            "current_user_role": "owner"
+        }
+    }
+}

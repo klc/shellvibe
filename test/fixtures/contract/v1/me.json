@@ -1,0 +1,24 @@
+{
+    "status": 200,
+    "body": {
+        "data": {
+            "user": {
+                "id": "<ulid>",
+                "name": "Contract Fixture",
+                "email": "contract@shellvibe.app",
+                "email_verified": false,
+                "created_at": "<timestamp>"
+            },
+            "device": {
+                "id": "<ulid>",
+                "name": "Fixture MacBook",
+                "platform": "macos",
+                "app_version": "2.0.0",
+                "last_seen_at": "<timestamp>",
+                "revoked_at": null,
+                "crypto_identity": null,
+                "created_at": "<timestamp>"
+            }
+        }
+    }
+}

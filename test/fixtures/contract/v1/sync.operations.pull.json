@@ -1,0 +1,22 @@
+{
+    "status": 200,
+    "body": {
+        "data": [
+            {
+                "id": "<ulid>",
+                "vault_id": "<ulid>",
+                "device_id": "<ulid>",
+                "logical_clock": 101,
+                "entity_type": "host",
+                "entity_id": "host_001",
+                "operation": "upsert",
+                "encrypted_payload": "encrypted_host_data_payload_1",
+                "created_at": "<timestamp>"
+            }
+        ],
+        "meta": {
+            "count": 1,
+            "max_clock": 101
+        }
+    }
+}

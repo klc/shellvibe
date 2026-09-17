@@ -1,0 +1,69 @@
+{
+    "status": 200,
+    "body": {
+        "data": [
+            {
+                "id": "<ulid>",
+                "action": "team.workspace.key_envelopes_uploaded",
+                "actor_user_id": "<ulid>",
+                "actor_device_id": "<ulid>",
+                "subject_type": "workspace",
+                "subject_id": "<ulid>",
+                "context": {
+                    "envelope_count": 1,
+                    "key_version": 1
+                },
+                "created_at": "<timestamp>"
+            },
+            {
+                "id": "<ulid>",
+                "action": "team.workspace.created",
+                "actor_user_id": "<ulid>",
+                "actor_device_id": "<ulid>",
+                "subject_type": "workspace",
+                "subject_id": "<ulid>",
+                "context": [],
+                "created_at": "<timestamp>"
+            },
+            {
+                "id": "<ulid>",
+                "action": "team.invitation.accepted",
+                "actor_user_id": "<ulid>",
+                "actor_device_id": "<ulid>",
+                "subject_type": "invitation",
+                "subject_id": "<ulid>",
+                "context": {
+                    "role": "editor",
+                    "membership_status": "accepted_pending_key"
+                },
+                "created_at": "<timestamp>"
+            },
+            {
+                "id": "<ulid>",
+                "action": "team.invitation.created",
+                "actor_user_id": "<ulid>",
+                "actor_device_id": "<ulid>",
+                "subject_type": "invitation",
+                "subject_id": "<ulid>",
+                "context": {
+                    "role": "editor",
+                    "expires_at": "<timestamp>"
+                },
+                "created_at": "<timestamp>"
+            },
+            {
+                "id": "<ulid>",
+                "action": "team.created",
+                "actor_user_id": "<ulid>",
+                "actor_device_id": "<ulid>",
+                "subject_type": null,
+                "subject_id": null,
+                "context": [],
+                "created_at": "<timestamp>"
+            }
+        ],
+        "meta": {
+            "count": 5
+        }
+    }
+}

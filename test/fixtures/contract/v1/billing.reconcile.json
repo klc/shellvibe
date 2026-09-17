@@ -1,0 +1,26 @@
+{
+    "status": 200,
+    "body": {
+        "data": {
+            "reconciled": true,
+            "entitlements": {
+                "plan": "pro",
+                "status": "active",
+                "capabilities": [
+                    "local_device_link",
+                    "cloud_backup",
+                    "cloud_sync",
+                    "remote_device_link"
+                ],
+                "limits": {
+                    "max_backup_size_bytes": 5242880,
+                    "max_backup_revisions": 10,
+                    "relay_concurrent_sessions": 2,
+                    "team_seats": 0
+                },
+                "expires_at": "<timestamp>",
+                "grace_ends_at": null
+            }
+        }
+    }
+}

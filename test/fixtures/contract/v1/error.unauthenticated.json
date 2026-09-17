@@ -1,0 +1,9 @@
+{
+    "status": 401,
+    "body": {
+        "code": "unauthenticated",
+        "message": "Authentication is required.",
+        "details": {},
+        "request_id": "<ulid>"
+    }
+}

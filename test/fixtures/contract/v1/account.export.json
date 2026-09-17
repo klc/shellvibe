@@ -1,0 +1,184 @@
+{
+    "status": 200,
+    "body": {
+        "data": {
+            "generated_at": "<timestamp>",
+            "note": "Sync revision ciphertext bodies are excluded by size; fetch them from GET /api/v1/sync/vault/revisions/{revision}. This export is not a backup.",
+            "account": {
+                "id": "<ulid>",
+                "name": "Contract Fixture",
+                "email": "contract@shellvibe.app",
+                "email_verified_at": null,
+                "created_at": "<timestamp>"
+            },
+            "devices": [
+                {
+                    "id": "<ulid>",
+                    "name": "Fixture MacBook",
+                    "platform": "macos",
+                    "app_version": "2.0.0",
+                    "last_seen_at": "<timestamp>",
+                    "revoked_at": null,
+                    "created_at": "<timestamp>",
+                    "crypto_identity": {
+                        "encryption_algorithm": "X25519",
+                        "signing_algorithm": "Ed25519",
+                        "encryption_public_key": "MCowBQYDK2VuAyEAvW...",
+                        "signing_public_key": "MCowBQYDK2VwAyEA9Z...",
+                        "fingerprint": "SHA256:abc123def456...",
+                        "key_generation": 1,
+                        "revoked_at": null
+                    }
+                },
+                {
+                    "id": "<ulid>",
+                    "name": "Fixture iPhone",
+                    "platform": "ios",
+                    "app_version": "1.0.0",
+                    "last_seen_at": "<timestamp>",
+                    "revoked_at": null,
+                    "created_at": "<timestamp>",
+                    "crypto_identity": null
+                }
+            ],
+            "entitlements": [
+                {
+                    "capability_code": "cloud_backup",
+                    "status": "active",
+                    "source_plan": "pro",
+                    "starts_at": "<timestamp>",
+                    "ends_at": "<timestamp>",
+                    "grace_ends_at": null
+                },
+                {
+                    "capability_code": "cloud_sync",
+                    "status": "active",
+                    "source_plan": "pro",
+                    "starts_at": "<timestamp>",
+                    "ends_at": "<timestamp>",
+                    "grace_ends_at": null
+                },
+                {
+                    "capability_code": "remote_device_link",
+                    "status": "active",
+                    "source_plan": "pro",
+                    "starts_at": "<timestamp>",
+                    "ends_at": "<timestamp>",
+                    "grace_ends_at": null
+                },
+                {
+                    "capability_code": "remote_device_link",
+                    "status": "active",
+                    "source_plan": "pro",
+                    "starts_at": "<timestamp>",
+                    "ends_at": "<timestamp>",
+                    "grace_ends_at": null
+                },
+                {
+                    "capability_code": "shared_workspaces",
+                    "status": "active",
+                    "source_plan": "team",
+                    "starts_at": "<timestamp>",
+                    "ends_at": "<timestamp>",
+                    "grace_ends_at": null
+                }
+            ],
+            "billing": {
+                "provider_app_user_id": "usr_<ulid>",
+                "subscriptions": [
+                    {
+                        "provider": "app_store",
+                        "plan_code": "pro",
+                        "status": "active",
+                        "current_period_starts_at": "<timestamp>",
+                        "current_period_ends_at": "<timestamp>",
+                        "grace_ends_at": null,
+                        "auto_renew": true
+                    }
+                ]
+            },
+            "sync": {
+                "vault": {
+                    "current_revision": 1,
+                    "current_hash": "80aa6f20c6bf44b329d4676e671eb1c51bf6364e9123a16413c47a5f50350dc3",
+                    "bytes_used": 38,
+                    "updated_at": "<timestamp>"
+                },
+                "revisions": [
+                    {
+                        "revision": 1,
+                        "base_revision": 0,
+                        "device_id": "<ulid>",
+                        "schema_version": 7,
+                        "encryption_version": 2,
+                        "ciphertext_sha256": "80aa6f20c6bf44b329d4676e671eb1c51bf6364e9123a16413c47a5f50350dc3",
+                        "size_bytes": 38,
+                        "created_at": "<timestamp>"
+                    }
+                ],
+                "operations": [
+                    {
+                        "logical_clock": 101,
+                        "device_id": "<ulid>",
+                        "entity_type": "host",
+                        "entity_id": "host_001",
+                        "operation": "upsert",
+                        "encrypted_payload": "encrypted_host_data_payload_1",
+                        "created_at": "<timestamp>"
+                    }
+                ]
+            },
+            "teams": {
+                "memberships": [
+                    {
+                        "team_id": "<ulid>",
+                        "role": "owner",
+                        "status": "active",
+                        "seat_consuming": true,
+                        "joined_at": "<timestamp>",
+                        "revoked_at": null
+                    }
+                ],
+                "teams": [
+                    {
+                        "id": "<ulid>",
+                        "is_owner": true,
+                        "encrypted_metadata": "encrypted_team_name_blob",
+                        "status": "active",
+                        "workspaces": [
+                            {
+                                "id": "<ulid>",
+                                "encrypted_metadata": "encrypted_workspace_name_blob",
+                                "current_key_version": 1,
+                                "membership_epoch": 1,
+                                "status": "active",
+                                "key_envelopes": [
+                                    {
+                                        "key_version": 1,
+                                        "recipient_device_id": "<ulid>",
+                                        "recipient_key_fingerprint": "SHA256:memberfingerprint...",
+                                        "crypto_suite": "HPKE-X25519-ChaCha20Poly1305",
+                                        "encapsulated_key": "encapsulated_key_bytes...",
+                                        "ciphertext": "wrapped_wdek_bytes...",
+                                        "signature": "signature_bytes..."
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            "relay_sessions": [
+                {
+                    "host_device_id": "<ulid>",
+                    "guest_device_id": null,
+                    "status": "closed",
+                    "bytes_transferred": 0,
+                    "started_at": "<timestamp>",
+                    "ended_at": "<timestamp>",
+                    "termination_reason": "user_requested"
+                }
+            ]
+        }
+    }
+}

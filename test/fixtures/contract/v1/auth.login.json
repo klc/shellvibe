@@ -1,0 +1,24 @@
+{
+    "status": 200,
+    "body": {
+        "data": {
+            "token": "<token>",
+            "user": {
+                "id": "<ulid>",
+                "name": "Contract Fixture",
+                "email": "contract@shellvibe.app",
+                "email_verified": false,
+                "created_at": "<timestamp>"
+            },
+            "device": {
+                "id": "<ulid>",
+                "name": "Fixture iPhone",
+                "platform": "ios",
+                "app_version": "1.0.0",
+                "last_seen_at": "<timestamp>",
+                "revoked_at": null,
+                "created_at": "<timestamp>"
+            }
+        }
+    }
+}
