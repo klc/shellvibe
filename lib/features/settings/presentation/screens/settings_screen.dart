@@ -14,6 +14,7 @@ import '../../../../core/models/mosh_prediction_mode.dart';
 import '../../../../core/utils/platform_capabilities.dart';
 import '../../../../shared/providers/database_providers.dart';
 import '../../../account/presentation/widgets/account_settings_section.dart';
+import '../../../cloud_backup/presentation/widgets/cloud_backup_section.dart';
 import '../../../device_link/presentation/widgets/paired_devices_settings_section.dart';
 import '../../../mcp/presentation/widgets/mcp_access_settings_section.dart';
 import '../../../terminal/domain/models/terminal_font.dart';
@@ -324,7 +325,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     SettingsSection.vault => 'Master password and auto-lock.',
     SettingsSection.account =>
       'Optional. Only cloud backup needs one.',
-    SettingsSection.sync => 'Backup and restore.',
+    SettingsSection.sync => 'Cloud backup, and backup to a file.',
     SettingsSection.about => 'Version, updates and licenses.',
   };
 
@@ -966,9 +967,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ];
       case SettingsSection.sync:
         return [
+          _buildSectionHeader('Cloud Backup', LucideIcons.cloudUpload),
+          const CloudBackupSection(),
+          const SizedBox(height: 24),
           // --- Section 4: Zero-Knowledge E2EE Cloud Sync ---
           _buildSectionHeader(
-            'Zero-Knowledge E2EE Cloud Sync',
+            'Encrypted File Backup',
             LucideIcons.cloudCog,
           ),
           ShadCard(

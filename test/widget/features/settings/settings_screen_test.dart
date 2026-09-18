@@ -92,7 +92,10 @@ void main() {
 
       await tester.tap(find.byKey(const Key('settings_section_sync')));
       await tester.pumpAndSettle();
-      expect(find.text('Zero-Knowledge E2EE Cloud Sync'), findsOneWidget);
+      // The Sync section now carries cloud backup above the file backup that
+      // was always there; the file path keeps working with no account.
+      expect(find.text('Cloud Backup'), findsOneWidget);
+      expect(find.text('Encrypted File Backup'), findsOneWidget);
       expect(find.byKey(const Key('export_backup_button')), findsOneWidget);
     });
 

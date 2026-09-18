@@ -1,0 +1,367 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
+
+import 'package:shellvibe/features/cloud_backup/data/cloud_backup_api.dart';
+import 'package:shellvibe/features/cloud_backup/presentation/notifiers/cloud_backup_notifier.dart';
+import 'package:shellvibe/features/cloud_backup/presentation/widgets/cloud_backup_section.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUp(() => FlutterSecureStorage.setMockInitialValues({}));
+
+  Future<void> pump(WidgetTester tester, CloudBackupState state) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.view.resetPhysicalSize());
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          cloudBackupProvider.overrideWith(() => _StubNotifier(state)),
+        ],
+        child: ShadTheme(
+          data: ShadThemeData(
+            colorScheme: const ShadSlateColorScheme.light(),
+            brightness: Brightness.light,
+          ),
+          child: const MaterialApp(
+            home: Scaffold(
+              body: SingleChildScrollView(child: CloudBackupSection()),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+  }
+
+  /// Same tree, pumped a single frame. For states that never settle, such as
+  /// a button showing a running spinner.
+  Future<void> pumpWithoutSettling(
+    WidgetTester tester,
+    CloudBackupState state,
+  ) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.view.resetPhysicalSize());
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          cloudBackupProvider.overrideWith(() => _StubNotifier(state)),
+        ],
+        child: ShadTheme(
+          data: ShadThemeData(
+            colorScheme: const ShadSlateColorScheme.light(),
+            brightness: Brightness.light,
+          ),
+          child: const MaterialApp(
+            home: Scaffold(
+              body: SingleChildScrollView(child: CloudBackupSection()),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+  }
+
+  group('blocked states', () {
+    testWidgets('signed out points at Account and keeps file backup', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        const CloudBackupState(blocker: CloudBackupBlocker.signedOut),
+      );
+
+      expect(find.textContaining('Sign in under Account'), findsOneWidget);
+      expect(
+        find.textContaining('needs no account'),
+        findsOneWidget,
+        reason: 'The free fallback must stay visible in the blocked state.',
+      );
+      expect(
+        find.byKey(const Key('cloud_backup_now_button')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('an unentitled plan says so without blaming the network', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        const CloudBackupState(blocker: CloudBackupBlocker.notEntitled),
+      );
+
+      expect(
+        find.textContaining('not included in your plan'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('always available'), findsOneWidget);
+    });
+  });
+
+  group('setup', () {
+    testWidgets('asks for a passphrase before anything else', (tester) async {
+      await pump(
+        tester,
+        const CloudBackupState(blocker: CloudBackupBlocker.notConfigured),
+      );
+
+      expect(
+        find.byKey(const Key('cloud_backup_passphrase_field')),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('nobody can reset it for you'),
+        findsOneWidget,
+        reason: 'The consequence has to be stated before the choice is made.',
+      );
+      expect(
+        find.byKey(const Key('cloud_backup_recovery_code')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('rejects a short passphrase', (tester) async {
+      await pump(
+        tester,
+        const CloudBackupState(blocker: CloudBackupBlocker.notConfigured),
+      );
+
+      await tester.enterText(
+        find.byKey(const Key('cloud_backup_passphrase_field')),
+        'short',
+      );
+      await tester.tap(find.byKey(const Key('cloud_backup_continue_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('at least 8 characters'), findsOneWidget);
+      expect(
+        find.byKey(const Key('cloud_backup_recovery_code')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('rejects a mismatched confirmation', (tester) async {
+      await pump(
+        tester,
+        const CloudBackupState(blocker: CloudBackupBlocker.notConfigured),
+      );
+
+      await tester.enterText(
+        find.byKey(const Key('cloud_backup_passphrase_field')),
+        'a good passphrase',
+      );
+      await tester.enterText(
+        find.byKey(const Key('cloud_backup_confirm_field')),
+        'a different passphrase',
+      );
+      await tester.tap(find.byKey(const Key('cloud_backup_continue_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('do not match'), findsOneWidget);
+    });
+
+    testWidgets('shows the recovery code with its consequence', (tester) async {
+      await pump(
+        tester,
+        const CloudBackupState(blocker: CloudBackupBlocker.notConfigured),
+      );
+
+      await _fillPassphrase(tester);
+
+      expect(
+        find.byKey(const Key('cloud_backup_recovery_code')),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('cannot be opened by anyone'),
+        findsOneWidget,
+        reason:
+            'Irreversible loss has to be said plainly at the moment the code '
+            'is shown.',
+      );
+    });
+
+    testWidgets('refuses to finish until the code is typed back', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        const CloudBackupState(blocker: CloudBackupBlocker.notConfigured),
+      );
+
+      await _fillPassphrase(tester);
+
+      await tester.enterText(
+        find.byKey(const Key('cloud_backup_recovery_confirm_field')),
+        'NOT-THE-CODE',
+      );
+      await tester.tap(
+        find.byKey(const Key('cloud_backup_finish_setup_button')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('not the code above'), findsOneWidget);
+    });
+
+    testWidgets('accepts the code pasted without its dashes', (tester) async {
+      // A password manager strips the grouping. Refusing that would tell the
+      // user their correct code is wrong.
+      await pump(
+        tester,
+        const CloudBackupState(blocker: CloudBackupBlocker.notConfigured),
+      );
+
+      await _fillPassphrase(tester);
+
+      final shown = tester
+          .widget<SelectableText>(
+            find.byKey(const Key('cloud_backup_recovery_code')),
+          )
+          .data!;
+
+      await tester.enterText(
+        find.byKey(const Key('cloud_backup_recovery_confirm_field')),
+        shown.replaceAll('-', '').toLowerCase(),
+      );
+      await tester.tap(
+        find.byKey(const Key('cloud_backup_finish_setup_button')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('not the code above'), findsNothing);
+    });
+  });
+
+  group('ready', () {
+    testWidgets('reports what the server holds', (tester) async {
+      await pump(
+        tester,
+        const CloudBackupState(
+          head: VaultHead(id: '01V', currentRevision: 4),
+          lastKnownRevision: 4,
+        ),
+      );
+
+      expect(find.textContaining('Server holds revision 4'), findsOneWidget);
+      expect(find.byKey(const Key('cloud_backup_now_button')), findsOneWidget);
+      expect(
+        find.byKey(const Key('cloud_backup_restore_button')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('an empty vault says so rather than showing revision 0', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        const CloudBackupState(head: VaultHead(id: '01V', currentRevision: 0)),
+      );
+
+      expect(find.textContaining('No backup stored yet'), findsOneWidget);
+    });
+
+    testWidgets('a conflict offers overwrite as an explicit danger', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        const CloudBackupState(
+          head: VaultHead(id: '01V', currentRevision: 9),
+          lastKnownRevision: 3,
+          conflictingServerRevision: 9,
+        ),
+      );
+
+      expect(
+        find.textContaining('newer than what this device'),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('cloud_backup_overwrite_button')),
+        findsOneWidget,
+        reason: 'Overwriting another device must be a deliberate action.',
+      );
+    });
+
+    testWidgets('no conflict means no overwrite button', (tester) async {
+      await pump(
+        tester,
+        const CloudBackupState(
+          head: VaultHead(id: '01V', currentRevision: 4),
+          lastKnownRevision: 4,
+        ),
+      );
+
+      expect(
+        find.byKey(const Key('cloud_backup_overwrite_button')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('a failure message is shown and dismissable', (tester) async {
+      await pump(
+        tester,
+        const CloudBackupState(
+          head: VaultHead(id: '01V', currentRevision: 1),
+          message: 'This backup is 7.2 MB, over the 5 MB your plan allows.',
+          messageIsError: true,
+        ),
+      );
+
+      expect(find.textContaining('over the 5 MB'), findsOneWidget);
+    });
+
+    testWidgets('busy disables the actions', (tester) async {
+      // Not pumpAndSettle: the busy button animates a spinner forever, so
+      // settling never happens.
+      await pumpWithoutSettling(
+        tester,
+        const CloudBackupState(
+          head: VaultHead(id: '01V', currentRevision: 1),
+          busy: true,
+        ),
+      );
+
+      // `buttonKey` lands on the InkWell, whose onTap is null while disabled.
+      final inkWell = tester.widget<InkWell>(
+        find.byKey(const Key('cloud_backup_now_button')),
+      );
+
+      expect(inkWell.onTap, isNull);
+    });
+  });
+}
+
+/// Fills the passphrase pair and advances to the recovery code step.
+Future<void> _fillPassphrase(WidgetTester tester) async {
+  await tester.enterText(
+    find.byKey(const Key('cloud_backup_passphrase_field')),
+    'a good passphrase',
+  );
+  await tester.enterText(
+    find.byKey(const Key('cloud_backup_confirm_field')),
+    'a good passphrase',
+  );
+  await tester.tap(find.byKey(const Key('cloud_backup_continue_button')));
+  await tester.pumpAndSettle();
+}
+
+/// Publishes a fixed state without touching storage, the network or the vault.
+final class _StubNotifier extends CloudBackupNotifier {
+  _StubNotifier(this._state);
+
+  final CloudBackupState _state;
+
+  @override
+  Future<CloudBackupState> build() async => _state;
+}
