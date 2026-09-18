@@ -140,4 +140,4 @@ final class SessionApiClientProvider
   }
 }
 
-String _$sessionApiClientHash() => r'805746acdb5423870cd64dbb08f48fb58547729a';
+String _$sessionApiClientHash() => r'a50c6aa3adbcecc8697802b13d816c9ffab283d6';
