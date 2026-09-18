@@ -6,14 +6,14 @@ import 'package:drift/drift.dart';
 import '../../features/vault/data/vault_key_service.dart';
 import '../../shared/database/app_database.dart';
 import '../crypto/encryption_engine.dart';
+import 'backup_envelope.dart';
 
-/// Backup envelope format currently produced by [E2EECloudSyncService].
-///
-/// * v1 carried identity ciphertext only — the key that could decrypt it stayed
-///   behind in the exporting device's keychain, so secrets were unrecoverable.
-/// * v2 additionally carries the vault Data Encryption Key, wrapped with the
-///   backup password, making the backup self-contained.
-const int kBackupSchemaVersion = 2;
+export 'backup_envelope.dart'
+    show
+        BackupEnvelope,
+        BackupEnvelopeException,
+        BackupUnlockMethod,
+        kBackupSchemaVersion;
 
 /// Outcome of [E2EECloudSyncService.importEncryptedBackup].
 class BackupImportResult {
@@ -24,24 +24,43 @@ class BackupImportResult {
   /// Human-readable warning to surface, or null when the import was complete.
   final String? warning;
 
-  const BackupImportResult({required this.secretsRecovered, this.warning});
+  /// Which secret opened the envelope. Always
+  /// [BackupUnlockMethod.passphrase] for a v1 or v2 backup, which has no
+  /// recovery path.
+  final BackupUnlockMethod unlockedWith;
+
+  /// Envelope version that was read.
+  final int schemaVersion;
+
+  const BackupImportResult({
+    required this.secretsRecovered,
+    this.warning,
+    this.unlockedWith = BackupUnlockMethod.passphrase,
+    this.schemaVersion = kBackupSchemaVersion,
+  });
 }
 
 /// Zero-Knowledge E2EE Cloud Sync Abstraction Service.
 /// Exports and imports encrypted database payloads using AES-256-GCM and Argon2id KDF.
 class E2EECloudSyncService {
   final EncryptionEngine _cryptoEngine;
+  final BackupEnvelope _envelope;
   final VaultKeyService vaultKeyService;
 
   E2EECloudSyncService({
     required this.vaultKeyService,
     EncryptionEngine? cryptoEngine,
-  }) : _cryptoEngine = cryptoEngine ?? EncryptionEngine();
+    BackupEnvelope? envelope,
+  }) : _cryptoEngine = cryptoEngine ?? EncryptionEngine(),
+       _envelope =
+           envelope ??
+           BackupEnvelope(crypto: cryptoEngine ?? EncryptionEngine());
 
   /// Exports an encrypted Zero-Knowledge backup package from [db] using [masterPassword].
   Future<String> exportEncryptedBackup({
     required AppDatabase db,
     required String masterPassword,
+    String? recoveryCode,
   }) async {
     final workspaces = await db.select(db.workspaces).get();
     final identities = await db.select(db.identities).get();
@@ -157,34 +176,12 @@ class E2EECloudSyncService {
     // any payload is produced.
     final dek = await vaultKeyService.getDek();
 
-    final jsonStr = jsonEncode(payloadMap);
-    final salt = _cryptoEngine.generateSalt();
-    final secretKey = await _cryptoEngine.deriveMasterKeyInBackground(
-      masterPassword: masterPassword,
-      salt: salt,
+    return _envelope.seal(
+      payloadJson: jsonEncode(payloadMap),
+      dek: dek,
+      passphrase: masterPassword,
+      recoveryCode: recoveryCode,
     );
-
-    final encryptedPayload = await _cryptoEngine.encrypt(
-      plaintext: jsonStr,
-      secretKey: secretKey,
-    );
-
-    // Ship the Data Encryption Key inside the envelope, wrapped with the same
-    // backup password. Without it the identity ciphertext above is dead weight
-    // on any other device.
-    final wrappedDek = await _cryptoEngine.encrypt(
-      plaintext: base64.encode(await dek.extractBytes()),
-      secretKey: secretKey,
-    );
-
-    final backupEnvelope = {
-      'schema_version': kBackupSchemaVersion,
-      'salt': base64.encode(salt),
-      'payload': encryptedPayload,
-      'dek_wrapped': wrappedDek,
-    };
-
-    return jsonEncode(backupEnvelope);
   }
 
   /// Imports and restores an encrypted backup package into [db] using [masterPassword].
@@ -197,49 +194,20 @@ class E2EECloudSyncService {
     required String backupPackageJson,
     required AppDatabase db,
     required String masterPassword,
+    BackupUnlockMethod unlockWith = BackupUnlockMethod.passphrase,
   }) async {
-    final envelope = jsonDecode(backupPackageJson) as Map<String, dynamic>;
-    final schemaVersion = envelope['schema_version'] as int? ?? 1;
-    if (schemaVersion > kBackupSchemaVersion) {
-      throw FormatException(
-        'Unsupported backup schema version $schemaVersion '
-        '(this app supports up to $kBackupSchemaVersion).',
-      );
-    }
-    final saltBase64 = envelope['salt'] as String;
-    final payloadEncrypted = envelope['payload'] as String;
-    final wrappedDek = envelope['dek_wrapped'] as String?;
-    if (schemaVersion >= 2 && wrappedDek == null) {
-      throw FormatException(
-        'v2 backup is missing the wrapped vault key (dek_wrapped).',
-      );
-    }
-
-    final salt = Uint8List.fromList(base64.decode(saltBase64));
-    final secretKey = await _cryptoEngine.deriveMasterKeyInBackground(
-      masterPassword: masterPassword,
-      salt: salt,
+    final opened = await _envelope.open(
+      envelopeJson: backupPackageJson,
+      secret: masterPassword,
+      method: unlockWith,
     );
 
-    final decryptedJsonStr = await _cryptoEngine.decrypt(
-      encryptedBase64: payloadEncrypted,
-      secretKey: secretKey,
-    );
-
-    final data = jsonDecode(decryptedJsonStr) as Map<String, dynamic>;
+    final data = jsonDecode(opened.payloadJson) as Map<String, dynamic>;
 
     // Resolve both keys up front — a locked vault must abort before the
     // transaction opens, not halfway through the restore.
-    SecretKey? backupDek;
-    SecretKey? localDek;
-    if (wrappedDek != null) {
-      final backupDekBase64 = await _cryptoEngine.decrypt(
-        encryptedBase64: wrappedDek,
-        secretKey: secretKey,
-      );
-      backupDek = SecretKey(Uint8List.fromList(base64.decode(backupDekBase64)));
-      localDek = await vaultKeyService.getDek();
-    }
+    final backupDek = opened.backupDek;
+    final localDek = backupDek == null ? null : await vaultKeyService.getDek();
 
     await db.transaction(() async {
       // 1. Workspaces
@@ -422,15 +390,23 @@ class E2EECloudSyncService {
       }
     });
 
-    if (wrappedDek == null) {
-      return const BackupImportResult(
+    if (backupDek == null) {
+      return BackupImportResult(
         secretsRecovered: false,
-        warning: 'This is a legacy (v1) backup: it does not contain the vault '
+        warning:
+            'This is a legacy (v1) backup: it does not contain the vault '
             'key, so stored passwords and private keys cannot be decrypted on '
             'this device and must be re-entered.',
+        unlockedWith: opened.unlockedWith,
+        schemaVersion: opened.schemaVersion,
       );
     }
-    return const BackupImportResult(secretsRecovered: true);
+
+    return BackupImportResult(
+      secretsRecovered: true,
+      unlockedWith: opened.unlockedWith,
+      schemaVersion: opened.schemaVersion,
+    );
   }
 
   /// Maps auth types this build no longer supports onto `'password'`.

@@ -249,13 +249,16 @@ void main() {
         masterPassword: password,
       );
 
-      expect(
-        () async => await syncService.importEncryptedBackup(
+      // A wrong passphrase and a tampered envelope now raise the same
+      // exception on purpose: telling them apart would make the import an
+      // oracle, and the user-facing answer is identical either way.
+      await expectLater(
+        syncService.importEncryptedBackup(
           backupPackageJson: backupJson,
           db: db2,
           masterPassword: wrongPassword,
         ),
-        throwsA(isA<CryptoException>()),
+        throwsA(isA<BackupEnvelopeException>()),
       );
     });
   });
