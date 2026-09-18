@@ -133,26 +133,33 @@ class _AccountSettingsSectionState
             _ErrorText(_formError!),
           ],
           const SizedBox(height: 12),
-          ShellVibeButton(
-            buttonKey: const Key('account_submit_button'),
-            label: _isRegistering ? 'Create Account' : 'Sign In',
-            icon: _isRegistering ? LucideIcons.userPlus : LucideIcons.logIn,
-            busy: _busy,
-            onPressed: _busy ? null : _submit,
-          ),
-          const SizedBox(height: 8),
-          ShellVibeButton.quiet(
-            buttonKey: const Key('account_toggle_mode_button'),
-            label: _isRegistering
-                ? 'I already have an account'
-                : 'Create an account instead',
-            onPressed: _busy
-                ? null
-                : () => setState(() {
-                    _isRegistering = !_isRegistering;
-                    _fieldErrors = const {};
-                    _formError = null;
-                  }),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ShellVibeButton(
+                buttonKey: const Key('account_submit_button'),
+                label: _isRegistering ? 'Create Account' : 'Sign In',
+                icon: _isRegistering
+                    ? LucideIcons.userPlus
+                    : LucideIcons.logIn,
+                busy: _busy,
+                onPressed: _busy ? null : _submit,
+              ),
+              ShellVibeButton.quiet(
+                buttonKey: const Key('account_toggle_mode_button'),
+                label: _isRegistering
+                    ? 'I Have an Account'
+                    : 'Create an Account',
+                onPressed: _busy
+                    ? null
+                    : () => setState(() {
+                        _isRegistering = !_isRegistering;
+                        _fieldErrors = const {};
+                        _formError = null;
+                      }),
+              ),
+            ],
           ),
         ],
       ),
@@ -197,27 +204,34 @@ class _AccountSettingsSectionState
             ),
           ),
           const Divider(height: 20),
-          ShellVibeButton.secondary(
-            buttonKey: const Key('account_devices_button'),
-            label: 'Devices on this account',
-            icon: LucideIcons.monitorSmartphone,
-            onPressed: () => _showDevices(context),
-          ),
-          const SizedBox(height: 8),
-          ShellVibeButton.quiet(
-            buttonKey: const Key('account_sign_out_button'),
-            label: 'Sign Out',
-            icon: LucideIcons.logOut,
-            busy: _busy,
-            onPressed: _busy ? null : () => _signOut(everywhere: false),
-          ),
-          const SizedBox(height: 8),
-          ShellVibeButton.danger(
-            buttonKey: const Key('account_sign_out_all_button'),
-            label: 'Sign Out Everywhere',
-            icon: LucideIcons.shieldOff,
-            busy: _busy,
-            onPressed: _busy ? null : () => _signOut(everywhere: true),
+          // Side by side rather than stacked: these size to their labels, and
+          // a left-aligned column of them reads as ragged edges rather than a
+          // set of actions.
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ShellVibeButton.secondary(
+                buttonKey: const Key('account_devices_button'),
+                label: 'Manage Devices',
+                icon: LucideIcons.monitorSmartphone,
+                onPressed: () => _showDevices(context),
+              ),
+              ShellVibeButton.quiet(
+                buttonKey: const Key('account_sign_out_button'),
+                label: 'Sign Out',
+                icon: LucideIcons.logOut,
+                busy: _busy,
+                onPressed: _busy ? null : () => _signOut(everywhere: false),
+              ),
+              ShellVibeButton.danger(
+                buttonKey: const Key('account_sign_out_all_button'),
+                label: 'Sign Out Everywhere',
+                icon: LucideIcons.shieldOff,
+                busy: _busy,
+                onPressed: _busy ? null : () => _signOut(everywhere: true),
+              ),
+            ],
           ),
         ],
       ),

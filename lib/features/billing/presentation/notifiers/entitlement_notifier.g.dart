@@ -64,7 +64,7 @@ final class EntitlementNotifierProvider
 }
 
 String _$entitlementNotifierHash() =>
-    r'9d53b4ca7d25a196516b02a2737d26b2b547381c';
+    r'e9f06af818da83e5872239ab63c936c7c523e6dc';
 
 /// Single source of truth for what the user may use.
 ///
@@ -166,7 +166,7 @@ final class HasCapabilityProvider extends $FunctionalProvider<bool, bool, bool>
   }
 }
 
-String _$hasCapabilityHash() => r'2487ec25af7aa02d93d0a2f94238d150d845057a';
+String _$hasCapabilityHash() => r'acc9de363ed23f1f46a734c8cd9ca53de120d312';
 
 /// Whether a single capability is unlocked right now.
 ///

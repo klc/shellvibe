@@ -50,7 +50,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('No runbooks defined.'), findsOneWidget);
-      expect(find.text('Add runbook'), findsOneWidget);
+      expect(find.text('Add Runbook'), findsOneWidget);
     });
 
     testWidgets('Automation library opens RunbookEditorDialog from the shell', (

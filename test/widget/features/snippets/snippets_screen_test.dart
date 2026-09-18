@@ -166,10 +166,10 @@ void main() {
 
       expect(find.byKey(const Key('add_snippet_button')), findsNothing);
       // No runbooks yet, so the header stands down and the empty state's own
-      // "Add runbook" button is the only one on the page.
+      // "Add Runbook" button is the only one on the page.
       expect(find.byKey(const Key('add_runbook_button')), findsNothing);
       expect(find.text('No runbooks defined.'), findsOneWidget);
-      expect(find.text('Add runbook'), findsOneWidget);
+      expect(find.text('Add Runbook'), findsOneWidget);
     });
 
     testWidgets('Empty library shows only the empty state add button', (
@@ -191,7 +191,7 @@ void main() {
 
       expect(find.byKey(const Key('add_snippet_button')), findsNothing);
       expect(find.text('No snippets yet.'), findsOneWidget);
-      expect(find.text('Add snippet'), findsOneWidget);
+      expect(find.text('Add Snippet'), findsOneWidget);
     });
   });
 }

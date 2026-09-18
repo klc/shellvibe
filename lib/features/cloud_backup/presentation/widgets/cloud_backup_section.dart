@@ -321,7 +321,7 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
         const SizedBox(height: 8),
         ShellVibeButton.quiet(
           buttonKey: const Key('cloud_backup_copy_code_button'),
-          label: 'Copy code',
+          label: 'Copy Code',
           icon: LucideIcons.copy,
           onPressed: () => Clipboard.setData(ClipboardData(text: code)),
         ),
@@ -461,7 +461,7 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
           const SizedBox(height: 8),
           ShellVibeButton.secondary(
             buttonKey: const Key('cloud_backup_adopt_recovery_button'),
-            label: 'Save recovery code',
+            label: 'Save Recovery Code',
             icon: LucideIcons.keyRound,
             busy: state.busy,
             onPressed: state.busy
@@ -488,7 +488,7 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
           const SizedBox(height: 8),
           ShellVibeButton.danger(
             buttonKey: const Key('cloud_backup_overwrite_button'),
-            label: 'Overwrite the newer backup',
+            label: 'Overwrite Newer Backup',
             icon: LucideIcons.triangleAlert,
             busy: state.busy,
             onPressed: state.busy
@@ -499,21 +499,30 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
           ),
         ],
         const SizedBox(height: 12),
-        ShellVibeButton(
-          buttonKey: const Key('cloud_backup_now_button'),
-          label: 'Back Up Now',
-          icon: LucideIcons.cloudUpload,
-          busy: state.busy,
-          onPressed: state.busy
-              ? null
-              : () => ref.read(cloudBackupProvider.notifier).backUpNow(),
-        ),
-        const SizedBox(height: 8),
-        ShellVibeButton.secondary(
-          buttonKey: const Key('cloud_backup_restore_button'),
-          label: 'Restore From Cloud',
-          icon: LucideIcons.cloudDownload,
-          onPressed: state.busy ? null : () => _openRestoreSheet(context),
+        // A Wrap rather than a stack: these buttons size to their labels, and
+        // a column of them left-aligned reads as ragged rather than as a set
+        // of actions. Side by side their edges line up, and on a narrow phone
+        // they wrap instead of being squeezed.
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            ShellVibeButton(
+              buttonKey: const Key('cloud_backup_now_button'),
+              label: 'Back Up Now',
+              icon: LucideIcons.cloudUpload,
+              busy: state.busy,
+              onPressed: state.busy
+                  ? null
+                  : () => ref.read(cloudBackupProvider.notifier).backUpNow(),
+            ),
+            ShellVibeButton.secondary(
+              buttonKey: const Key('cloud_backup_restore_button'),
+              label: 'Restore From Cloud',
+              icon: LucideIcons.cloudDownload,
+              onPressed: state.busy ? null : () => _openRestoreSheet(context),
+            ),
+          ],
         ),
         const Divider(height: 24),
         Material(
@@ -533,20 +542,25 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
           ),
         ),
         const SizedBox(height: 8),
-        ShellVibeButton.quiet(
-          buttonKey: const Key('cloud_backup_forget_button'),
-          label: 'Forget the passphrase on this device',
-          icon: LucideIcons.eraser,
-          onPressed: () =>
-              ref.read(cloudBackupProvider.notifier).forgetOnThisDevice(),
-        ),
-        const SizedBox(height: 8),
-        ShellVibeButton.danger(
-          buttonKey: const Key('cloud_backup_delete_button'),
-          label: 'Delete the cloud backup',
-          icon: LucideIcons.trash2,
-          busy: state.busy,
-          onPressed: state.busy ? null : () => _confirmDelete(context),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            ShellVibeButton.quiet(
+              buttonKey: const Key('cloud_backup_forget_button'),
+              label: 'Forget Passphrase',
+              icon: LucideIcons.eraser,
+              onPressed: () =>
+                  ref.read(cloudBackupProvider.notifier).forgetOnThisDevice(),
+            ),
+            ShellVibeButton.danger(
+              buttonKey: const Key('cloud_backup_delete_button'),
+              label: 'Delete Cloud Backup',
+              icon: LucideIcons.trash2,
+              busy: state.busy,
+              onPressed: state.busy ? null : () => _confirmDelete(context),
+            ),
+          ],
         ),
       ],
     );
@@ -581,7 +595,7 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
               ),
               const SizedBox(height: 8),
               ShellVibeButton.quiet(
-                label: 'Keep it',
+                label: 'Keep It',
                 onPressed: () => Navigator.of(sheetContext).pop(false),
               ),
             ],
