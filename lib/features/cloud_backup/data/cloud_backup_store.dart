@@ -9,7 +9,12 @@ import '../../../shared/storage/secure_storage_service.dart';
 /// not storing it would mean prompting on every upload, which is how automatic
 /// backup stops happening.
 ///
-/// The recovery code is never stored, here or anywhere else.
+/// The recovery code is kept here too. Not storing it was the original
+/// intention, and it was wrong: the code is sealed into each envelope at
+/// upload time, so a device that has forgotten it writes backups the code
+/// cannot open. The recovery path would then silently cover only the very
+/// first backup ever taken, which is worse than useless -- it is a promise
+/// that quietly stops being true.
 final class CloudBackupStore {
   final SecureStorageService storage;
 
@@ -24,6 +29,20 @@ final class CloudBackupStore {
 
   Future<void> writePassphrase(String passphrase) =>
       storage.write(key: _passphraseKey, value: passphrase);
+
+  /// The recovery code, when this device knows it.
+  ///
+  /// Null on a device that adopted an existing passphrase without being given
+  /// the code. Backups written there carry no recovery path, and the UI says
+  /// so rather than letting the user believe otherwise.
+  Future<String?> readRecoveryCode() async {
+    final value = await storage.read(key: _recoveryCodeKey);
+
+    return (value == null || value.isEmpty) ? null : value;
+  }
+
+  Future<void> writeRecoveryCode(String recoveryCode) =>
+      storage.write(key: _recoveryCodeKey, value: recoveryCode);
 
   /// Whether cloud backup has been configured on this device.
   Future<bool> isConfigured() async => await readPassphrase() != null;
@@ -68,12 +87,14 @@ final class CloudBackupStore {
   /// account's vault, which it cannot open.
   Future<void> clear() async {
     await storage.delete(key: _passphraseKey);
+    await storage.delete(key: _recoveryCodeKey);
     await storage.delete(key: _pendingUploadKey);
     await storage.delete(key: _lastRevisionKey);
     await storage.delete(key: _backupOnExitKey);
   }
 
   static const String _passphraseKey = 'shellvibe_sync_passphrase';
+  static const String _recoveryCodeKey = 'shellvibe_sync_recovery_code';
   static const String _pendingUploadKey = 'shellvibe_sync_pending_upload';
   static const String _lastRevisionKey = 'shellvibe_sync_last_revision';
   static const String _backupOnExitKey = 'shellvibe_sync_backup_on_exit';

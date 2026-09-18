@@ -25,6 +25,12 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
   final _passphraseController = TextEditingController();
   final _confirmController = TextEditingController();
   final _recoveryConfirmController = TextEditingController();
+  final _unlockSecretController = TextEditingController();
+  final _unlockRecoveryController = TextEditingController();
+  final _adoptRecoveryController = TextEditingController();
+
+  /// Which secret the unlock form is asking for.
+  BackupUnlockMethod _unlockMethod = BackupUnlockMethod.passphrase;
 
   /// The code generated for this setup, held only until the user confirms it.
   String? _pendingRecoveryCode;
@@ -36,6 +42,9 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
     _passphraseController.dispose();
     _confirmController.dispose();
     _recoveryConfirmController.dispose();
+    _unlockSecretController.dispose();
+    _unlockRecoveryController.dispose();
+    _adoptRecoveryController.dispose();
     super.dispose();
   }
 
@@ -73,6 +82,10 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
                 'Cloud backup is not included in your plan. Local file backup '
                 'below is always available.',
               ),
+              CloudBackupBlocker.needsExistingPassphrase => _buildUnlock(
+                tokens,
+                state,
+              ),
               CloudBackupBlocker.notConfigured => _buildSetup(tokens, state),
               null => _buildReady(tokens, state),
             },
@@ -103,6 +116,125 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
       ),
     ],
   );
+
+  // --- Unlock an existing backup -------------------------------------------
+
+  /// Shown on a device joining an account that already has a backup.
+  ///
+  /// The passphrase is not invented here. It already exists, it lives only in
+  /// the user's head and on the device that set it, and asking this device to
+  /// make up a new one is what produced a backup the first device could not
+  /// open.
+  Widget _buildUnlock(ShellVibeTokens tokens, CloudBackupState state) {
+    final head = state.head;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(LucideIcons.cloudDownload, size: 16, color: tokens.brand),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                head == null
+                    ? 'This account already has a backup.'
+                    : 'This account already has a backup '
+                          '(revision ${head.currentRevision}). Enter the sync '
+                          'passphrase you set on your other device to unlock '
+                          'it here.',
+                style: const TextStyle(fontSize: 13),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        ShadInput(
+          key: const Key('cloud_backup_unlock_secret_field'),
+          controller: _unlockSecretController,
+          obscureText: _unlockMethod == BackupUnlockMethod.passphrase,
+          placeholder: Text(
+            _unlockMethod == BackupUnlockMethod.passphrase
+                ? 'Sync passphrase'
+                : 'Recovery code',
+          ),
+        ),
+        if (_unlockMethod == BackupUnlockMethod.passphrase) ...[
+          const SizedBox(height: 8),
+          ShadInput(
+            key: const Key('cloud_backup_unlock_recovery_field'),
+            controller: _unlockRecoveryController,
+            placeholder: const Text('Recovery code (optional)'),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Without it, backups written from this device cannot be opened '
+            'with your recovery code. You can add it later.',
+            style: TextStyle(fontSize: 11, color: tokens.textSubtle),
+          ),
+        ],
+        if (_setupError != null) ...[
+          const SizedBox(height: 8),
+          _Error(_setupError!),
+        ],
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            ShellVibeButton(
+              buttonKey: const Key('cloud_backup_unlock_button'),
+              label: 'Unlock',
+              icon: LucideIcons.lockKeyholeOpen,
+              busy: state.busy,
+              onPressed: state.busy ? null : _unlockExisting,
+            ),
+            const SizedBox(width: 8),
+            ShellVibeButton.quiet(
+              buttonKey: const Key('cloud_backup_unlock_toggle_button'),
+              label: _unlockMethod == BackupUnlockMethod.passphrase
+                  ? 'Use the recovery code'
+                  : 'Use the passphrase',
+              onPressed: () => setState(() {
+                _unlockMethod =
+                    _unlockMethod == BackupUnlockMethod.passphrase
+                    ? BackupUnlockMethod.recoveryCode
+                    : BackupUnlockMethod.passphrase;
+                _unlockSecretController.clear();
+                _setupError = null;
+              }),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Future<void> _unlockExisting() async {
+    final secret = _unlockSecretController.text;
+
+    if (secret.isEmpty) {
+      setState(() => _setupError = 'Enter your passphrase.');
+
+      return;
+    }
+
+    setState(() => _setupError = null);
+
+    final recovery = _unlockRecoveryController.text.trim();
+
+    await ref
+        .read(cloudBackupProvider.notifier)
+        .unlockExisting(
+          secret: secret,
+          method: _unlockMethod,
+          recoveryCode: recovery.isEmpty ? null : recovery,
+        );
+
+    if (!mounted) return;
+
+    _unlockSecretController.clear();
+    _unlockRecoveryController.clear();
+  }
 
   // --- Setup --------------------------------------------------------------
 
@@ -142,7 +274,6 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
             buttonKey: const Key('cloud_backup_continue_button'),
             label: 'Continue',
             icon: LucideIcons.arrowRight,
-            expand: true,
             onPressed: _generateRecoveryCode,
           ),
         ],
@@ -209,7 +340,6 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
           buttonKey: const Key('cloud_backup_finish_setup_button'),
           label: 'Turn On Cloud Backup',
           icon: LucideIcons.cloudUpload,
-          expand: true,
           busy: state.busy,
           onPressed: state.busy ? null : _finishSetup,
         ),
@@ -305,6 +435,49 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
             style: TextStyle(fontSize: 11, color: tokens.textSubtle),
           ),
         ],
+        if (state.recoveryCodeMissing) ...[
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(LucideIcons.keyRound, size: 16, color: tokens.warning),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'This device does not know your recovery code, so backups '
+                  'written here can only be opened with the passphrase. Add '
+                  'it to close that gap.',
+                  style: TextStyle(fontSize: 12, color: tokens.warning),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ShadInput(
+            key: const Key('cloud_backup_adopt_recovery_field'),
+            controller: _adoptRecoveryController,
+            placeholder: const Text('Recovery code'),
+          ),
+          const SizedBox(height: 8),
+          ShellVibeButton.secondary(
+            buttonKey: const Key('cloud_backup_adopt_recovery_button'),
+            label: 'Save recovery code',
+            icon: LucideIcons.keyRound,
+            busy: state.busy,
+            onPressed: state.busy
+                ? null
+                : () async {
+                    final code = _adoptRecoveryController.text.trim();
+                    if (code.isEmpty) return;
+
+                    await ref
+                        .read(cloudBackupProvider.notifier)
+                        .adoptRecoveryCode(code);
+
+                    if (mounted) _adoptRecoveryController.clear();
+                  },
+          ),
+        ],
         if (state.conflictingServerRevision != null) ...[
           const SizedBox(height: 12),
           Text(
@@ -317,7 +490,6 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
             buttonKey: const Key('cloud_backup_overwrite_button'),
             label: 'Overwrite the newer backup',
             icon: LucideIcons.triangleAlert,
-            expand: true,
             busy: state.busy,
             onPressed: state.busy
                 ? null
@@ -331,7 +503,6 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
           buttonKey: const Key('cloud_backup_now_button'),
           label: 'Back Up Now',
           icon: LucideIcons.cloudUpload,
-          expand: true,
           busy: state.busy,
           onPressed: state.busy
               ? null
@@ -342,7 +513,6 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
           buttonKey: const Key('cloud_backup_restore_button'),
           label: 'Restore From Cloud',
           icon: LucideIcons.cloudDownload,
-          expand: true,
           onPressed: state.busy ? null : () => _openRestoreSheet(context),
         ),
         const Divider(height: 24),
@@ -367,7 +537,6 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
           buttonKey: const Key('cloud_backup_forget_button'),
           label: 'Forget the passphrase on this device',
           icon: LucideIcons.eraser,
-          expand: true,
           onPressed: () =>
               ref.read(cloudBackupProvider.notifier).forgetOnThisDevice(),
         ),
@@ -376,7 +545,6 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
           buttonKey: const Key('cloud_backup_delete_button'),
           label: 'Delete the cloud backup',
           icon: LucideIcons.trash2,
-          expand: true,
           busy: state.busy,
           onPressed: state.busy ? null : () => _confirmDelete(context),
         ),
@@ -409,13 +577,11 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
                 buttonKey: const Key('cloud_backup_delete_confirm_button'),
                 label: 'Delete Everything',
                 icon: LucideIcons.trash2,
-                expand: true,
                 onPressed: () => Navigator.of(sheetContext).pop(true),
               ),
               const SizedBox(height: 8),
               ShellVibeButton.quiet(
                 label: 'Keep it',
-                expand: true,
                 onPressed: () => Navigator.of(sheetContext).pop(false),
               ),
             ],
@@ -575,7 +741,6 @@ class _RestoreSheetState extends State<_RestoreSheet> {
                 buttonKey: const Key('restore_confirm_button'),
                 label: 'Restore',
                 icon: LucideIcons.cloudDownload,
-                expand: true,
                 busy: _busy,
                 onPressed: (_selected == null || _busy)
                     ? null

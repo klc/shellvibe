@@ -22,8 +22,18 @@ enum CloudBackupBlocker {
   /// Signed in, but the plan does not include cloud backup.
   notEntitled,
 
-  /// Entitled, but no sync passphrase has been set up here yet.
+  /// Entitled, the account has no backup yet, and this device has no
+  /// passphrase: a genuine first-time setup.
   notConfigured,
+
+  /// Entitled, this device has no passphrase, but the account already has a
+  /// backup written by another device.
+  ///
+  /// Distinct from [notConfigured] because the two need opposite actions. A
+  /// second device must be asked for the passphrase that already exists, not
+  /// invited to invent a new one -- inventing one there produced a backup the
+  /// first device could not open, and uploaded it over the good one.
+  needsExistingPassphrase,
 }
 
 /// Immutable cloud backup state.
@@ -56,6 +66,13 @@ final class CloudBackupState {
   /// Set when the last upload lost a race, so the UI can offer to overwrite.
   final int? conflictingServerRevision;
 
+  /// True when this device holds the passphrase but not the recovery code.
+  ///
+  /// Backups written here cannot be opened with the recovery code, so the UI
+  /// has to say so rather than let the user keep believing the code covers
+  /// everything.
+  final bool recoveryCodeMissing;
+
   const CloudBackupState({
     this.blocker,
     this.head,
@@ -66,6 +83,7 @@ final class CloudBackupState {
     this.message,
     this.messageIsError = false,
     this.conflictingServerRevision,
+    this.recoveryCodeMissing = false,
   });
 
   bool get isReady => blocker == null;
@@ -88,6 +106,7 @@ final class CloudBackupState {
     String? message,
     bool? messageIsError,
     int? conflictingServerRevision,
+    bool? recoveryCodeMissing,
     bool clearBlocker = false,
     bool clearMessage = false,
     bool clearConflict = false,
@@ -103,6 +122,7 @@ final class CloudBackupState {
     conflictingServerRevision: clearConflict
         ? null
         : (conflictingServerRevision ?? this.conflictingServerRevision),
+    recoveryCodeMissing: recoveryCodeMissing ?? this.recoveryCodeMissing,
   );
 }
 
@@ -152,12 +172,143 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
     );
 
     final configured = await _store.isConfigured();
+    final lastKnownRevision = await _store.readLastKnownRevision();
+    final backupOnExit = await _store.readBackupOnExit();
+    final recoveryCodeMissing =
+        configured && await _store.readRecoveryCode() == null;
+
+    if (configured) {
+      return CloudBackupState(
+        lastKnownRevision: lastKnownRevision,
+        backupOnExit: backupOnExit,
+        recoveryCodeMissing: recoveryCodeMissing,
+      );
+    }
+
+    // This device has no passphrase. Whether that means "set one up" or "you
+    // already have one, type it" is the server's answer, not this device's:
+    // deciding it locally is what let a second device invent a new passphrase
+    // and upload an empty vault over the first device's backup.
+    VaultHead? head;
+    try {
+      head = await _service!.head();
+    } on Object {
+      // Offline. Stay on setup rather than guessing, and say nothing
+      // misleading: the head is re-read the next time this builds.
+      return CloudBackupState(
+        blocker: CloudBackupBlocker.notConfigured,
+        backupOnExit: backupOnExit,
+      );
+    }
 
     return CloudBackupState(
-      blocker: configured ? null : CloudBackupBlocker.notConfigured,
-      lastKnownRevision: await _store.readLastKnownRevision(),
-      backupOnExit: await _store.readBackupOnExit(),
+      blocker: head.isEmpty
+          ? CloudBackupBlocker.notConfigured
+          : CloudBackupBlocker.needsExistingPassphrase,
+      head: head,
+      backupOnExit: backupOnExit,
     );
+  }
+
+  /// Adopts a passphrase that already protects this account's backup.
+  ///
+  /// Verifies it against the newest stored revision before keeping it, and
+  /// uploads nothing: a device joining an account has nothing worth sending
+  /// yet, and sending anyway is exactly how the first device's backup was
+  /// overwritten.
+  Future<bool> unlockExisting({
+    required String secret,
+    BackupUnlockMethod method = BackupUnlockMethod.passphrase,
+    String? recoveryCode,
+  }) async {
+    final service = _service;
+    if (service == null) return false;
+
+    final current = state.value ?? const CloudBackupState();
+    state = AsyncValue.data(current.copyWith(busy: true, clearMessage: true));
+
+    try {
+      final head = await service.head();
+
+      if (head.isEmpty) {
+        state = AsyncValue.data(
+          current.copyWith(
+            busy: false,
+            blocker: CloudBackupBlocker.notConfigured,
+            message: 'This account has no backup to unlock yet.',
+            messageIsError: true,
+          ),
+        );
+
+        return false;
+      }
+
+      final opens = await service.canOpen(
+        revision: head.currentRevision,
+        secret: secret,
+        unlockWith: method,
+      );
+
+      if (!opens) {
+        state = AsyncValue.data(
+          current.copyWith(
+            busy: false,
+            message: method == BackupUnlockMethod.recoveryCode
+                ? 'That recovery code does not open this backup.'
+                : 'That passphrase does not open this backup.',
+            messageIsError: true,
+          ),
+        );
+
+        return false;
+      }
+
+      // Only a passphrase can be stored as the passphrase. Unlocking with a
+      // recovery code proves ownership but is not the secret future uploads
+      // are sealed with, so that path stops here and asks for the passphrase.
+      if (method == BackupUnlockMethod.recoveryCode) {
+        state = AsyncValue.data(
+          current.copyWith(
+            busy: false,
+            message:
+                'Recovery code accepted. Set a passphrase for this device to '
+                'finish, or restore from the app that still has one.',
+            messageIsError: false,
+          ),
+        );
+
+        return true;
+      }
+
+      await _store.writePassphrase(secret);
+      if (recoveryCode != null && recoveryCode.isNotEmpty) {
+        await _store.writeRecoveryCode(recoveryCode);
+      }
+
+      state = AsyncValue.data(
+        CloudBackupState(
+          head: head,
+          backupOnExit: current.backupOnExit,
+          recoveryCodeMissing:
+              recoveryCode == null || recoveryCode.isEmpty,
+          message:
+              'Unlocked. Restore revision ${head.currentRevision} to bring '
+              'this device up to date before backing up from here.',
+        ),
+      );
+
+      return true;
+    } on Object catch (e) {
+      state = AsyncValue.data(
+        current.copyWith(
+          busy: false,
+          message: 'Could not reach the backup: $e',
+          messageIsError: true,
+        ),
+      );
+
+      return false;
+    }
   }
 
   /// Stores the sync passphrase and takes the first backup.
@@ -168,12 +319,44 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
     required String passphrase,
     required String recoveryCode,
   }) async {
+    final service = _service;
+    if (service == null) return;
+
+    // Belt and braces against the bug this flow used to have: even if the UI
+    // somehow offered first-time setup on a device joining an account that
+    // already has a backup, refuse rather than upload over it.
+    try {
+      final head = await service.head();
+
+      if (!head.isEmpty) {
+        _publish(
+          (s) => s.copyWith(
+            blocker: CloudBackupBlocker.needsExistingPassphrase,
+            head: head,
+            message:
+                'This account already has a backup. Unlock it with the '
+                'passphrase you set on your other device instead of creating '
+                'a new one.',
+            messageIsError: true,
+          ),
+        );
+
+        return;
+      }
+    } on Object {
+      // Offline: fall through. The upload below will fail on its own and say
+      // so, which is better than blocking setup on a network hiccup.
+    }
+
     await _store.writePassphrase(passphrase);
+    await _store.writeRecoveryCode(recoveryCode);
 
     final current = state.value ?? const CloudBackupState();
-    state = AsyncValue.data(current.copyWith(clearBlocker: true));
+    state = AsyncValue.data(
+      current.copyWith(clearBlocker: true, recoveryCodeMissing: false),
+    );
 
-    await backUpNow(recoveryCode: recoveryCode);
+    await backUpNow();
   }
 
   /// Reads what the server holds.
@@ -208,7 +391,7 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
   ///
   /// [force] overwrites a newer backup from another device and is only ever
   /// passed from an explicit user choice.
-  Future<void> backUpNow({String? recoveryCode, bool force = false}) async {
+  Future<void> backUpNow({bool force = false}) async {
     final service = _service;
     final deviceId = _deviceId;
     if (service == null || deviceId == null) return;
@@ -225,6 +408,11 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
 
       return;
     }
+
+    // Every upload carries the recovery code this device knows, not just the
+    // first one. Sealing it into the setup backup alone made the recovery path
+    // cover exactly one revision and then quietly stop.
+    final recoveryCode = await _store.readRecoveryCode();
 
     await _run((state) async {
       final result = await service.upload(
@@ -309,6 +497,56 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
   Future<void> forgetOnThisDevice() async {
     await _store.clear();
     ref.invalidateSelf();
+  }
+
+  /// Teaches this device the recovery code so its backups carry one.
+  ///
+  /// Verified against the newest revision first: storing an unverified code
+  /// would seal future backups with a secret the user does not actually have.
+  Future<bool> adoptRecoveryCode(String recoveryCode) async {
+    final service = _service;
+    if (service == null) return false;
+
+    try {
+      final head = await service.head();
+
+      if (!head.isEmpty) {
+        final opens = await service.canOpen(
+          revision: head.currentRevision,
+          secret: recoveryCode,
+          unlockWith: BackupUnlockMethod.recoveryCode,
+        );
+
+        if (!opens) {
+          _publish(
+            (s) => s.copyWith(
+              message: 'That recovery code does not open this backup.',
+              messageIsError: true,
+            ),
+          );
+
+          return false;
+        }
+      }
+
+      await _store.writeRecoveryCode(recoveryCode);
+      _publish(
+        (s) => s.copyWith(
+          recoveryCodeMissing: false,
+          message: 'Saved. Backups from this device carry the recovery code '
+              'from now on.',
+          messageIsError: false,
+        ),
+      );
+
+      return true;
+    } on Object catch (e) {
+      _publish(
+        (s) => s.copyWith(message: '$e', messageIsError: true),
+      );
+
+      return false;
+    }
   }
 
   /// Turns the backup-on-close behaviour on or off.

@@ -137,7 +137,6 @@ class _AccountSettingsSectionState
             buttonKey: const Key('account_submit_button'),
             label: _isRegistering ? 'Create Account' : 'Sign In',
             icon: _isRegistering ? LucideIcons.userPlus : LucideIcons.logIn,
-            expand: true,
             busy: _busy,
             onPressed: _busy ? null : _submit,
           ),
@@ -147,7 +146,6 @@ class _AccountSettingsSectionState
             label: _isRegistering
                 ? 'I already have an account'
                 : 'Create an account instead',
-            expand: true,
             onPressed: _busy
                 ? null
                 : () => setState(() {
@@ -203,7 +201,6 @@ class _AccountSettingsSectionState
             buttonKey: const Key('account_devices_button'),
             label: 'Devices on this account',
             icon: LucideIcons.monitorSmartphone,
-            expand: true,
             onPressed: () => _showDevices(context),
           ),
           const SizedBox(height: 8),
@@ -211,7 +208,6 @@ class _AccountSettingsSectionState
             buttonKey: const Key('account_sign_out_button'),
             label: 'Sign Out',
             icon: LucideIcons.logOut,
-            expand: true,
             busy: _busy,
             onPressed: _busy ? null : () => _signOut(everywhere: false),
           ),
@@ -220,7 +216,6 @@ class _AccountSettingsSectionState
             buttonKey: const Key('account_sign_out_all_button'),
             label: 'Sign Out Everywhere',
             icon: LucideIcons.shieldOff,
-            expand: true,
             busy: _busy,
             onPressed: _busy ? null : () => _signOut(everywhere: true),
           ),

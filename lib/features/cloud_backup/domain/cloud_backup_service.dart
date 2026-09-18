@@ -235,6 +235,36 @@ final class CloudBackupService {
     );
   }
 
+  /// Checks that [secret] opens [revision], writing nothing.
+  ///
+  /// This is how a second device adopts an existing backup: it proves the
+  /// passphrase before storing it, so a typo is caught at the point it is typed
+  /// rather than at the next upload. Nothing touches the database -- the
+  /// payload is decrypted and discarded, because the question here is only
+  /// whether the key is right.
+  Future<bool> canOpen({
+    required int revision,
+    required String secret,
+    BackupUnlockMethod unlockWith = BackupUnlockMethod.passphrase,
+  }) async {
+    final stored = await api.revision(revision);
+    final ciphertext = stored.ciphertext;
+
+    if (ciphertext == null || ciphertext.isEmpty) return false;
+
+    try {
+      await BackupEnvelope().open(
+        envelopeJson: ciphertext,
+        secret: secret,
+        method: unlockWith,
+      );
+
+      return true;
+    } on BackupEnvelopeException {
+      return false;
+    }
+  }
+
   /// Deletes the vault and every revision. Irreversible.
   Future<void> deleteVault() async {
     await api.deleteVault();
