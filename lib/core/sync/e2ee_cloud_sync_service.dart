@@ -210,6 +210,18 @@ class E2EECloudSyncService {
     final localDek = backupDek == null ? null : await vaultKeyService.getDek();
 
     await db.transaction(() async {
+      // Two tables in this payload reference themselves: `hosts.jump_host_id`
+      // points at another host, and `host_groups.parent_id` at another group.
+      // The rows are restored in whatever order the backup lists them, so a
+      // host whose jump host comes later in the list failed its foreign key at
+      // the moment it was inserted -- and took the whole restore down with it.
+      //
+      // Deferring moves every check to COMMIT, by which point all the rows
+      // exist. It is also the only ordering-independent answer: topologically
+      // sorting two tables today would leave the next self-reference to
+      // rediscover this the same way, on someone's phone.
+      await db.customStatement('PRAGMA defer_foreign_keys = ON;');
+
       // 1. Workspaces
       if (data['workspaces'] is List) {
         for (final item in data['workspaces'] as List) {
