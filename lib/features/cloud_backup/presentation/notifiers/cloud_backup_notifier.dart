@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../../app/restored_data.dart';
 import '../../../../core/api/api_exception.dart';
 import '../../../../core/sync/e2ee_cloud_sync_service.dart';
 import '../../../../shared/providers/database_providers.dart';
@@ -463,11 +464,16 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
 
       await _store.writeLastKnownRevision(revision);
 
+      // The restore wrote straight to the database, so every list notifier is
+      // still holding what it read at startup. Without this the app shows the
+      // old data until it is restarted -- which is what "reopen the app to see
+      // everything" used to paper over.
+      invalidateRestoredData(ref);
+
       return state.copyWith(
         lastKnownRevision: revision,
         message:
-            result.warning ??
-            'Restored revision $revision. Reopen the app to see everything.',
+            result.warning ?? 'Restored revision $revision.',
         messageIsError: result.warning != null,
         clearConflict: true,
       );

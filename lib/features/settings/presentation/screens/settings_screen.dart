@@ -13,6 +13,7 @@ import '../../../../core/constants/app_constants.dart';
 import '../../../../core/models/mosh_prediction_mode.dart';
 import '../../../../core/utils/platform_capabilities.dart';
 import '../../../../shared/providers/database_providers.dart';
+import '../../../../app/restored_data.dart';
 import '../../../account/presentation/widgets/account_settings_section.dart';
 import '../../../cloud_backup/presentation/widgets/cloud_backup_section.dart';
 import '../../../device_link/presentation/widgets/paired_devices_settings_section.dart';
@@ -187,6 +188,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         db: db,
         masterPassword: password,
       );
+
+      // The import wrote straight to the database; the list notifiers are
+      // still holding what they read at startup and would keep showing the old
+      // hosts and identities until the app was restarted.
+      invalidateRestoredDataFor(ref);
 
       if (mounted) {
         ShadToaster.of(context).show(

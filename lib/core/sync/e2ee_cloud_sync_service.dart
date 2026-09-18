@@ -73,7 +73,7 @@ class E2EECloudSyncService {
     final runbookSteps = await db.select(db.runbookSteps).get();
 
     final payloadMap = {
-      'version': 1,
+      'version': 2,
       'exported_at': DateTime.now().toIso8601String(),
       'workspaces': workspaces
           .map((w) => {
@@ -105,6 +105,11 @@ class E2EECloudSyncService {
                 'colorTag': g.colorTag,
               })
           .toList(),
+      // Every column on the table, not a subset. `username` was missing here
+      // and a restored host tried to authenticate as whoever the client fell
+      // back to, which reads to the user as the key being broken rather than
+      // the backup being incomplete. `HostsBackupColumnsTest` fails if a new
+      // column is added without being added here too.
       'hosts': hosts
           .map((h) => {
                 'id': h.id,
@@ -113,10 +118,16 @@ class E2EECloudSyncService {
                 'identityId': h.identityId,
                 'label': h.label,
                 'hostname': h.hostname,
+                'username': h.username,
                 'port': h.port,
                 'protocol': h.protocol,
+                'moshServerPath': h.moshServerPath,
+                'moshPortRange': h.moshPortRange,
                 'colorTag': h.colorTag,
                 'jumpHostId': h.jumpHostId,
+                'environment': h.environment,
+                'mcpVisible': h.mcpVisible,
+                'mcpDefaultMode': h.mcpDefaultMode,
                 'createdAt': h.createdAt.toIso8601String(),
               })
           .toList(),
@@ -287,10 +298,19 @@ class E2EECloudSyncService {
                   identityId: Value(item['identityId'] as String?),
                   label: item['label'] as String,
                   hostname: item['hostname'] as String,
+                  // Absent in backups written before these columns were
+                  // exported; the table's own defaults apply then.
+                  username: Value(item['username'] as String?),
                   port: Value(item['port'] as int? ?? 22),
                   protocol: Value(item['protocol'] as String? ?? 'ssh'),
+                  moshServerPath: Value(item['moshServerPath'] as String?),
+                  moshPortRange: Value(item['moshPortRange'] as String?),
                   colorTag: Value(item['colorTag'] as String?),
                   jumpHostId: Value(item['jumpHostId'] as String?),
+                  environment: Value(item['environment'] as String? ?? 'dev'),
+                  mcpVisible: Value(item['mcpVisible'] as bool? ?? true),
+                  mcpDefaultMode: Value(
+                      item['mcpDefaultMode'] as String? ?? 'readonly'),
                   createdAt: DateTime.parse(item['createdAt'] as String),
                 ),
               );
