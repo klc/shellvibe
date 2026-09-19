@@ -126,7 +126,8 @@
                         "encrypted_payload": "encrypted_host_data_payload_1",
                         "created_at": "<timestamp>"
                     }
-                ]
+                ],
+                "sync_snapshots": []
             },
             "teams": {
                 "memberships": [
