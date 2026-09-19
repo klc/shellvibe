@@ -7,11 +7,9 @@ import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../../../core/sync/backup_envelope.dart';
 import '../../../../core/sync/backup_scope_store.dart';
-import '../../../settings/presentation/notifiers/backup_scope_notifier.dart';
 import '../../../settings/presentation/widgets/backup_scope_picker.dart';
 import '../../data/cloud_backup_api.dart';
 import '../notifiers/cloud_backup_notifier.dart';
-import '../notifiers/sync_notifier.dart';
 
 /// Cloud backup surface in Settings → Sync.
 ///
@@ -500,7 +498,6 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
           lastFullBackupAt: state.lastFullBackupAt,
         ),
         const Divider(height: 24),
-        const _AutoSyncControls(),
         const SizedBox(height: 12),
         // A Wrap rather than a stack: these buttons size to their labels, and
         // a column of them left-aligned reads as ragged rather than as a set
@@ -843,163 +840,4 @@ final class _Error extends StatelessWidget {
     text,
     style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.error),
   );
-}
-
-/// Automatic sync: whether it runs, and what it carries.
-///
-/// Deliberately its own switch rather than an implication of the manual
-/// backup's scope. A manual backup is something the user asks for at a moment
-/// they chose; automatic sync writes to the account on its own schedule, in
-/// both directions. Turning the last category off would be a strange way to
-/// say "stop doing that", and leaving it on by default would be a stranger way
-/// to start.
-final class _AutoSyncControls extends ConsumerWidget {
-  const _AutoSyncControls();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final tokens = ShellVibeTokens.resolve(context);
-    final enabled = ref.watch(autoSyncEnabledProvider).value ?? false;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Material(
-          type: MaterialType.transparency,
-          child: SwitchListTile.adaptive(
-            key: const Key('auto_sync_enabled_switch'),
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Automatic sync'),
-            subtitle: Text(
-              'Sends changes as you make them and applies what other devices '
-              'send. Separate from the manual backup above, which stays a '
-              'snapshot you take yourself.',
-              style: TextStyle(fontSize: 11, color: tokens.textSubtle),
-            ),
-            value: enabled,
-            onChanged: (value) =>
-                ref.read(autoSyncEnabledProvider.notifier).set(value),
-          ),
-        ),
-        if (enabled) ...[
-          const SizedBox(height: 4),
-          _SyncStatus(state: ref.watch(syncProvider)),
-        ],
-        const SizedBox(height: 8),
-        BackupScopePicker(
-          target: BackupTarget.autoSync,
-          title: 'What syncs automatically',
-          subtitle:
-              'Per device, and in both directions: a category that is off is '
-              'neither sent from here nor applied here. Manual backups are '
-              'not affected.',
-          enabled: enabled,
-        ),
-      ],
-    );
-  }
-}
-
-/// What automatic sync is doing right now, in one line.
-///
-/// A switch that is on but does nothing is worse than one that is off, so
-/// every state that stops sync says which one it is and what would clear it.
-final class _SyncStatus extends ConsumerWidget {
-  const _SyncStatus({required this.state});
-
-  final AsyncValue<SyncState> state;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final tokens = ShellVibeTokens.resolve(context);
-
-    final (icon, colour, text) = switch (state) {
-      AsyncLoading() => (LucideIcons.refreshCw, tokens.textSubtle, 'Starting…'),
-      AsyncError(:final error) => (
-        LucideIcons.circleAlert,
-        Theme.of(context).colorScheme.error,
-        'Sync could not start: $error',
-      ),
-      AsyncData(:final value) => _describe(context, tokens, value),
-    };
-
-    if (text.isEmpty) return const SizedBox.shrink();
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 14, color: colour),
-        const SizedBox(width: 6),
-        Expanded(
-          child: Text(text, style: TextStyle(fontSize: 11, color: colour)),
-        ),
-        if (value(state)?.isActive ?? false)
-          ShellVibeIconButton(
-            icon: LucideIcons.refreshCw,
-            tooltip: 'Sync now',
-            onPressed: () => ref.read(syncProvider.notifier).syncNow(),
-          ),
-      ],
-    );
-  }
-
-  static SyncState? value(AsyncValue<SyncState> state) => state.value;
-
-  (IconData, Color, String) _describe(
-    BuildContext context,
-    ShellVibeTokens tokens,
-    SyncState value,
-  ) {
-    if (value.error != null) {
-      return (
-        LucideIcons.circleAlert,
-        value.needsSnapshotRestore
-            ? tokens.warning
-            : Theme.of(context).colorScheme.error,
-        value.error!,
-      );
-    }
-
-    return switch (value.blocker) {
-      SyncBlocker.disabled => (LucideIcons.info, tokens.textSubtle, ''),
-      SyncBlocker.notEntitled => (
-        LucideIcons.circleAlert,
-        tokens.warning,
-        'Sign in with a plan that includes cloud backup to sync.',
-      ),
-      SyncBlocker.notConfigured => (
-        LucideIcons.circleAlert,
-        tokens.warning,
-        'Set a sync passphrase first.',
-      ),
-      // Every snapshot this account holds carries less than sync does.
-      // Starting from one would leave a category missing that nothing later
-      // fills in, so the user is asked rather than quietly given part of it.
-      SyncBlocker.noCompleteGround => (
-        LucideIcons.cloudUpload,
-        tokens.warning,
-        'No complete snapshot to start from. Take a full backup on a device '
-            'that already has your data, then try again.',
-      ),
-      SyncBlocker.wrongPassphrase => (
-        LucideIcons.circleAlert,
-        tokens.warning,
-        'The passphrase on this device does not open this account\'s sync '
-            'snapshot. Use the one from a device that is already syncing.',
-      ),
-      null when value.running => (
-        LucideIcons.refreshCw,
-        tokens.textSubtle,
-        'Syncing…',
-      ),
-      null => (
-        LucideIcons.circleCheck,
-        tokens.success,
-        value.lastSyncAt == null
-            ? 'Watching for changes.'
-            : 'Up to date · sent ${value.lastPushed}, received '
-                  '${value.lastPulled}.',
-      ),
-    };
-  }
 }

@@ -90,13 +90,21 @@ void main() {
       expect(find.text('Security & Biometric Controls'), findsOneWidget);
       expect(find.byKey(const Key('test_biometrics_button')), findsOneWidget);
 
-      await tester.tap(find.byKey(const Key('settings_section_sync')));
+      // Backup holds the copies the user takes: to their account, and to a
+      // file. The file path keeps working with no account at all.
+      await tester.tap(find.byKey(const Key('settings_section_backup')));
       await tester.pumpAndSettle();
-      // The Sync section now carries cloud backup above the file backup that
-      // was always there; the file path keeps working with no account.
       expect(find.text('Cloud Backup'), findsOneWidget);
       expect(find.text('Encrypted File Backup'), findsOneWidget);
       expect(find.byKey(const Key('export_backup_button')), findsOneWidget);
+
+      // Sync is its own section. They shared a screen while automatic sync was
+      // something a backup switched on; it is not that any more.
+      await tester.tap(find.byKey(const Key('settings_section_sync')));
+      await tester.pumpAndSettle();
+      expect(find.text('Automatic Sync'), findsOneWidget);
+      expect(find.byKey(const Key('auto_sync_enabled_switch')), findsOneWidget);
+      expect(find.text('Encrypted File Backup'), findsNothing);
     });
 
     testWidgets('Compact layout shows every section plus the tools group', (

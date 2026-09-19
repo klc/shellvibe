@@ -18,6 +18,7 @@ import '../../../../shared/providers/database_providers.dart';
 import '../../../../app/restored_data.dart';
 import '../../../account/presentation/widgets/account_settings_section.dart';
 import '../../../cloud_backup/presentation/widgets/cloud_backup_section.dart';
+import '../../../cloud_backup/presentation/widgets/sync_section.dart';
 import '../../../device_link/presentation/widgets/paired_devices_settings_section.dart';
 import '../../../mcp/presentation/widgets/mcp_access_settings_section.dart';
 import '../widgets/backup_scope_picker.dart';
@@ -42,6 +43,14 @@ enum SettingsSection {
   aiAccess('AI Access', LucideIcons.bot),
   vault('Vault', LucideIcons.lockKeyhole),
   account('Account', LucideIcons.circleUser),
+
+  /// Copies the user asks for: a file on disk, and revisions in the account.
+  backup('Backup', LucideIcons.cloudUpload),
+
+  /// The thing that runs on its own. Split from Backup because they are two
+  /// features that happened to share a screen: one is a snapshot taken at a
+  /// moment the user chose, the other writes to the account in both
+  /// directions on its own schedule.
   sync('Sync', LucideIcons.cloudCog),
   about('About', LucideIcons.info);
 
@@ -355,7 +364,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       'AI agent access, registered clients, and the kill switch.',
     SettingsSection.vault => 'Master password and auto-lock.',
     SettingsSection.account => 'Optional. Only cloud backup needs one.',
-    SettingsSection.sync => 'Cloud backup, and backup to a file.',
+    SettingsSection.backup => 'Copies you take: to a file, or to your account.',
+    SettingsSection.sync =>
+      'Keeps your devices in step on its own, in both directions.',
     SettingsSection.about => 'Version, updates and licenses.',
   };
 
@@ -996,6 +1007,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const AccountSettingsSection(),
         ];
       case SettingsSection.sync:
+        return [
+          _buildSectionHeader('Automatic Sync', LucideIcons.cloudCog),
+          const SyncSection(),
+        ];
+      case SettingsSection.backup:
         return [
           _buildSectionHeader('Cloud Backup', LucideIcons.cloudUpload),
           const CloudBackupSection(),

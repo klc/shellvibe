@@ -10,6 +10,7 @@ import '../features/mcp/presentation/notifiers/mcp_settings_notifier.dart';
 import '../features/mcp/presentation/widgets/mcp_approval_host.dart';
 import '../features/settings/domain/models/app_settings_model.dart';
 import '../features/settings/presentation/notifiers/settings_notifier.dart';
+import '../features/cloud_backup/presentation/notifiers/cloud_backup_notifier.dart';
 import '../features/cloud_backup/presentation/notifiers/sync_notifier.dart';
 import '../features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import '../features/vault/presentation/notifiers/vault_notifier.dart';
@@ -202,6 +203,13 @@ class _ShellVibeAppState extends ConsumerState<ShellVibeApp>
     // records local changes, which has to happen whether or not sync itself
     // is switched on.
     ref.watch(syncProvider);
+
+    // And cloud backup, for the same reason again. It holds the passphrase,
+    // the head and the schedule a backup runs on, none of which should wait
+    // for someone to open the settings screen -- an automatic backup that
+    // only happens while its own settings page is visible is not automatic.
+    ref.watch(cloudBackupProvider);
+
     // The server cannot start behind a locked vault, so a launch that begins
     // locked has to try again once it opens.
     ref.listen(vaultProvider, (_, _) {
