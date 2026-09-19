@@ -122,6 +122,7 @@ final class SyncState {
 class SyncNotifier extends _$SyncNotifier {
   SyncEngine? _engine;
   SyncJoinService? _join;
+  bool _joinStarted = false;
   SyncSnapshotService? _ground;
   String? _deviceId;
   String? _passphrase;
@@ -254,7 +255,18 @@ class SyncNotifier extends _$SyncNotifier {
     // Joining comes before anything else, and is safe to run every start: a
     // device that has finished returns at once, and one that was closed
     // halfway through finishes rather than calling itself done.
-    unawaited(_joinThenSync());
+    //
+    // Started from `listenSelf` rather than from here, and that is the whole
+    // point of it: fired from inside `build` it runs while `state` is still
+    // loading, and every `_publish` it makes is dropped because there is no
+    // state to update yet. The join's result and, worse, its failure both
+    // land on the floor, and the screen keeps showing the "watching for
+    // changes" this method is about to return -- a sync that reports itself
+    // healthy while nothing has happened at all.
+    // On the event queue, not here: `build`'s own return value is assigned
+    // after it completes, so anything published from inside it is overwritten
+    // a moment later even when it is not dropped outright.
+    Future(() => unawaited(_startJoinOnce()));
 
     return const SyncState(blocker: null);
   }
@@ -295,6 +307,17 @@ class SyncNotifier extends _$SyncNotifier {
     return (await store.syncKeyForUpload(autoSyncEnabled: true))!;
   }
 
+  /// Runs the join the first time this build publishes a state.
+  ///
+  /// `listenSelf` fires on every publish, including the ones the join itself
+  /// makes, so the guard is what keeps one join from starting another.
+  Future<void> _startJoinOnce() async {
+    if (_joinStarted || _join == null) return;
+    _joinStarted = true;
+
+    await _joinThenSync();
+  }
+
   /// Joins, then runs a first pass.
   Future<void> _joinThenSync() async {
     final join = _join;
@@ -309,10 +332,16 @@ class SyncNotifier extends _$SyncNotifier {
       );
 
       if (!result.succeeded) {
+        debugPrint('[Sync] join refused: ${result.problem} ${result.message}');
         _publish((s) => s.copyWith(error: result.message));
 
         return;
       }
+
+      debugPrint(
+        '[Sync] joined: applied=${result.applied} seeded=${result.seeded} '
+        'pushed=${result.pushed} firstGround=${result.wroteFirstGround}',
+      );
 
       if (result.applied > 0) invalidateRestoredData(ref);
 
@@ -324,7 +353,9 @@ class SyncNotifier extends _$SyncNotifier {
           lastPulled: result.applied,
         ),
       );
-    } on Object catch (e) {
+    } on Object catch (e, stackTrace) {
+      debugPrint('[Sync] join failed: $e');
+      debugPrintStack(stackTrace: stackTrace);
       _publish((s) => s.copyWith(error: '$e'));
 
       return;
@@ -449,13 +480,22 @@ class SyncNotifier extends _$SyncNotifier {
     _engine = null;
     _join = null;
     _ground = null;
+    _joinStarted = false;
   }
 
-  void _publish(SyncState Function(SyncState state) update) {
-    final current = state.value;
-    if (current == null) return;
+  /// The state as this notifier last knew it.
+  ///
+  /// `state.value` is null until `build` finishes, and the old version of
+  /// [_publish] returned early in that window. That is how a join that failed
+  /// before anyone opened the screen came to report itself as healthy: the
+  /// error was written to a state that did not exist yet. Keeping a copy means
+  /// a late update lands on the right thing rather than on nothing.
+  SyncState _current = const SyncState(blocker: SyncBlocker.disabled);
 
-    state = AsyncValue.data(update(current));
+  void _publish(SyncState Function(SyncState state) update) {
+    _current = update(state.value ?? _current);
+
+    state = AsyncValue.data(_current);
   }
 }
 
