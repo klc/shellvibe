@@ -455,7 +455,10 @@ class SyncNotifier extends _$SyncNotifier {
   }
 
   void _start(AppDatabase db) {
-    _stop();
+    // Timers only. This runs right after `build` has constructed the engine
+    // and the join service, so tearing those down here would throw away what
+    // it was called to start -- which is what it used to do.
+    _stopTimers();
 
     _periodic = Timer.periodic(pollInterval, (_) => syncNow());
 
@@ -470,13 +473,27 @@ class SyncNotifier extends _$SyncNotifier {
         });
   }
 
-  void _stop() {
+  /// Cancels what is scheduled, and leaves the engine alone.
+  ///
+  /// Split from [_stop] because they answer different questions. Restarting
+  /// the timers is not the same as shutting sync down, and a single method
+  /// doing both meant every start immediately discarded the engine it was
+  /// starting for. Nothing failed: `syncNow` simply returned at its null
+  /// check, so the debounce, the poll and the foreground pass all ran and
+  /// did nothing, forever.
+  void _stopTimers() {
     _debounce?.cancel();
     _periodic?.cancel();
     unawaited(_changes?.cancel());
     _debounce = null;
     _periodic = null;
     _changes = null;
+  }
+
+  /// Shuts sync down: nothing scheduled, nothing to run.
+  void _stop() {
+    _stopTimers();
+
     _engine = null;
     _join = null;
     _ground = null;
