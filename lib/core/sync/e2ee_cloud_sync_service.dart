@@ -131,6 +131,20 @@ class BackupRepairReport {
 
   bool get isNotEmpty => !isEmpty;
 
+  /// How many rows were changed or dropped to make the restore fit.
+  ///
+  /// One number for a summary line. The breakdown is in [messages]; this is
+  /// what a caller reports when it has room for a count and not a list.
+  int get total =>
+      hostsWithoutIdentity +
+      hostsWithoutJumpHost +
+      groupsWithoutParent +
+      skippedPortForwards +
+      skippedRunbookSteps +
+      skippedTemplatePanes +
+      skippedBookmarks +
+      skippedForMissingWorkspace;
+
   /// One sentence per repair, for the restore summary.
   List<String> get messages => [
     if (hostsWithoutIdentity > 0)

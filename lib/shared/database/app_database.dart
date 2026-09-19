@@ -107,7 +107,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 12;
 
   @override
   MigrationStrategy get migration {
@@ -182,6 +182,18 @@ class AppDatabase extends _$AppDatabase {
           // operation for it wins -- which is correct, because a device that
           // has never synced has nothing to defend.
           await m.createTable(syncEntityVersions);
+        }
+        if (from >= 10 && from < 12) {
+          // How far a join got. `none` on an existing install, including one
+          // that is already syncing: it joined under the old flow, which had
+          // no seed step, so telling it the join is finished would be a claim
+          // about rows that were never sent.
+          //
+          // Only when the table is already there. An install older than 10
+          // gets it from `createTable` above, which builds the table as it is
+          // defined now -- column included -- and adding it again fails the
+          // whole upgrade with `duplicate column name`.
+          await m.addColumn(syncState, syncState.joinState);
         }
       },
     );

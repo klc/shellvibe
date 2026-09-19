@@ -73,7 +73,7 @@ final class CloudBackupUploadResult {
 /// [E2EECloudSyncService] and [BackupEnvelope]; carrying opaque strings stays
 /// in [CloudBackupApi]. Nothing here ever sees a decrypted payload.
 final class CloudBackupService {
-  final CloudBackupApi api;
+  final VaultTransport api;
   final E2EECloudSyncService sync;
 
   /// Persists the pending upload id across a restart, so a retry after a

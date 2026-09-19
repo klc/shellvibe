@@ -69,7 +69,7 @@ final class SyncSnapshotService {
   /// backup upload be answered with the sync vault's stored revision.
   factory SyncSnapshotService.over({
     required CloudBackupService backupService,
-    required CloudBackupApi syncApi,
+    required VaultTransport syncApi,
     required Future<String?> Function() readPendingUploadId,
     required Future<void> Function(String? uploadId) writePendingUploadId,
   }) => SyncSnapshotService(

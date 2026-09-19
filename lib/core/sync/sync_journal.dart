@@ -19,6 +19,36 @@ const Duration kSyncTrashRetention = Duration(days: 30);
 /// the change**. Recording the operation separately would let a crash land the
 /// write and lose the operation, and an operation that never existed is a
 /// change that silently never syncs.
+/// How far a device has got through joining automatic sync.
+enum SyncJoinState {
+  /// Has not joined. The resting state, and what every device that synced
+  /// under the old flow reports -- it never ran a seed step, so claiming it
+  /// finished one would be a claim about rows that were never sent.
+  none('none'),
+
+  /// The ground is merged in and this device's own rows are queued. Not
+  /// finished: they still have to go out.
+  applied('applied'),
+
+  /// Joined. Rows sent, ground rewritten.
+  done('done');
+
+  const SyncJoinState(this.wireName);
+
+  final String wireName;
+
+  static SyncJoinState fromWireName(String value) {
+    for (final state in SyncJoinState.values) {
+      if (state.wireName == value) return state;
+    }
+
+    // An unknown value means a newer build wrote it. Treating it as `none`
+    // repeats a join, which merges and is therefore safe; treating it as
+    // `done` would skip one.
+    return SyncJoinState.none;
+  }
+}
+
 final class SyncJournal {
   final AppDatabase db;
 
@@ -311,6 +341,112 @@ final class SyncJournal {
 
     await (db.update(db.syncState)..where((t) => t.id.equals(1))).write(
       SyncStateCompanion(lastSeenClock: Value(clock)),
+    );
+  }
+
+  /// Queues an `upsert` for every syncable row this device has never recorded
+  /// a version for, and returns how many.
+  ///
+  /// This is what a device brings to a sync it is joining. Rows written before
+  /// sync existed produced no operation -- nothing was listening -- so they
+  /// live only on this device, and `push()` sends the outbox rather than the
+  /// database. Without this step a desktop with sixty hosts switches sync on
+  /// and sends nothing at all, and every other device sees an account that
+  /// looks empty.
+  ///
+  /// Rows that already carry a version are skipped, which is exactly the rows
+  /// the ground just wrote. Sending those back would spend the write budget
+  /// re-uploading what was just downloaded.
+  ///
+  /// One clock for the batch. They are all the same thing -- what this device
+  /// held at the moment it joined -- and it sits one above the ground's clock,
+  /// so a row the ground did not carry wins over anything the ground said at
+  /// the time it was taken.
+  ///
+  /// Call inside the transaction that applies the ground. Queued separately,
+  /// a crash in between leaves a device that believes it has joined and has
+  /// not sent anything.
+  /// [queue] false records the versions without queueing anything to send.
+  /// That is the first device's case: it has just written the ground, so the
+  /// rows are already where a joining device will find them, and sending them
+  /// again would spend the write budget telling nobody something they can
+  /// already read. The versions are still needed -- a row standing at no clock
+  /// loses to any operation that mentions it, however old.
+  Future<int> seedUnversioned({bool queue = true}) async {
+    final clock = await _nextClock();
+    var seeded = 0;
+
+    for (final entityType in SyncRowCodec.syncableTypes) {
+      final rows = await db.customSelect('SELECT id FROM $entityType').get();
+
+      for (final row in rows) {
+        final entityId = row.read<String>('id');
+
+        final version = await versionFor(
+          entityType: entityType,
+          entityId: entityId,
+        );
+        if (version != null) continue;
+
+        final payload = await SyncRowCodec.read(db, entityType, entityId);
+        if (payload == null) continue;
+
+        if (queue) {
+          await _write(
+            entityType: entityType,
+            entityId: entityId,
+            operation: 'upsert',
+            payload: jsonEncode(payload),
+            // No ancestor. This row predates sync on this device, so there is
+            // no state any other device ever saw it in.
+            before: null,
+            clock: clock,
+          );
+        } else {
+          await setVersion(
+            entityType: entityType,
+            entityId: entityId,
+            logicalClock: clock,
+            deviceId: deviceId,
+          );
+        }
+
+        seeded++;
+      }
+    }
+
+    return seeded;
+  }
+
+  /// How many rows stand at [logicalClock] as written by [deviceId].
+  ///
+  /// Used to count what a ground brought: the restore stamps every row it
+  /// wrote with the snapshot's clock and the device that wrote it, so this is
+  /// that set, without the importer having to count as it goes.
+  Future<int> countVersionsAt({
+    required int logicalClock,
+    required String deviceId,
+  }) async {
+    final rows =
+        await (db.select(db.syncEntityVersions)..where(
+              (t) =>
+                  t.logicalClock.equals(logicalClock) &
+                  t.deviceId.equals(deviceId),
+            ))
+            .get();
+
+    return rows.length;
+  }
+
+  /// How far this device has got through joining.
+  Future<SyncJoinState> readJoinState() async =>
+      SyncJoinState.fromWireName((await readState()).joinState);
+
+  Future<void> writeJoinState(SyncJoinState state) async {
+    await readState();
+
+    await (db.update(db.syncState)..where((t) => t.id.equals(1))).write(
+      SyncStateCompanion(joinState: Value(state.wireName)),
     );
   }
 

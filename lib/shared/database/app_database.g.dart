@@ -10366,8 +10366,25 @@ class $SyncStateTable extends SyncState
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _joinStateMeta = const VerificationMeta(
+    'joinState',
+  );
   @override
-  List<GeneratedColumn> get $columns => [id, lastSeenClock, pulledThroughClock];
+  late final GeneratedColumn<String> joinState = GeneratedColumn<String>(
+    'join_state',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('none'),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    lastSeenClock,
+    pulledThroughClock,
+    joinState,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -10401,6 +10418,12 @@ class $SyncStateTable extends SyncState
         ),
       );
     }
+    if (data.containsKey('join_state')) {
+      context.handle(
+        _joinStateMeta,
+        joinState.isAcceptableOrUnknown(data['join_state']!, _joinStateMeta),
+      );
+    }
     return context;
   }
 
@@ -10422,6 +10445,10 @@ class $SyncStateTable extends SyncState
         DriftSqlType.int,
         data['${effectivePrefix}pulled_through_clock'],
       )!,
+      joinState: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}join_state'],
+      )!,
     );
   }
 
@@ -10442,10 +10469,26 @@ class SyncStateData extends DataClass implements Insertable<SyncStateData> {
   /// Clock the last pull was acknowledged at. Only ever advanced after the
   /// operations it covers have been written.
   final int pulledThroughClock;
+
+  /// How far this device has got through joining automatic sync.
+  ///
+  /// `none`, then `applied` once the ground has been merged in and this
+  /// device's own rows are queued, then `done` once they have been sent and
+  /// the ground rewritten.
+  ///
+  /// Stored rather than inferred, because the two halves of joining cannot be
+  /// told apart afterwards. A device that applied the ground and was closed
+  /// before its own rows went out looks exactly like one that has finished:
+  /// the clocks are set, the outbox is empty in the sense that nothing failed.
+  /// Without this it would call itself joined and the rows it never sent --
+  /// the sixty hosts that were the reason for syncing at all -- would stay on
+  /// that device forever, with nothing reporting a problem.
+  final String joinState;
   const SyncStateData({
     required this.id,
     required this.lastSeenClock,
     required this.pulledThroughClock,
+    required this.joinState,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -10453,6 +10496,7 @@ class SyncStateData extends DataClass implements Insertable<SyncStateData> {
     map['id'] = Variable<int>(id);
     map['last_seen_clock'] = Variable<int>(lastSeenClock);
     map['pulled_through_clock'] = Variable<int>(pulledThroughClock);
+    map['join_state'] = Variable<String>(joinState);
     return map;
   }
 
@@ -10461,6 +10505,7 @@ class SyncStateData extends DataClass implements Insertable<SyncStateData> {
       id: Value(id),
       lastSeenClock: Value(lastSeenClock),
       pulledThroughClock: Value(pulledThroughClock),
+      joinState: Value(joinState),
     );
   }
 
@@ -10473,6 +10518,7 @@ class SyncStateData extends DataClass implements Insertable<SyncStateData> {
       id: serializer.fromJson<int>(json['id']),
       lastSeenClock: serializer.fromJson<int>(json['lastSeenClock']),
       pulledThroughClock: serializer.fromJson<int>(json['pulledThroughClock']),
+      joinState: serializer.fromJson<String>(json['joinState']),
     );
   }
   @override
@@ -10482,6 +10528,7 @@ class SyncStateData extends DataClass implements Insertable<SyncStateData> {
       'id': serializer.toJson<int>(id),
       'lastSeenClock': serializer.toJson<int>(lastSeenClock),
       'pulledThroughClock': serializer.toJson<int>(pulledThroughClock),
+      'joinState': serializer.toJson<String>(joinState),
     };
   }
 
@@ -10489,10 +10536,12 @@ class SyncStateData extends DataClass implements Insertable<SyncStateData> {
     int? id,
     int? lastSeenClock,
     int? pulledThroughClock,
+    String? joinState,
   }) => SyncStateData(
     id: id ?? this.id,
     lastSeenClock: lastSeenClock ?? this.lastSeenClock,
     pulledThroughClock: pulledThroughClock ?? this.pulledThroughClock,
+    joinState: joinState ?? this.joinState,
   );
   SyncStateData copyWithCompanion(SyncStateCompanion data) {
     return SyncStateData(
@@ -10503,6 +10552,7 @@ class SyncStateData extends DataClass implements Insertable<SyncStateData> {
       pulledThroughClock: data.pulledThroughClock.present
           ? data.pulledThroughClock.value
           : this.pulledThroughClock,
+      joinState: data.joinState.present ? data.joinState.value : this.joinState,
     );
   }
 
@@ -10511,46 +10561,54 @@ class SyncStateData extends DataClass implements Insertable<SyncStateData> {
     return (StringBuffer('SyncStateData(')
           ..write('id: $id, ')
           ..write('lastSeenClock: $lastSeenClock, ')
-          ..write('pulledThroughClock: $pulledThroughClock')
+          ..write('pulledThroughClock: $pulledThroughClock, ')
+          ..write('joinState: $joinState')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, lastSeenClock, pulledThroughClock);
+  int get hashCode =>
+      Object.hash(id, lastSeenClock, pulledThroughClock, joinState);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is SyncStateData &&
           other.id == this.id &&
           other.lastSeenClock == this.lastSeenClock &&
-          other.pulledThroughClock == this.pulledThroughClock);
+          other.pulledThroughClock == this.pulledThroughClock &&
+          other.joinState == this.joinState);
 }
 
 class SyncStateCompanion extends UpdateCompanion<SyncStateData> {
   final Value<int> id;
   final Value<int> lastSeenClock;
   final Value<int> pulledThroughClock;
+  final Value<String> joinState;
   const SyncStateCompanion({
     this.id = const Value.absent(),
     this.lastSeenClock = const Value.absent(),
     this.pulledThroughClock = const Value.absent(),
+    this.joinState = const Value.absent(),
   });
   SyncStateCompanion.insert({
     this.id = const Value.absent(),
     this.lastSeenClock = const Value.absent(),
     this.pulledThroughClock = const Value.absent(),
+    this.joinState = const Value.absent(),
   });
   static Insertable<SyncStateData> custom({
     Expression<int>? id,
     Expression<int>? lastSeenClock,
     Expression<int>? pulledThroughClock,
+    Expression<String>? joinState,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (lastSeenClock != null) 'last_seen_clock': lastSeenClock,
       if (pulledThroughClock != null)
         'pulled_through_clock': pulledThroughClock,
+      if (joinState != null) 'join_state': joinState,
     });
   }
 
@@ -10558,11 +10616,13 @@ class SyncStateCompanion extends UpdateCompanion<SyncStateData> {
     Value<int>? id,
     Value<int>? lastSeenClock,
     Value<int>? pulledThroughClock,
+    Value<String>? joinState,
   }) {
     return SyncStateCompanion(
       id: id ?? this.id,
       lastSeenClock: lastSeenClock ?? this.lastSeenClock,
       pulledThroughClock: pulledThroughClock ?? this.pulledThroughClock,
+      joinState: joinState ?? this.joinState,
     );
   }
 
@@ -10578,6 +10638,9 @@ class SyncStateCompanion extends UpdateCompanion<SyncStateData> {
     if (pulledThroughClock.present) {
       map['pulled_through_clock'] = Variable<int>(pulledThroughClock.value);
     }
+    if (joinState.present) {
+      map['join_state'] = Variable<String>(joinState.value);
+    }
     return map;
   }
 
@@ -10586,7 +10649,8 @@ class SyncStateCompanion extends UpdateCompanion<SyncStateData> {
     return (StringBuffer('SyncStateCompanion(')
           ..write('id: $id, ')
           ..write('lastSeenClock: $lastSeenClock, ')
-          ..write('pulledThroughClock: $pulledThroughClock')
+          ..write('pulledThroughClock: $pulledThroughClock, ')
+          ..write('joinState: $joinState')
           ..write(')'))
         .toString();
   }
@@ -20600,12 +20664,14 @@ typedef $$SyncStateTableCreateCompanionBuilder =
       Value<int> id,
       Value<int> lastSeenClock,
       Value<int> pulledThroughClock,
+      Value<String> joinState,
     });
 typedef $$SyncStateTableUpdateCompanionBuilder =
     SyncStateCompanion Function({
       Value<int> id,
       Value<int> lastSeenClock,
       Value<int> pulledThroughClock,
+      Value<String> joinState,
     });
 
 class $$SyncStateTableFilterComposer
@@ -20629,6 +20695,11 @@ class $$SyncStateTableFilterComposer
 
   ColumnFilters<int> get pulledThroughClock => $composableBuilder(
     column: $table.pulledThroughClock,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get joinState => $composableBuilder(
+    column: $table.joinState,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -20656,6 +20727,11 @@ class $$SyncStateTableOrderingComposer
     column: $table.pulledThroughClock,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get joinState => $composableBuilder(
+    column: $table.joinState,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$SyncStateTableAnnotationComposer
@@ -20679,6 +20755,9 @@ class $$SyncStateTableAnnotationComposer
     column: $table.pulledThroughClock,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get joinState =>
+      $composableBuilder(column: $table.joinState, builder: (column) => column);
 }
 
 class $$SyncStateTableTableManager
@@ -20715,20 +20794,24 @@ class $$SyncStateTableTableManager
                 Value<int> id = const Value.absent(),
                 Value<int> lastSeenClock = const Value.absent(),
                 Value<int> pulledThroughClock = const Value.absent(),
+                Value<String> joinState = const Value.absent(),
               }) => SyncStateCompanion(
                 id: id,
                 lastSeenClock: lastSeenClock,
                 pulledThroughClock: pulledThroughClock,
+                joinState: joinState,
               ),
           createCompanionCallback:
               ({
                 Value<int> id = const Value.absent(),
                 Value<int> lastSeenClock = const Value.absent(),
                 Value<int> pulledThroughClock = const Value.absent(),
+                Value<String> joinState = const Value.absent(),
               }) => SyncStateCompanion.insert(
                 id: id,
                 lastSeenClock: lastSeenClock,
                 pulledThroughClock: pulledThroughClock,
+                joinState: joinState,
               ),
           withReferenceMapper: (p0) => p0
               .map(

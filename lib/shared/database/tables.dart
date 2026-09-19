@@ -482,6 +482,21 @@ class SyncState extends Table {
   IntColumn get pulledThroughClock =>
       integer().withDefault(const Constant(0))();
 
+  /// How far this device has got through joining automatic sync.
+  ///
+  /// `none`, then `applied` once the ground has been merged in and this
+  /// device's own rows are queued, then `done` once they have been sent and
+  /// the ground rewritten.
+  ///
+  /// Stored rather than inferred, because the two halves of joining cannot be
+  /// told apart afterwards. A device that applied the ground and was closed
+  /// before its own rows went out looks exactly like one that has finished:
+  /// the clocks are set, the outbox is empty in the sense that nothing failed.
+  /// Without this it would call itself joined and the rows it never sent --
+  /// the sixty hosts that were the reason for syncing at all -- would stay on
+  /// that device forever, with nothing reporting a problem.
+  TextColumn get joinState => text().withDefault(const Constant('none'))();
+
   @override
   Set<Column> get primaryKey => {id};
 }

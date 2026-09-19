@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../../../core/api/api_client.dart';
+import 'sync_operations_api.dart';
 
 /// The vault head: what the server currently holds.
 @immutable
@@ -124,12 +125,40 @@ enum VaultKind {
   final String wireName;
 }
 
+/// What a vault can be asked for.
+///
+/// The seam a test substitutes, the same way [SyncOperationTransport] is the
+/// seam for the operation log. Joining is a conversation between two devices
+/// and one vault, and scripting that through raw HTTP replies tests the
+/// plumbing rather than the thing that can lose data.
+abstract interface class VaultTransport {
+  VaultKind get kind;
+
+  Future<VaultHead> head();
+
+  Future<List<BackupRevision>> revisions();
+
+  Future<BackupRevision> revision(int revision);
+
+  Future<BackupRevision> upload({
+    required int baseRevision,
+    required String uploadId,
+    required String deviceId,
+    required int schemaVersion,
+    required int encryptionVersion,
+    required String ciphertext,
+    required String ciphertextSha256,
+  });
+
+  Future<void> deleteVault();
+}
+
 /// The `/sync/vault` half of the v1 API.
 ///
 /// Carries opaque ciphertext and nothing else. It never sees a passphrase, a
 /// key or a decrypted payload -- that is the whole point of the boundary, and
 /// the reason this class takes and returns strings.
-final class CloudBackupApi {
+final class CloudBackupApi implements VaultTransport {
   final ApiClient client;
 
   /// The vault every call on this instance addresses.
@@ -137,6 +166,7 @@ final class CloudBackupApi {
   /// Fixed at construction rather than passed per call: an instance that could
   /// be pointed at either vault would put the decision at every call site, and
   /// one call site forgetting it writes a backup into the sync slot.
+  @override
   final VaultKind kind;
 
   const CloudBackupApi({required this.client, this.kind = VaultKind.backup});
@@ -144,6 +174,7 @@ final class CloudBackupApi {
   Map<String, String> get _kindQuery => {'kind': kind.wireName};
 
   /// Reads the vault head. The server creates an empty vault on first read.
+  @override
   Future<VaultHead> head() async {
     final response = await client.get('/sync/vault', query: _kindQuery);
 
@@ -152,6 +183,7 @@ final class CloudBackupApi {
 
   /// Lists stored revisions, newest first as the server orders them. The
   /// server caps this at 20.
+  @override
   Future<List<BackupRevision>> revisions() async {
     final response = await client.get(
       '/sync/vault/revisions',
@@ -164,6 +196,7 @@ final class CloudBackupApi {
   }
 
   /// Downloads one revision, ciphertext included.
+  @override
   Future<BackupRevision> revision(int revision) async {
     final response = await client.get(
       '/sync/vault/revisions/$revision',
@@ -184,6 +217,7 @@ final class CloudBackupApi {
   /// Throws `ApiException` with `isSyncConflict` when [baseRevision] is no
   /// longer the head, and with `isPlanSizeLimit` when the envelope exceeds the
   /// plan's allowance.
+  @override
   Future<BackupRevision> upload({
     required int baseRevision,
     required String uploadId,
@@ -211,6 +245,7 @@ final class CloudBackupApi {
   }
 
   /// Deletes the vault and every revision in it. Irreversible.
+  @override
   Future<void> deleteVault() =>
       client.delete('/sync/vault', body: {'kind': kind.wireName});
 }
