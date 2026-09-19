@@ -26,27 +26,55 @@ class RunbooksDao extends DatabaseAccessor<AppDatabase>
         .get();
   }
 
-  Future<int> insertRunbook(RunbooksCompanion runbook) =>
-      into(runbooks).insert(runbook);
+  Future<int> insertRunbook(RunbooksCompanion runbook) => db.recordUpsert(
+    entityType: 'runbooks',
+    entityId: runbook.id.value,
+    write: () => into(runbooks).insert(runbook),
+  );
 
-  Future<bool> updateRunbook(RunbooksCompanion runbook) =>
-      update(runbooks).replace(runbook);
+  Future<bool> updateRunbook(RunbooksCompanion runbook) => db.recordUpsert(
+    entityType: 'runbooks',
+    entityId: runbook.id.value,
+    write: () => update(runbooks).replace(runbook),
+  );
 
-  Future<int> deleteRunbook(String id) async {
-    await (delete(runbookSteps)..where((tbl) => tbl.runbookId.equals(id))).go();
-    return (delete(runbooks)..where((tbl) => tbl.id.equals(id))).go();
-  }
+  /// Deletes the runbook. Its steps go with it.
+  ///
+  /// The explicit step delete is gone: `runbook_steps.runbook_id` cascades, so
+  /// the database was going to remove them anyway, and doing it by hand meant
+  /// the sync journal saw a bare delete it could not attribute. It records the
+  /// cascade itself.
+  Future<int> deleteRunbook(String id) => db.recordDelete(
+    entityType: 'runbooks',
+    entityId: id,
+    write: () => (delete(runbooks)..where((tbl) => tbl.id.equals(id))).go(),
+  );
 
   Future<void> replaceSteps(
     String runbookId,
     List<RunbookStepsCompanion> steps,
   ) async {
     await transaction(() async {
-      await (delete(
+      final removed = await (select(
         runbookSteps,
-      )..where((tbl) => tbl.runbookId.equals(runbookId))).go();
+      )..where((tbl) => tbl.runbookId.equals(runbookId))).get();
+
+      for (final step in removed) {
+        await db.recordDelete(
+          entityType: 'runbook_steps',
+          entityId: step.id,
+          write: () => (delete(
+            runbookSteps,
+          )..where((tbl) => tbl.id.equals(step.id))).go(),
+        );
+      }
+
       for (final step in steps) {
-        await into(runbookSteps).insert(step);
+        await db.recordUpsert(
+          entityType: 'runbook_steps',
+          entityId: step.id.value,
+          write: () => into(runbookSteps).insert(step),
+        );
       }
     });
   }

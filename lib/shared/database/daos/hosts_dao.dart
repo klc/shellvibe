@@ -32,7 +32,12 @@ class HostsDao extends DatabaseAccessor<AppDatabase> with _$HostsDaoMixin {
     if (host.workspaceId.present) {
       await db.workspacesDao.ensureWorkspaceExists(host.workspaceId.value);
     }
-    return into(hosts).insert(host);
+
+    return db.recordUpsert(
+      entityType: 'hosts',
+      entityId: host.id.value,
+      write: () => into(hosts).insert(host),
+    );
   }
 
   /// Updates an existing host by id.
@@ -40,11 +45,20 @@ class HostsDao extends DatabaseAccessor<AppDatabase> with _$HostsDaoMixin {
   /// Deliberately not `update.replace`: replace is an UPSERT that would
   /// resurrect a deleted row and clobber `createdAt` on every edit.
   Future<int> updateHostById(String id, Insertable<Host> host) {
-    return (update(hosts)..where((tbl) => tbl.id.equals(id))).write(host);
+    return db.recordUpsert(
+      entityType: 'hosts',
+      entityId: id,
+      write: () =>
+          (update(hosts)..where((tbl) => tbl.id.equals(id))).write(host),
+    );
   }
 
   Future<int> deleteHost(String id) {
-    return (delete(hosts)..where((tbl) => tbl.id.equals(id))).go();
+    return db.recordDelete(
+      entityType: 'hosts',
+      entityId: id,
+      write: () => (delete(hosts)..where((tbl) => tbl.id.equals(id))).go(),
+    );
   }
 
   /// Points every host in [hostIds] at [identityId] in a single statement.
@@ -60,9 +74,26 @@ class HostsDao extends DatabaseAccessor<AppDatabase> with _$HostsDaoMixin {
     String? identityId,
   ) async {
     if (hostIds.isEmpty) return 0;
-    return (update(hosts)..where((tbl) => tbl.id.isIn(hostIds))).write(
-      HostsCompanion(identityId: Value<String?>(identityId)),
-    );
+
+    // One statement, but one operation per host: the sync log is keyed by
+    // row, and a bulk write that recorded nothing would leave every other
+    // device pointing at the old identity.
+    return transaction(() async {
+      final changed =
+          await (update(hosts)..where((tbl) => tbl.id.isIn(hostIds))).write(
+            HostsCompanion(identityId: Value<String?>(identityId)),
+          );
+
+      for (final id in hostIds) {
+        await db.recordUpsert(
+          entityType: 'hosts',
+          entityId: id,
+          write: () async {},
+        );
+      }
+
+      return changed;
+    });
   }
 
   /// Moves every host currently bound to [fromIdentityId] onto [toIdentityId].
@@ -73,9 +104,26 @@ class HostsDao extends DatabaseAccessor<AppDatabase> with _$HostsDaoMixin {
     String fromIdentityId,
     String? toIdentityId,
   ) async {
-    return (update(hosts)
-          ..where((tbl) => tbl.identityId.equals(fromIdentityId)))
-        .write(HostsCompanion(identityId: Value<String?>(toIdentityId)));
+    return transaction(() async {
+      final affected = await (select(
+        hosts,
+      )..where((tbl) => tbl.identityId.equals(fromIdentityId))).get();
+
+      final changed =
+          await (update(hosts)
+                ..where((tbl) => tbl.identityId.equals(fromIdentityId)))
+              .write(HostsCompanion(identityId: Value<String?>(toIdentityId)));
+
+      for (final host in affected) {
+        await db.recordUpsert(
+          entityType: 'hosts',
+          entityId: host.id,
+          write: () async {},
+        );
+      }
+
+      return changed;
+    });
   }
 
   // --- Host Groups ---
@@ -106,17 +154,31 @@ class HostsDao extends DatabaseAccessor<AppDatabase> with _$HostsDaoMixin {
     if (group.workspaceId.present) {
       await db.workspacesDao.ensureWorkspaceExists(group.workspaceId.value);
     }
-    return into(hostGroups).insert(group);
+
+    return db.recordUpsert(
+      entityType: 'host_groups',
+      entityId: group.id.value,
+      write: () => into(hostGroups).insert(group),
+    );
   }
 
   /// Updates an existing host group by id.
   ///
   /// See [updateHostById] for why this is not `update.replace`.
   Future<int> updateHostGroupById(String id, Insertable<HostGroup> group) {
-    return (update(hostGroups)..where((tbl) => tbl.id.equals(id))).write(group);
+    return db.recordUpsert(
+      entityType: 'host_groups',
+      entityId: id,
+      write: () =>
+          (update(hostGroups)..where((tbl) => tbl.id.equals(id))).write(group),
+    );
   }
 
   Future<int> deleteHostGroup(String id) {
-    return (delete(hostGroups)..where((tbl) => tbl.id.equals(id))).go();
+    return db.recordDelete(
+      entityType: 'host_groups',
+      entityId: id,
+      write: () => (delete(hostGroups)..where((tbl) => tbl.id.equals(id))).go(),
+    );
   }
 }

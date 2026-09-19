@@ -29,12 +29,23 @@ class SnippetsDao extends DatabaseAccessor<AppDatabase>
     if (snippet.workspaceId.present) {
       await db.workspacesDao.ensureWorkspaceExists(snippet.workspaceId.value);
     }
-    return into(snippets).insert(snippet);
+
+    return db.recordUpsert(
+      entityType: 'snippets',
+      entityId: snippet.id.value,
+      write: () => into(snippets).insert(snippet),
+    );
   }
 
-  Future<bool> updateSnippet(SnippetsCompanion snippet) =>
-      update(snippets).replace(snippet);
+  Future<bool> updateSnippet(SnippetsCompanion snippet) => db.recordUpsert(
+    entityType: 'snippets',
+    entityId: snippet.id.value,
+    write: () => update(snippets).replace(snippet),
+  );
 
-  Future<int> deleteSnippet(String id) =>
-      (delete(snippets)..where((tbl) => tbl.id.equals(id))).go();
+  Future<int> deleteSnippet(String id) => db.recordDelete(
+    entityType: 'snippets',
+    entityId: id,
+    write: () => (delete(snippets)..where((tbl) => tbl.id.equals(id))).go(),
+  );
 }

@@ -69,16 +69,37 @@ final class SyncJournal {
     return result;
   });
 
-  /// Runs [write], which deletes the row, and records the delete.
+  /// Runs [write], which deletes the row, and records the delete -- along with
+  /// everything the database deletes or rewrites on its way out.
   ///
   /// The body is read before [write] runs: after the delete there is nothing
   /// left to keep, and the body is what makes the delete undoable.
+  ///
+  /// The cascade matters as much as the row itself. Deleting a host takes its
+  /// port forwards and bookmarks with it, and deleting an identity leaves
+  /// every host that used it with a null. A device that is only told about the
+  /// host keeps the orphans forever, and nothing about that looks like a bug
+  /// until someone opens the tunnel list on the other device.
   Future<T> delete<T>({
     required String entityType,
     required String entityId,
     required Future<T> Function() write,
   }) => db.transaction(() async {
     final body = await SyncRowCodec.read(db, entityType, entityId);
+
+    // Read both sets of consequences while the rows are still there.
+    final cascaded = body == null
+        ? const <({String type, String id})>[]
+        : await _cascadeTargets(entityType, entityId);
+    final rewritten = body == null
+        ? const <({String type, String id})>[]
+        : await _setNullTargets(entityType, entityId);
+
+    final bodies = <({String type, String id}), String>{
+      for (final target in cascaded)
+        if (await SyncRowCodec.read(db, target.type, target.id) case final row?)
+          target: jsonEncode(row),
+    };
 
     final result = await write();
 
@@ -87,6 +108,35 @@ final class SyncJournal {
     // from another device.
     if (body == null) return result;
 
+    await _recordDelete(entityType, entityId, jsonEncode(body));
+
+    for (final entry in bodies.entries) {
+      await _recordDelete(entry.key.type, entry.key.id, entry.value);
+    }
+
+    // These rows still exist; the database only nulled a column. They are
+    // changes like any other, so they go out as upserts.
+    for (final target in rewritten) {
+      final payload = await SyncRowCodec.read(db, target.type, target.id);
+      if (payload == null) continue;
+
+      await _write(
+        entityType: target.type,
+        entityId: target.id,
+        operation: 'upsert',
+        payload: jsonEncode(payload),
+        before: null,
+      );
+    }
+
+    return result;
+  });
+
+  Future<void> _recordDelete(
+    String entityType,
+    String entityId,
+    String body,
+  ) async {
     final clock = await _nextClock();
 
     await _write(
@@ -94,7 +144,7 @@ final class SyncJournal {
       entityId: entityId,
       operation: 'delete',
       payload: null,
-      before: jsonEncode(body),
+      before: body,
       clock: clock,
     );
 
@@ -104,14 +154,12 @@ final class SyncJournal {
           SyncTombstonesCompanion.insert(
             entityType: entityType,
             entityId: entityId,
-            body: Value(jsonEncode(body)),
+            body: Value(body),
             logicalClock: clock,
             deletedAt: DateTime.now(),
           ),
         );
-
-    return result;
-  });
+  }
 
   /// Operations waiting to be sent, oldest first.
   Future<List<PendingOperation>> pending() => (db.select(
@@ -284,5 +332,108 @@ final class SyncJournal {
             createdAt: DateTime.now(),
           ),
         );
+  }
+
+  /// Rows the database deletes when their parent goes, by foreign key.
+  ///
+  /// Mirrors `ON DELETE CASCADE` in the schema. Kept as data rather than
+  /// discovered at run time: SQLite does not report what a cascade removed, so
+  /// the only way to record those deletes is to know what they will be.
+  static const Map<String, List<(String, String)>> cascades = {
+    'workspaces': [
+      ('identities', 'workspace_id'),
+      ('host_groups', 'workspace_id'),
+      ('hosts', 'workspace_id'),
+      ('snippets', 'workspace_id'),
+      ('runbooks', 'workspace_id'),
+      ('templates', 'workspace_id'),
+      ('bookmarks', 'workspace_id'),
+    ],
+    'hosts': [('port_forward_rules', 'host_id'), ('bookmarks', 'host_id')],
+    'runbooks': [('runbook_steps', 'runbook_id')],
+    'templates': [
+      ('template_panes', 'template_id'),
+      ('bookmarks', 'template_id'),
+    ],
+  };
+
+  /// Rows the database rewrites when their parent goes, by foreign key.
+  ///
+  /// Mirrors `ON DELETE SET NULL`. These rows survive with a column cleared,
+  /// so they are ordinary changes and go out as upserts.
+  static const Map<String, List<(String, String)>> setNulls = {
+    'host_groups': [('host_groups', 'parent_id'), ('hosts', 'group_id')],
+    'identities': [('hosts', 'identity_id')],
+    'hosts': [('hosts', 'jump_host_id')],
+  };
+
+  /// Everything a delete of [entityType]/[entityId] takes with it, including
+  /// what those rows take with them in turn.
+  Future<List<({String type, String id})>> _cascadeTargets(
+    String entityType,
+    String entityId,
+  ) async {
+    final found = <({String type, String id})>[];
+    final seen = <String>{'$entityType/$entityId'};
+    var frontier = [(type: entityType, id: entityId)];
+
+    while (frontier.isNotEmpty) {
+      final next = <({String type, String id})>[];
+
+      for (final parent in frontier) {
+        for (final (childTable, column)
+            in cascades[parent.type] ?? const <(String, String)>[]) {
+          for (final id in await _idsWhere(childTable, column, parent.id)) {
+            if (!seen.add('$childTable/$id')) continue;
+
+            final child = (type: childTable, id: id);
+            found.add(child);
+            next.add(child);
+          }
+        }
+      }
+
+      frontier = next;
+    }
+
+    return found;
+  }
+
+  Future<List<({String type, String id})>> _setNullTargets(
+    String entityType,
+    String entityId,
+  ) async {
+    final targets = <({String type, String id})>[];
+
+    for (final (table, column)
+        in setNulls[entityType] ?? const <(String, String)>[]) {
+      for (final id in await _idsWhere(table, column, entityId)) {
+        // A row that points at itself is the row being deleted.
+        if (table == entityType && id == entityId) continue;
+
+        targets.add((type: table, id: id));
+      }
+    }
+
+    return targets;
+  }
+
+  /// Ids in [table] whose [column] holds [value].
+  ///
+  /// Raw SQL because the table and column are values here, not types. Both
+  /// come from the constant maps above and never from a caller.
+  Future<List<String>> _idsWhere(
+    String table,
+    String column,
+    String value,
+  ) async {
+    final rows = await db
+        .customSelect(
+          'SELECT id FROM $table WHERE $column = ?',
+          variables: [Variable.withString(value)],
+        )
+        .get();
+
+    return rows.map((r) => r.read<String>('id')).toList();
   }
 }

@@ -35,7 +35,12 @@ class IdentitiesDao extends DatabaseAccessor<AppDatabase>
     if (identity.workspaceId.present) {
       await db.workspacesDao.ensureWorkspaceExists(identity.workspaceId.value);
     }
-    return into(identities).insert(identity);
+
+    return db.recordUpsert(
+      entityType: 'identities',
+      entityId: identity.id.value,
+      write: () => into(identities).insert(identity),
+    );
   }
 
   /// Updates an existing identity by id.
@@ -43,12 +48,20 @@ class IdentitiesDao extends DatabaseAccessor<AppDatabase>
   /// Deliberately not `update.replace`: replace is an UPSERT that would
   /// resurrect a deleted row and clobber `createdAt` on every edit.
   Future<int> updateIdentityById(String id, Insertable<Identity> identity) {
-    return (update(
-      identities,
-    )..where((tbl) => tbl.id.equals(id))).write(identity);
+    return db.recordUpsert(
+      entityType: 'identities',
+      entityId: id,
+      write: () => (update(
+        identities,
+      )..where((tbl) => tbl.id.equals(id))).write(identity),
+    );
   }
 
   Future<int> deleteIdentity(String id) {
-    return (delete(identities)..where((tbl) => tbl.id.equals(id))).go();
+    return db.recordDelete(
+      entityType: 'identities',
+      entityId: id,
+      write: () => (delete(identities)..where((tbl) => tbl.id.equals(id))).go(),
+    );
   }
 }

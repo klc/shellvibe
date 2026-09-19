@@ -5,6 +5,7 @@ import 'package:drift/native.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 
+import '../../core/sync/sync_journal.dart';
 import 'tables.dart';
 import 'daos/bookmarks_dao.dart';
 import 'daos/hosts_dao.dart';
@@ -60,6 +61,49 @@ part 'app_database.g.dart';
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
+
+  /// Records local changes for automatic sync, when it is switched on.
+  ///
+  /// Null until a vault is set up. The DAOs call through [recordUpsert] and
+  /// [recordDelete] either way, so nothing in them has to know whether sync
+  /// exists -- and a device that turns sync on does not need a different write
+  /// path than one that never does.
+  SyncJournal? syncJournal;
+
+  /// Runs [write] and records it, when there is a journal to record into.
+  Future<T> recordUpsert<T>({
+    required String entityType,
+    required String entityId,
+    required Future<T> Function() write,
+  }) {
+    final journal = syncJournal;
+
+    return journal == null
+        ? write()
+        : journal.upsert(
+            entityType: entityType,
+            entityId: entityId,
+            write: write,
+          );
+  }
+
+  /// Runs [write], which deletes the row, and records it along with everything
+  /// the database cascades or rewrites.
+  Future<T> recordDelete<T>({
+    required String entityType,
+    required String entityId,
+    required Future<T> Function() write,
+  }) {
+    final journal = syncJournal;
+
+    return journal == null
+        ? write()
+        : journal.delete(
+            entityType: entityType,
+            entityId: entityId,
+            write: write,
+          );
+  }
 
   @override
   int get schemaVersion => 10;

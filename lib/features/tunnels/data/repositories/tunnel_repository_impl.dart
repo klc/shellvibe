@@ -54,7 +54,7 @@ class TunnelRepositoryImpl implements TunnelRepository {
 
   @override
   Future<void> updateRule(TunnelRuleModel rule) async {
-    await _dao.updateRule(_mapToEntity(rule));
+    await _dao.updateRule(_mapToCompanion(rule));
   }
 
   @override
@@ -71,18 +71,6 @@ class TunnelRepositoryImpl implements TunnelRepository {
       remoteHost: entity.remoteHost,
       remotePort: entity.remotePort,
       autoStart: entity.autoStart,
-    );
-  }
-
-  PortForwardRule _mapToEntity(TunnelRuleModel model) {
-    return PortForwardRule(
-      id: model.id,
-      hostId: model.hostId,
-      type: model.type,
-      localPort: model.localPort,
-      remoteHost: model.remoteHost,
-      remotePort: model.remotePort,
-      autoStart: model.autoStart,
     );
   }
 
