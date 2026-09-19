@@ -570,6 +570,11 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
   }
 
   Future<void> _confirmDelete(BuildContext context) async {
+    // Resolved before the sheet opens, for the same reason the restore sheet
+    // captures its data: this widget can be gone by the time the sheet
+    // closes, and `ref` is unsafe once it is.
+    final notifier = ref.read(cloudBackupProvider.notifier);
+
     final confirmed = await showModalBottomSheet<bool>(
       context: context,
       builder: (sheetContext) => SafeArea(
@@ -608,21 +613,31 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
     );
 
     if (confirmed ?? false) {
-      await ref.read(cloudBackupProvider.notifier).deleteVault();
+      await notifier.deleteVault();
     }
   }
 
   Future<void> _openRestoreSheet(BuildContext context) async {
+    // Everything the sheet needs is read here and captured, so its builder
+    // closes over plain values. A `ref` read inside that builder runs again
+    // on every rebuild of the sheet -- including the rebuilds the restore
+    // itself causes -- by which point this section can already be
+    // deactivated. Riverpod then throws "using ref when a widget is about to
+    // or has been unmounted", on a phone, in the middle of a restore.
     final notifier = ref.read(cloudBackupProvider.notifier);
     await notifier.loadRevisions();
 
     if (!context.mounted) return;
 
+    final revisions =
+        ref.read(cloudBackupProvider).value?.revisions ??
+        const <BackupRevision>[];
+
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       builder: (sheetContext) => _RestoreSheet(
-        revisions: ref.read(cloudBackupProvider).value?.revisions ?? const [],
+        revisions: revisions,
         onRestore: (revision, secret, method) async {
           await notifier.restore(
             revision: revision,

@@ -4,6 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
+import 'package:shellvibe/core/sync/backup_envelope.dart';
 import 'package:shellvibe/features/cloud_backup/data/cloud_backup_api.dart';
 import 'package:shellvibe/features/cloud_backup/presentation/notifiers/cloud_backup_notifier.dart';
 import 'package:shellvibe/features/cloud_backup/presentation/widgets/cloud_backup_section.dart';
@@ -85,10 +86,7 @@ void main() {
         findsOneWidget,
         reason: 'The free fallback must stay visible in the blocked state.',
       );
-      expect(
-        find.byKey(const Key('cloud_backup_now_button')),
-        findsNothing,
-      );
+      expect(find.byKey(const Key('cloud_backup_now_button')), findsNothing);
     });
 
     testWidgets('an unentitled plan says so without blaming the network', (
@@ -99,10 +97,7 @@ void main() {
         const CloudBackupState(blocker: CloudBackupBlocker.notEntitled),
       );
 
-      expect(
-        find.textContaining('not included in your plan'),
-        findsOneWidget,
-      );
+      expect(find.textContaining('not included in your plan'), findsOneWidget);
       expect(find.textContaining('always available'), findsOneWidget);
     });
   });
@@ -123,10 +118,7 @@ void main() {
         findsOneWidget,
         reason: 'The consequence has to be stated before the choice is made.',
       );
-      expect(
-        find.byKey(const Key('cloud_backup_recovery_code')),
-        findsNothing,
-      );
+      expect(find.byKey(const Key('cloud_backup_recovery_code')), findsNothing);
     });
 
     testWidgets('rejects a short passphrase', (tester) async {
@@ -143,10 +135,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining('at least 8 characters'), findsOneWidget);
-      expect(
-        find.byKey(const Key('cloud_backup_recovery_code')),
-        findsNothing,
-      );
+      expect(find.byKey(const Key('cloud_backup_recovery_code')), findsNothing);
     });
 
     testWidgets('rejects a mismatched confirmation', (tester) async {
@@ -340,6 +329,77 @@ void main() {
       expect(inkWell.onTap, isNull);
     });
   });
+
+  group('the restore sheet', () {
+    testWidgets('survives the section leaving the tree beneath it', (
+      tester,
+    ) async {
+      // The crash on the phone: a restore invalidates providers, the screen
+      // underneath rebuilds and the section goes, and the sheet -- still on
+      // screen, still rebuilding -- reaches into that section's `ref`.
+      // Riverpod throws "using ref when a widget is about to or has been
+      // unmounted", in the middle of a restore, after the data is written.
+      tester.view.physicalSize = const Size(1080, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      final state = CloudBackupState(
+        lastKnownRevision: 1,
+        revisions: [
+          BackupRevision(
+            id: 'rev-1',
+            revision: 1,
+            baseRevision: 0,
+            deviceId: 'desktop',
+            schemaVersion: 4,
+            encryptionVersion: 1,
+            ciphertextSha256: 'abc',
+            sizeBytes: 2048,
+            createdAt: DateTime(2026, 9, 19),
+          ),
+        ],
+      );
+
+      Widget app({required bool withSection}) => ProviderScope(
+        overrides: [
+          cloudBackupProvider.overrideWith(() => _StubNotifier(state)),
+        ],
+        child: ShadTheme(
+          data: ShadThemeData(
+            colorScheme: const ShadSlateColorScheme.light(),
+            brightness: Brightness.light,
+          ),
+          child: MaterialApp(
+            home: Scaffold(
+              body: withSection
+                  ? const SingleChildScrollView(child: CloudBackupSection())
+                  : const SizedBox.shrink(),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(app(withSection: true));
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('cloud_backup_restore_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Restore from cloud'), findsOneWidget);
+
+      // The screen underneath rebuilds without the section, the way it does
+      // when a restore invalidates the providers it was built from. The sheet
+      // stays on screen, and the frame that follows runs its builder again.
+      await tester.pumpWidget(app(withSection: false));
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'The sheet reached into a ref that no longer has a widget.',
+      );
+    });
+  });
 }
 
 /// Fills the passphrase pair and advances to the recovery code step.
@@ -364,4 +424,25 @@ final class _StubNotifier extends CloudBackupNotifier {
 
   @override
   Future<CloudBackupState> build() async => _state;
+
+  @override
+  Future<void> loadRevisions() async {}
+
+  /// Publishes new state the way a real restore does.
+  ///
+  /// The rebuild that causes is what used to reach into a `ref` belonging to
+  /// a section that had already been deactivated.
+  @override
+  Future<void> restore({
+    required int revision,
+    required String secret,
+    BackupUnlockMethod unlockWith = BackupUnlockMethod.passphrase,
+  }) async {
+    state = AsyncValue.data(
+      _state.copyWith(
+        lastKnownRevision: revision,
+        message: 'Restored revision $revision.',
+      ),
+    );
+  }
 }
