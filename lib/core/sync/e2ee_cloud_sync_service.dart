@@ -312,11 +312,18 @@ class E2EECloudSyncService {
   /// Nothing is ever deleted: every collection is upserted, so a backup that
   /// was taken with a narrowed scope leaves the categories it omits exactly as
   /// they are on this device.
+  ///
+  /// [snapshotDeviceId] is the device the snapshot was uploaded from, used to
+  /// break clock ties on the rows it restores. A file backup has no such id
+  /// and leaves it empty, which loses every tie -- the conservative reading,
+  /// because an operation made at the same clock is at least as current as a
+  /// file of unknown age.
   Future<BackupImportResult> importEncryptedBackup({
     required String backupPackageJson,
     required AppDatabase db,
     required String masterPassword,
     BackupUnlockMethod unlockWith = BackupUnlockMethod.passphrase,
+    String snapshotDeviceId = '',
   }) async {
     final opened = await _envelope.open(
       envelopeJson: backupPackageJson,
@@ -744,6 +751,48 @@ class E2EECloudSyncService {
         table: 'host_groups',
         column: 'parent_id',
       );
+
+      // 14. Where the restored rows now stand in the operation log.
+      //
+      // Without this they carry no version at all, so the first operation to
+      // mention any of them wins by default -- including one this snapshot
+      // already superseded. And the cursor stays at zero, which makes the
+      // device replay a log it has just restored past.
+      //
+      // Stamped inside the same transaction as the rows: a version written
+      // for rows that were rolled back would defend data this device does not
+      // have.
+      final journal = db.syncJournal;
+      final syncClock = data['sync_clock'] as int?;
+
+      if (journal != null && syncClock != null) {
+        for (final type in SyncRowCodec.syncableTypes) {
+          final items = data[type];
+          if (items is! List) continue;
+
+          final present = await idsOf(type);
+
+          for (final item in items) {
+            final id = item is Map ? item['id'] as String? : null;
+            if (id == null || !present.contains(id)) continue;
+
+            await journal.setVersion(
+              entityType: type,
+              entityId: id,
+              logicalClock: syncClock,
+              deviceId: snapshotDeviceId,
+            );
+          }
+        }
+
+        // Never backwards. Restoring an older revision on purpose must not
+        // rewind the cursor past operations this device has already applied
+        // and would then be offered again.
+        final state = await journal.readState();
+        if (syncClock > state.pulledThroughClock) {
+          await journal.acknowledgePull(syncClock);
+        }
+      }
     });
 
     final settings = included.contains(BackupCategory.settings)

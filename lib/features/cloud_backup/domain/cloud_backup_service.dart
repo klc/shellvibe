@@ -122,6 +122,7 @@ final class CloudBackupService {
     BackupScope scope = BackupScope.full,
     Map<String, dynamic>? settings,
     Uint8List? syncKey,
+    int? syncClock,
   }) async {
     final String envelope;
     try {
@@ -132,6 +133,7 @@ final class CloudBackupService {
         scope: scope,
         settings: settings,
         syncKey: syncKey,
+        syncClock: syncClock,
       );
     } on Object catch (e) {
       return CloudBackupUploadResult.failed(
@@ -190,6 +192,14 @@ final class CloudBackupService {
                 deviceId: deviceId,
                 maxSizeBytes: maxSizeBytes,
                 recoveryCode: recoveryCode,
+                // Everything the first attempt carried. Leaving these out
+                // silently widened the scope the user chose and dropped the
+                // sync key, which takes the envelope back to v3 -- and a v3
+                // backup is one that no other device can start syncing from.
+                scope: scope,
+                settings: settings,
+                syncKey: syncKey,
+                syncClock: syncClock,
               )
             : null,
       );
@@ -242,6 +252,9 @@ final class CloudBackupService {
       db: db,
       masterPassword: secret,
       unlockWith: unlockWith,
+      // The device that wrote the revision, so the rows it restores break
+      // clock ties the same way the operation that produced them would have.
+      snapshotDeviceId: stored.deviceId,
     );
   }
 

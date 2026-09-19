@@ -78,13 +78,6 @@ final class CloudBackupStore {
   Future<void> writeLastKnownRevision(int revision) =>
       storage.write(key: _lastRevisionKey, value: '$revision');
 
-  /// Whether the user asked for a backup when the app closes.
-  Future<bool> readBackupOnExit() async =>
-      await storage.read(key: _backupOnExitKey) == 'true';
-
-  Future<void> writeBackupOnExit(bool enabled) =>
-      storage.write(key: _backupOnExitKey, value: '$enabled');
-
   /// The vault's sync key, once this device has learned it.
   ///
   /// Base64. The design note kept this in memory only, recovered by opening
@@ -173,6 +166,10 @@ final class CloudBackupStore {
   static const String _recoveryCodeKey = 'shellvibe_sync_recovery_code';
   static const String _pendingUploadKey = 'shellvibe_sync_pending_upload';
   static const String _lastRevisionKey = 'shellvibe_sync_last_revision';
+
+  /// Read by nothing. Kept only so [clear] removes what earlier builds wrote:
+  /// the "back up when the app closes" switch was never wired to the app
+  /// lifecycle, and a scheduled backup replaces it.
   static const String _backupOnExitKey = 'shellvibe_sync_backup_on_exit';
   static const String _lastFullBackupKey = 'shellvibe_sync_last_full_backup';
   static const String _syncKeyKey = 'shellvibe_sync_key';

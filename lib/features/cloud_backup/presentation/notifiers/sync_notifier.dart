@@ -140,6 +140,13 @@ class SyncNotifier extends _$SyncNotifier {
       deviceId: account.session?.deviceId ?? 'local',
     );
 
+    // The trash holds the body of every deleted row so a mistaken delete can
+    // be taken back, which means a secret stays on disk for the length of the
+    // retention window. Nothing else runs the clock down, so without this the
+    // window never closes and the promise the delete confirmation makes --
+    // thirty days -- is not kept.
+    unawaited(db.syncJournal!.purgeTrash());
+
     final enabled = await ref.watch(autoSyncEnabledProvider.future);
     if (!enabled) {
       _stop();

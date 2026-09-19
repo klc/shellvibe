@@ -54,9 +54,6 @@ final class CloudBackupState {
   /// The revision this device last wrote or restored.
   final int? lastKnownRevision;
 
-  /// True when a backup runs when the app closes.
-  final bool backupOnExit;
-
   /// True while an upload, restore or delete is running.
   final bool busy;
 
@@ -84,7 +81,6 @@ final class CloudBackupState {
     this.head,
     this.revisions = const [],
     this.lastKnownRevision,
-    this.backupOnExit = false,
     this.busy = false,
     this.message,
     this.messageIsError = false,
@@ -116,7 +112,6 @@ final class CloudBackupState {
     VaultHead? head,
     List<BackupRevision>? revisions,
     int? lastKnownRevision,
-    bool? backupOnExit,
     bool? busy,
     String? message,
     bool? messageIsError,
@@ -131,7 +126,6 @@ final class CloudBackupState {
     head: head ?? this.head,
     revisions: revisions ?? this.revisions,
     lastKnownRevision: lastKnownRevision ?? this.lastKnownRevision,
-    backupOnExit: backupOnExit ?? this.backupOnExit,
     busy: busy ?? this.busy,
     message: clearMessage ? null : (message ?? this.message),
     messageIsError: messageIsError ?? this.messageIsError,
@@ -195,7 +189,6 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
 
     final configured = await _store.isConfigured();
     final lastKnownRevision = await _store.readLastKnownRevision();
-    final backupOnExit = await _store.readBackupOnExit();
     final lastFullBackupAt = await _store.readLastFullBackupAt();
     final recoveryCodeMissing =
         configured && await _store.readRecoveryCode() == null;
@@ -203,7 +196,6 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
     if (configured) {
       return CloudBackupState(
         lastKnownRevision: lastKnownRevision,
-        backupOnExit: backupOnExit,
         recoveryCodeMissing: recoveryCodeMissing,
         lastFullBackupAt: lastFullBackupAt,
       );
@@ -221,7 +213,6 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
       // misleading: the head is re-read the next time this builds.
       return CloudBackupState(
         blocker: CloudBackupBlocker.notConfigured,
-        backupOnExit: backupOnExit,
         lastFullBackupAt: lastFullBackupAt,
       );
     }
@@ -231,7 +222,6 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
           ? CloudBackupBlocker.notConfigured
           : CloudBackupBlocker.needsExistingPassphrase,
       head: head,
-      backupOnExit: backupOnExit,
       lastFullBackupAt: lastFullBackupAt,
     );
   }
@@ -320,7 +310,6 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
       state = AsyncValue.data(
         CloudBackupState(
           head: head,
-          backupOnExit: current.backupOnExit,
           recoveryCodeMissing: recoveryCode == null || recoveryCode.isEmpty,
           message:
               'Unlocked. Restore revision ${head.currentRevision} to bring '
@@ -453,6 +442,15 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
       autoSyncEnabled: await _scopeStore.readAutoSyncEnabled(),
     );
 
+    // Where this snapshot sits in the operation log. A device that restores it
+    // resumes pulling from here instead of replaying a log that reaches back
+    // further than the server still keeps -- and without it that device counts
+    // from zero, re-applying everything it just restored.
+    final syncClock = await ref
+        .read(appDatabaseProvider)
+        .syncJournal
+        ?.readState();
+
     // App settings live in secure storage, not the database, so they are read
     // here and handed over rather than reached for inside the sync service.
     final settings = scope.contains(BackupCategory.settings)
@@ -470,6 +468,7 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
         scope: scope,
         settings: settings,
         syncKey: syncKey,
+        syncClock: syncClock?.lastSeenClock,
       );
 
       if (!result.succeeded) {
@@ -633,12 +632,6 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
 
       return false;
     }
-  }
-
-  /// Turns the backup-on-close behaviour on or off.
-  Future<void> setBackupOnExit(bool enabled) async {
-    await _store.writeBackupOnExit(enabled);
-    _publish((s) => s.copyWith(backupOnExit: enabled));
   }
 
   /// Dismisses the last message.

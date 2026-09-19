@@ -528,23 +528,6 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
           ],
         ),
         const Divider(height: 24),
-        Material(
-          type: MaterialType.transparency,
-          child: SwitchListTile.adaptive(
-            key: const Key('cloud_backup_on_exit_switch'),
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Back up when the app closes'),
-            subtitle: Text(
-              'One upload per close, not one per change: a full snapshot on '
-              'every edit would exhaust the revisions your plan keeps.',
-              style: TextStyle(fontSize: 11, color: tokens.textSubtle),
-            ),
-            value: state.backupOnExit,
-            onChanged: (value) =>
-                ref.read(cloudBackupProvider.notifier).setBackupOnExit(value),
-          ),
-        ),
-        const SizedBox(height: 8),
         Wrap(
           spacing: 8,
           runSpacing: 8,
