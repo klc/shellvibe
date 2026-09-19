@@ -55,7 +55,7 @@ final class DeviceDescriptor {
 
     try {
       final hostname = Platform.localHostname.trim();
-      if (hostname.isNotEmpty) {
+      if (isUsefulHostname(hostname)) {
         // macOS reports "name.local"; the suffix is noise in a device list.
         return hostname.endsWith('.local')
             ? hostname.substring(0, hostname.length - '.local'.length)
@@ -71,6 +71,26 @@ final class DeviceDescriptor {
       'macos' => 'Mac',
       'windows' => 'Windows PC',
       _ => 'ShellVibe device',
+    };
+  }
+
+  /// Whether [hostname] names this machine or merely names the loopback.
+  ///
+  /// Android does not fail the way the code above expected. It does not throw
+  /// and it does not return an empty string: it returns `localhost`, so the
+  /// guard passed and every phone on the account registered under that name.
+  /// A device list where every entry reads `localhost` cannot be used for the
+  /// thing it exists for -- deciding which device to revoke.
+  @visibleForTesting
+  static bool isUsefulHostname(String hostname) {
+    if (hostname.isEmpty) return false;
+
+    return switch (hostname.toLowerCase()) {
+      'localhost' || 'localhost.localdomain' => false,
+      '127.0.0.1' || '::1' => false,
+      // Android's own placeholder, seen on some vendor images.
+      'android' || 'unknown' => false,
+      _ => true,
     };
   }
 }
