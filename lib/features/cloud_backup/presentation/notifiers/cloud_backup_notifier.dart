@@ -4,10 +4,12 @@ import 'package:uuid/uuid.dart';
 
 import '../../../../app/restored_data.dart';
 import '../../../../core/api/api_exception.dart';
+import '../../../../core/sync/backup_scope_store.dart';
 import '../../../../core/sync/e2ee_cloud_sync_service.dart';
 import '../../../../shared/providers/database_providers.dart';
 import '../../../account/presentation/notifiers/account_notifier.dart';
 import '../../../billing/presentation/notifiers/entitlement_notifier.dart';
+import '../../../settings/presentation/notifiers/settings_notifier.dart';
 import '../../../vault/presentation/notifiers/identities_notifier.dart';
 import '../../data/cloud_backup_api.dart';
 import '../../data/cloud_backup_store.dart';
@@ -74,6 +76,9 @@ final class CloudBackupState {
   /// everything.
   final bool recoveryCodeMissing;
 
+  /// When this device last wrote a backup that held everything, if ever.
+  final DateTime? lastFullBackupAt;
+
   const CloudBackupState({
     this.blocker,
     this.head,
@@ -85,9 +90,18 @@ final class CloudBackupState {
     this.messageIsError = false,
     this.conflictingServerRevision,
     this.recoveryCodeMissing = false,
+    this.lastFullBackupAt,
   });
 
   bool get isReady => blocker == null;
+
+  /// How long ago the last complete backup was, or null when there has never
+  /// been one from this device.
+  Duration? get sinceLastFullBackup {
+    final at = lastFullBackupAt;
+
+    return at == null ? null : DateTime.now().difference(at);
+  }
 
   /// True when the server holds a revision this device has not seen.
   bool get serverIsAhead {
@@ -108,6 +122,7 @@ final class CloudBackupState {
     bool? messageIsError,
     int? conflictingServerRevision,
     bool? recoveryCodeMissing,
+    DateTime? lastFullBackupAt,
     bool clearBlocker = false,
     bool clearMessage = false,
     bool clearConflict = false,
@@ -124,6 +139,7 @@ final class CloudBackupState {
         ? null
         : (conflictingServerRevision ?? this.conflictingServerRevision),
     recoveryCodeMissing: recoveryCodeMissing ?? this.recoveryCodeMissing,
+    lastFullBackupAt: lastFullBackupAt ?? this.lastFullBackupAt,
   );
 }
 
@@ -144,6 +160,11 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
   /// both produce -- would otherwise hit an uninitialised field.
   CloudBackupStore get _store =>
       CloudBackupStore(storage: ref.read(secureStorageServiceProvider));
+
+  /// The backup scope is a device preference rather than account state, so it
+  /// has its own store and survives signing out.
+  BackupScopeStore get _scopeStore =>
+      BackupScopeStore(storage: ref.read(secureStorageServiceProvider));
 
   @override
   Future<CloudBackupState> build() async {
@@ -175,6 +196,7 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
     final configured = await _store.isConfigured();
     final lastKnownRevision = await _store.readLastKnownRevision();
     final backupOnExit = await _store.readBackupOnExit();
+    final lastFullBackupAt = await _store.readLastFullBackupAt();
     final recoveryCodeMissing =
         configured && await _store.readRecoveryCode() == null;
 
@@ -183,6 +205,7 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
         lastKnownRevision: lastKnownRevision,
         backupOnExit: backupOnExit,
         recoveryCodeMissing: recoveryCodeMissing,
+        lastFullBackupAt: lastFullBackupAt,
       );
     }
 
@@ -199,6 +222,7 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
       return CloudBackupState(
         blocker: CloudBackupBlocker.notConfigured,
         backupOnExit: backupOnExit,
+        lastFullBackupAt: lastFullBackupAt,
       );
     }
 
@@ -208,6 +232,7 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
           : CloudBackupBlocker.needsExistingPassphrase,
       head: head,
       backupOnExit: backupOnExit,
+      lastFullBackupAt: lastFullBackupAt,
     );
   }
 
@@ -290,8 +315,7 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
         CloudBackupState(
           head: head,
           backupOnExit: current.backupOnExit,
-          recoveryCodeMissing:
-              recoveryCode == null || recoveryCode.isEmpty,
+          recoveryCodeMissing: recoveryCode == null || recoveryCode.isEmpty,
           message:
               'Unlocked. Restore revision ${head.currentRevision} to bring '
               'this device up to date before backing up from here.',
@@ -383,8 +407,7 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
     if (service == null) return;
 
     await _run(
-      (state) async =>
-          state.copyWith(revisions: await service.revisions()),
+      (state) async => state.copyWith(revisions: await service.revisions()),
     );
   }
 
@@ -414,6 +437,13 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
     // first one. Sealing it into the setup backup alone made the recovery path
     // cover exactly one revision and then quietly stop.
     final recoveryCode = await _store.readRecoveryCode();
+    final scope = await _scopeStore.read();
+
+    // App settings live in secure storage, not the database, so they are read
+    // here and handed over rather than reached for inside the sync service.
+    final settings = scope.contains(BackupCategory.settings)
+        ? (await ref.read(settingsRepositoryProvider).loadSettings()).toJson()
+        : null;
 
     await _run((state) async {
       final result = await service.upload(
@@ -423,6 +453,8 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
         maxSizeBytes: _maxSizeBytes,
         recoveryCode: recoveryCode,
         force: force,
+        scope: scope,
+        settings: settings,
       );
 
       if (!result.succeeded) {
@@ -435,10 +467,23 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
 
       await _store.writeLastKnownRevision(result.revision!);
 
+      // Only a complete backup resets the clock the partial-history warning
+      // is measured against.
+      DateTime? lastFullBackupAt;
+      if (scope.isFull) {
+        lastFullBackupAt = DateTime.now();
+        await _store.writeLastFullBackupAt(lastFullBackupAt);
+      }
+
       return state.copyWith(
         lastKnownRevision: result.revision,
         head: await service.head(),
-        message: 'Backed up as revision ${result.revision}.',
+        lastFullBackupAt: lastFullBackupAt,
+        message: scope.isFull
+            ? 'Backed up as revision ${result.revision}.'
+            : 'Backed up as revision ${result.revision} '
+                  '(${scope.toManifest().length} of '
+                  '${BackupScope.full.toManifest().length} categories).',
         messageIsError: false,
         clearConflict: true,
       );
@@ -464,16 +509,36 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
 
       await _store.writeLastKnownRevision(revision);
 
+      // Settings come back as the blob they were stored as. Applying them is
+      // this notifier's job, not the sync service's: the service owns the
+      // database and knows nothing about secure storage.
+      final restoredSettings = result.settings;
+      final settingsNotes = restoredSettings == null
+          ? const <String>[]
+          : await ref
+                .read(settingsProvider.notifier)
+                .applyRestoredSettings(restoredSettings);
+
       // The restore wrote straight to the database, so every list notifier is
       // still holding what it read at startup. Without this the app shows the
       // old data until it is restarted -- which is what "reopen the app to see
       // everything" used to paper over.
       invalidateRestoredData(ref);
 
+      // Repairs are reported, never swallowed. A host restored without its
+      // credentials still looks restored on the list, and finding that out at
+      // connection time reads as "the backup broke my keys".
+      final notes = [
+        result.warning,
+        ...result.repairs.messages,
+        ...settingsNotes,
+      ].nonNulls.toList();
+
       return state.copyWith(
         lastKnownRevision: revision,
-        message:
-            result.warning ?? 'Restored revision $revision.',
+        message: notes.isEmpty
+            ? 'Restored revision $revision.'
+            : 'Restored revision $revision. ${notes.join(' ')}',
         messageIsError: result.warning != null,
         clearConflict: true,
       );
@@ -539,7 +604,8 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
       _publish(
         (s) => s.copyWith(
           recoveryCodeMissing: false,
-          message: 'Saved. Backups from this device carry the recovery code '
+          message:
+              'Saved. Backups from this device carry the recovery code '
               'from now on.',
           messageIsError: false,
         ),
@@ -547,9 +613,7 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
 
       return true;
     } on Object catch (e) {
-      _publish(
-        (s) => s.copyWith(message: '$e', messageIsError: true),
-      );
+      _publish((s) => s.copyWith(message: '$e', messageIsError: true));
 
       return false;
     }
@@ -572,9 +636,7 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
     Future<CloudBackupState> Function(CloudBackupState state) action,
   ) async {
     final current = state.value ?? const CloudBackupState();
-    state = AsyncValue.data(
-      current.copyWith(busy: true, clearMessage: true),
-    );
+    state = AsyncValue.data(current.copyWith(busy: true, clearMessage: true));
 
     try {
       state = AsyncValue.data((await action(current)).copyWith(busy: false));
@@ -598,20 +660,12 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
       );
     } on BackupEnvelopeException catch (e) {
       state = AsyncValue.data(
-        current.copyWith(
-          busy: false,
-          message: e.reason,
-          messageIsError: true,
-        ),
+        current.copyWith(busy: false, message: e.reason, messageIsError: true),
       );
     } on Object catch (e) {
       if (kDebugMode) debugPrint('Cloud backup action failed: $e');
       state = AsyncValue.data(
-        current.copyWith(
-          busy: false,
-          message: '$e',
-          messageIsError: true,
-        ),
+        current.copyWith(busy: false, message: '$e', messageIsError: true),
       );
     }
   }

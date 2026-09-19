@@ -92,10 +92,7 @@ class BackupScope {
     if (manifest is! List) return full;
 
     return BackupScope.of(
-      manifest
-          .whereType<String>()
-          .map(BackupCategory.fromWireName)
-          .nonNulls,
+      manifest.whereType<String>().map(BackupCategory.fromWireName).nonNulls,
     );
   }
 

@@ -108,6 +108,10 @@ final class CloudBackupService {
   /// [force] re-reads the head and uploads on top of it after a conflict. That
   /// overwrites what the other device stored, so it is only ever called from an
   /// explicit user choice -- never automatically.
+  ///
+  /// [scope] narrows what the backup carries. [settings] is the app settings
+  /// blob, which lives in secure storage rather than the database and is
+  /// therefore read by the caller.
   Future<CloudBackupUploadResult> upload({
     required AppDatabase db,
     required String passphrase,
@@ -115,6 +119,8 @@ final class CloudBackupService {
     required int maxSizeBytes,
     String? recoveryCode,
     bool force = false,
+    BackupScope scope = BackupScope.full,
+    Map<String, dynamic>? settings,
   }) async {
     final String envelope;
     try {
@@ -122,6 +128,8 @@ final class CloudBackupService {
         db: db,
         masterPassword: passphrase,
         recoveryCode: recoveryCode,
+        scope: scope,
+        settings: settings,
       );
     } on Object catch (e) {
       return CloudBackupUploadResult.failed(

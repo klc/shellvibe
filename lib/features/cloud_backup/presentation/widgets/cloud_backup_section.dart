@@ -6,6 +6,7 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../../../core/sync/backup_envelope.dart';
+import '../../../settings/presentation/widgets/backup_scope_picker.dart';
 import '../../data/cloud_backup_api.dart';
 import '../notifiers/cloud_backup_notifier.dart';
 
@@ -195,8 +196,7 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
                   ? 'Use the recovery code'
                   : 'Use the passphrase',
               onPressed: () => setState(() {
-                _unlockMethod =
-                    _unlockMethod == BackupUnlockMethod.passphrase
+                _unlockMethod = _unlockMethod == BackupUnlockMethod.passphrase
                     ? BackupUnlockMethod.recoveryCode
                     : BackupUnlockMethod.passphrase;
                 _unlockSecretController.clear();
@@ -351,9 +351,7 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
     final passphrase = _passphraseController.text;
 
     if (passphrase.length < 8) {
-      setState(
-        () => _setupError = 'Use at least 8 characters.',
-      );
+      setState(() => _setupError = 'Use at least 8 characters.');
 
       return;
     }
@@ -389,10 +387,7 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
 
     await ref
         .read(cloudBackupProvider.notifier)
-        .configure(
-          passphrase: _passphraseController.text,
-          recoveryCode: code,
-        );
+        .configure(passphrase: _passphraseController.text, recoveryCode: code);
 
     if (!mounted) return;
 
@@ -417,14 +412,11 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
             Icon(LucideIcons.cloudCheck, size: 16, color: tokens.success),
             const SizedBox(width: 8),
             Expanded(
-              child: Text(
-                switch (head) {
-                  null => 'Cloud backup is on.',
-                  final h when h.isEmpty => 'No backup stored yet.',
-                  final h => 'Server holds revision ${h.currentRevision}.',
-                },
-                style: const TextStyle(fontSize: 13),
-              ),
+              child: Text(switch (head) {
+                null => 'Cloud backup is on.',
+                final h when h.isEmpty => 'No backup stored yet.',
+                final h => 'Server holds revision ${h.currentRevision}.',
+              }, style: const TextStyle(fontSize: 13)),
             ),
           ],
         ),
@@ -498,6 +490,8 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
                       .backUpNow(force: true),
           ),
         ],
+        const Divider(height: 24),
+        BackupScopePicker(lastFullBackupAt: state.lastFullBackupAt),
         const SizedBox(height: 12),
         // A Wrap rather than a stack: these buttons size to their labels, and
         // a column of them left-aligned reads as ragged rather than as a set
@@ -840,9 +834,6 @@ final class _Error extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Text(
     text,
-    style: TextStyle(
-      fontSize: 12,
-      color: Theme.of(context).colorScheme.error,
-    ),
+    style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.error),
   );
 }

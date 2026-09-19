@@ -57,8 +57,7 @@ final class CloudBackupStore {
     return (value == null || value.isEmpty) ? null : value;
   }
 
-  Future<void> writePendingUploadId(String? uploadId) =>
-      uploadId == null
+  Future<void> writePendingUploadId(String? uploadId) => uploadId == null
       ? storage.delete(key: _pendingUploadKey)
       : storage.write(key: _pendingUploadKey, value: uploadId);
 
@@ -80,6 +79,20 @@ final class CloudBackupStore {
   Future<void> writeBackupOnExit(bool enabled) =>
       storage.write(key: _backupOnExitKey, value: '$enabled');
 
+  /// When this device last wrote a backup that held everything.
+  ///
+  /// A vault whose whole history is partial only reveals that at restore
+  /// time, which is the worst moment to learn it. This is what the warning on
+  /// the Cloud Backup screen is measured against.
+  Future<DateTime?> readLastFullBackupAt() async {
+    final value = await storage.read(key: _lastFullBackupKey);
+
+    return value == null ? null : DateTime.tryParse(value);
+  }
+
+  Future<void> writeLastFullBackupAt(DateTime at) =>
+      storage.write(key: _lastFullBackupKey, value: at.toIso8601String());
+
   /// Forgets everything about cloud backup on this device.
   ///
   /// Used when the vault is deleted from the server and when the account is
@@ -91,6 +104,7 @@ final class CloudBackupStore {
     await storage.delete(key: _pendingUploadKey);
     await storage.delete(key: _lastRevisionKey);
     await storage.delete(key: _backupOnExitKey);
+    await storage.delete(key: _lastFullBackupKey);
   }
 
   static const String _passphraseKey = 'shellvibe_sync_passphrase';
@@ -98,4 +112,5 @@ final class CloudBackupStore {
   static const String _pendingUploadKey = 'shellvibe_sync_pending_upload';
   static const String _lastRevisionKey = 'shellvibe_sync_last_revision';
   static const String _backupOnExitKey = 'shellvibe_sync_backup_on_exit';
+  static const String _lastFullBackupKey = 'shellvibe_sync_last_full_backup';
 }

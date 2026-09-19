@@ -11,6 +11,8 @@ import '../../../../app/widgets/adaptive_modal.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/models/mosh_prediction_mode.dart';
+import '../../../../core/sync/backup_scope.dart';
+import '../../../../core/sync/backup_scope_store.dart';
 import '../../../../core/utils/platform_capabilities.dart';
 import '../../../../shared/providers/database_providers.dart';
 import '../../../../app/restored_data.dart';
@@ -18,6 +20,7 @@ import '../../../account/presentation/widgets/account_settings_section.dart';
 import '../../../cloud_backup/presentation/widgets/cloud_backup_section.dart';
 import '../../../device_link/presentation/widgets/paired_devices_settings_section.dart';
 import '../../../mcp/presentation/widgets/mcp_access_settings_section.dart';
+import '../widgets/backup_scope_picker.dart';
 import '../../../terminal/domain/models/terminal_font.dart';
 import '../../../terminal/domain/models/terminal_palette.dart';
 import '../../../terminal/domain/models/terminal_palette_data.dart';
@@ -119,9 +122,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     try {
       final db = ref.read(appDatabaseProvider);
       final syncService = ref.read(e2eeCloudSyncServiceProvider);
+
+      // The same scope the cloud backup uses. It is a device preference --
+      // "what my backups contain" -- not something that should mean one thing
+      // for a file on disk and another for the vault.
+      final scope = await BackupScopeStore(
+        storage: ref.read(secureStorageServiceProvider),
+      ).read();
+
       final backupJson = await syncService.exportEncryptedBackup(
         db: db,
         masterPassword: password,
+        scope: scope,
+        settings: scope.contains(BackupCategory.settings)
+            ? (await ref.read(settingsRepositoryProvider).loadSettings())
+                  .toJson()
+            : null,
       );
 
       final path = await ref
@@ -188,6 +204,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         db: db,
         masterPassword: password,
       );
+
+      // Settings live in secure storage, so the sync service hands them back
+      // rather than applying them itself.
+      final restoredSettings = result.settings;
+      if (restoredSettings != null) {
+        await ref
+            .read(settingsProvider.notifier)
+            .applyRestoredSettings(restoredSettings);
+      }
 
       // The import wrote straight to the database; the list notifiers are
       // still holding what they read at startup and would keep showing the old
@@ -329,8 +354,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     SettingsSection.aiAccess =>
       'AI agent access, registered clients, and the kill switch.',
     SettingsSection.vault => 'Master password and auto-lock.',
-    SettingsSection.account =>
-      'Optional. Only cloud backup needs one.',
+    SettingsSection.account => 'Optional. Only cloud backup needs one.',
     SettingsSection.sync => 'Cloud backup, and backup to a file.',
     SettingsSection.about => 'Version, updates and licenses.',
   };
@@ -977,10 +1001,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const CloudBackupSection(),
           const SizedBox(height: 24),
           // --- Section 4: Zero-Knowledge E2EE Cloud Sync ---
-          _buildSectionHeader(
-            'Encrypted File Backup',
-            LucideIcons.cloudCog,
-          ),
+          _buildSectionHeader('Encrypted File Backup', LucideIcons.cloudCog),
           ShadCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1001,6 +1022,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     'Enter password to encrypt/decrypt backup',
                   ),
                 ),
+                const Divider(height: 24),
+                const BackupScopePicker(),
                 const SizedBox(height: 12),
                 ShellVibeButton(
                   key: const Key('export_backup_button'),

@@ -35,7 +35,9 @@ void main() {
   }
 
   Future<void> seedSource() async {
-    await source.into(source.identities).insert(
+    await source
+        .into(source.identities)
+        .insert(
           IdentitiesCompanion.insert(
             id: 'i1',
             workspaceId: 'default',
@@ -45,7 +47,9 @@ void main() {
             createdAt: DateTime.now(),
           ),
         );
-    await source.into(source.hosts).insert(
+    await source
+        .into(source.hosts)
+        .insert(
           HostsCompanion.insert(
             id: 'h1',
             workspaceId: 'default',
@@ -55,7 +59,9 @@ void main() {
             createdAt: DateTime.now(),
           ),
         );
-    await source.into(source.portForwardRules).insert(
+    await source
+        .into(source.portForwardRules)
+        .insert(
           PortForwardRulesCompanion.insert(
             id: 'p1',
             hostId: 'h1',
@@ -63,7 +69,9 @@ void main() {
             localPort: 8080,
           ),
         );
-    await source.into(source.templates).insert(
+    await source
+        .into(source.templates)
+        .insert(
           TemplatesCompanion.insert(
             id: 't1',
             workspaceId: 'default',
@@ -71,7 +79,9 @@ void main() {
             createdAt: DateTime.now(),
           ),
         );
-    await source.into(source.templatePanes).insert(
+    await source
+        .into(source.templatePanes)
+        .insert(
           TemplatePanesCompanion.insert(
             id: 'tp1',
             templateId: 't1',
@@ -80,7 +90,9 @@ void main() {
             hostId: const Value('h1'),
           ),
         );
-    await source.into(source.bookmarks).insert(
+    await source
+        .into(source.bookmarks)
+        .insert(
           BookmarksCompanion.insert(
             id: 'b1',
             workspaceId: 'default',
@@ -122,10 +134,7 @@ void main() {
       );
 
       expect(payload['version'], 3);
-      expect(
-        BackupScope.fromManifest(payload['included']),
-        BackupScope.full,
-      );
+      expect(BackupScope.fromManifest(payload['included']), BackupScope.full);
     });
 
     test('an excluded category is absent, not empty', () async {
@@ -187,7 +196,9 @@ void main() {
       // The promise that makes a partial backup safe to restore at all.
       await seedSource();
 
-      await target.into(target.identities).insert(
+      await target
+          .into(target.identities)
+          .insert(
             IdentitiesCompanion.insert(
               id: 'local-1',
               workspaceId: 'default',
@@ -225,48 +236,50 @@ void main() {
         masterPassword: passphrase,
       );
 
-      final host = await (target.select(target.hosts)
-            ..where((h) => h.id.equals('h1')))
-          .getSingle();
+      final host = await (target.select(
+        target.hosts,
+      )..where((h) => h.id.equals('h1'))).getSingle();
 
       expect(host.identityId, isNull);
       expect(result.repairs.hostsWithoutIdentity, 1);
       expect(result.repairs.messages.first, contains('without credentials'));
     });
 
-    test('the same host keeps its identity when the device already has it',
-        () async {
-      // The reference is repaired against the database, not against the
-      // payload: a partial backup may point at a row this device already has.
-      await seedSource();
+    test(
+      'the same host keeps its identity when the device already has it',
+      () async {
+        // The reference is repaired against the database, not against the
+        // payload: a partial backup may point at a row this device already has.
+        await seedSource();
 
-      await sync.importEncryptedBackup(
-        backupPackageJson: await sync.exportEncryptedBackup(
-          db: source,
+        await sync.importEncryptedBackup(
+          backupPackageJson: await sync.exportEncryptedBackup(
+            db: source,
+            masterPassword: passphrase,
+            scope: BackupScope.of(const [BackupCategory.identities]),
+          ),
+          db: target,
           masterPassword: passphrase,
-          scope: BackupScope.of(const [BackupCategory.identities]),
-        ),
-        db: target,
-        masterPassword: passphrase,
-      );
+        );
 
-      final result = await sync.importEncryptedBackup(
-        backupPackageJson: await sync.exportEncryptedBackup(
-          db: source,
+        final result = await sync.importEncryptedBackup(
+          backupPackageJson: await sync.exportEncryptedBackup(
+            db: source,
+            masterPassword: passphrase,
+            scope: BackupScope.of(const [BackupCategory.hosts]),
+          ),
+          db: target,
           masterPassword: passphrase,
-          scope: BackupScope.of(const [BackupCategory.hosts]),
-        ),
-        db: target,
-        masterPassword: passphrase,
-      );
+        );
 
-      final host = await (target.select(target.hosts)
-            ..where((h) => h.id.equals('h1')))
-          .getSingle();
+        final host = await (target.select(
+          target.hosts,
+        )..where((h) => h.id.equals('h1'))).getSingle();
 
-      expect(host.identityId, 'i1');
-      expect(result.repairs.hostsWithoutIdentity, 0);
-    });
+        expect(host.identityId, 'i1');
+        expect(result.repairs.hostsWithoutIdentity, 0);
+      },
+    );
 
     test('a port forward without its host is skipped, not fatal', () async {
       // `port_forward_rules.host_id` is NOT NULL. Writing it anyway would fail
@@ -398,7 +411,11 @@ void main() {
       masterPassword: passphrase,
     );
 
-    expect(result.repairs.isEmpty, isTrue, reason: result.repairs.messages.join(' '));
+    expect(
+      result.repairs.isEmpty,
+      isTrue,
+      reason: result.repairs.messages.join(' '),
+    );
     expect(result.included, BackupScope.full);
   });
 }

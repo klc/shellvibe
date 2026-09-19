@@ -203,38 +203,44 @@ class E2EECloudSyncService {
       'included': scope.toManifest(),
       'exported_at': DateTime.now().toIso8601String(),
       'workspaces': workspaces
-          .map((w) => {
-                'id': w.id,
-                'name': w.name,
-                'colorCode': w.colorCode,
-                'createdAt': w.createdAt.toIso8601String(),
-              })
+          .map(
+            (w) => {
+              'id': w.id,
+              'name': w.name,
+              'colorCode': w.colorCode,
+              'createdAt': w.createdAt.toIso8601String(),
+            },
+          )
           .toList(),
       'host_groups': hostGroups
-          .map((g) => {
-                'id': g.id,
-                'workspaceId': g.workspaceId,
-                'parentId': g.parentId,
-                'name': g.name,
-                'colorTag': g.colorTag,
-              })
+          .map(
+            (g) => {
+              'id': g.id,
+              'workspaceId': g.workspaceId,
+              'parentId': g.parentId,
+              'name': g.name,
+              'colorTag': g.colorTag,
+            },
+          )
           .toList(),
     };
 
     if (scope.contains(BackupCategory.identities)) {
       final identities = await db.select(db.identities).get();
       payloadMap['identities'] = identities
-          .map((i) => {
-                'id': i.id,
-                'workspaceId': i.workspaceId,
-                'title': i.title,
-                'username': i.username,
-                'authType': i.authType,
-                'passwordEncrypted': i.passwordEncrypted,
-                'privateKeyEncrypted': i.privateKeyEncrypted,
-                'passphraseEncrypted': i.passphraseEncrypted,
-                'createdAt': i.createdAt.toIso8601String(),
-              })
+          .map(
+            (i) => {
+              'id': i.id,
+              'workspaceId': i.workspaceId,
+              'title': i.title,
+              'username': i.username,
+              'authType': i.authType,
+              'passwordEncrypted': i.passwordEncrypted,
+              'privateKeyEncrypted': i.privateKeyEncrypted,
+              'passphraseEncrypted': i.passphraseEncrypted,
+              'createdAt': i.createdAt.toIso8601String(),
+            },
+          )
           .toList();
     }
 
@@ -246,54 +252,60 @@ class E2EECloudSyncService {
       // the backup being incomplete. `HostsBackupColumnsTest` fails if a new
       // column is added without being added here too.
       payloadMap['hosts'] = hosts
-          .map((h) => {
-                'id': h.id,
-                'workspaceId': h.workspaceId,
-                'groupId': h.groupId,
-                'identityId': h.identityId,
-                'label': h.label,
-                'hostname': h.hostname,
-                'username': h.username,
-                'port': h.port,
-                'protocol': h.protocol,
-                'moshServerPath': h.moshServerPath,
-                'moshPortRange': h.moshPortRange,
-                'colorTag': h.colorTag,
-                'jumpHostId': h.jumpHostId,
-                'environment': h.environment,
-                'mcpVisible': h.mcpVisible,
-                'mcpDefaultMode': h.mcpDefaultMode,
-                'createdAt': h.createdAt.toIso8601String(),
-              })
+          .map(
+            (h) => {
+              'id': h.id,
+              'workspaceId': h.workspaceId,
+              'groupId': h.groupId,
+              'identityId': h.identityId,
+              'label': h.label,
+              'hostname': h.hostname,
+              'username': h.username,
+              'port': h.port,
+              'protocol': h.protocol,
+              'moshServerPath': h.moshServerPath,
+              'moshPortRange': h.moshPortRange,
+              'colorTag': h.colorTag,
+              'jumpHostId': h.jumpHostId,
+              'environment': h.environment,
+              'mcpVisible': h.mcpVisible,
+              'mcpDefaultMode': h.mcpDefaultMode,
+              'createdAt': h.createdAt.toIso8601String(),
+            },
+          )
           .toList();
     }
 
     if (scope.contains(BackupCategory.knownHosts)) {
       final knownHosts = await db.select(db.knownHosts).get();
       payloadMap['known_hosts'] = knownHosts
-          .map((k) => {
-                'id': k.id,
-                'hostname': k.hostname,
-                'port': k.port,
-                'keyType': k.keyType,
-                'fingerprintSha256': k.fingerprintSha256,
-                'firstSeenAt': k.firstSeenAt.toIso8601String(),
-              })
+          .map(
+            (k) => {
+              'id': k.id,
+              'hostname': k.hostname,
+              'port': k.port,
+              'keyType': k.keyType,
+              'fingerprintSha256': k.fingerprintSha256,
+              'firstSeenAt': k.firstSeenAt.toIso8601String(),
+            },
+          )
           .toList();
     }
 
     if (scope.contains(BackupCategory.portForwards)) {
       final portForwardRules = await db.select(db.portForwardRules).get();
       payloadMap['port_forward_rules'] = portForwardRules
-          .map((p) => {
-                'id': p.id,
-                'hostId': p.hostId,
-                'type': p.type,
-                'localPort': p.localPort,
-                'remoteHost': p.remoteHost,
-                'remotePort': p.remotePort,
-                'autoStart': p.autoStart,
-              })
+          .map(
+            (p) => {
+              'id': p.id,
+              'hostId': p.hostId,
+              'type': p.type,
+              'localPort': p.localPort,
+              'remoteHost': p.remoteHost,
+              'remotePort': p.remotePort,
+              'autoStart': p.autoStart,
+            },
+          )
           .toList();
     }
 
@@ -303,33 +315,39 @@ class E2EECloudSyncService {
       final runbookSteps = await db.select(db.runbookSteps).get();
 
       payloadMap['snippets'] = snippets
-          .map((s) => {
-                'id': s.id,
-                'workspaceId': s.workspaceId,
-                'title': s.title,
-                'code': s.code,
-                'tags': s.tags,
-              })
+          .map(
+            (s) => {
+              'id': s.id,
+              'workspaceId': s.workspaceId,
+              'title': s.title,
+              'code': s.code,
+              'tags': s.tags,
+            },
+          )
           .toList();
       payloadMap['runbooks'] = runbooks
-          .map((r) => {
-                'id': r.id,
-                'workspaceId': r.workspaceId,
-                'title': r.title,
-                'description': r.description,
-                'createdAt': r.createdAt.toIso8601String(),
-              })
+          .map(
+            (r) => {
+              'id': r.id,
+              'workspaceId': r.workspaceId,
+              'title': r.title,
+              'description': r.description,
+              'createdAt': r.createdAt.toIso8601String(),
+            },
+          )
           .toList();
       payloadMap['runbook_steps'] = runbookSteps
-          .map((rs) => {
-                'id': rs.id,
-                'runbookId': rs.runbookId,
-                'stepOrder': rs.stepOrder,
-                'command': rs.command,
-                'expectedExitCode': rs.expectedExitCode,
-                'expectedOutputPattern': rs.expectedOutputPattern,
-                'timeoutSeconds': rs.timeoutSeconds,
-              })
+          .map(
+            (rs) => {
+              'id': rs.id,
+              'runbookId': rs.runbookId,
+              'stepOrder': rs.stepOrder,
+              'command': rs.command,
+              'expectedExitCode': rs.expectedExitCode,
+              'expectedOutputPattern': rs.expectedOutputPattern,
+              'timeoutSeconds': rs.timeoutSeconds,
+            },
+          )
           .toList();
     }
 
@@ -338,41 +356,47 @@ class E2EECloudSyncService {
       final templatePanes = await db.select(db.templatePanes).get();
 
       payloadMap['templates'] = templates
-          .map((t) => {
-                'id': t.id,
-                'workspaceId': t.workspaceId,
-                'name': t.name,
-                'description': t.description,
-                'activePaneId': t.activePaneId,
-                'createdAt': t.createdAt.toIso8601String(),
-              })
+          .map(
+            (t) => {
+              'id': t.id,
+              'workspaceId': t.workspaceId,
+              'name': t.name,
+              'description': t.description,
+              'activePaneId': t.activePaneId,
+              'createdAt': t.createdAt.toIso8601String(),
+            },
+          )
           .toList();
       payloadMap['template_panes'] = templatePanes
-          .map((tp) => {
-                'id': tp.id,
-                'templateId': tp.templateId,
-                'paneOrder': tp.paneOrder,
-                'parentPaneId': tp.parentPaneId,
-                'splitDirection': tp.splitDirection,
-                'splitRatio': tp.splitRatio,
-                'sessionType': tp.sessionType,
-                'hostId': tp.hostId,
-                'title': tp.title,
-              })
+          .map(
+            (tp) => {
+              'id': tp.id,
+              'templateId': tp.templateId,
+              'paneOrder': tp.paneOrder,
+              'parentPaneId': tp.parentPaneId,
+              'splitDirection': tp.splitDirection,
+              'splitRatio': tp.splitRatio,
+              'sessionType': tp.sessionType,
+              'hostId': tp.hostId,
+              'title': tp.title,
+            },
+          )
           .toList();
     }
 
     if (scope.contains(BackupCategory.bookmarks)) {
       final bookmarks = await db.select(db.bookmarks).get();
       payloadMap['bookmarks'] = bookmarks
-          .map((b) => {
-                'id': b.id,
-                'workspaceId': b.workspaceId,
-                'hostId': b.hostId,
-                'templateId': b.templateId,
-                'position': b.position,
-                'createdAt': b.createdAt.toIso8601String(),
-              })
+          .map(
+            (b) => {
+              'id': b.id,
+              'workspaceId': b.workspaceId,
+              'hostId': b.hostId,
+              'templateId': b.templateId,
+              'position': b.position,
+              'createdAt': b.createdAt.toIso8601String(),
+            },
+          )
           .toList();
     }
 
@@ -441,16 +465,16 @@ class E2EECloudSyncService {
       // rather than from the payload: a partial backup may reference a row
       // this device already has, and that reference is perfectly good.
       Future<Set<String>> idsOf(String table) async {
-        final rows = await db
-            .customSelect('SELECT id FROM $table')
-            .get();
+        final rows = await db.customSelect('SELECT id FROM $table').get();
         return rows.map((r) => r.read<String>('id')).toSet();
       }
 
       // 1. Workspaces
       if (data['workspaces'] is List) {
         for (final item in data['workspaces'] as List) {
-          await db.into(db.workspaces).insertOnConflictUpdate(
+          await db
+              .into(db.workspaces)
+              .insertOnConflictUpdate(
                 WorkspacesCompanion.insert(
                   id: item['id'] as String,
                   name: item['name'] as String,
@@ -469,7 +493,9 @@ class E2EECloudSyncService {
             repairs.skippedForMissingWorkspace++;
             continue;
           }
-          await db.into(db.identities).insertOnConflictUpdate(
+          await db
+              .into(db.identities)
+              .insertOnConflictUpdate(
                 IdentitiesCompanion.insert(
                   id: item['id'] as String,
                   workspaceId: item['workspaceId'] as String,
@@ -479,12 +505,27 @@ class E2EECloudSyncService {
                   // SSH agent option would otherwise reintroduce rows the
                   // v7 migration just rewrote.
                   authType: _normalizeAuthType(item['authType'] as String),
-                  passwordEncrypted: Value(await _rewrapSecret(
-                      item['passwordEncrypted'] as String?, backupDek, localDek)),
-                  privateKeyEncrypted: Value(await _rewrapSecret(
-                      item['privateKeyEncrypted'] as String?, backupDek, localDek)),
-                  passphraseEncrypted: Value(await _rewrapSecret(
-                      item['passphraseEncrypted'] as String?, backupDek, localDek)),
+                  passwordEncrypted: Value(
+                    await _rewrapSecret(
+                      item['passwordEncrypted'] as String?,
+                      backupDek,
+                      localDek,
+                    ),
+                  ),
+                  privateKeyEncrypted: Value(
+                    await _rewrapSecret(
+                      item['privateKeyEncrypted'] as String?,
+                      backupDek,
+                      localDek,
+                    ),
+                  ),
+                  passphraseEncrypted: Value(
+                    await _rewrapSecret(
+                      item['passphraseEncrypted'] as String?,
+                      backupDek,
+                      localDek,
+                    ),
+                  ),
                   createdAt: DateTime.parse(item['createdAt'] as String),
                 ),
               );
@@ -499,7 +540,9 @@ class E2EECloudSyncService {
             repairs.skippedForMissingWorkspace++;
             continue;
           }
-          await db.into(db.hostGroups).insertOnConflictUpdate(
+          await db
+              .into(db.hostGroups)
+              .insertOnConflictUpdate(
                 HostGroupsCompanion.insert(
                   id: item['id'] as String,
                   workspaceId: item['workspaceId'] as String,
@@ -535,7 +578,9 @@ class E2EECloudSyncService {
           final groupId = item['groupId'] as String?;
           final keepGroup = groupId != null && groupIds.contains(groupId);
 
-          await db.into(db.hosts).insertOnConflictUpdate(
+          await db
+              .into(db.hosts)
+              .insertOnConflictUpdate(
                 HostsCompanion.insert(
                   id: item['id'] as String,
                   workspaceId: item['workspaceId'] as String,
@@ -555,7 +600,8 @@ class E2EECloudSyncService {
                   environment: Value(item['environment'] as String? ?? 'dev'),
                   mcpVisible: Value(item['mcpVisible'] as bool? ?? true),
                   mcpDefaultMode: Value(
-                      item['mcpDefaultMode'] as String? ?? 'readonly'),
+                    item['mcpDefaultMode'] as String? ?? 'readonly',
+                  ),
                   createdAt: DateTime.parse(item['createdAt'] as String),
                 ),
               );
@@ -585,7 +631,9 @@ class E2EECloudSyncService {
                 port: Value(port),
                 keyType: Value(item['keyType'] as String),
                 fingerprintSha256: Value(item['fingerprintSha256'] as String),
-                firstSeenAt: Value(DateTime.parse(item['firstSeenAt'] as String)),
+                firstSeenAt: Value(
+                  DateTime.parse(item['firstSeenAt'] as String),
+                ),
               ),
             );
           } else {
@@ -614,7 +662,9 @@ class E2EECloudSyncService {
             repairs.skippedPortForwards++;
             continue;
           }
-          await db.into(db.portForwardRules).insertOnConflictUpdate(
+          await db
+              .into(db.portForwardRules)
+              .insertOnConflictUpdate(
                 PortForwardRulesCompanion.insert(
                   id: item['id'] as String,
                   hostId: item['hostId'] as String,
@@ -635,7 +685,9 @@ class E2EECloudSyncService {
             repairs.skippedForMissingWorkspace++;
             continue;
           }
-          await db.into(db.snippets).insertOnConflictUpdate(
+          await db
+              .into(db.snippets)
+              .insertOnConflictUpdate(
                 SnippetsCompanion.insert(
                   id: item['id'] as String,
                   workspaceId: item['workspaceId'] as String,
@@ -654,7 +706,9 @@ class E2EECloudSyncService {
             repairs.skippedForMissingWorkspace++;
             continue;
           }
-          await db.into(db.runbooks).insertOnConflictUpdate(
+          await db
+              .into(db.runbooks)
+              .insertOnConflictUpdate(
                 RunbooksCompanion.insert(
                   id: item['id'] as String,
                   workspaceId: item['workspaceId'] as String,
@@ -674,14 +728,20 @@ class E2EECloudSyncService {
             repairs.skippedRunbookSteps++;
             continue;
           }
-          await db.into(db.runbookSteps).insertOnConflictUpdate(
+          await db
+              .into(db.runbookSteps)
+              .insertOnConflictUpdate(
                 RunbookStepsCompanion.insert(
                   id: item['id'] as String,
                   runbookId: item['runbookId'] as String,
                   stepOrder: item['stepOrder'] as int,
                   command: item['command'] as String,
-                  expectedExitCode: Value(item['expectedExitCode'] as int? ?? 0),
-                  expectedOutputPattern: Value(item['expectedOutputPattern'] as String?),
+                  expectedExitCode: Value(
+                    item['expectedExitCode'] as int? ?? 0,
+                  ),
+                  expectedOutputPattern: Value(
+                    item['expectedOutputPattern'] as String?,
+                  ),
                   timeoutSeconds: Value(item['timeoutSeconds'] as int? ?? 30),
                 ),
               );
@@ -695,7 +755,9 @@ class E2EECloudSyncService {
             repairs.skippedForMissingWorkspace++;
             continue;
           }
-          await db.into(db.templates).insertOnConflictUpdate(
+          await db
+              .into(db.templates)
+              .insertOnConflictUpdate(
                 TemplatesCompanion.insert(
                   id: item['id'] as String,
                   workspaceId: item['workspaceId'] as String,
@@ -721,7 +783,9 @@ class E2EECloudSyncService {
             repairs.skippedTemplatePanes++;
             continue;
           }
-          await db.into(db.templatePanes).insertOnConflictUpdate(
+          await db
+              .into(db.templatePanes)
+              .insertOnConflictUpdate(
                 TemplatePanesCompanion.insert(
                   id: item['id'] as String,
                   templateId: item['templateId'] as String,
@@ -729,7 +793,8 @@ class E2EECloudSyncService {
                   parentPaneId: Value(item['parentPaneId'] as String?),
                   splitDirection: Value(item['splitDirection'] as String?),
                   splitRatio: Value(
-                      (item['splitRatio'] as num?)?.toDouble() ?? 0.5),
+                    (item['splitRatio'] as num?)?.toDouble() ?? 0.5,
+                  ),
                   sessionType: item['sessionType'] as String,
                   hostId: Value(item['hostId'] as String?),
                   title: Value(item['title'] as String?),
@@ -761,7 +826,9 @@ class E2EECloudSyncService {
             continue;
           }
 
-          await db.into(db.bookmarks).insertOnConflictUpdate(
+          await db
+              .into(db.bookmarks)
+              .insertOnConflictUpdate(
                 BookmarksCompanion.insert(
                   id: item['id'] as String,
                   workspaceId: item['workspaceId'] as String,
