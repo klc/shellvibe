@@ -6,6 +6,54 @@ import 'package:cryptography/cryptography.dart';
 import '../../../core/sync/backup_envelope.dart';
 import '../../../shared/storage/secure_storage_service.dart';
 
+/// How often a backup runs without being asked.
+///
+/// Off by default. A feature shipping is not a reason to start writing to
+/// someone's account on a schedule they did not choose.
+enum BackupFrequency {
+  off('off', null),
+  hourly('hourly', Duration(hours: 1)),
+  daily('daily', Duration(days: 1)),
+  weekly('weekly', Duration(days: 7));
+
+  const BackupFrequency(this.wireName, this.interval);
+
+  /// Stable name in storage. Never derived from [name]: renaming a Dart
+  /// identifier must not silently change someone's schedule.
+  final String wireName;
+
+  /// How long between backups, or null when off.
+  final Duration? interval;
+
+  /// What the user is actually promised.
+  ///
+  /// There is no background task, so the check runs when the app is open or
+  /// coming back to the foreground. "Daily" therefore means "once a day, the
+  /// first time you open it" -- and saying so is better than a schedule that
+  /// quietly does not happen on a device nobody opened.
+  String get promise => switch (this) {
+    BackupFrequency.off => 'Only when you ask.',
+    BackupFrequency.hourly => 'At most once an hour, while the app is open.',
+    BackupFrequency.daily => 'Once a day, the first time you open the app.',
+    BackupFrequency.weekly => 'Once a week, the first time you open the app.',
+  };
+
+  String get label => switch (this) {
+    BackupFrequency.off => 'Off',
+    BackupFrequency.hourly => 'Hourly',
+    BackupFrequency.daily => 'Daily',
+    BackupFrequency.weekly => 'Weekly',
+  };
+
+  static BackupFrequency fromWireName(String? value) {
+    for (final frequency in BackupFrequency.values) {
+      if (frequency.wireName == value) return frequency;
+    }
+
+    return BackupFrequency.off;
+  }
+}
+
 /// Durable state for cloud backup on this device.
 ///
 /// The sync passphrase is kept in the same hardware-backed keychain the vault
@@ -175,6 +223,42 @@ final class CloudBackupStore {
   Future<void> writeGroundMark({required int revision, required int clock}) =>
       storage.write(key: _groundMarkKey, value: '$revision:$clock');
 
+  /// How often a backup runs on its own.
+  Future<BackupFrequency> readBackupFrequency() async =>
+      BackupFrequency.fromWireName(await storage.read(key: _frequencyKey));
+
+  Future<void> writeBackupFrequency(BackupFrequency frequency) =>
+      storage.write(key: _frequencyKey, value: frequency.wireName);
+
+  /// When a scheduled backup last ran, and the clock the database stood at.
+  ///
+  /// The clock is what answers "has anything changed". Every local write and
+  /// every applied remote operation moves it, and it keeps moving whether or
+  /// not automatic sync is on -- unlike the outbox, which sync drains, and
+  /// which would therefore read as "nothing changed" on exactly the devices
+  /// that change the most.
+  Future<({DateTime at, int clock})?> readAutoBackupMark() async {
+    final value = await storage.read(key: _autoBackupMarkKey);
+    if (value == null || value.isEmpty) return null;
+
+    final separator = value.lastIndexOf(':');
+    if (separator < 0) return null;
+
+    final at = DateTime.tryParse(value.substring(0, separator));
+    final clock = int.tryParse(value.substring(separator + 1));
+    if (at == null || clock == null) return null;
+
+    return (at: at, clock: clock);
+  }
+
+  Future<void> writeAutoBackupMark({
+    required DateTime at,
+    required int clock,
+  }) => storage.write(
+    key: _autoBackupMarkKey,
+    value: '${at.toIso8601String()}:$clock',
+  );
+
   /// When this device last wrote a backup that held everything.
   ///
   /// A vault whose whole history is partial only reveals that at restore
@@ -203,6 +287,7 @@ final class CloudBackupStore {
     await storage.delete(key: _backupOnExitKey);
     await storage.delete(key: _lastFullBackupKey);
     await storage.delete(key: _groundMarkKey);
+    await storage.delete(key: _autoBackupMarkKey);
     await storage.delete(key: _syncKeyKey);
   }
 
@@ -219,5 +304,7 @@ final class CloudBackupStore {
   static const String _backupOnExitKey = 'shellvibe_sync_backup_on_exit';
   static const String _lastFullBackupKey = 'shellvibe_sync_last_full_backup';
   static const String _groundMarkKey = 'shellvibe_sync_ground_mark';
+  static const String _frequencyKey = 'shellvibe_backup_frequency';
+  static const String _autoBackupMarkKey = 'shellvibe_backup_auto_mark';
   static const String _syncKeyKey = 'shellvibe_sync_key';
 }

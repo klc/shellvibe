@@ -9,6 +9,7 @@ import '../../../../core/sync/backup_envelope.dart';
 import '../../../../core/sync/backup_scope_store.dart';
 import '../../../settings/presentation/widgets/backup_scope_picker.dart';
 import '../../data/cloud_backup_api.dart';
+import '../../data/cloud_backup_store.dart';
 import '../notifiers/cloud_backup_notifier.dart';
 
 /// Cloud backup surface in Settings → Sync.
@@ -525,6 +526,8 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
           ],
         ),
         const Divider(height: 24),
+        _FrequencyPicker(state: state),
+        const Divider(height: 24),
         Wrap(
           spacing: 8,
           runSpacing: 8,
@@ -840,4 +843,88 @@ final class _Error extends StatelessWidget {
     text,
     style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.error),
   );
+}
+
+/// How often a backup runs without being asked.
+///
+/// The promise under each option is not decoration. There is no background
+/// task on any platform here, so "daily" means "once a day, the first time you
+/// open the app" -- and a schedule that quietly does not happen on a device
+/// nobody opened is worse than one that says so.
+final class _FrequencyPicker extends ConsumerWidget {
+  const _FrequencyPicker({required this.state});
+
+  final CloudBackupState state;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ShellVibeTokens.resolve(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Automatic backup',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: tokens.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          state.frequency.promise,
+          style: TextStyle(fontSize: 11, color: tokens.textSubtle),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final frequency in BackupFrequency.values)
+              if (frequency == state.frequency)
+                ShellVibeButton(
+                  buttonKey: Key('backup_frequency_${frequency.wireName}'),
+                  label: frequency.label,
+                  icon: LucideIcons.check,
+                  onPressed: null,
+                )
+              else
+                ShellVibeButton.quiet(
+                  buttonKey: Key('backup_frequency_${frequency.wireName}'),
+                  label: frequency.label,
+                  onPressed: state.busy
+                      ? null
+                      : () => ref
+                            .read(cloudBackupProvider.notifier)
+                            .setFrequency(frequency),
+                ),
+          ],
+        ),
+        if (state.lastAutoBackupAt != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            'Last automatic backup ${_ago(state.lastAutoBackupAt!)}.',
+            style: TextStyle(fontSize: 11, color: tokens.textSubtle),
+          ),
+        ],
+        const SizedBox(height: 8),
+        Text(
+          'A scheduled backup is skipped when nothing has changed, and never '
+          'overwrites a newer backup from another device.',
+          style: TextStyle(fontSize: 11, color: tokens.textSubtle),
+        ),
+      ],
+    );
+  }
+
+  static String _ago(DateTime at) {
+    final elapsed = DateTime.now().difference(at);
+
+    if (elapsed.inMinutes < 1) return 'just now';
+    if (elapsed.inHours < 1) return '${elapsed.inMinutes} min ago';
+    if (elapsed.inDays < 1) return '${elapsed.inHours} h ago';
+
+    return '${elapsed.inDays} d ago';
+  }
 }

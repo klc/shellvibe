@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:uuid/uuid.dart';
@@ -11,6 +13,7 @@ import '../../../account/presentation/notifiers/account_notifier.dart';
 import '../../../billing/presentation/notifiers/entitlement_notifier.dart';
 import '../../../settings/presentation/notifiers/settings_notifier.dart';
 import '../../../vault/presentation/notifiers/identities_notifier.dart';
+import '../../../vault/presentation/notifiers/vault_notifier.dart';
 import '../../data/cloud_backup_api.dart';
 import '../../data/cloud_backup_store.dart';
 import '../../domain/cloud_backup_service.dart';
@@ -76,6 +79,12 @@ final class CloudBackupState {
   /// When this device last wrote a backup that held everything, if ever.
   final DateTime? lastFullBackupAt;
 
+  /// How often a backup runs without being asked.
+  final BackupFrequency frequency;
+
+  /// When a scheduled backup last ran on this device.
+  final DateTime? lastAutoBackupAt;
+
   const CloudBackupState({
     this.blocker,
     this.head,
@@ -87,6 +96,8 @@ final class CloudBackupState {
     this.conflictingServerRevision,
     this.recoveryCodeMissing = false,
     this.lastFullBackupAt,
+    this.frequency = BackupFrequency.off,
+    this.lastAutoBackupAt,
   });
 
   bool get isReady => blocker == null;
@@ -118,6 +129,8 @@ final class CloudBackupState {
     int? conflictingServerRevision,
     bool? recoveryCodeMissing,
     DateTime? lastFullBackupAt,
+    BackupFrequency? frequency,
+    DateTime? lastAutoBackupAt,
     bool clearBlocker = false,
     bool clearMessage = false,
     bool clearConflict = false,
@@ -134,6 +147,8 @@ final class CloudBackupState {
         : (conflictingServerRevision ?? this.conflictingServerRevision),
     recoveryCodeMissing: recoveryCodeMissing ?? this.recoveryCodeMissing,
     lastFullBackupAt: lastFullBackupAt ?? this.lastFullBackupAt,
+    frequency: frequency ?? this.frequency,
+    lastAutoBackupAt: lastAutoBackupAt ?? this.lastAutoBackupAt,
   );
 }
 
@@ -146,6 +161,14 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
   CloudBackupService? _service;
   String? _deviceId;
   int _maxSizeBytes = 0;
+  Timer? _schedule;
+
+  /// How often the schedule is re-examined while the app is open.
+  ///
+  /// Not the backup interval: this is how often "is one due" gets asked. An
+  /// hourly backup on a machine left open for a day has to happen without
+  /// someone closing and reopening the app.
+  static const Duration scheduleTick = Duration(minutes: 15);
 
   /// Durable state for this device.
   ///
@@ -162,6 +185,7 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
 
   @override
   Future<CloudBackupState> build() async {
+    ref.onDispose(() => _schedule?.cancel());
     ref.watch(secureStorageServiceProvider);
 
     final account = await ref.watch(accountProvider.future);
@@ -190,14 +214,25 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
     final configured = await _store.isConfigured();
     final lastKnownRevision = await _store.readLastKnownRevision();
     final lastFullBackupAt = await _store.readLastFullBackupAt();
+    final frequency = await _store.readBackupFrequency();
+    final autoMark = await _store.readAutoBackupMark();
+
+    _startSchedule(frequency);
     final recoveryCodeMissing =
         configured && await _store.readRecoveryCode() == null;
 
     if (configured) {
+      // A device that has been closed longer than the interval is due the
+      // moment it opens. There is no background task, so this is the only
+      // moment a scheduled backup can happen at all.
+      unawaited(maybeBackUpOnSchedule());
+
       return CloudBackupState(
         lastKnownRevision: lastKnownRevision,
         recoveryCodeMissing: recoveryCodeMissing,
         lastFullBackupAt: lastFullBackupAt,
+        frequency: frequency,
+        lastAutoBackupAt: autoMark?.at,
       );
     }
 
@@ -214,6 +249,8 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
       return CloudBackupState(
         blocker: CloudBackupBlocker.notConfigured,
         lastFullBackupAt: lastFullBackupAt,
+        frequency: frequency,
+        lastAutoBackupAt: autoMark?.at,
       );
     }
 
@@ -223,6 +260,8 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
           : CloudBackupBlocker.needsExistingPassphrase,
       head: head,
       lastFullBackupAt: lastFullBackupAt,
+      frequency: frequency,
+      lastAutoBackupAt: autoMark?.at,
     );
   }
 
@@ -632,6 +671,91 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
 
       return false;
     }
+  }
+
+  /// Sets how often a backup runs on its own.
+  Future<void> setFrequency(BackupFrequency frequency) async {
+    await _store.writeBackupFrequency(frequency);
+    _startSchedule(frequency);
+    _publish((s) => s.copyWith(frequency: frequency));
+
+    unawaited(maybeBackUpOnSchedule());
+  }
+
+  /// Backs up if one is due and anything has changed.
+  ///
+  /// Called when the app opens, when it comes back to the foreground, and on
+  /// a timer while it is open. Safe to call as often as any of those happen:
+  /// everything that would make it a bad idea is checked here.
+  Future<void> maybeBackUpOnSchedule() async {
+    final frequency = state.value?.frequency ?? BackupFrequency.off;
+    final interval = frequency.interval;
+    if (interval == null) return;
+
+    if (_service == null || _deviceId == null) return;
+    if (await _store.readPassphrase() == null) return;
+
+    final mark = await _store.readAutoBackupMark();
+    final now = DateTime.now();
+
+    if (mark != null && now.difference(mark.at) < interval) return;
+
+    // Has anything actually changed. Without this an hourly backup writes the
+    // same bytes every hour and turns a ten revision window into ten copies
+    // of one state -- which is not a history, and is exactly what someone
+    // reaches for a revision list to escape.
+    final clock =
+        (await ref.read(appDatabaseProvider).syncJournal?.readState())
+            ?.lastSeenClock ??
+        0;
+
+    if (mark != null && clock == mark.clock) {
+      // Nothing to write, but the schedule has been honoured. Recording it
+      // stops an idle device asking the same question every tick.
+      await _store.writeAutoBackupMark(at: now, clock: clock);
+
+      return;
+    }
+
+    // Sealing identity secrets needs the vault open. Skipping is right --
+    // there is nothing to do behind a lock -- but silence is not: a user who
+    // keeps the vault locked would see backups simply stop.
+    final vault = ref.read(vaultProvider).value;
+    if (vault != null && vault.status == VaultStatus.locked) {
+      _publish(
+        (s) => s.copyWith(
+          message:
+              'Scheduled backup skipped: the vault is locked. It will run '
+              'once you unlock it.',
+          messageIsError: false,
+        ),
+      );
+
+      return;
+    }
+
+    // Never forced. A conflict means another device wrote since this one last
+    // read the head, and overwriting that without being asked is the one move
+    // here that destroys someone's data. The next tick reads the new head and
+    // tries again.
+    await backUpNow();
+
+    if (state.value?.conflictingServerRevision != null) return;
+
+    await _store.writeAutoBackupMark(at: now, clock: clock);
+    _publish((s) => s.copyWith(lastAutoBackupAt: now));
+  }
+
+  void _startSchedule(BackupFrequency frequency) {
+    _schedule?.cancel();
+    _schedule = null;
+
+    if (frequency.interval == null) return;
+
+    _schedule = Timer.periodic(
+      scheduleTick,
+      (_) => unawaited(maybeBackUpOnSchedule()),
+    );
   }
 
   /// Dismisses the last message.

@@ -168,6 +168,10 @@ class _ShellVibeAppState extends ConsumerState<ShellVibeApp>
       // Coming back to the app is the moment the user is most likely to be
       // looking at data another device changed while this one was away.
       unawaited(ref.read(syncProvider.notifier).syncNow());
+      // And the only other moment a scheduled backup can run. There is no
+      // background task, so a device that sat closed past its interval is due
+      // the moment someone opens it again.
+      unawaited(ref.read(cloudBackupProvider.notifier).maybeBackUpOnSchedule());
     }
   }
 
