@@ -10592,6 +10592,334 @@ class SyncStateCompanion extends UpdateCompanion<SyncStateData> {
   }
 }
 
+class $SyncEntityVersionsTable extends SyncEntityVersions
+    with TableInfo<$SyncEntityVersionsTable, SyncEntityVersion> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SyncEntityVersionsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _entityTypeMeta = const VerificationMeta(
+    'entityType',
+  );
+  @override
+  late final GeneratedColumn<String> entityType = GeneratedColumn<String>(
+    'entity_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _entityIdMeta = const VerificationMeta(
+    'entityId',
+  );
+  @override
+  late final GeneratedColumn<String> entityId = GeneratedColumn<String>(
+    'entity_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _logicalClockMeta = const VerificationMeta(
+    'logicalClock',
+  );
+  @override
+  late final GeneratedColumn<int> logicalClock = GeneratedColumn<int>(
+    'logical_clock',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _deviceIdMeta = const VerificationMeta(
+    'deviceId',
+  );
+  @override
+  late final GeneratedColumn<String> deviceId = GeneratedColumn<String>(
+    'device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    entityType,
+    entityId,
+    logicalClock,
+    deviceId,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'sync_entity_versions';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SyncEntityVersion> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('entity_type')) {
+      context.handle(
+        _entityTypeMeta,
+        entityType.isAcceptableOrUnknown(data['entity_type']!, _entityTypeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_entityTypeMeta);
+    }
+    if (data.containsKey('entity_id')) {
+      context.handle(
+        _entityIdMeta,
+        entityId.isAcceptableOrUnknown(data['entity_id']!, _entityIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_entityIdMeta);
+    }
+    if (data.containsKey('logical_clock')) {
+      context.handle(
+        _logicalClockMeta,
+        logicalClock.isAcceptableOrUnknown(
+          data['logical_clock']!,
+          _logicalClockMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_logicalClockMeta);
+    }
+    if (data.containsKey('device_id')) {
+      context.handle(
+        _deviceIdMeta,
+        deviceId.isAcceptableOrUnknown(data['device_id']!, _deviceIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_deviceIdMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {entityType, entityId};
+  @override
+  SyncEntityVersion map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SyncEntityVersion(
+      entityType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}entity_type'],
+      )!,
+      entityId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}entity_id'],
+      )!,
+      logicalClock: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}logical_clock'],
+      )!,
+      deviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}device_id'],
+      )!,
+    );
+  }
+
+  @override
+  $SyncEntityVersionsTable createAlias(String alias) {
+    return $SyncEntityVersionsTable(attachedDatabase, alias);
+  }
+}
+
+class SyncEntityVersion extends DataClass
+    implements Insertable<SyncEntityVersion> {
+  final String entityType;
+  final String entityId;
+  final int logicalClock;
+  final String deviceId;
+  const SyncEntityVersion({
+    required this.entityType,
+    required this.entityId,
+    required this.logicalClock,
+    required this.deviceId,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['entity_type'] = Variable<String>(entityType);
+    map['entity_id'] = Variable<String>(entityId);
+    map['logical_clock'] = Variable<int>(logicalClock);
+    map['device_id'] = Variable<String>(deviceId);
+    return map;
+  }
+
+  SyncEntityVersionsCompanion toCompanion(bool nullToAbsent) {
+    return SyncEntityVersionsCompanion(
+      entityType: Value(entityType),
+      entityId: Value(entityId),
+      logicalClock: Value(logicalClock),
+      deviceId: Value(deviceId),
+    );
+  }
+
+  factory SyncEntityVersion.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SyncEntityVersion(
+      entityType: serializer.fromJson<String>(json['entityType']),
+      entityId: serializer.fromJson<String>(json['entityId']),
+      logicalClock: serializer.fromJson<int>(json['logicalClock']),
+      deviceId: serializer.fromJson<String>(json['deviceId']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'entityType': serializer.toJson<String>(entityType),
+      'entityId': serializer.toJson<String>(entityId),
+      'logicalClock': serializer.toJson<int>(logicalClock),
+      'deviceId': serializer.toJson<String>(deviceId),
+    };
+  }
+
+  SyncEntityVersion copyWith({
+    String? entityType,
+    String? entityId,
+    int? logicalClock,
+    String? deviceId,
+  }) => SyncEntityVersion(
+    entityType: entityType ?? this.entityType,
+    entityId: entityId ?? this.entityId,
+    logicalClock: logicalClock ?? this.logicalClock,
+    deviceId: deviceId ?? this.deviceId,
+  );
+  SyncEntityVersion copyWithCompanion(SyncEntityVersionsCompanion data) {
+    return SyncEntityVersion(
+      entityType: data.entityType.present
+          ? data.entityType.value
+          : this.entityType,
+      entityId: data.entityId.present ? data.entityId.value : this.entityId,
+      logicalClock: data.logicalClock.present
+          ? data.logicalClock.value
+          : this.logicalClock,
+      deviceId: data.deviceId.present ? data.deviceId.value : this.deviceId,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncEntityVersion(')
+          ..write('entityType: $entityType, ')
+          ..write('entityId: $entityId, ')
+          ..write('logicalClock: $logicalClock, ')
+          ..write('deviceId: $deviceId')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(entityType, entityId, logicalClock, deviceId);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SyncEntityVersion &&
+          other.entityType == this.entityType &&
+          other.entityId == this.entityId &&
+          other.logicalClock == this.logicalClock &&
+          other.deviceId == this.deviceId);
+}
+
+class SyncEntityVersionsCompanion extends UpdateCompanion<SyncEntityVersion> {
+  final Value<String> entityType;
+  final Value<String> entityId;
+  final Value<int> logicalClock;
+  final Value<String> deviceId;
+  final Value<int> rowid;
+  const SyncEntityVersionsCompanion({
+    this.entityType = const Value.absent(),
+    this.entityId = const Value.absent(),
+    this.logicalClock = const Value.absent(),
+    this.deviceId = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SyncEntityVersionsCompanion.insert({
+    required String entityType,
+    required String entityId,
+    required int logicalClock,
+    required String deviceId,
+    this.rowid = const Value.absent(),
+  }) : entityType = Value(entityType),
+       entityId = Value(entityId),
+       logicalClock = Value(logicalClock),
+       deviceId = Value(deviceId);
+  static Insertable<SyncEntityVersion> custom({
+    Expression<String>? entityType,
+    Expression<String>? entityId,
+    Expression<int>? logicalClock,
+    Expression<String>? deviceId,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (entityType != null) 'entity_type': entityType,
+      if (entityId != null) 'entity_id': entityId,
+      if (logicalClock != null) 'logical_clock': logicalClock,
+      if (deviceId != null) 'device_id': deviceId,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SyncEntityVersionsCompanion copyWith({
+    Value<String>? entityType,
+    Value<String>? entityId,
+    Value<int>? logicalClock,
+    Value<String>? deviceId,
+    Value<int>? rowid,
+  }) {
+    return SyncEntityVersionsCompanion(
+      entityType: entityType ?? this.entityType,
+      entityId: entityId ?? this.entityId,
+      logicalClock: logicalClock ?? this.logicalClock,
+      deviceId: deviceId ?? this.deviceId,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (entityType.present) {
+      map['entity_type'] = Variable<String>(entityType.value);
+    }
+    if (entityId.present) {
+      map['entity_id'] = Variable<String>(entityId.value);
+    }
+    if (logicalClock.present) {
+      map['logical_clock'] = Variable<int>(logicalClock.value);
+    }
+    if (deviceId.present) {
+      map['device_id'] = Variable<String>(deviceId.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncEntityVersionsCompanion(')
+          ..write('entityType: $entityType, ')
+          ..write('entityId: $entityId, ')
+          ..write('logicalClock: $logicalClock, ')
+          ..write('deviceId: $deviceId, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -10619,6 +10947,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $PendingOperationsTable(this);
   late final $SyncTombstonesTable syncTombstones = $SyncTombstonesTable(this);
   late final $SyncStateTable syncState = $SyncStateTable(this);
+  late final $SyncEntityVersionsTable syncEntityVersions =
+      $SyncEntityVersionsTable(this);
   late final HostsDao hostsDao = HostsDao(this as AppDatabase);
   late final IdentitiesDao identitiesDao = IdentitiesDao(this as AppDatabase);
   late final KnownHostsDao knownHostsDao = KnownHostsDao(this as AppDatabase);
@@ -10658,6 +10988,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     pendingOperations,
     syncTombstones,
     syncState,
+    syncEntityVersions,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -20433,6 +20764,215 @@ typedef $$SyncStateTableProcessedTableManager =
       SyncStateData,
       PrefetchHooks Function()
     >;
+typedef $$SyncEntityVersionsTableCreateCompanionBuilder =
+    SyncEntityVersionsCompanion Function({
+      required String entityType,
+      required String entityId,
+      required int logicalClock,
+      required String deviceId,
+      Value<int> rowid,
+    });
+typedef $$SyncEntityVersionsTableUpdateCompanionBuilder =
+    SyncEntityVersionsCompanion Function({
+      Value<String> entityType,
+      Value<String> entityId,
+      Value<int> logicalClock,
+      Value<String> deviceId,
+      Value<int> rowid,
+    });
+
+class $$SyncEntityVersionsTableFilterComposer
+    extends Composer<_$AppDatabase, $SyncEntityVersionsTable> {
+  $$SyncEntityVersionsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get entityType => $composableBuilder(
+    column: $table.entityType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get entityId => $composableBuilder(
+    column: $table.entityId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get logicalClock => $composableBuilder(
+    column: $table.logicalClock,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$SyncEntityVersionsTableOrderingComposer
+    extends Composer<_$AppDatabase, $SyncEntityVersionsTable> {
+  $$SyncEntityVersionsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get entityType => $composableBuilder(
+    column: $table.entityType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get entityId => $composableBuilder(
+    column: $table.entityId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get logicalClock => $composableBuilder(
+    column: $table.logicalClock,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SyncEntityVersionsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SyncEntityVersionsTable> {
+  $$SyncEntityVersionsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get entityType => $composableBuilder(
+    column: $table.entityType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get entityId =>
+      $composableBuilder(column: $table.entityId, builder: (column) => column);
+
+  GeneratedColumn<int> get logicalClock => $composableBuilder(
+    column: $table.logicalClock,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get deviceId =>
+      $composableBuilder(column: $table.deviceId, builder: (column) => column);
+}
+
+class $$SyncEntityVersionsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SyncEntityVersionsTable,
+          SyncEntityVersion,
+          $$SyncEntityVersionsTableFilterComposer,
+          $$SyncEntityVersionsTableOrderingComposer,
+          $$SyncEntityVersionsTableAnnotationComposer,
+          $$SyncEntityVersionsTableCreateCompanionBuilder,
+          $$SyncEntityVersionsTableUpdateCompanionBuilder,
+          (
+            SyncEntityVersion,
+            BaseReferences<
+              _$AppDatabase,
+              $SyncEntityVersionsTable,
+              SyncEntityVersion
+            >,
+          ),
+          SyncEntityVersion,
+          PrefetchHooks Function()
+        > {
+  $$SyncEntityVersionsTableTableManager(
+    _$AppDatabase db,
+    $SyncEntityVersionsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SyncEntityVersionsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SyncEntityVersionsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SyncEntityVersionsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> entityType = const Value.absent(),
+                Value<String> entityId = const Value.absent(),
+                Value<int> logicalClock = const Value.absent(),
+                Value<String> deviceId = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SyncEntityVersionsCompanion(
+                entityType: entityType,
+                entityId: entityId,
+                logicalClock: logicalClock,
+                deviceId: deviceId,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String entityType,
+                required String entityId,
+                required int logicalClock,
+                required String deviceId,
+                Value<int> rowid = const Value.absent(),
+              }) => SyncEntityVersionsCompanion.insert(
+                entityType: entityType,
+                entityId: entityId,
+                logicalClock: logicalClock,
+                deviceId: deviceId,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$SyncEntityVersionsTable, SyncEntityVersion>(
+                    table,
+                  ),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $SyncEntityVersionsTable,
+                    SyncEntityVersion
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$SyncEntityVersionsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SyncEntityVersionsTable,
+      SyncEntityVersion,
+      $$SyncEntityVersionsTableFilterComposer,
+      $$SyncEntityVersionsTableOrderingComposer,
+      $$SyncEntityVersionsTableAnnotationComposer,
+      $$SyncEntityVersionsTableCreateCompanionBuilder,
+      $$SyncEntityVersionsTableUpdateCompanionBuilder,
+      (
+        SyncEntityVersion,
+        BaseReferences<
+          _$AppDatabase,
+          $SyncEntityVersionsTable,
+          SyncEntityVersion
+        >,
+      ),
+      SyncEntityVersion,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -20479,4 +21019,6 @@ class $AppDatabaseManager {
       $$SyncTombstonesTableTableManager(_db, _db.syncTombstones);
   $$SyncStateTableTableManager get syncState =>
       $$SyncStateTableTableManager(_db, _db.syncState);
+  $$SyncEntityVersionsTableTableManager get syncEntityVersions =>
+      $$SyncEntityVersionsTableTableManager(_db, _db.syncEntityVersions);
 }

@@ -485,3 +485,25 @@ class SyncState extends Table {
   @override
   Set<Column> get primaryKey => {id};
 }
+
+/// 21. Sync Entity Versions (what clock each row currently stands at)
+///
+/// Entity level last-writer-wins needs to compare an incoming operation with
+/// the state this device already holds. The outbox cannot answer that: once an
+/// operation has been sent it is cleared, and the device forgets the clock its
+/// own row carries. Without this table a device that has pushed accepts every
+/// incoming operation, and two devices that edited the same row while offline
+/// end up holding *each other's* value -- they swap rather than converge.
+///
+/// One row per entity, overwritten on every local change and on every applied
+/// operation. The device id is stored because it breaks ties: two devices can
+/// produce the same clock offline, and the rule only has to be deterministic.
+class SyncEntityVersions extends Table {
+  TextColumn get entityType => text()();
+  TextColumn get entityId => text()();
+  IntColumn get logicalClock => integer()();
+  TextColumn get deviceId => text()();
+
+  @override
+  Set<Column> get primaryKey => {entityType, entityId};
+}

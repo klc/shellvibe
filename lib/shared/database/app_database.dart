@@ -44,6 +44,7 @@ part 'app_database.g.dart';
     PendingOperations,
     SyncTombstones,
     SyncState,
+    SyncEntityVersions,
   ],
   daos: [
     HostsDao,
@@ -106,7 +107,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 11;
 
   @override
   MigrationStrategy get migration {
@@ -174,6 +175,13 @@ class AppDatabase extends _$AppDatabase {
           await m.createTable(pendingOperations);
           await m.createTable(syncTombstones);
           await m.createTable(syncState);
+        }
+        if (from < 11) {
+          // Which clock each row stands at. Empty on an existing install:
+          // every row is then treated as having no version, so the first
+          // operation for it wins -- which is correct, because a device that
+          // has never synced has nothing to defend.
+          await m.createTable(syncEntityVersions);
         }
       },
     );

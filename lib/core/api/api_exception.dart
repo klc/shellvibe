@@ -109,6 +109,12 @@ final class ApiException extends ApiFailure {
   /// Upload raced another device: the vault head moved.
   bool get isSyncConflict => code == ApiErrorCode.syncConflict;
 
+  /// The operation log no longer reaches back to this device's cursor.
+  ///
+  /// Not an error to retry: the operations this device never saw have been
+  /// pruned, and the only way forward is the snapshot the server still holds.
+  bool get isSyncCursorExpired => code == ApiErrorCode.syncCursorExpired;
+
   /// `429 rate_limited` carries two unrelated meanings on this server.
   ///
   /// `SyncController::putVault` answers an over-quota backup with the same

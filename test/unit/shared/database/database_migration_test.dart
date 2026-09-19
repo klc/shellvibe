@@ -89,13 +89,17 @@ void main() {
         final appDb = AppDatabase(NativeDatabase(tempDbFile));
         db = appDb;
 
-        expect(appDb.schemaVersion, equals(10));
+        expect(appDb.schemaVersion, equals(11));
 
         // The v10 tables have to exist after a migration, not only after a
         // fresh create: a device that upgrades and then makes a change would
         // otherwise fail on the write that records it.
-        for (final table in ['pending_operations', 'sync_tombstones',
-            'sync_state']) {
+        for (final table in [
+          'pending_operations',
+          'sync_tombstones',
+          'sync_state',
+          'sync_entity_versions',
+        ]) {
           final found = await appDb
               .customSelect(
                 "SELECT name FROM sqlite_master WHERE type = 'table' "

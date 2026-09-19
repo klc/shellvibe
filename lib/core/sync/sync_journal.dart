@@ -21,10 +21,22 @@ const Duration kSyncTrashRetention = Duration(days: 30);
 /// change that silently never syncs.
 final class SyncJournal {
   final AppDatabase db;
+
+  /// This device's id, as the server knows it.
+  ///
+  /// Written into every version row, because it breaks ties: two devices can
+  /// produce the same clock while offline, and the merge rule only has to be
+  /// deterministic. Defaults to a local placeholder for a device that has no
+  /// account yet, whose operations never leave it.
+  final String deviceId;
+
   final String Function() _newId;
 
-  SyncJournal({required this.db, String Function()? newId})
-    : _newId = newId ?? const Uuid().v4;
+  SyncJournal({
+    required this.db,
+    this.deviceId = 'local',
+    String Function()? newId,
+  }) : _newId = newId ?? const Uuid().v4;
 
   /// Runs [write] and records an `upsert` for the row it touched.
   ///
@@ -197,16 +209,57 @@ final class SyncJournal {
   Future<bool> isDeleted({
     required String entityType,
     required String entityId,
-  }) async {
-    final row =
-        await (db.select(db.syncTombstones)..where(
-              (t) =>
-                  t.entityType.equals(entityType) & t.entityId.equals(entityId),
-            ))
-            .getSingleOrNull();
+  }) async =>
+      await tombstoneFor(entityType: entityType, entityId: entityId) != null;
 
-    return row != null;
-  }
+  /// The clock a row currently stands at on this device.
+  ///
+  /// Null for a row that has never taken part in sync, which is the state
+  /// every row is in on a device that has just turned it on.
+  Future<SyncEntityVersion?> versionFor({
+    required String entityType,
+    required String entityId,
+  }) =>
+      (db.select(db.syncEntityVersions)..where(
+            (t) =>
+                t.entityType.equals(entityType) & t.entityId.equals(entityId),
+          ))
+          .getSingleOrNull();
+
+  /// Records the clock a row now stands at.
+  ///
+  /// Called for a local change and for an applied remote operation alike:
+  /// both move the row to a new point in the log, and the next comparison has
+  /// to see the same thing either way.
+  Future<void> setVersion({
+    required String entityType,
+    required String entityId,
+    required int logicalClock,
+    required String deviceId,
+  }) => db
+      .into(db.syncEntityVersions)
+      .insertOnConflictUpdate(
+        SyncEntityVersionsCompanion.insert(
+          entityType: entityType,
+          entityId: entityId,
+          logicalClock: logicalClock,
+          deviceId: deviceId,
+        ),
+      );
+
+  /// The tombstone for a row, when this device deleted it.
+  ///
+  /// Carries the clock the delete was made at, which is what decides whether a
+  /// late `upsert` is newer than the delete or older than it.
+  Future<SyncTombstone?> tombstoneFor({
+    required String entityType,
+    required String entityId,
+  }) =>
+      (db.select(db.syncTombstones)..where(
+            (t) =>
+                t.entityType.equals(entityType) & t.entityId.equals(entityId),
+          ))
+          .getSingleOrNull();
 
   /// Empties the body of every tombstone past [retention], keeping the id.
   ///
@@ -318,6 +371,8 @@ final class SyncJournal {
       )..where((t) => t.id.equals(existing.id))).go();
     }
 
+    final assigned = clock ?? await _nextClock();
+
     await db
         .into(db.pendingOperations)
         .insert(
@@ -328,10 +383,21 @@ final class SyncJournal {
             operation: operation,
             payload: Value(payload),
             beforeImage: Value(beforeImage),
-            logicalClock: clock ?? await _nextClock(),
+            logicalClock: assigned,
             createdAt: DateTime.now(),
           ),
         );
+
+    // The row now stands at this clock. Recording it here rather than leaving
+    // it implied by the outbox is what survives the send: a cleared outbox
+    // would otherwise leave this device with no idea what clock its own row
+    // carries, and it would accept every incoming operation.
+    await setVersion(
+      entityType: entityType,
+      entityId: entityId,
+      logicalClock: assigned,
+      deviceId: deviceId,
+    );
   }
 
   /// Rows the database deletes when their parent goes, by foreign key.
