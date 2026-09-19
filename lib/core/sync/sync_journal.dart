@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../shared/database/app_database.dart';
 import 'sync_row_codec.dart';
+import 'sync_row_writer.dart';
 
 /// How long a deleted row stays recoverable.
 ///
@@ -305,6 +306,49 @@ final class SyncJournal {
           (t) => t.body.isNotNull() & t.deletedAt.isSmallerOrEqualValue(cutoff),
         ))
         .write(const SyncTombstonesCompanion(body: Value(null)));
+  }
+
+  /// Puts a deleted row back.
+  ///
+  /// Automatic sync carries a mistaken delete to every other device in
+  /// seconds, which closes the window where someone could say "wait, that was
+  /// wrong". The trash is what reopens it, and it is local: the row goes back
+  /// as an ordinary `upsert` at a new clock, higher than the delete that took
+  /// it away, so the other devices see a row being written rather than a
+  /// delete being argued with.
+  ///
+  /// Returns false when the body has already been emptied -- the thirty days
+  /// are up, or the trash was emptied by hand -- in which case there is
+  /// nothing left to restore. The id stays either way: without it a late
+  /// `upsert` from a device that had not heard about the delete would bring
+  /// the row back on its own.
+  Future<bool> restoreFromTrash({
+    required String entityType,
+    required String entityId,
+  }) async {
+    final tombstone = await tombstoneFor(
+      entityType: entityType,
+      entityId: entityId,
+    );
+
+    final body = tombstone?.body;
+    if (body == null || body.isEmpty) return false;
+
+    final row = jsonDecode(body) as Map<String, dynamic>;
+
+    return db.transaction(() async {
+      final result = await upsert(
+        entityType: entityType,
+        entityId: entityId,
+        write: () => SyncRowWriter.write(db, entityType, row),
+      );
+
+      // The row could not be written because something it points at is gone
+      // as well -- its workspace, or the host a port forward belonged to.
+      // Leaving the tombstone alone is right: nothing was restored, and the
+      // entry has to stay offerable once the thing it needs comes back.
+      return result.written;
+    });
   }
 
   /// Empties the trash now, at the user's request.

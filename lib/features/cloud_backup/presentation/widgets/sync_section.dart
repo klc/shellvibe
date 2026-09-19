@@ -9,6 +9,7 @@ import '../../../settings/presentation/notifiers/backup_scope_notifier.dart';
 import '../../../settings/presentation/widgets/backup_scope_picker.dart';
 import '../../domain/sync_join_service.dart';
 import '../notifiers/sync_notifier.dart';
+import '../notifiers/sync_trash_notifier.dart';
 
 /// Automatic sync: whether it runs, and what it carries.
 ///
@@ -61,6 +62,8 @@ final class SyncSection extends ConsumerWidget {
               'not affected.',
           enabled: enabled,
         ),
+        const SizedBox(height: 16),
+        const _Trash(),
       ],
     );
   }
@@ -236,5 +239,125 @@ final class _JoinSummary extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+/// Deleted rows this device can still put back.
+///
+/// Automatic sync carries a mistaken delete to every other device in seconds,
+/// which closes the window where someone could say "wait, that was wrong"
+/// before they have finished reading the confirmation. This reopens it.
+///
+/// Shown whether or not sync is on: a delete made with sync off still lands
+/// here, and the deletes that most need undoing are the ones nobody was
+/// watching.
+final class _Trash extends ConsumerWidget {
+  const _Trash();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ShellVibeTokens.resolve(context);
+    final trash = ref.watch(syncTrashProvider);
+    final rows = trash.value ?? const <TrashedRow>[];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Recently deleted',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: tokens.textPrimary,
+                ),
+              ),
+            ),
+            if (rows.isNotEmpty)
+              ShellVibeButton.quiet(
+                buttonKey: const Key('sync_trash_empty_button'),
+                label: 'Empty Now',
+                icon: LucideIcons.trash2,
+                onPressed: () => ref.read(syncTrashProvider.notifier).empty(),
+              ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          rows.isEmpty
+              ? 'Nothing deleted in the last 30 days.'
+              : 'Kept for 30 days on this device, then the contents are '
+                    'discarded. Secrets in a deleted identity stay on disk '
+                    'for that long.',
+          style: TextStyle(fontSize: 11, color: tokens.textSubtle),
+        ),
+        for (final row in rows)
+          Padding(
+            key: Key('sync_trash_row_${row.entityId}'),
+            padding: const EdgeInsets.only(top: 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${row.kind} · ${row.label}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: tokens.textPrimary,
+                        ),
+                      ),
+                      Text(
+                        _remaining(row.remaining),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: tokens.textSubtle,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                ShellVibeButton.quiet(
+                  label: 'Restore',
+                  icon: LucideIcons.undo2,
+                  onPressed: () => _restore(context, ref, row),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _restore(
+    BuildContext context,
+    WidgetRef ref,
+    TrashedRow row,
+  ) async {
+    final restored = await ref.read(syncTrashProvider.notifier).restore(row);
+    if (restored || !context.mounted) return;
+
+    // The row itself is fine; what it belonged to is gone too. Saying which
+    // way round that is turns a dead button into a two-step job.
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '${row.label} could not be put back: something it belongs to was '
+          'deleted as well. Restore that first.',
+        ),
+      ),
+    );
+  }
+
+  static String _remaining(Duration left) {
+    if (left.isNegative) return 'Expiring now';
+    if (left.inDays >= 1) return '${left.inDays} days left';
+    if (left.inHours >= 1) return '${left.inHours} hours left';
+
+    return 'Less than an hour left';
   }
 }
