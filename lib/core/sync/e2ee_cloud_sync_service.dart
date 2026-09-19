@@ -14,7 +14,9 @@ export 'backup_envelope.dart'
         BackupEnvelope,
         BackupEnvelopeException,
         BackupUnlockMethod,
-        kBackupSchemaVersion;
+        OpenedBackup,
+        kBackupSchemaVersion,
+        kBackupSchemaVersionWithoutSyncKey;
 export 'backup_scope.dart';
 
 /// Outcome of [E2EECloudSyncService.importEncryptedBackup].
@@ -48,6 +50,19 @@ class BackupImportResult {
   /// know about.
   final Map<String, dynamic>? settings;
 
+  /// The vault's sync key, when the envelope carried one (v4).
+  ///
+  /// Held in memory by the caller and never written to disk: it is recovered
+  /// by opening the newest envelope, which is why automatic sync requires at
+  /// least one backup to exist.
+  final SecretKey? syncKey;
+
+  /// The Lamport clock the snapshot was taken at, when it recorded one.
+  ///
+  /// A device restoring from a snapshot resumes pulling operations from here
+  /// rather than from the beginning of the log.
+  final int? syncClock;
+
   const BackupImportResult({
     required this.secretsRecovered,
     this.warning,
@@ -56,6 +71,8 @@ class BackupImportResult {
     this.included = BackupScope.full,
     this.repairs = const BackupRepairReport(),
     this.settings,
+    this.syncKey,
+    this.syncClock,
   });
 }
 
@@ -191,6 +208,8 @@ class E2EECloudSyncService {
     String? recoveryCode,
     BackupScope scope = BackupScope.full,
     Map<String, dynamic>? settings,
+    Uint8List? syncKey,
+    int? syncClock,
   }) async {
     final workspaces = await db.select(db.workspaces).get();
     final hostGroups = await db.select(db.hostGroups).get();
@@ -202,6 +221,10 @@ class E2EECloudSyncService {
       'version': 3,
       'included': scope.toManifest(),
       'exported_at': DateTime.now().toIso8601String(),
+      // Where this snapshot sits in the operation log. A device that falls
+      // too far behind restores the snapshot and resumes from here instead of
+      // replaying a log that has already been pruned.
+      'sync_clock': ?syncClock,
       'workspaces': workspaces
           .map(
             (w) => {
@@ -413,6 +436,7 @@ class E2EECloudSyncService {
       dek: dek,
       passphrase: masterPassword,
       recoveryCode: recoveryCode,
+      syncKey: syncKey,
     );
   }
 
@@ -876,6 +900,8 @@ class E2EECloudSyncService {
         included: included,
         repairs: repairs.toReport(),
         settings: settings,
+        syncKey: opened.syncKey,
+        syncClock: data['sync_clock'] as int?,
       );
     }
 
@@ -886,6 +912,8 @@ class E2EECloudSyncService {
       included: included,
       repairs: repairs.toReport(),
       settings: settings,
+      syncKey: opened.syncKey,
+      syncClock: data['sync_clock'] as int?,
     );
   }
 

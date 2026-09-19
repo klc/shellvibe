@@ -110,10 +110,7 @@ void main() {
       expect(opened.payloadJson, payload);
       expect(opened.schemaVersion, 3);
       expect(opened.unlockedWith, BackupUnlockMethod.passphrase);
-      expect(
-        await opened.backupDek!.extractBytes(),
-        await dek.extractBytes(),
-      );
+      expect(await opened.backupDek!.extractBytes(), await dek.extractBytes());
       expect(opened.isLegacyWithoutKey, isFalse);
     });
 
@@ -162,10 +159,7 @@ void main() {
 
       expect(opened.payloadJson, payload);
       expect(opened.unlockedWith, BackupUnlockMethod.recoveryCode);
-      expect(
-        await opened.backupDek!.extractBytes(),
-        await dek.extractBytes(),
-      );
+      expect(await opened.backupDek!.extractBytes(), await dek.extractBytes());
     });
 
     test('the passphrase still opens the same envelope', () async {
@@ -267,7 +261,9 @@ void main() {
     });
 
     test('generated codes are distinct and use the safe alphabet', () {
-      final codes = {for (var i = 0; i < 25; i++) envelope.generateRecoveryCode()};
+      final codes = {
+        for (var i = 0; i < 25; i++) envelope.generateRecoveryCode(),
+      };
 
       expect(codes, hasLength(25));
 
@@ -278,7 +274,8 @@ void main() {
         expect(
           normalized,
           matches(RegExp(r'^[0-9ABCDEFGHJKMNPQRSTVWXYZ]+$')),
-          reason: 'I, L, O and U are excluded so a handwritten code cannot be '
+          reason:
+              'I, L, O and U are excluded so a handwritten code cannot be '
               'misread.',
         );
       }
@@ -341,10 +338,7 @@ void main() {
       original['salt'] = base64.encode(crypto.generateSalt());
 
       await expectLater(
-        envelope.open(
-          envelopeJson: jsonEncode(original),
-          secret: passphrase,
-        ),
+        envelope.open(envelopeJson: jsonEncode(original), secret: passphrase),
         throwsA(isA<BackupEnvelopeException>()),
       );
     });
@@ -392,10 +386,7 @@ void main() {
 
     test('an envelope missing its fields is refused', () async {
       await expectLater(
-        envelope.open(
-          envelopeJson: '{"schema_version":3}',
-          secret: passphrase,
-        ),
+        envelope.open(envelopeJson: '{"schema_version":3}', secret: passphrase),
         throwsA(isA<BackupEnvelopeException>()),
       );
     });
@@ -447,10 +438,7 @@ void main() {
       expect(opened.payloadJson, payload);
       expect(opened.schemaVersion, 2);
       expect(opened.isLegacyWithoutKey, isFalse);
-      expect(
-        await opened.backupDek!.extractBytes(),
-        await dek.extractBytes(),
-      );
+      expect(await opened.backupDek!.extractBytes(), await dek.extractBytes());
     });
 
     test('a v2 envelope with a wrong passphrase fails closed', () async {
@@ -495,10 +483,7 @@ void main() {
           envelopeJson: jsonEncode({
             'schema_version': 2,
             'salt': base64.encode(salt),
-            'payload': await crypto.encrypt(
-              plaintext: payload,
-              secretKey: key,
-            ),
+            'payload': await crypto.encrypt(plaintext: payload, secretKey: key),
           }),
           secret: passphrase,
         ),

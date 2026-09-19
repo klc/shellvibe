@@ -20,7 +20,20 @@ import '../crypto/encryption_engine.dart';
 ///   version: a recovery code can open the same backup as the passphrase, and
 ///   changing the passphrase rewraps a 32-byte key instead of re-encrypting the
 ///   whole payload.
-const int kBackupSchemaVersion = 3;
+/// * **v4** carries the sync key as well: the long-lived random key that
+///   encrypts operations in the log, wrapped under the same payload key. The
+///   sync key is deliberately not derived from the passphrase -- deriving it
+///   would mean a passphrase change made every operation already in the log
+///   unreadable, so the passphrase could either never change or every
+///   operation would have to be rewritten.
+const int kBackupSchemaVersion = 4;
+
+/// The version written when there is no sync key to carry.
+///
+/// A v4 envelope is refused outright by a build that reads up to v3, so one is
+/// only written when it has something a v3 cannot hold. Until automatic sync
+/// is set up on a vault, its backups stay readable by older builds.
+const int kBackupSchemaVersionWithoutSyncKey = 3;
 
 /// How a v3 envelope was opened.
 enum BackupUnlockMethod {
@@ -62,11 +75,16 @@ final class OpenedBackup {
   /// The envelope's own schema version.
   final int schemaVersion;
 
+  /// The vault's sync key, or null for an envelope written before automatic
+  /// sync was set up on this vault.
+  final SecretKey? syncKey;
+
   const OpenedBackup({
     required this.payloadJson,
     required this.backupDek,
     required this.unlockedWith,
     required this.schemaVersion,
+    this.syncKey,
   });
 
   /// True for a v1 envelope, whose identity secrets cannot be decrypted on any
@@ -90,16 +108,31 @@ final class BackupEnvelope {
   /// as strong as the key it protects and no passphrase policy applies to it.
   static const int recoveryCodeBytes = 32;
 
-  /// Builds a v3 envelope.
+  /// Bytes in a sync key. The same size as the payload key it is wrapped
+  /// under, because it protects data of the same value.
+  static const int syncKeyBytes = 32;
+
+  /// A fresh sync key. Random, and constant for the lifetime of the vault.
+  Uint8List generateSyncKey() => _crypto.generateSalt(syncKeyBytes);
+
+  /// Builds a v3 envelope, or a v4 one when [syncKey] is given.
   ///
   /// [payloadJson] and [dek] are encrypted under a fresh random payload key.
   /// That key is wrapped with [passphrase], and again with [recoveryCode] when
   /// one is given, so either secret opens the backup on its own.
+  ///
+  /// [syncKey] is wrapped under the payload key rather than under each
+  /// unlocking secret in turn. That is one ciphertext instead of two and still
+  /// reaches through both paths, because whoever can open the envelope at all
+  /// already holds the payload key. It also keeps the property the sync key
+  /// exists for: changing the passphrase rewraps 32 bytes and leaves every
+  /// operation in the log readable.
   Future<String> seal({
     required String payloadJson,
     required SecretKey dek,
     required String passphrase,
     String? recoveryCode,
+    Uint8List? syncKey,
   }) async {
     if (passphrase.isEmpty) {
       throw const BackupEnvelopeException('The passphrase cannot be empty.');
@@ -130,7 +163,9 @@ final class BackupEnvelope {
     }
 
     return jsonEncode({
-      'schema_version': kBackupSchemaVersion,
+      'schema_version': syncKey == null
+          ? kBackupSchemaVersionWithoutSyncKey
+          : kBackupSchemaVersion,
       'salt': base64.encode(passphraseSalt),
       'recovery_salt': recoverySalt == null
           ? null
@@ -148,13 +183,18 @@ final class BackupEnvelope {
         secretKey: passphraseKey,
       ),
       'pk_wrapped_recovery': recoveryWrapped,
+      if (syncKey != null)
+        'sync_key_wrapped': await _crypto.encrypt(
+          plaintext: base64.encode(syncKey),
+          secretKey: payloadKey,
+        ),
     });
   }
 
-  /// Opens a v1, v2 or v3 envelope with [secret].
+  /// Opens a v1, v2, v3 or v4 envelope with [secret].
   ///
-  /// [method] selects which wrapped key a v3 envelope is opened through. It is
-  /// ignored for v1 and v2, which have only one.
+  /// [method] selects which wrapped key a v3 or v4 envelope is opened through.
+  /// It is ignored for v1 and v2, which have only one.
   ///
   /// Throws [BackupEnvelopeException] for a wrong secret, a tampered envelope,
   /// a malformed one, or a version this build does not know -- deliberately the
@@ -273,6 +313,8 @@ final class BackupEnvelope {
       ),
     );
 
+    final wrappedSyncKey = envelope['sync_key_wrapped'] as String?;
+
     return OpenedBackup(
       payloadJson: await _decryptOrFail(encrypted: payload, key: payloadKey),
       backupDek: SecretKey(
@@ -282,6 +324,16 @@ final class BackupEnvelope {
       ),
       unlockedWith: method,
       schemaVersion: schemaVersion,
+      syncKey: wrappedSyncKey == null
+          ? null
+          : SecretKey(
+              base64.decode(
+                await _decryptOrFail(
+                  encrypted: wrappedSyncKey,
+                  key: payloadKey,
+                ),
+              ),
+            ),
     );
   }
 

@@ -442,7 +442,10 @@ void main() {
       );
 
       expect(result.secretsRecovered, isTrue);
-      expect(result.schemaVersion, kBackupSchemaVersion);
+      // v3, not v4: no sync key was handed to the seal, and a v4 envelope is
+      // refused outright by a build that reads up to v3. One is only written
+      // when it holds something a v3 cannot.
+      expect(result.schemaVersion, kBackupSchemaVersionWithoutSyncKey);
 
       // The database seeds a default workspace on creation, so the restored
       // row is an addition rather than the only one.
