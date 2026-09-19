@@ -5,6 +5,7 @@ import 'package:cryptography/cryptography.dart';
 import 'package:drift/drift.dart' show TableUpdateQuery;
 import 'package:flutter/foundation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../../app/restored_data.dart';
 import '../../../../core/api/api_exception.dart';
@@ -15,9 +16,14 @@ import '../../../../shared/database/app_database.dart';
 import '../../../../shared/providers/database_providers.dart';
 import '../../../account/presentation/notifiers/account_notifier.dart';
 import '../../../billing/presentation/notifiers/entitlement_notifier.dart';
+import '../../../vault/presentation/notifiers/identities_notifier.dart';
 import '../../../settings/presentation/notifiers/backup_scope_notifier.dart';
+import '../../data/cloud_backup_api.dart';
 import '../../data/cloud_backup_store.dart';
 import '../../data/sync_operations_api.dart';
+import '../../domain/cloud_backup_service.dart';
+import '../../domain/sync_join_service.dart';
+import '../../domain/sync_snapshot_service.dart';
 
 part 'sync_notifier.g.dart';
 
@@ -32,12 +38,15 @@ enum SyncBlocker {
   /// No passphrase on this device yet.
   notConfigured,
 
-  /// No sync key: this vault has no backup carrying one.
+  /// This account holds snapshots, but none covers everything sync carries.
   ///
-  /// Not an error. The key cannot be invented -- every device has to hold the
-  /// same one -- so the first backup taken after switching sync on is what
-  /// creates it, and every other device learns it by opening a backup.
-  needsBackup,
+  /// Starting from one would leave a category missing that nothing later
+  /// fills in, so the user is asked for a complete backup instead of being
+  /// quietly given part of their data.
+  noCompleteGround,
+
+  /// The stored passphrase does not open this account's sync snapshot.
+  wrongPassphrase,
 }
 
 /// What automatic sync is doing.
@@ -57,6 +66,13 @@ final class SyncState {
   /// for a restore rather than a retry.
   final bool needsSnapshotRestore;
 
+  /// What joining this account did, the one time it ran.
+  ///
+  /// Kept rather than shown and dropped: the join can finish while the screen
+  /// that would have reported it is closed, and "sixty hosts sent, two
+  /// arrived" is the sentence that tells the user the switch did something.
+  final SyncJoinResult? lastJoin;
+
   final String? error;
 
   const SyncState({
@@ -66,6 +82,7 @@ final class SyncState {
     this.lastPushed = 0,
     this.lastPulled = 0,
     this.needsSnapshotRestore = false,
+    this.lastJoin,
     this.error,
   });
 
@@ -78,6 +95,7 @@ final class SyncState {
     int? lastPushed,
     int? lastPulled,
     bool? needsSnapshotRestore,
+    SyncJoinResult? lastJoin,
     String? error,
     bool clearBlocker = false,
     bool clearError = false,
@@ -88,6 +106,7 @@ final class SyncState {
     lastPushed: lastPushed ?? this.lastPushed,
     lastPulled: lastPulled ?? this.lastPulled,
     needsSnapshotRestore: needsSnapshotRestore ?? this.needsSnapshotRestore,
+    lastJoin: lastJoin ?? this.lastJoin,
     error: clearError ? null : (error ?? this.error),
   );
 }
@@ -102,6 +121,12 @@ final class SyncState {
 @Riverpod(keepAlive: true)
 class SyncNotifier extends _$SyncNotifier {
   SyncEngine? _engine;
+  SyncJoinService? _join;
+  SyncSnapshotService? _ground;
+  String? _deviceId;
+  String? _passphrase;
+  Uint8List? _syncKey;
+  int _maxSizeBytes = 0;
   Timer? _debounce;
   Timer? _periodic;
   StreamSubscription<void>? _changes;
@@ -172,33 +197,163 @@ class SyncNotifier extends _$SyncNotifier {
       return const SyncState(blocker: SyncBlocker.notConfigured);
     }
 
-    final storedKey = await store.readSyncKey();
-    if (storedKey == null) {
+    final passphrase = (await store.readPassphrase())!;
+    final client = ref.watch(accountProvider.notifier).apiClient;
+
+    final ground = SyncSnapshotService.over(
+      backupService: CloudBackupService(
+        api: CloudBackupApi(client: client),
+        sync: ref.watch(e2eeCloudSyncServiceProvider),
+        readPendingUploadId: store.readPendingUploadId,
+        writePendingUploadId: store.writePendingUploadId,
+        newUploadId: const Uuid().v4,
+      ),
+      syncApi: CloudBackupApi(client: client, kind: VaultKind.sync),
+      readPendingUploadId: store.readPendingSyncUploadId,
+      writePendingUploadId: store.writePendingSyncUploadId,
+      readMark: store.readGroundMark,
+      writeMark: store.writeGroundMark,
+    );
+
+    final Uint8List syncKey;
+    try {
+      syncKey = await _resolveSyncKey(store, ground, passphrase);
+    } on _NoCompleteGround {
       _stop();
 
-      // Nothing is broken. This vault simply has no backup carrying a sync
-      // key yet, and taking one is what creates it.
-      return const SyncState(blocker: SyncBlocker.needsBackup);
+      return const SyncState(blocker: SyncBlocker.noCompleteGround);
+    } on _WrongPassphrase {
+      _stop();
+
+      return const SyncState(blocker: SyncBlocker.wrongPassphrase);
     }
+
+    _deviceId = account.session!.deviceId;
+    _maxSizeBytes = entitlement.entitlement.limits.maxBackupSizeBytes;
+    _passphrase = passphrase;
+    _syncKey = syncKey;
+    _ground = ground;
 
     _engine = SyncEngine(
       db: db,
       journal: db.syncJournal!,
-      api: SyncOperationsApi(
-        client: ref.watch(accountProvider.notifier).apiClient,
-      ),
-      syncKey: SecretKey(base64.decode(storedKey)),
+      api: SyncOperationsApi(client: client),
+      syncKey: SecretKey(syncKey),
       scope: await ref.watch(backupScopeProvider(BackupTarget.autoSync).future),
+    );
+
+    _join = SyncJoinService(
+      db: db,
+      journal: db.syncJournal!,
+      ground: ground,
+      engine: _engine!,
     );
 
     _start(db);
 
-    // A device that has just switched sync on is behind by everything that
-    // happened before it did. Catching up is the first thing to do, and it
-    // happens before anything local is sent.
-    unawaited(syncNow(pullFirst: true));
+    // Joining comes before anything else, and is safe to run every start: a
+    // device that has finished returns at once, and one that was closed
+    // halfway through finishes rather than calling itself done.
+    unawaited(_joinThenSync());
 
     return const SyncState(blocker: null);
+  }
+
+  /// Finds the key every device in this account has to share.
+  ///
+  /// It cannot be derived or invented. Two devices that each minted their own
+  /// would seal operations the other silently skips -- nothing would fail, and
+  /// neither would ever see the other's work. So: what this device already
+  /// holds, or what the account's ground carries, or -- only for an account
+  /// with no ground at all -- a new one.
+  Future<Uint8List> _resolveSyncKey(
+    CloudBackupStore store,
+    SyncSnapshotService ground,
+    String passphrase,
+  ) async {
+    final stored = await store.readSyncKey();
+    if (stored != null) return base64.decode(stored);
+
+    final found = await ground.readGround(secret: passphrase);
+
+    if (found.problem == SyncGroundProblem.cannotOpen) {
+      throw const _WrongPassphrase();
+    }
+    if (found.problem == SyncGroundProblem.allPartial) {
+      throw const _NoCompleteGround();
+    }
+
+    final carried = found.ground?.syncKey;
+    if (carried != null) {
+      await store.adoptSyncKey(carried);
+
+      return Uint8List.fromList(await carried.extractBytes());
+    }
+
+    // An account with no ground, or one whose ground predates the key. This
+    // device mints it and the first ground it writes carries it onward.
+    return (await store.syncKeyForUpload(autoSyncEnabled: true))!;
+  }
+
+  /// Joins, then runs a first pass.
+  Future<void> _joinThenSync() async {
+    final join = _join;
+    if (join == null) return;
+
+    try {
+      final result = await join.join(
+        secret: _passphrase!,
+        deviceId: _deviceId!,
+        maxSizeBytes: _maxSizeBytes,
+        syncKey: _syncKey!,
+      );
+
+      if (!result.succeeded) {
+        _publish((s) => s.copyWith(error: result.message));
+
+        return;
+      }
+
+      if (result.applied > 0) invalidateRestoredData(ref);
+
+      _publish(
+        (s) => s.copyWith(
+          lastJoin: result,
+          lastSyncAt: DateTime.now(),
+          lastPushed: result.pushed,
+          lastPulled: result.applied,
+        ),
+      );
+    } on Object catch (e) {
+      _publish((s) => s.copyWith(error: '$e'));
+
+      return;
+    }
+
+    await syncNow(pullFirst: true);
+
+    // The ground and the log have to overlap, and only one device has to keep
+    // them that way. A conflict here means another got there first.
+    unawaited(_refreshGround());
+  }
+
+  Future<void> _refreshGround() async {
+    final ground = _ground;
+    if (ground == null) return;
+
+    try {
+      await ground.refreshIfStale(
+        db: ref.read(appDatabaseProvider),
+        passphrase: _passphrase!,
+        deviceId: _deviceId!,
+        maxSizeBytes: _maxSizeBytes,
+        syncKey: _syncKey!,
+      );
+    } on Object catch (e) {
+      // Housekeeping. A device that cannot refresh the ground today syncs
+      // perfectly well; another one will, and this one tries again next start.
+      debugPrint('[Sync] ground refresh skipped: $e');
+    }
   }
 
   /// Runs one pass now.
@@ -292,6 +447,8 @@ class SyncNotifier extends _$SyncNotifier {
     _periodic = null;
     _changes = null;
     _engine = null;
+    _join = null;
+    _ground = null;
   }
 
   void _publish(SyncState Function(SyncState state) update) {
@@ -300,4 +457,14 @@ class SyncNotifier extends _$SyncNotifier {
 
     state = AsyncValue.data(update(current));
   }
+}
+
+/// The account's snapshots are all narrower than sync carries.
+final class _NoCompleteGround implements Exception {
+  const _NoCompleteGround();
+}
+
+/// The stored passphrase does not open the account's ground.
+final class _WrongPassphrase implements Exception {
+  const _WrongPassphrase();
 }

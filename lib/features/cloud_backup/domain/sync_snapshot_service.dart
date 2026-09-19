@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:cryptography/cryptography.dart';
+
 import 'package:flutter/foundation.dart';
 
 import '../../../core/sync/e2ee_cloud_sync_service.dart';
@@ -24,11 +26,19 @@ final class SyncGround {
   /// The sealed envelope, to hand to the importer.
   final String ciphertext;
 
+  /// The vault's sync key, carried by the snapshot.
+  ///
+  /// This is where a device learns it. It cannot be derived or invented --
+  /// every device has to hold the same one, and two devices that each minted
+  /// their own would seal operations the other silently skips.
+  final SecretKey? syncKey;
+
   const SyncGround({
     required this.revision,
     required this.deviceId,
     required this.syncClock,
     required this.ciphertext,
+    this.syncKey,
   });
 }
 
@@ -266,6 +276,7 @@ final class SyncSnapshotService {
           deviceId: revision.deviceId,
           syncClock: payload['sync_clock'] as int?,
           ciphertext: ciphertext,
+          syncKey: opened.syncKey,
         ),
         problem: null,
       );

@@ -972,14 +972,20 @@ final class _SyncStatus extends ConsumerWidget {
         tokens.warning,
         'Set a sync passphrase first.',
       ),
-      // The honest version of "nothing is happening yet". The key every
-      // device has to share only exists inside a backup, so one has to be
-      // taken before sync can carry anything.
-      SyncBlocker.needsBackup => (
+      // Every snapshot this account holds carries less than sync does.
+      // Starting from one would leave a category missing that nothing later
+      // fills in, so the user is asked rather than quietly given part of it.
+      SyncBlocker.noCompleteGround => (
         LucideIcons.cloudUpload,
         tokens.warning,
-        'Back up once to start syncing: the key your devices share is created '
-            'with that backup, and other devices pick it up when they open it.',
+        'No complete snapshot to start from. Take a full backup on a device '
+            'that already has your data, then try again.',
+      ),
+      SyncBlocker.wrongPassphrase => (
+        LucideIcons.circleAlert,
+        tokens.warning,
+        'The passphrase on this device does not open this account\'s sync '
+            'snapshot. Use the one from a device that is already syncing.',
       ),
       null when value.running => (
         LucideIcons.refreshCw,
