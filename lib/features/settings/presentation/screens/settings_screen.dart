@@ -123,12 +123,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       final db = ref.read(appDatabaseProvider);
       final syncService = ref.read(e2eeCloudSyncServiceProvider);
 
-      // The same scope the cloud backup uses. It is a device preference --
-      // "what my backups contain" -- not something that should mean one thing
-      // for a file on disk and another for the vault.
+      // This picker's own scope. A file saved to disk and a backup uploaded
+      // to the vault are different acts with different risks, so narrowing
+      // one says nothing about the other.
       final scope = await BackupScopeStore(
         storage: ref.read(secureStorageServiceProvider),
-      ).read();
+      ).read(BackupTarget.file);
 
       final backupJson = await syncService.exportEncryptedBackup(
         db: db,
@@ -1023,7 +1023,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
                 ),
                 const Divider(height: 24),
-                const BackupScopePicker(),
+                const BackupScopePicker(target: BackupTarget.file),
                 const SizedBox(height: 12),
                 ShellVibeButton(
                   key: const Key('export_backup_button'),

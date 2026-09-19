@@ -6,25 +6,25 @@ import '../../../../shared/providers/database_providers.dart';
 
 part 'backup_scope_notifier.g.dart';
 
-/// What this device puts in a backup.
+/// What this device puts in a backup, for one [BackupTarget].
 ///
-/// One preference for both backup paths: the encrypted file saved to disk and
-/// the cloud vault. Splitting them would mean "what my backups contain" had
-/// two answers, and the user would find out which was which at restore time.
+/// One notifier per target rather than one for all three: narrowing the file
+/// backup says nothing about what the cloud vault should hold, and neither
+/// says anything about what runs in the background.
 @Riverpod(keepAlive: true)
 class BackupScopeNotifier extends _$BackupScopeNotifier {
   BackupScopeStore get _store =>
       BackupScopeStore(storage: ref.read(secureStorageServiceProvider));
 
   @override
-  Future<BackupScope> build() {
+  Future<BackupScope> build(BackupTarget target) {
     ref.watch(secureStorageServiceProvider);
 
-    return _store.read();
+    return _store.read(target);
   }
 
   Future<void> set(BackupScope scope) async {
-    await _store.write(scope);
+    await _store.write(target, scope);
     state = AsyncValue.data(scope);
   }
 
@@ -45,5 +45,28 @@ class BackupScopeNotifier extends _$BackupScopeNotifier {
     }
 
     await set(BackupScope.of(categories));
+  }
+}
+
+/// Whether automatic sync runs on this device.
+///
+/// Separate from every scope: "sync in the background" and "carry hosts" are
+/// different decisions, and folding them together would make turning the last
+/// category off mean something it does not.
+@Riverpod(keepAlive: true)
+class AutoSyncEnabledNotifier extends _$AutoSyncEnabledNotifier {
+  BackupScopeStore get _store =>
+      BackupScopeStore(storage: ref.read(secureStorageServiceProvider));
+
+  @override
+  Future<bool> build() {
+    ref.watch(secureStorageServiceProvider);
+
+    return _store.readAutoSyncEnabled();
+  }
+
+  Future<void> set(bool enabled) async {
+    await _store.writeAutoSyncEnabled(enabled);
+    state = AsyncValue.data(enabled);
   }
 }

@@ -437,7 +437,7 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
     // first one. Sealing it into the setup backup alone made the recovery path
     // cover exactly one revision and then quietly stop.
     final recoveryCode = await _store.readRecoveryCode();
-    final scope = await _scopeStore.read();
+    final scope = await _scopeStore.read(BackupTarget.cloud);
 
     // App settings live in secure storage, not the database, so they are read
     // here and handed over rather than reached for inside the sync service.

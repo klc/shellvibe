@@ -4,6 +4,7 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../core/sync/backup_scope.dart';
+import '../../../../core/sync/backup_scope_store.dart';
 import '../notifiers/backup_scope_notifier.dart';
 
 /// Picks what the next backup carries.
@@ -13,7 +14,28 @@ import '../notifiers/backup_scope_notifier.dart';
 /// forgotten, and the moment that matters is the one where the user asks for
 /// a backup.
 final class BackupScopePicker extends ConsumerWidget {
-  const BackupScopePicker({super.key, this.lastFullBackupAt});
+  const BackupScopePicker({
+    required this.target,
+    super.key,
+    this.title = 'What gets backed up',
+    this.subtitle,
+    this.lastFullBackupAt,
+    this.enabled = true,
+  });
+
+  /// Which selection this picker edits. Each one is its own preference: a
+  /// narrowed file backup says nothing about the cloud vault, and neither says
+  /// anything about what runs in the background.
+  final BackupTarget target;
+
+  final String title;
+
+  /// Replaces the default explanation when this picker is not about a backup.
+  final String? subtitle;
+
+  /// False greys the chips out without hiding them, so a user who has
+  /// switched the feature off can still see what it would carry.
+  final bool enabled;
 
   /// When this device last wrote a complete backup, when that is known.
   ///
@@ -35,20 +57,19 @@ final class BackupScopePicker extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = ShellVibeTokens.resolve(context);
-    final scope = ref.watch(backupScopeProvider).value ?? BackupScope.full;
+    final scope =
+        ref.watch(backupScopeProvider(target)).value ?? BackupScope.full;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'What gets backed up',
-          style: Theme.of(context).textTheme.titleSmall,
-        ),
+        Text(title, style: Theme.of(context).textTheme.titleSmall),
         const SizedBox(height: 4),
         Text(
-          'Workspaces and groups always go in: everything else is filed under '
-          'them. Restoring is always complete — it never deletes what a backup '
-          'left out.',
+          subtitle ??
+              'Workspaces and groups always go in: everything else is filed '
+                  'under them. Restoring is always complete — it never deletes '
+                  'what a backup left out.',
           style: TextStyle(fontSize: 11, color: tokens.textSubtle),
         ),
         const SizedBox(height: 8),
@@ -58,15 +79,15 @@ final class BackupScopePicker extends ConsumerWidget {
           children: [
             for (final category in BackupCategory.values)
               FilterChip(
-                key: Key('backup_scope_${category.wireName}'),
+                key: Key('backup_scope_${target.name}_${category.wireName}'),
                 label: Text(label(category)),
                 selected: scope.contains(category),
                 // A port forward row cannot exist without its host, so the
                 // choice is locked rather than silently repaired later.
-                onSelected: _isLocked(category, scope)
+                onSelected: !enabled || _isLocked(category, scope)
                     ? null
                     : (selected) => ref
-                          .read(backupScopeProvider.notifier)
+                          .read(backupScopeProvider(target).notifier)
                           .toggle(category, selected),
               ),
           ],

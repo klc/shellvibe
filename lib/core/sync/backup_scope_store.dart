@@ -1,12 +1,33 @@
 import '../../shared/storage/secure_storage_service.dart';
 import 'backup_scope.dart';
 
-/// What this device puts in a backup.
+/// Which selection a scope belongs to.
 ///
-/// A device preference, not account state: it applies to the encrypted file
-/// saved to disk as much as to the cloud vault, and it outlives signing out.
-/// That is why it does not live in `CloudBackupStore`, which is cleared when
-/// the account goes away.
+/// Three separate answers, deliberately. They were one preference at first,
+/// on the reasoning that "what my backups contain" should not mean two things
+/// -- but they are not one question. A file saved to disk, a backup uploaded
+/// to the vault and a background sync that runs on its own are three different
+/// acts with three different risks, and a user who narrows one has not said
+/// anything about the others.
+enum BackupTarget {
+  /// The encrypted `.svb` file written to disk.
+  file('shellvibe_backup_scope_file'),
+
+  /// A manual backup uploaded to the cloud vault.
+  cloud('shellvibe_backup_scope_cloud'),
+
+  /// What automatic sync carries, in both directions.
+  autoSync('shellvibe_sync_scope');
+
+  const BackupTarget(this.storageKey);
+
+  final String storageKey;
+}
+
+/// What this device puts in a backup, per target.
+///
+/// A device preference, not account state: it outlives signing out, which is
+/// why it does not live in `CloudBackupStore`.
 final class BackupScopeStore {
   final SecureStorageService storage;
 
@@ -16,15 +37,39 @@ final class BackupScopeStore {
   ///
   /// Defaulting to everything is the only safe default: a backup that quietly
   /// holds less than the user assumes is discovered at restore time.
-  Future<BackupScope> read() async {
-    final value = await storage.read(key: _key);
-    if (value == null || value.isEmpty) return BackupScope.full;
+  Future<BackupScope> read(BackupTarget target) async {
+    final value = await storage.read(key: target.storageKey);
+    if (value != null && value.isNotEmpty) {
+      return BackupScope.fromManifest(value.split(','));
+    }
 
-    return BackupScope.fromManifest(value.split(','));
+    // The single shared preference these three replaced. Read once so a user
+    // who had already narrowed their backups does not silently get everything
+    // again on the next upgrade.
+    final legacy = await storage.read(key: _legacyKey);
+    if (legacy != null && legacy.isNotEmpty) {
+      return BackupScope.fromManifest(legacy.split(','));
+    }
+
+    return BackupScope.full;
   }
 
-  Future<void> write(BackupScope scope) =>
-      storage.write(key: _key, value: scope.toManifest().join(','));
+  Future<void> write(BackupTarget target, BackupScope scope) => storage.write(
+    key: target.storageKey,
+    value: scope.toManifest().join(','),
+  );
 
-  static const String _key = 'shellvibe_backup_scope';
+  /// Whether automatic sync runs on this device.
+  ///
+  /// Off until the user turns it on. Background sync writes to the account on
+  /// its own schedule, and that is not something to start doing because a
+  /// feature shipped.
+  Future<bool> readAutoSyncEnabled() async =>
+      await storage.read(key: _autoSyncEnabledKey) == 'true';
+
+  Future<void> writeAutoSyncEnabled(bool enabled) =>
+      storage.write(key: _autoSyncEnabledKey, value: '$enabled');
+
+  static const String _legacyKey = 'shellvibe_backup_scope';
+  static const String _autoSyncEnabledKey = 'shellvibe_sync_enabled';
 }

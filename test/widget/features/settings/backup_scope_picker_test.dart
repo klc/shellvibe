@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'package:shellvibe/core/sync/backup_scope.dart';
+import 'package:shellvibe/core/sync/backup_scope_store.dart';
 import 'package:shellvibe/features/settings/presentation/notifiers/backup_scope_notifier.dart';
 import 'package:shellvibe/features/settings/presentation/widgets/backup_scope_picker.dart';
 
@@ -21,13 +22,17 @@ void main() {
     WidgetTester tester, {
     BackupScope scope = BackupScope.full,
     DateTime? lastFullBackupAt,
+    BackupTarget target = BackupTarget.cloud,
   }) async {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() => tester.view.resetPhysicalSize());
 
     final container = ProviderContainer(
-      overrides: [backupScopeProvider.overrideWith(() => _StubScope(scope))],
+      overrides: [
+        for (final t in BackupTarget.values)
+          backupScopeProvider(t).overrideWith(() => _StubScope(scope)),
+      ],
     );
     addTearDown(container.dispose);
 
@@ -42,7 +47,10 @@ void main() {
           child: MaterialApp(
             home: Scaffold(
               body: SingleChildScrollView(
-                child: BackupScopePicker(lastFullBackupAt: lastFullBackupAt),
+                child: BackupScopePicker(
+                  target: target,
+                  lastFullBackupAt: lastFullBackupAt,
+                ),
               ),
             ),
           ),
@@ -54,15 +62,22 @@ void main() {
     return container;
   }
 
-  FilterChip chipFor(WidgetTester tester, BackupCategory category) => tester
-      .widget<FilterChip>(find.byKey(Key('backup_scope_${category.wireName}')));
+  FilterChip chipFor(
+    WidgetTester tester,
+    BackupCategory category, {
+    BackupTarget target = BackupTarget.cloud,
+  }) => tester.widget<FilterChip>(
+    find.byKey(Key('backup_scope_${target.name}_${category.wireName}')),
+  );
 
   testWidgets('every category is offered', (tester) async {
     await pump(tester);
 
     for (final category in BackupCategory.values) {
       expect(
-        find.byKey(Key('backup_scope_${category.wireName}')),
+        find.byKey(
+          Key('backup_scope_${BackupTarget.cloud.name}_${category.wireName}'),
+        ),
         findsOneWidget,
         reason: 'A category with no chip cannot be turned off, or back on.',
       );
@@ -88,11 +103,18 @@ void main() {
     final container = await pump(tester);
 
     await tester.tap(
-      find.byKey(Key('backup_scope_${BackupCategory.hosts.wireName}')),
+      find.byKey(
+        Key(
+          'backup_scope_${BackupTarget.cloud.name}_'
+          '${BackupCategory.hosts.wireName}',
+        ),
+      ),
     );
     await tester.pumpAndSettle();
 
-    final scope = container.read(backupScopeProvider).value!;
+    final scope = container
+        .read(backupScopeProvider(BackupTarget.cloud))
+        .value!;
 
     expect(scope.contains(BackupCategory.hosts), isFalse);
     expect(scope.contains(BackupCategory.portForwards), isFalse);
@@ -153,7 +175,7 @@ class _StubScope extends BackupScopeNotifier {
   final BackupScope _initial;
 
   @override
-  Future<BackupScope> build() async => _initial;
+  Future<BackupScope> build(BackupTarget target) async => _initial;
 
   @override
   Future<void> set(BackupScope scope) async {

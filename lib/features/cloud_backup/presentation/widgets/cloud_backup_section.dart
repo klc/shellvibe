@@ -6,6 +6,8 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../../../core/sync/backup_envelope.dart';
+import '../../../../core/sync/backup_scope_store.dart';
+import '../../../settings/presentation/notifiers/backup_scope_notifier.dart';
 import '../../../settings/presentation/widgets/backup_scope_picker.dart';
 import '../../data/cloud_backup_api.dart';
 import '../notifiers/cloud_backup_notifier.dart';
@@ -491,7 +493,13 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
           ),
         ],
         const Divider(height: 24),
-        BackupScopePicker(lastFullBackupAt: state.lastFullBackupAt),
+        BackupScopePicker(
+          target: BackupTarget.cloud,
+          title: 'What a manual backup uploads',
+          lastFullBackupAt: state.lastFullBackupAt,
+        ),
+        const Divider(height: 24),
+        const _AutoSyncControls(),
         const SizedBox(height: 12),
         // A Wrap rather than a stack: these buttons size to their labels, and
         // a column of them left-aligned reads as ragged rather than as a set
@@ -836,4 +844,73 @@ final class _Error extends StatelessWidget {
     text,
     style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.error),
   );
+}
+
+/// Automatic sync: whether it runs, and what it carries.
+///
+/// Deliberately its own switch rather than an implication of the manual
+/// backup's scope. A manual backup is something the user asks for at a moment
+/// they chose; automatic sync writes to the account on its own schedule, in
+/// both directions. Turning the last category off would be a strange way to
+/// say "stop doing that", and leaving it on by default would be a stranger way
+/// to start.
+final class _AutoSyncControls extends ConsumerWidget {
+  const _AutoSyncControls();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ShellVibeTokens.resolve(context);
+    final enabled = ref.watch(autoSyncEnabledProvider).value ?? false;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Material(
+          type: MaterialType.transparency,
+          child: SwitchListTile.adaptive(
+            key: const Key('auto_sync_enabled_switch'),
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Automatic sync'),
+            subtitle: Text(
+              'Sends changes as you make them and applies what other devices '
+              'send. Separate from the manual backup above, which stays a '
+              'snapshot you take yourself.',
+              style: TextStyle(fontSize: 11, color: tokens.textSubtle),
+            ),
+            value: enabled,
+            onChanged: (value) =>
+                ref.read(autoSyncEnabledProvider.notifier).set(value),
+          ),
+        ),
+        if (enabled) ...[
+          const SizedBox(height: 4),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(LucideIcons.info, size: 14, color: tokens.textSubtle),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Changes are being recorded on this device, but nothing '
+                  'sends them yet: the background schedule is still being '
+                  'built. Keep taking manual backups until it is.',
+                  style: TextStyle(fontSize: 11, color: tokens.textSubtle),
+                ),
+              ),
+            ],
+          ),
+        ],
+        const SizedBox(height: 8),
+        BackupScopePicker(
+          target: BackupTarget.autoSync,
+          title: 'What syncs automatically',
+          subtitle:
+              'Per device, and in both directions: a category that is off is '
+              'neither sent from here nor applied here. Manual backups are '
+              'not affected.',
+          enabled: enabled,
+        ),
+      ],
+    );
+  }
 }
