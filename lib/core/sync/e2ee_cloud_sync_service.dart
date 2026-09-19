@@ -8,6 +8,7 @@ import '../../shared/database/app_database.dart';
 import '../crypto/encryption_engine.dart';
 import 'backup_envelope.dart';
 import 'backup_scope.dart';
+import 'sync_row_codec.dart';
 
 export 'backup_envelope.dart'
     show
@@ -225,110 +226,35 @@ class E2EECloudSyncService {
       // too far behind restores the snapshot and resumes from here instead of
       // replaying a log that has already been pruned.
       'sync_clock': ?syncClock,
-      'workspaces': workspaces
-          .map(
-            (w) => {
-              'id': w.id,
-              'name': w.name,
-              'colorCode': w.colorCode,
-              'createdAt': w.createdAt.toIso8601String(),
-            },
-          )
-          .toList(),
-      'host_groups': hostGroups
-          .map(
-            (g) => {
-              'id': g.id,
-              'workspaceId': g.workspaceId,
-              'parentId': g.parentId,
-              'name': g.name,
-              'colorTag': g.colorTag,
-            },
-          )
-          .toList(),
+      'workspaces': workspaces.map(SyncRowCodec.workspace).toList(),
+      'host_groups': hostGroups.map(SyncRowCodec.hostGroup).toList(),
     };
 
     if (scope.contains(BackupCategory.identities)) {
       final identities = await db.select(db.identities).get();
-      payloadMap['identities'] = identities
-          .map(
-            (i) => {
-              'id': i.id,
-              'workspaceId': i.workspaceId,
-              'title': i.title,
-              'username': i.username,
-              'authType': i.authType,
-              'passwordEncrypted': i.passwordEncrypted,
-              'privateKeyEncrypted': i.privateKeyEncrypted,
-              'passphraseEncrypted': i.passphraseEncrypted,
-              'createdAt': i.createdAt.toIso8601String(),
-            },
-          )
-          .toList();
+      payloadMap['identities'] = identities.map(SyncRowCodec.identity).toList();
     }
 
     if (scope.contains(BackupCategory.hosts)) {
       final hosts = await db.select(db.hosts).get();
-      // Every column on the table, not a subset. `username` was missing here
-      // and a restored host tried to authenticate as whoever the client fell
-      // back to, which reads to the user as the key being broken rather than
-      // the backup being incomplete. `HostsBackupColumnsTest` fails if a new
-      // column is added without being added here too.
-      payloadMap['hosts'] = hosts
-          .map(
-            (h) => {
-              'id': h.id,
-              'workspaceId': h.workspaceId,
-              'groupId': h.groupId,
-              'identityId': h.identityId,
-              'label': h.label,
-              'hostname': h.hostname,
-              'username': h.username,
-              'port': h.port,
-              'protocol': h.protocol,
-              'moshServerPath': h.moshServerPath,
-              'moshPortRange': h.moshPortRange,
-              'colorTag': h.colorTag,
-              'jumpHostId': h.jumpHostId,
-              'environment': h.environment,
-              'mcpVisible': h.mcpVisible,
-              'mcpDefaultMode': h.mcpDefaultMode,
-              'createdAt': h.createdAt.toIso8601String(),
-            },
-          )
-          .toList();
+      // The column list lives in SyncRowCodec, shared with the operation
+      // log so a row cannot mean one thing in a snapshot and another in an
+      // operation. `backup_covers_every_column_test` reads the payload and
+      // fails if a column is added to the table without being encoded.
+      payloadMap['hosts'] = hosts.map(SyncRowCodec.host).toList();
     }
 
     if (scope.contains(BackupCategory.knownHosts)) {
       final knownHosts = await db.select(db.knownHosts).get();
       payloadMap['known_hosts'] = knownHosts
-          .map(
-            (k) => {
-              'id': k.id,
-              'hostname': k.hostname,
-              'port': k.port,
-              'keyType': k.keyType,
-              'fingerprintSha256': k.fingerprintSha256,
-              'firstSeenAt': k.firstSeenAt.toIso8601String(),
-            },
-          )
+          .map(SyncRowCodec.knownHost)
           .toList();
     }
 
     if (scope.contains(BackupCategory.portForwards)) {
       final portForwardRules = await db.select(db.portForwardRules).get();
       payloadMap['port_forward_rules'] = portForwardRules
-          .map(
-            (p) => {
-              'id': p.id,
-              'hostId': p.hostId,
-              'type': p.type,
-              'localPort': p.localPort,
-              'remoteHost': p.remoteHost,
-              'remotePort': p.remotePort,
-              'autoStart': p.autoStart,
-            },
-          )
+          .map(SyncRowCodec.portForwardRule)
           .toList();
     }
 
@@ -337,40 +263,10 @@ class E2EECloudSyncService {
       final runbooks = await db.select(db.runbooks).get();
       final runbookSteps = await db.select(db.runbookSteps).get();
 
-      payloadMap['snippets'] = snippets
-          .map(
-            (s) => {
-              'id': s.id,
-              'workspaceId': s.workspaceId,
-              'title': s.title,
-              'code': s.code,
-              'tags': s.tags,
-            },
-          )
-          .toList();
-      payloadMap['runbooks'] = runbooks
-          .map(
-            (r) => {
-              'id': r.id,
-              'workspaceId': r.workspaceId,
-              'title': r.title,
-              'description': r.description,
-              'createdAt': r.createdAt.toIso8601String(),
-            },
-          )
-          .toList();
+      payloadMap['snippets'] = snippets.map(SyncRowCodec.snippet).toList();
+      payloadMap['runbooks'] = runbooks.map(SyncRowCodec.runbook).toList();
       payloadMap['runbook_steps'] = runbookSteps
-          .map(
-            (rs) => {
-              'id': rs.id,
-              'runbookId': rs.runbookId,
-              'stepOrder': rs.stepOrder,
-              'command': rs.command,
-              'expectedExitCode': rs.expectedExitCode,
-              'expectedOutputPattern': rs.expectedOutputPattern,
-              'timeoutSeconds': rs.timeoutSeconds,
-            },
-          )
+          .map(SyncRowCodec.runbookStep)
           .toList();
     }
 
@@ -378,49 +274,15 @@ class E2EECloudSyncService {
       final templates = await db.select(db.templates).get();
       final templatePanes = await db.select(db.templatePanes).get();
 
-      payloadMap['templates'] = templates
-          .map(
-            (t) => {
-              'id': t.id,
-              'workspaceId': t.workspaceId,
-              'name': t.name,
-              'description': t.description,
-              'activePaneId': t.activePaneId,
-              'createdAt': t.createdAt.toIso8601String(),
-            },
-          )
-          .toList();
+      payloadMap['templates'] = templates.map(SyncRowCodec.template).toList();
       payloadMap['template_panes'] = templatePanes
-          .map(
-            (tp) => {
-              'id': tp.id,
-              'templateId': tp.templateId,
-              'paneOrder': tp.paneOrder,
-              'parentPaneId': tp.parentPaneId,
-              'splitDirection': tp.splitDirection,
-              'splitRatio': tp.splitRatio,
-              'sessionType': tp.sessionType,
-              'hostId': tp.hostId,
-              'title': tp.title,
-            },
-          )
+          .map(SyncRowCodec.templatePane)
           .toList();
     }
 
     if (scope.contains(BackupCategory.bookmarks)) {
       final bookmarks = await db.select(db.bookmarks).get();
-      payloadMap['bookmarks'] = bookmarks
-          .map(
-            (b) => {
-              'id': b.id,
-              'workspaceId': b.workspaceId,
-              'hostId': b.hostId,
-              'templateId': b.templateId,
-              'position': b.position,
-              'createdAt': b.createdAt.toIso8601String(),
-            },
-          )
-          .toList();
+      payloadMap['bookmarks'] = bookmarks.map(SyncRowCodec.bookmark).toList();
     }
 
     if (scope.contains(BackupCategory.settings) && settings != null) {

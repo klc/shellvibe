@@ -9408,6 +9408,1190 @@ class BookmarksCompanion extends UpdateCompanion<Bookmark> {
   }
 }
 
+class $PendingOperationsTable extends PendingOperations
+    with TableInfo<$PendingOperationsTable, PendingOperation> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PendingOperationsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _entityTypeMeta = const VerificationMeta(
+    'entityType',
+  );
+  @override
+  late final GeneratedColumn<String> entityType = GeneratedColumn<String>(
+    'entity_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _entityIdMeta = const VerificationMeta(
+    'entityId',
+  );
+  @override
+  late final GeneratedColumn<String> entityId = GeneratedColumn<String>(
+    'entity_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _operationMeta = const VerificationMeta(
+    'operation',
+  );
+  @override
+  late final GeneratedColumn<String> operation = GeneratedColumn<String>(
+    'operation',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _payloadMeta = const VerificationMeta(
+    'payload',
+  );
+  @override
+  late final GeneratedColumn<String> payload = GeneratedColumn<String>(
+    'payload',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _beforeImageMeta = const VerificationMeta(
+    'beforeImage',
+  );
+  @override
+  late final GeneratedColumn<String> beforeImage = GeneratedColumn<String>(
+    'before_image',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _logicalClockMeta = const VerificationMeta(
+    'logicalClock',
+  );
+  @override
+  late final GeneratedColumn<int> logicalClock = GeneratedColumn<int>(
+    'logical_clock',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    entityType,
+    entityId,
+    operation,
+    payload,
+    beforeImage,
+    logicalClock,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'pending_operations';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PendingOperation> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('entity_type')) {
+      context.handle(
+        _entityTypeMeta,
+        entityType.isAcceptableOrUnknown(data['entity_type']!, _entityTypeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_entityTypeMeta);
+    }
+    if (data.containsKey('entity_id')) {
+      context.handle(
+        _entityIdMeta,
+        entityId.isAcceptableOrUnknown(data['entity_id']!, _entityIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_entityIdMeta);
+    }
+    if (data.containsKey('operation')) {
+      context.handle(
+        _operationMeta,
+        operation.isAcceptableOrUnknown(data['operation']!, _operationMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_operationMeta);
+    }
+    if (data.containsKey('payload')) {
+      context.handle(
+        _payloadMeta,
+        payload.isAcceptableOrUnknown(data['payload']!, _payloadMeta),
+      );
+    }
+    if (data.containsKey('before_image')) {
+      context.handle(
+        _beforeImageMeta,
+        beforeImage.isAcceptableOrUnknown(
+          data['before_image']!,
+          _beforeImageMeta,
+        ),
+      );
+    }
+    if (data.containsKey('logical_clock')) {
+      context.handle(
+        _logicalClockMeta,
+        logicalClock.isAcceptableOrUnknown(
+          data['logical_clock']!,
+          _logicalClockMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_logicalClockMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {entityType, entityId},
+  ];
+  @override
+  PendingOperation map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PendingOperation(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      entityType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}entity_type'],
+      )!,
+      entityId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}entity_id'],
+      )!,
+      operation: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}operation'],
+      )!,
+      payload: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}payload'],
+      ),
+      beforeImage: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}before_image'],
+      ),
+      logicalClock: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}logical_clock'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $PendingOperationsTable createAlias(String alias) {
+    return $PendingOperationsTable(attachedDatabase, alias);
+  }
+}
+
+class PendingOperation extends DataClass
+    implements Insertable<PendingOperation> {
+  final String id;
+
+  /// The table the row belongs to, in its plain name (`hosts`). The opaque
+  /// alias is derived at send time -- storing the alias instead would make the
+  /// outbox unreadable without the sync key.
+  final String entityType;
+  final String entityId;
+
+  /// `upsert` or `delete`.
+  final String operation;
+
+  /// The row as JSON, or null for a delete.
+  final String? payload;
+
+  /// The row as it was before, or null when it did not exist.
+  final String? beforeImage;
+
+  /// Lamport clock this device assigned to the change.
+  final int logicalClock;
+  final DateTime createdAt;
+  const PendingOperation({
+    required this.id,
+    required this.entityType,
+    required this.entityId,
+    required this.operation,
+    this.payload,
+    this.beforeImage,
+    required this.logicalClock,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['entity_type'] = Variable<String>(entityType);
+    map['entity_id'] = Variable<String>(entityId);
+    map['operation'] = Variable<String>(operation);
+    if (!nullToAbsent || payload != null) {
+      map['payload'] = Variable<String>(payload);
+    }
+    if (!nullToAbsent || beforeImage != null) {
+      map['before_image'] = Variable<String>(beforeImage);
+    }
+    map['logical_clock'] = Variable<int>(logicalClock);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  PendingOperationsCompanion toCompanion(bool nullToAbsent) {
+    return PendingOperationsCompanion(
+      id: Value(id),
+      entityType: Value(entityType),
+      entityId: Value(entityId),
+      operation: Value(operation),
+      payload: payload == null && nullToAbsent
+          ? const Value.absent()
+          : Value(payload),
+      beforeImage: beforeImage == null && nullToAbsent
+          ? const Value.absent()
+          : Value(beforeImage),
+      logicalClock: Value(logicalClock),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory PendingOperation.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PendingOperation(
+      id: serializer.fromJson<String>(json['id']),
+      entityType: serializer.fromJson<String>(json['entityType']),
+      entityId: serializer.fromJson<String>(json['entityId']),
+      operation: serializer.fromJson<String>(json['operation']),
+      payload: serializer.fromJson<String?>(json['payload']),
+      beforeImage: serializer.fromJson<String?>(json['beforeImage']),
+      logicalClock: serializer.fromJson<int>(json['logicalClock']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'entityType': serializer.toJson<String>(entityType),
+      'entityId': serializer.toJson<String>(entityId),
+      'operation': serializer.toJson<String>(operation),
+      'payload': serializer.toJson<String?>(payload),
+      'beforeImage': serializer.toJson<String?>(beforeImage),
+      'logicalClock': serializer.toJson<int>(logicalClock),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  PendingOperation copyWith({
+    String? id,
+    String? entityType,
+    String? entityId,
+    String? operation,
+    Value<String?> payload = const Value.absent(),
+    Value<String?> beforeImage = const Value.absent(),
+    int? logicalClock,
+    DateTime? createdAt,
+  }) => PendingOperation(
+    id: id ?? this.id,
+    entityType: entityType ?? this.entityType,
+    entityId: entityId ?? this.entityId,
+    operation: operation ?? this.operation,
+    payload: payload.present ? payload.value : this.payload,
+    beforeImage: beforeImage.present ? beforeImage.value : this.beforeImage,
+    logicalClock: logicalClock ?? this.logicalClock,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  PendingOperation copyWithCompanion(PendingOperationsCompanion data) {
+    return PendingOperation(
+      id: data.id.present ? data.id.value : this.id,
+      entityType: data.entityType.present
+          ? data.entityType.value
+          : this.entityType,
+      entityId: data.entityId.present ? data.entityId.value : this.entityId,
+      operation: data.operation.present ? data.operation.value : this.operation,
+      payload: data.payload.present ? data.payload.value : this.payload,
+      beforeImage: data.beforeImage.present
+          ? data.beforeImage.value
+          : this.beforeImage,
+      logicalClock: data.logicalClock.present
+          ? data.logicalClock.value
+          : this.logicalClock,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PendingOperation(')
+          ..write('id: $id, ')
+          ..write('entityType: $entityType, ')
+          ..write('entityId: $entityId, ')
+          ..write('operation: $operation, ')
+          ..write('payload: $payload, ')
+          ..write('beforeImage: $beforeImage, ')
+          ..write('logicalClock: $logicalClock, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    entityType,
+    entityId,
+    operation,
+    payload,
+    beforeImage,
+    logicalClock,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PendingOperation &&
+          other.id == this.id &&
+          other.entityType == this.entityType &&
+          other.entityId == this.entityId &&
+          other.operation == this.operation &&
+          other.payload == this.payload &&
+          other.beforeImage == this.beforeImage &&
+          other.logicalClock == this.logicalClock &&
+          other.createdAt == this.createdAt);
+}
+
+class PendingOperationsCompanion extends UpdateCompanion<PendingOperation> {
+  final Value<String> id;
+  final Value<String> entityType;
+  final Value<String> entityId;
+  final Value<String> operation;
+  final Value<String?> payload;
+  final Value<String?> beforeImage;
+  final Value<int> logicalClock;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const PendingOperationsCompanion({
+    this.id = const Value.absent(),
+    this.entityType = const Value.absent(),
+    this.entityId = const Value.absent(),
+    this.operation = const Value.absent(),
+    this.payload = const Value.absent(),
+    this.beforeImage = const Value.absent(),
+    this.logicalClock = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PendingOperationsCompanion.insert({
+    required String id,
+    required String entityType,
+    required String entityId,
+    required String operation,
+    this.payload = const Value.absent(),
+    this.beforeImage = const Value.absent(),
+    required int logicalClock,
+    required DateTime createdAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       entityType = Value(entityType),
+       entityId = Value(entityId),
+       operation = Value(operation),
+       logicalClock = Value(logicalClock),
+       createdAt = Value(createdAt);
+  static Insertable<PendingOperation> custom({
+    Expression<String>? id,
+    Expression<String>? entityType,
+    Expression<String>? entityId,
+    Expression<String>? operation,
+    Expression<String>? payload,
+    Expression<String>? beforeImage,
+    Expression<int>? logicalClock,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (entityType != null) 'entity_type': entityType,
+      if (entityId != null) 'entity_id': entityId,
+      if (operation != null) 'operation': operation,
+      if (payload != null) 'payload': payload,
+      if (beforeImage != null) 'before_image': beforeImage,
+      if (logicalClock != null) 'logical_clock': logicalClock,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PendingOperationsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? entityType,
+    Value<String>? entityId,
+    Value<String>? operation,
+    Value<String?>? payload,
+    Value<String?>? beforeImage,
+    Value<int>? logicalClock,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return PendingOperationsCompanion(
+      id: id ?? this.id,
+      entityType: entityType ?? this.entityType,
+      entityId: entityId ?? this.entityId,
+      operation: operation ?? this.operation,
+      payload: payload ?? this.payload,
+      beforeImage: beforeImage ?? this.beforeImage,
+      logicalClock: logicalClock ?? this.logicalClock,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (entityType.present) {
+      map['entity_type'] = Variable<String>(entityType.value);
+    }
+    if (entityId.present) {
+      map['entity_id'] = Variable<String>(entityId.value);
+    }
+    if (operation.present) {
+      map['operation'] = Variable<String>(operation.value);
+    }
+    if (payload.present) {
+      map['payload'] = Variable<String>(payload.value);
+    }
+    if (beforeImage.present) {
+      map['before_image'] = Variable<String>(beforeImage.value);
+    }
+    if (logicalClock.present) {
+      map['logical_clock'] = Variable<int>(logicalClock.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PendingOperationsCompanion(')
+          ..write('id: $id, ')
+          ..write('entityType: $entityType, ')
+          ..write('entityId: $entityId, ')
+          ..write('operation: $operation, ')
+          ..write('payload: $payload, ')
+          ..write('beforeImage: $beforeImage, ')
+          ..write('logicalClock: $logicalClock, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $SyncTombstonesTable extends SyncTombstones
+    with TableInfo<$SyncTombstonesTable, SyncTombstone> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SyncTombstonesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _entityTypeMeta = const VerificationMeta(
+    'entityType',
+  );
+  @override
+  late final GeneratedColumn<String> entityType = GeneratedColumn<String>(
+    'entity_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _entityIdMeta = const VerificationMeta(
+    'entityId',
+  );
+  @override
+  late final GeneratedColumn<String> entityId = GeneratedColumn<String>(
+    'entity_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _bodyMeta = const VerificationMeta('body');
+  @override
+  late final GeneratedColumn<String> body = GeneratedColumn<String>(
+    'body',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _logicalClockMeta = const VerificationMeta(
+    'logicalClock',
+  );
+  @override
+  late final GeneratedColumn<int> logicalClock = GeneratedColumn<int>(
+    'logical_clock',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    entityType,
+    entityId,
+    body,
+    logicalClock,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'sync_tombstones';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SyncTombstone> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('entity_type')) {
+      context.handle(
+        _entityTypeMeta,
+        entityType.isAcceptableOrUnknown(data['entity_type']!, _entityTypeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_entityTypeMeta);
+    }
+    if (data.containsKey('entity_id')) {
+      context.handle(
+        _entityIdMeta,
+        entityId.isAcceptableOrUnknown(data['entity_id']!, _entityIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_entityIdMeta);
+    }
+    if (data.containsKey('body')) {
+      context.handle(
+        _bodyMeta,
+        body.isAcceptableOrUnknown(data['body']!, _bodyMeta),
+      );
+    }
+    if (data.containsKey('logical_clock')) {
+      context.handle(
+        _logicalClockMeta,
+        logicalClock.isAcceptableOrUnknown(
+          data['logical_clock']!,
+          _logicalClockMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_logicalClockMeta);
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_deletedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {entityType, entityId};
+  @override
+  SyncTombstone map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SyncTombstone(
+      entityType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}entity_type'],
+      )!,
+      entityId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}entity_id'],
+      )!,
+      body: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}body'],
+      ),
+      logicalClock: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}logical_clock'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      )!,
+    );
+  }
+
+  @override
+  $SyncTombstonesTable createAlias(String alias) {
+    return $SyncTombstonesTable(attachedDatabase, alias);
+  }
+}
+
+class SyncTombstone extends DataClass implements Insertable<SyncTombstone> {
+  final String entityType;
+  final String entityId;
+
+  /// The last known row as JSON, or null once the trash window has passed.
+  ///
+  /// The row is emptied rather than deleted: the id has to outlive the body,
+  /// or a late `upsert` would bring the row back.
+  final String? body;
+  final int logicalClock;
+  final DateTime deletedAt;
+  const SyncTombstone({
+    required this.entityType,
+    required this.entityId,
+    this.body,
+    required this.logicalClock,
+    required this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['entity_type'] = Variable<String>(entityType);
+    map['entity_id'] = Variable<String>(entityId);
+    if (!nullToAbsent || body != null) {
+      map['body'] = Variable<String>(body);
+    }
+    map['logical_clock'] = Variable<int>(logicalClock);
+    map['deleted_at'] = Variable<DateTime>(deletedAt);
+    return map;
+  }
+
+  SyncTombstonesCompanion toCompanion(bool nullToAbsent) {
+    return SyncTombstonesCompanion(
+      entityType: Value(entityType),
+      entityId: Value(entityId),
+      body: body == null && nullToAbsent ? const Value.absent() : Value(body),
+      logicalClock: Value(logicalClock),
+      deletedAt: Value(deletedAt),
+    );
+  }
+
+  factory SyncTombstone.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SyncTombstone(
+      entityType: serializer.fromJson<String>(json['entityType']),
+      entityId: serializer.fromJson<String>(json['entityId']),
+      body: serializer.fromJson<String?>(json['body']),
+      logicalClock: serializer.fromJson<int>(json['logicalClock']),
+      deletedAt: serializer.fromJson<DateTime>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'entityType': serializer.toJson<String>(entityType),
+      'entityId': serializer.toJson<String>(entityId),
+      'body': serializer.toJson<String?>(body),
+      'logicalClock': serializer.toJson<int>(logicalClock),
+      'deletedAt': serializer.toJson<DateTime>(deletedAt),
+    };
+  }
+
+  SyncTombstone copyWith({
+    String? entityType,
+    String? entityId,
+    Value<String?> body = const Value.absent(),
+    int? logicalClock,
+    DateTime? deletedAt,
+  }) => SyncTombstone(
+    entityType: entityType ?? this.entityType,
+    entityId: entityId ?? this.entityId,
+    body: body.present ? body.value : this.body,
+    logicalClock: logicalClock ?? this.logicalClock,
+    deletedAt: deletedAt ?? this.deletedAt,
+  );
+  SyncTombstone copyWithCompanion(SyncTombstonesCompanion data) {
+    return SyncTombstone(
+      entityType: data.entityType.present
+          ? data.entityType.value
+          : this.entityType,
+      entityId: data.entityId.present ? data.entityId.value : this.entityId,
+      body: data.body.present ? data.body.value : this.body,
+      logicalClock: data.logicalClock.present
+          ? data.logicalClock.value
+          : this.logicalClock,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncTombstone(')
+          ..write('entityType: $entityType, ')
+          ..write('entityId: $entityId, ')
+          ..write('body: $body, ')
+          ..write('logicalClock: $logicalClock, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(entityType, entityId, body, logicalClock, deletedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SyncTombstone &&
+          other.entityType == this.entityType &&
+          other.entityId == this.entityId &&
+          other.body == this.body &&
+          other.logicalClock == this.logicalClock &&
+          other.deletedAt == this.deletedAt);
+}
+
+class SyncTombstonesCompanion extends UpdateCompanion<SyncTombstone> {
+  final Value<String> entityType;
+  final Value<String> entityId;
+  final Value<String?> body;
+  final Value<int> logicalClock;
+  final Value<DateTime> deletedAt;
+  final Value<int> rowid;
+  const SyncTombstonesCompanion({
+    this.entityType = const Value.absent(),
+    this.entityId = const Value.absent(),
+    this.body = const Value.absent(),
+    this.logicalClock = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SyncTombstonesCompanion.insert({
+    required String entityType,
+    required String entityId,
+    this.body = const Value.absent(),
+    required int logicalClock,
+    required DateTime deletedAt,
+    this.rowid = const Value.absent(),
+  }) : entityType = Value(entityType),
+       entityId = Value(entityId),
+       logicalClock = Value(logicalClock),
+       deletedAt = Value(deletedAt);
+  static Insertable<SyncTombstone> custom({
+    Expression<String>? entityType,
+    Expression<String>? entityId,
+    Expression<String>? body,
+    Expression<int>? logicalClock,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (entityType != null) 'entity_type': entityType,
+      if (entityId != null) 'entity_id': entityId,
+      if (body != null) 'body': body,
+      if (logicalClock != null) 'logical_clock': logicalClock,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SyncTombstonesCompanion copyWith({
+    Value<String>? entityType,
+    Value<String>? entityId,
+    Value<String?>? body,
+    Value<int>? logicalClock,
+    Value<DateTime>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return SyncTombstonesCompanion(
+      entityType: entityType ?? this.entityType,
+      entityId: entityId ?? this.entityId,
+      body: body ?? this.body,
+      logicalClock: logicalClock ?? this.logicalClock,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (entityType.present) {
+      map['entity_type'] = Variable<String>(entityType.value);
+    }
+    if (entityId.present) {
+      map['entity_id'] = Variable<String>(entityId.value);
+    }
+    if (body.present) {
+      map['body'] = Variable<String>(body.value);
+    }
+    if (logicalClock.present) {
+      map['logical_clock'] = Variable<int>(logicalClock.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncTombstonesCompanion(')
+          ..write('entityType: $entityType, ')
+          ..write('entityId: $entityId, ')
+          ..write('body: $body, ')
+          ..write('logicalClock: $logicalClock, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $SyncStateTable extends SyncState
+    with TableInfo<$SyncStateTable, SyncStateData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SyncStateTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lastSeenClockMeta = const VerificationMeta(
+    'lastSeenClock',
+  );
+  @override
+  late final GeneratedColumn<int> lastSeenClock = GeneratedColumn<int>(
+    'last_seen_clock',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _pulledThroughClockMeta =
+      const VerificationMeta('pulledThroughClock');
+  @override
+  late final GeneratedColumn<int> pulledThroughClock = GeneratedColumn<int>(
+    'pulled_through_clock',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, lastSeenClock, pulledThroughClock];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'sync_state';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SyncStateData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('last_seen_clock')) {
+      context.handle(
+        _lastSeenClockMeta,
+        lastSeenClock.isAcceptableOrUnknown(
+          data['last_seen_clock']!,
+          _lastSeenClockMeta,
+        ),
+      );
+    }
+    if (data.containsKey('pulled_through_clock')) {
+      context.handle(
+        _pulledThroughClockMeta,
+        pulledThroughClock.isAcceptableOrUnknown(
+          data['pulled_through_clock']!,
+          _pulledThroughClockMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  SyncStateData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SyncStateData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      lastSeenClock: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}last_seen_clock'],
+      )!,
+      pulledThroughClock: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}pulled_through_clock'],
+      )!,
+    );
+  }
+
+  @override
+  $SyncStateTable createAlias(String alias) {
+    return $SyncStateTable(attachedDatabase, alias);
+  }
+}
+
+class SyncStateData extends DataClass implements Insertable<SyncStateData> {
+  /// Always `1`. A table rather than a key-value blob so the clock can take
+  /// part in a transaction.
+  final int id;
+
+  /// Highest clock this device has seen, from its own changes or from a pull.
+  final int lastSeenClock;
+
+  /// Clock the last pull was acknowledged at. Only ever advanced after the
+  /// operations it covers have been written.
+  final int pulledThroughClock;
+  const SyncStateData({
+    required this.id,
+    required this.lastSeenClock,
+    required this.pulledThroughClock,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['last_seen_clock'] = Variable<int>(lastSeenClock);
+    map['pulled_through_clock'] = Variable<int>(pulledThroughClock);
+    return map;
+  }
+
+  SyncStateCompanion toCompanion(bool nullToAbsent) {
+    return SyncStateCompanion(
+      id: Value(id),
+      lastSeenClock: Value(lastSeenClock),
+      pulledThroughClock: Value(pulledThroughClock),
+    );
+  }
+
+  factory SyncStateData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SyncStateData(
+      id: serializer.fromJson<int>(json['id']),
+      lastSeenClock: serializer.fromJson<int>(json['lastSeenClock']),
+      pulledThroughClock: serializer.fromJson<int>(json['pulledThroughClock']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'lastSeenClock': serializer.toJson<int>(lastSeenClock),
+      'pulledThroughClock': serializer.toJson<int>(pulledThroughClock),
+    };
+  }
+
+  SyncStateData copyWith({
+    int? id,
+    int? lastSeenClock,
+    int? pulledThroughClock,
+  }) => SyncStateData(
+    id: id ?? this.id,
+    lastSeenClock: lastSeenClock ?? this.lastSeenClock,
+    pulledThroughClock: pulledThroughClock ?? this.pulledThroughClock,
+  );
+  SyncStateData copyWithCompanion(SyncStateCompanion data) {
+    return SyncStateData(
+      id: data.id.present ? data.id.value : this.id,
+      lastSeenClock: data.lastSeenClock.present
+          ? data.lastSeenClock.value
+          : this.lastSeenClock,
+      pulledThroughClock: data.pulledThroughClock.present
+          ? data.pulledThroughClock.value
+          : this.pulledThroughClock,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncStateData(')
+          ..write('id: $id, ')
+          ..write('lastSeenClock: $lastSeenClock, ')
+          ..write('pulledThroughClock: $pulledThroughClock')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, lastSeenClock, pulledThroughClock);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SyncStateData &&
+          other.id == this.id &&
+          other.lastSeenClock == this.lastSeenClock &&
+          other.pulledThroughClock == this.pulledThroughClock);
+}
+
+class SyncStateCompanion extends UpdateCompanion<SyncStateData> {
+  final Value<int> id;
+  final Value<int> lastSeenClock;
+  final Value<int> pulledThroughClock;
+  const SyncStateCompanion({
+    this.id = const Value.absent(),
+    this.lastSeenClock = const Value.absent(),
+    this.pulledThroughClock = const Value.absent(),
+  });
+  SyncStateCompanion.insert({
+    this.id = const Value.absent(),
+    this.lastSeenClock = const Value.absent(),
+    this.pulledThroughClock = const Value.absent(),
+  });
+  static Insertable<SyncStateData> custom({
+    Expression<int>? id,
+    Expression<int>? lastSeenClock,
+    Expression<int>? pulledThroughClock,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (lastSeenClock != null) 'last_seen_clock': lastSeenClock,
+      if (pulledThroughClock != null)
+        'pulled_through_clock': pulledThroughClock,
+    });
+  }
+
+  SyncStateCompanion copyWith({
+    Value<int>? id,
+    Value<int>? lastSeenClock,
+    Value<int>? pulledThroughClock,
+  }) {
+    return SyncStateCompanion(
+      id: id ?? this.id,
+      lastSeenClock: lastSeenClock ?? this.lastSeenClock,
+      pulledThroughClock: pulledThroughClock ?? this.pulledThroughClock,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (lastSeenClock.present) {
+      map['last_seen_clock'] = Variable<int>(lastSeenClock.value);
+    }
+    if (pulledThroughClock.present) {
+      map['pulled_through_clock'] = Variable<int>(pulledThroughClock.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncStateCompanion(')
+          ..write('id: $id, ')
+          ..write('lastSeenClock: $lastSeenClock, ')
+          ..write('pulledThroughClock: $pulledThroughClock')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -9431,6 +10615,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $McpApprovalsTable mcpApprovals = $McpApprovalsTable(this);
   late final $McpAuditLogTable mcpAuditLog = $McpAuditLogTable(this);
   late final $BookmarksTable bookmarks = $BookmarksTable(this);
+  late final $PendingOperationsTable pendingOperations =
+      $PendingOperationsTable(this);
+  late final $SyncTombstonesTable syncTombstones = $SyncTombstonesTable(this);
+  late final $SyncStateTable syncState = $SyncStateTable(this);
   late final HostsDao hostsDao = HostsDao(this as AppDatabase);
   late final IdentitiesDao identitiesDao = IdentitiesDao(this as AppDatabase);
   late final KnownHostsDao knownHostsDao = KnownHostsDao(this as AppDatabase);
@@ -9467,6 +10655,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     mcpApprovals,
     mcpAuditLog,
     bookmarks,
+    pendingOperations,
+    syncTombstones,
+    syncState,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -18573,6 +19764,675 @@ typedef $$BookmarksTableProcessedTableManager =
       Bookmark,
       PrefetchHooks Function({bool workspaceId, bool hostId, bool templateId})
     >;
+typedef $$PendingOperationsTableCreateCompanionBuilder =
+    PendingOperationsCompanion Function({
+      required String id,
+      required String entityType,
+      required String entityId,
+      required String operation,
+      Value<String?> payload,
+      Value<String?> beforeImage,
+      required int logicalClock,
+      required DateTime createdAt,
+      Value<int> rowid,
+    });
+typedef $$PendingOperationsTableUpdateCompanionBuilder =
+    PendingOperationsCompanion Function({
+      Value<String> id,
+      Value<String> entityType,
+      Value<String> entityId,
+      Value<String> operation,
+      Value<String?> payload,
+      Value<String?> beforeImage,
+      Value<int> logicalClock,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+class $$PendingOperationsTableFilterComposer
+    extends Composer<_$AppDatabase, $PendingOperationsTable> {
+  $$PendingOperationsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get entityType => $composableBuilder(
+    column: $table.entityType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get entityId => $composableBuilder(
+    column: $table.entityId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get operation => $composableBuilder(
+    column: $table.operation,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get payload => $composableBuilder(
+    column: $table.payload,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get beforeImage => $composableBuilder(
+    column: $table.beforeImage,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get logicalClock => $composableBuilder(
+    column: $table.logicalClock,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PendingOperationsTableOrderingComposer
+    extends Composer<_$AppDatabase, $PendingOperationsTable> {
+  $$PendingOperationsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get entityType => $composableBuilder(
+    column: $table.entityType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get entityId => $composableBuilder(
+    column: $table.entityId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get operation => $composableBuilder(
+    column: $table.operation,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get payload => $composableBuilder(
+    column: $table.payload,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get beforeImage => $composableBuilder(
+    column: $table.beforeImage,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get logicalClock => $composableBuilder(
+    column: $table.logicalClock,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PendingOperationsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $PendingOperationsTable> {
+  $$PendingOperationsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get entityType => $composableBuilder(
+    column: $table.entityType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get entityId =>
+      $composableBuilder(column: $table.entityId, builder: (column) => column);
+
+  GeneratedColumn<String> get operation =>
+      $composableBuilder(column: $table.operation, builder: (column) => column);
+
+  GeneratedColumn<String> get payload =>
+      $composableBuilder(column: $table.payload, builder: (column) => column);
+
+  GeneratedColumn<String> get beforeImage => $composableBuilder(
+    column: $table.beforeImage,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get logicalClock => $composableBuilder(
+    column: $table.logicalClock,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$PendingOperationsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $PendingOperationsTable,
+          PendingOperation,
+          $$PendingOperationsTableFilterComposer,
+          $$PendingOperationsTableOrderingComposer,
+          $$PendingOperationsTableAnnotationComposer,
+          $$PendingOperationsTableCreateCompanionBuilder,
+          $$PendingOperationsTableUpdateCompanionBuilder,
+          (
+            PendingOperation,
+            BaseReferences<
+              _$AppDatabase,
+              $PendingOperationsTable,
+              PendingOperation
+            >,
+          ),
+          PendingOperation,
+          PrefetchHooks Function()
+        > {
+  $$PendingOperationsTableTableManager(
+    _$AppDatabase db,
+    $PendingOperationsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PendingOperationsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PendingOperationsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$PendingOperationsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> entityType = const Value.absent(),
+                Value<String> entityId = const Value.absent(),
+                Value<String> operation = const Value.absent(),
+                Value<String?> payload = const Value.absent(),
+                Value<String?> beforeImage = const Value.absent(),
+                Value<int> logicalClock = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PendingOperationsCompanion(
+                id: id,
+                entityType: entityType,
+                entityId: entityId,
+                operation: operation,
+                payload: payload,
+                beforeImage: beforeImage,
+                logicalClock: logicalClock,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String entityType,
+                required String entityId,
+                required String operation,
+                Value<String?> payload = const Value.absent(),
+                Value<String?> beforeImage = const Value.absent(),
+                required int logicalClock,
+                required DateTime createdAt,
+                Value<int> rowid = const Value.absent(),
+              }) => PendingOperationsCompanion.insert(
+                id: id,
+                entityType: entityType,
+                entityId: entityId,
+                operation: operation,
+                payload: payload,
+                beforeImage: beforeImage,
+                logicalClock: logicalClock,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$PendingOperationsTable, PendingOperation>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $PendingOperationsTable,
+                    PendingOperation
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PendingOperationsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $PendingOperationsTable,
+      PendingOperation,
+      $$PendingOperationsTableFilterComposer,
+      $$PendingOperationsTableOrderingComposer,
+      $$PendingOperationsTableAnnotationComposer,
+      $$PendingOperationsTableCreateCompanionBuilder,
+      $$PendingOperationsTableUpdateCompanionBuilder,
+      (
+        PendingOperation,
+        BaseReferences<
+          _$AppDatabase,
+          $PendingOperationsTable,
+          PendingOperation
+        >,
+      ),
+      PendingOperation,
+      PrefetchHooks Function()
+    >;
+typedef $$SyncTombstonesTableCreateCompanionBuilder =
+    SyncTombstonesCompanion Function({
+      required String entityType,
+      required String entityId,
+      Value<String?> body,
+      required int logicalClock,
+      required DateTime deletedAt,
+      Value<int> rowid,
+    });
+typedef $$SyncTombstonesTableUpdateCompanionBuilder =
+    SyncTombstonesCompanion Function({
+      Value<String> entityType,
+      Value<String> entityId,
+      Value<String?> body,
+      Value<int> logicalClock,
+      Value<DateTime> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$SyncTombstonesTableFilterComposer
+    extends Composer<_$AppDatabase, $SyncTombstonesTable> {
+  $$SyncTombstonesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get entityType => $composableBuilder(
+    column: $table.entityType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get entityId => $composableBuilder(
+    column: $table.entityId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get body => $composableBuilder(
+    column: $table.body,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get logicalClock => $composableBuilder(
+    column: $table.logicalClock,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$SyncTombstonesTableOrderingComposer
+    extends Composer<_$AppDatabase, $SyncTombstonesTable> {
+  $$SyncTombstonesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get entityType => $composableBuilder(
+    column: $table.entityType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get entityId => $composableBuilder(
+    column: $table.entityId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get body => $composableBuilder(
+    column: $table.body,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get logicalClock => $composableBuilder(
+    column: $table.logicalClock,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SyncTombstonesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SyncTombstonesTable> {
+  $$SyncTombstonesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get entityType => $composableBuilder(
+    column: $table.entityType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get entityId =>
+      $composableBuilder(column: $table.entityId, builder: (column) => column);
+
+  GeneratedColumn<String> get body =>
+      $composableBuilder(column: $table.body, builder: (column) => column);
+
+  GeneratedColumn<int> get logicalClock => $composableBuilder(
+    column: $table.logicalClock,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$SyncTombstonesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SyncTombstonesTable,
+          SyncTombstone,
+          $$SyncTombstonesTableFilterComposer,
+          $$SyncTombstonesTableOrderingComposer,
+          $$SyncTombstonesTableAnnotationComposer,
+          $$SyncTombstonesTableCreateCompanionBuilder,
+          $$SyncTombstonesTableUpdateCompanionBuilder,
+          (
+            SyncTombstone,
+            BaseReferences<_$AppDatabase, $SyncTombstonesTable, SyncTombstone>,
+          ),
+          SyncTombstone,
+          PrefetchHooks Function()
+        > {
+  $$SyncTombstonesTableTableManager(
+    _$AppDatabase db,
+    $SyncTombstonesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SyncTombstonesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SyncTombstonesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SyncTombstonesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> entityType = const Value.absent(),
+                Value<String> entityId = const Value.absent(),
+                Value<String?> body = const Value.absent(),
+                Value<int> logicalClock = const Value.absent(),
+                Value<DateTime> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SyncTombstonesCompanion(
+                entityType: entityType,
+                entityId: entityId,
+                body: body,
+                logicalClock: logicalClock,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String entityType,
+                required String entityId,
+                Value<String?> body = const Value.absent(),
+                required int logicalClock,
+                required DateTime deletedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => SyncTombstonesCompanion.insert(
+                entityType: entityType,
+                entityId: entityId,
+                body: body,
+                logicalClock: logicalClock,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$SyncTombstonesTable, SyncTombstone>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $SyncTombstonesTable,
+                    SyncTombstone
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$SyncTombstonesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SyncTombstonesTable,
+      SyncTombstone,
+      $$SyncTombstonesTableFilterComposer,
+      $$SyncTombstonesTableOrderingComposer,
+      $$SyncTombstonesTableAnnotationComposer,
+      $$SyncTombstonesTableCreateCompanionBuilder,
+      $$SyncTombstonesTableUpdateCompanionBuilder,
+      (
+        SyncTombstone,
+        BaseReferences<_$AppDatabase, $SyncTombstonesTable, SyncTombstone>,
+      ),
+      SyncTombstone,
+      PrefetchHooks Function()
+    >;
+typedef $$SyncStateTableCreateCompanionBuilder =
+    SyncStateCompanion Function({
+      Value<int> id,
+      Value<int> lastSeenClock,
+      Value<int> pulledThroughClock,
+    });
+typedef $$SyncStateTableUpdateCompanionBuilder =
+    SyncStateCompanion Function({
+      Value<int> id,
+      Value<int> lastSeenClock,
+      Value<int> pulledThroughClock,
+    });
+
+class $$SyncStateTableFilterComposer
+    extends Composer<_$AppDatabase, $SyncStateTable> {
+  $$SyncStateTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get lastSeenClock => $composableBuilder(
+    column: $table.lastSeenClock,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get pulledThroughClock => $composableBuilder(
+    column: $table.pulledThroughClock,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$SyncStateTableOrderingComposer
+    extends Composer<_$AppDatabase, $SyncStateTable> {
+  $$SyncStateTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get lastSeenClock => $composableBuilder(
+    column: $table.lastSeenClock,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get pulledThroughClock => $composableBuilder(
+    column: $table.pulledThroughClock,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SyncStateTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SyncStateTable> {
+  $$SyncStateTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get lastSeenClock => $composableBuilder(
+    column: $table.lastSeenClock,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get pulledThroughClock => $composableBuilder(
+    column: $table.pulledThroughClock,
+    builder: (column) => column,
+  );
+}
+
+class $$SyncStateTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SyncStateTable,
+          SyncStateData,
+          $$SyncStateTableFilterComposer,
+          $$SyncStateTableOrderingComposer,
+          $$SyncStateTableAnnotationComposer,
+          $$SyncStateTableCreateCompanionBuilder,
+          $$SyncStateTableUpdateCompanionBuilder,
+          (
+            SyncStateData,
+            BaseReferences<_$AppDatabase, $SyncStateTable, SyncStateData>,
+          ),
+          SyncStateData,
+          PrefetchHooks Function()
+        > {
+  $$SyncStateTableTableManager(_$AppDatabase db, $SyncStateTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SyncStateTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SyncStateTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SyncStateTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> lastSeenClock = const Value.absent(),
+                Value<int> pulledThroughClock = const Value.absent(),
+              }) => SyncStateCompanion(
+                id: id,
+                lastSeenClock: lastSeenClock,
+                pulledThroughClock: pulledThroughClock,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> lastSeenClock = const Value.absent(),
+                Value<int> pulledThroughClock = const Value.absent(),
+              }) => SyncStateCompanion.insert(
+                id: id,
+                lastSeenClock: lastSeenClock,
+                pulledThroughClock: pulledThroughClock,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$SyncStateTable, SyncStateData>(table),
+                  BaseReferences<_$AppDatabase, $SyncStateTable, SyncStateData>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$SyncStateTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SyncStateTable,
+      SyncStateData,
+      $$SyncStateTableFilterComposer,
+      $$SyncStateTableOrderingComposer,
+      $$SyncStateTableAnnotationComposer,
+      $$SyncStateTableCreateCompanionBuilder,
+      $$SyncStateTableUpdateCompanionBuilder,
+      (
+        SyncStateData,
+        BaseReferences<_$AppDatabase, $SyncStateTable, SyncStateData>,
+      ),
+      SyncStateData,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -18613,4 +20473,10 @@ class $AppDatabaseManager {
       $$McpAuditLogTableTableManager(_db, _db.mcpAuditLog);
   $$BookmarksTableTableManager get bookmarks =>
       $$BookmarksTableTableManager(_db, _db.bookmarks);
+  $$PendingOperationsTableTableManager get pendingOperations =>
+      $$PendingOperationsTableTableManager(_db, _db.pendingOperations);
+  $$SyncTombstonesTableTableManager get syncTombstones =>
+      $$SyncTombstonesTableTableManager(_db, _db.syncTombstones);
+  $$SyncStateTableTableManager get syncState =>
+      $$SyncStateTableTableManager(_db, _db.syncState);
 }

@@ -40,6 +40,9 @@ part 'app_database.g.dart';
     McpApprovals,
     McpAuditLog,
     Bookmarks,
+    PendingOperations,
+    SyncTombstones,
+    SyncState,
   ],
   daos: [
     HostsDao,
@@ -59,7 +62,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration {
@@ -119,6 +122,14 @@ class AppDatabase extends _$AppDatabase {
         }
         if (from < 9) {
           await m.createTable(bookmarks);
+        }
+        if (from < 10) {
+          // The local outbox for automatic sync. Empty on an existing
+          // install: nothing that happened before this migration was
+          // recorded, and the first snapshot is what carries it instead.
+          await m.createTable(pendingOperations);
+          await m.createTable(syncTombstones);
+          await m.createTable(syncState);
         }
       },
     );

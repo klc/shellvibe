@@ -89,7 +89,23 @@ void main() {
         final appDb = AppDatabase(NativeDatabase(tempDbFile));
         db = appDb;
 
-        expect(appDb.schemaVersion, equals(9));
+        expect(appDb.schemaVersion, equals(10));
+
+        // The v10 tables have to exist after a migration, not only after a
+        // fresh create: a device that upgrades and then makes a change would
+        // otherwise fail on the write that records it.
+        for (final table in ['pending_operations', 'sync_tombstones',
+            'sync_state']) {
+          final found = await appDb
+              .customSelect(
+                "SELECT name FROM sqlite_master WHERE type = 'table' "
+                'AND name = ?',
+                variables: [Variable.withString(table)],
+              )
+              .get();
+
+          expect(found, isNotEmpty, reason: '$table is missing after upgrade');
+        }
 
         // 3. Verify existing legacy host record can be fetched.
         final fetchedHost = await appDb.hostsDao.getHostById('host-v1');
