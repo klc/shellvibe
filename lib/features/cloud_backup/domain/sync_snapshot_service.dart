@@ -46,6 +46,27 @@ enum SyncGroundProblem {
   cannotOpen,
 }
 
+/// How far the log may run past the ground before it is rewritten.
+///
+/// The ground and the log have to overlap. The server keeps operations for
+/// ninety days, so a ground older than that window is one no device can bridge
+/// to: it restores, then asks for operations that were pruned, and the gap
+/// between them is data that is simply missing -- silently, because nothing in
+/// that sequence fails.
+///
+/// Five hundred is a starting point rather than a measurement, chosen to be
+/// far below what ninety days of operations comes to while still rare enough
+/// that refreshing does not become a habit. `docs/sync_v3_plan.md` 12 keeps
+/// this open.
+const int kSyncGroundStaleOps = 500;
+
+/// How old the ground may get before it is rewritten, whatever the log did.
+///
+/// A quiet account produces few operations, so the clock test alone would let
+/// a ground sit until it fell out of the retention window without ever looking
+/// stale.
+const Duration kSyncGroundMaxAge = Duration(days: 7);
+
 /// Reads and writes the vault automatic sync starts a new device from.
 ///
 /// Separate from [CloudBackupService] in intent, not in machinery: it drives
@@ -60,7 +81,19 @@ enum SyncGroundProblem {
 final class SyncSnapshotService {
   final CloudBackupService backups;
 
-  const SyncSnapshotService({required this.backups});
+  /// Which ground this device last wrote or started from.
+  ///
+  /// Injected rather than read here: this class owns the rules about grounds,
+  /// not where a device keeps its notes.
+  final Future<({int revision, int clock})?> Function() readMark;
+  final Future<void> Function({required int revision, required int clock})
+  writeMark;
+
+  const SyncSnapshotService({
+    required this.backups,
+    required this.readMark,
+    required this.writeMark,
+  });
 
   /// A service pointed at the sync vault.
   ///
@@ -72,6 +105,9 @@ final class SyncSnapshotService {
     required VaultTransport syncApi,
     required Future<String?> Function() readPendingUploadId,
     required Future<void> Function(String? uploadId) writePendingUploadId,
+    required Future<({int revision, int clock})?> Function() readMark,
+    required Future<void> Function({required int revision, required int clock})
+    writeMark,
   }) => SyncSnapshotService(
     backups: CloudBackupService(
       api: syncApi,
@@ -80,6 +116,8 @@ final class SyncSnapshotService {
       writePendingUploadId: writePendingUploadId,
       newUploadId: backupService.newUploadId,
     ),
+    readMark: readMark,
+    writeMark: writeMark,
   );
 
   Future<VaultHead> head() => backups.head();
@@ -100,8 +138,9 @@ final class SyncSnapshotService {
     bool force = false,
   }) async {
     final state = await db.syncJournal?.readState();
+    final clock = state?.lastSeenClock ?? 0;
 
-    return backups.upload(
+    final result = await backups.upload(
       db: db,
       passphrase: passphrase,
       deviceId: deviceId,
@@ -110,8 +149,73 @@ final class SyncSnapshotService {
       force: force,
       scope: BackupScope.syncGround,
       syncKey: syncKey,
-      syncClock: state?.lastSeenClock ?? 0,
+      syncClock: clock,
     );
+
+    if (result.succeeded) {
+      await writeMark(revision: result.revision!, clock: clock);
+    }
+
+    return result;
+  }
+
+  /// Rewrites the ground when it has fallen too far behind the log.
+  ///
+  /// The two have to overlap. A device restores the ground and then asks for
+  /// operations from the clock it recorded; if those were pruned, what sits
+  /// between them is data no device can reach -- and nothing in that sequence
+  /// fails, so nobody finds out.
+  ///
+  /// Only one device has to do this, so a conflict is success by another
+  /// route: it means another device rewrote it first. Never forced --
+  /// overwriting a ground another device has just written is the one move here
+  /// that loses data.
+  ///
+  /// Returns true when this device wrote a new one.
+  Future<bool> refreshIfStale({
+    required AppDatabase db,
+    required String passphrase,
+    required String deviceId,
+    required int maxSizeBytes,
+    required Uint8List syncKey,
+    String? recoveryCode,
+    DateTime? now,
+  }) async {
+    final current = await head();
+
+    // Nothing to refresh. The account has no ground, which is the joining
+    // path's problem and not this one's.
+    if (current.isEmpty) return false;
+
+    final mark = await readMark();
+    final at = now ?? DateTime.now();
+
+    final tooOld =
+        current.updatedAt != null &&
+        at.difference(current.updatedAt!) > kSyncGroundMaxAge;
+
+    var driftedTooFar = false;
+    if (mark != null && mark.revision == current.currentRevision) {
+      final state = await db.syncJournal?.readState();
+      driftedTooFar =
+          (state?.lastSeenClock ?? 0) - mark.clock > kSyncGroundStaleOps;
+    }
+
+    // A revision this device does not recognise means another one rewrote the
+    // ground, and only it knows the clock that went in. Age still applies --
+    // it comes from the server and every device reads the same number.
+    if (!tooOld && !driftedTooFar) return false;
+
+    final written = await write(
+      db: db,
+      passphrase: passphrase,
+      deviceId: deviceId,
+      maxSizeBytes: maxSizeBytes,
+      syncKey: syncKey,
+      recoveryCode: recoveryCode,
+    );
+
+    return written.succeeded;
   }
 
   /// The newest revision that covers the whole sync scope.
@@ -185,11 +289,19 @@ final class SyncSnapshotService {
     required SyncGround ground,
     required String secret,
     BackupUnlockMethod unlockWith = BackupUnlockMethod.passphrase,
-  }) => backups.sync.importEncryptedBackup(
-    backupPackageJson: ground.ciphertext,
-    db: db,
-    masterPassword: secret,
-    unlockWith: unlockWith,
-    snapshotDeviceId: ground.deviceId,
-  );
+  }) async {
+    final result = await backups.sync.importEncryptedBackup(
+      backupPackageJson: ground.ciphertext,
+      db: db,
+      masterPassword: secret,
+      unlockWith: unlockWith,
+      snapshotDeviceId: ground.deviceId,
+    );
+
+    // This device now stands on this ground, so staleness is measured from
+    // here rather than from whatever it last wrote itself.
+    await writeMark(revision: ground.revision, clock: ground.syncClock ?? 0);
+
+    return result;
+  }
 }

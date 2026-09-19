@@ -33,6 +33,7 @@ void main() {
   late SyncSnapshotService ground;
   late String? backupUploadId;
   late String? syncUploadId;
+  ({int revision, int clock})? mark;
 
   const passphrase = 'a sync passphrase';
   const deviceId = '01DEVICEULID00000000000000';
@@ -52,6 +53,7 @@ void main() {
     e2ee = E2EECloudSyncService(vaultKeyService: vaultKeyService);
     backupUploadId = null;
     syncUploadId = null;
+    mark = null;
 
     final client = ApiClient(
       transport: transport,
@@ -69,6 +71,9 @@ void main() {
       syncApi: CloudBackupApi(client: client, kind: VaultKind.sync),
       readPendingUploadId: () async => syncUploadId,
       writePendingUploadId: (id) async => syncUploadId = id,
+      readMark: () async => mark,
+      writeMark: ({required int revision, required int clock}) async =>
+          mark = (revision: revision, clock: clock),
     );
   });
 

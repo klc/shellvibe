@@ -58,6 +58,7 @@ void main() {
 
     final e2ee = E2EECloudSyncService(vaultKeyService: vaultKeyService);
     String? pendingUpload;
+    ({int revision, int clock})? mark;
 
     final ground = SyncSnapshotService(
       backups: CloudBackupService(
@@ -67,6 +68,9 @@ void main() {
         writePendingUploadId: (value) async => pendingUpload = value,
         newUploadId: () => '$id-${DateTime.now().microsecondsSinceEpoch}',
       ),
+      readMark: () async => mark,
+      writeMark: ({required int revision, required int clock}) async =>
+          mark = (revision: revision, clock: clock),
     );
 
     final engine = SyncEngine(
@@ -253,6 +257,72 @@ void main() {
     });
   });
 
+  group('keeping the ground and the log overlapping', () {
+    test('a fresh ground is left alone', () async {
+      final desktop = await device('desktop');
+      await desktop.addHosts(5);
+      await desktop.joinSync(syncKey, passphrase);
+
+      final before = vault.stored.length;
+      final refreshed = await desktop.refreshGround(syncKey, passphrase);
+
+      expect(refreshed, isFalse);
+      expect(vault.stored, hasLength(before));
+    });
+
+    test('a ground the log has run past is rewritten', () async {
+      final desktop = await device('desktop');
+      await desktop.addHosts(5);
+      await desktop.joinSync(syncKey, passphrase);
+
+      // Far more operations than the ground accounts for. A device restoring
+      // it would ask the log for everything since, and the server keeps only
+      // ninety days of it.
+      await desktop.journal.acknowledgePull(kSyncGroundStaleOps + 1);
+
+      expect(await desktop.refreshGround(syncKey, passphrase), isTrue);
+      expect(vault.stored, hasLength(2));
+    });
+
+    test('an old ground is rewritten even on a quiet account', () async {
+      // Few operations, so the clock never looks stale -- and the ground sits
+      // until it falls out of the retention window with nobody noticing.
+      final desktop = await device('desktop');
+      await desktop.addHosts(5);
+      await desktop.joinSync(syncKey, passphrase);
+
+      vault.updatedAt = DateTime.now().subtract(
+        kSyncGroundMaxAge + const Duration(days: 1),
+      );
+
+      expect(await desktop.refreshGround(syncKey, passphrase), isTrue);
+    });
+
+    test('an empty account is the joining path, not this one', () async {
+      final desktop = await device('desktop');
+      await desktop.addHosts(5);
+
+      expect(await desktop.refreshGround(syncKey, passphrase), isFalse);
+      expect(vault.stored, isEmpty);
+    });
+
+    test('a ground another device rewrote is left to it', () async {
+      // Only one device has to do this. Measuring drift against a revision
+      // this device did not write would compare its own clock with a baseline
+      // it does not have.
+      final desktop = await device('desktop');
+      await desktop.addHosts(5);
+      await desktop.joinSync(syncKey, passphrase);
+      await desktop.journal.acknowledgePull(kSyncGroundStaleOps + 1);
+
+      final phone = await device('phone');
+      await phone.joinSync(syncKey, passphrase);
+      await phone.refreshGroundForced(syncKey, passphrase);
+
+      expect(await desktop.refreshGround(syncKey, passphrase), isFalse);
+    });
+  });
+
   group('refusing to start from the wrong thing', () {
     test('a partial ground is refused rather than half-applied', () async {
       final desktop = await device('desktop');
@@ -304,6 +374,26 @@ final class _Device {
     syncKey: key,
   );
 
+  Future<bool> refreshGround(Uint8List key, String secret) =>
+      join.ground.refreshIfStale(
+        db: db,
+        passphrase: secret,
+        deviceId: id,
+        maxSizeBytes: 5 * 1024 * 1024,
+        syncKey: key,
+      );
+
+  /// Writes a new ground regardless, so a test can stand in for the device
+  /// that got there first.
+  Future<void> refreshGroundForced(Uint8List key, String secret) =>
+      join.ground.write(
+        db: db,
+        passphrase: secret,
+        deviceId: id,
+        maxSizeBytes: 5 * 1024 * 1024,
+        syncKey: key,
+      );
+
   Future<int> hostCount() async => (await db.select(db.hosts).get()).length;
 
   Future<void> addHosts(int count, {String prefix = 'host'}) async {
@@ -353,11 +443,15 @@ final class _Vault implements VaultTransport {
   @override
   VaultKind get kind => VaultKind.sync;
 
+  /// What the server reports as the last write, which the age rule reads.
+  DateTime? updatedAt;
+
   @override
   Future<VaultHead> head() async => VaultHead(
     id: 'vault',
     currentRevision: stored.length,
     currentHash: stored.isEmpty ? null : stored.last.ciphertextSha256,
+    updatedAt: stored.isEmpty ? null : (updatedAt ?? DateTime.now()),
   );
 
   /// Newest first, the way the server orders them.

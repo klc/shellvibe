@@ -149,6 +149,32 @@ final class CloudBackupStore {
     return minted;
   }
 
+  /// The sync ground this device last wrote or started from.
+  ///
+  /// Two numbers: which revision it was, and the clock it recorded. The clock
+  /// lives inside the ciphertext, so asking the server for it means
+  /// downloading and decrypting a snapshot -- too much to spend on a question
+  /// asked at every start.
+  ///
+  /// Null when this device has never touched a ground, which is also what a
+  /// device that has not joined reports.
+  Future<({int revision, int clock})?> readGroundMark() async {
+    final value = await storage.read(key: _groundMarkKey);
+    if (value == null || value.isEmpty) return null;
+
+    final parts = value.split(':');
+    if (parts.length != 2) return null;
+
+    final revision = int.tryParse(parts[0]);
+    final clock = int.tryParse(parts[1]);
+    if (revision == null || clock == null) return null;
+
+    return (revision: revision, clock: clock);
+  }
+
+  Future<void> writeGroundMark({required int revision, required int clock}) =>
+      storage.write(key: _groundMarkKey, value: '$revision:$clock');
+
   /// When this device last wrote a backup that held everything.
   ///
   /// A vault whose whole history is partial only reveals that at restore
@@ -176,6 +202,7 @@ final class CloudBackupStore {
     await storage.delete(key: _lastRevisionKey);
     await storage.delete(key: _backupOnExitKey);
     await storage.delete(key: _lastFullBackupKey);
+    await storage.delete(key: _groundMarkKey);
     await storage.delete(key: _syncKeyKey);
   }
 
@@ -191,5 +218,6 @@ final class CloudBackupStore {
   /// lifecycle, and a scheduled backup replaces it.
   static const String _backupOnExitKey = 'shellvibe_sync_backup_on_exit';
   static const String _lastFullBackupKey = 'shellvibe_sync_last_full_backup';
+  static const String _groundMarkKey = 'shellvibe_sync_ground_mark';
   static const String _syncKeyKey = 'shellvibe_sync_key';
 }
