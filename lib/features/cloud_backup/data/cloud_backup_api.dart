@@ -103,6 +103,27 @@ final class BackupRevision {
   );
 }
 
+/// Which of an account's two vaults a call means.
+///
+/// They were one, and one revision chain cannot serve both. A sync snapshot
+/// has to be rewritten as the operation log moves on, which inside the plan's
+/// backup window would push the user's own backups out of it within a couple
+/// of months. Separate lifetimes too: deleting your backups must not stop sync
+/// on the devices that are still running.
+enum VaultKind {
+  /// What the user asked to keep.
+  backup('backup'),
+
+  /// The ground a joining device starts from, and the home of the operation
+  /// log. Always written with the full scope -- a partial one cannot be the
+  /// ground anything starts from.
+  sync('sync');
+
+  const VaultKind(this.wireName);
+
+  final String wireName;
+}
+
 /// The `/sync/vault` half of the v1 API.
 ///
 /// Carries opaque ciphertext and nothing else. It never sees a passphrase, a
@@ -111,11 +132,20 @@ final class BackupRevision {
 final class CloudBackupApi {
   final ApiClient client;
 
-  const CloudBackupApi({required this.client});
+  /// The vault every call on this instance addresses.
+  ///
+  /// Fixed at construction rather than passed per call: an instance that could
+  /// be pointed at either vault would put the decision at every call site, and
+  /// one call site forgetting it writes a backup into the sync slot.
+  final VaultKind kind;
+
+  const CloudBackupApi({required this.client, this.kind = VaultKind.backup});
+
+  Map<String, String> get _kindQuery => {'kind': kind.wireName};
 
   /// Reads the vault head. The server creates an empty vault on first read.
   Future<VaultHead> head() async {
-    final response = await client.get('/sync/vault');
+    final response = await client.get('/sync/vault', query: _kindQuery);
 
     return VaultHead.fromJson(response.dataMap);
   }
@@ -123,7 +153,10 @@ final class CloudBackupApi {
   /// Lists stored revisions, newest first as the server orders them. The
   /// server caps this at 20.
   Future<List<BackupRevision>> revisions() async {
-    final response = await client.get('/sync/vault/revisions');
+    final response = await client.get(
+      '/sync/vault/revisions',
+      query: _kindQuery,
+    );
 
     return response.dataList
         .map(BackupRevision.fromJson)
@@ -132,7 +165,10 @@ final class CloudBackupApi {
 
   /// Downloads one revision, ciphertext included.
   Future<BackupRevision> revision(int revision) async {
-    final response = await client.get('/sync/vault/revisions/$revision');
+    final response = await client.get(
+      '/sync/vault/revisions/$revision',
+      query: _kindQuery,
+    );
 
     return BackupRevision.fromJson(response.dataMap);
   }
@@ -160,6 +196,7 @@ final class CloudBackupApi {
     final response = await client.put(
       '/sync/vault',
       body: {
+        'kind': kind.wireName,
         'base_revision': baseRevision,
         'upload_id': uploadId,
         'device_id': deviceId,
@@ -174,5 +211,6 @@ final class CloudBackupApi {
   }
 
   /// Deletes the vault and every revision in it. Irreversible.
-  Future<void> deleteVault() => client.delete('/sync/vault');
+  Future<void> deleteVault() =>
+      client.delete('/sync/vault', body: {'kind': kind.wireName});
 }

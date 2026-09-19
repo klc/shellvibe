@@ -67,6 +67,22 @@ final class CloudBackupStore {
       ? storage.delete(key: _pendingUploadKey)
       : storage.write(key: _pendingUploadKey, value: uploadId);
 
+  /// The same, for the sync vault.
+  ///
+  /// A separate key, and it has to be: the idempotency key is what the server
+  /// answers a retry with. Shared between the two vaults, a retried backup
+  /// upload could be answered with the sync vault's stored revision -- a
+  /// success for a write that never happened.
+  Future<String?> readPendingSyncUploadId() async {
+    final value = await storage.read(key: _pendingSyncUploadKey);
+
+    return (value == null || value.isEmpty) ? null : value;
+  }
+
+  Future<void> writePendingSyncUploadId(String? uploadId) => uploadId == null
+      ? storage.delete(key: _pendingSyncUploadKey)
+      : storage.write(key: _pendingSyncUploadKey, value: uploadId);
+
   /// The revision number this device last uploaded or restored, for showing
   /// "you are up to date" without a round trip.
   Future<int?> readLastKnownRevision() async {
@@ -156,6 +172,7 @@ final class CloudBackupStore {
     await storage.delete(key: _passphraseKey);
     await storage.delete(key: _recoveryCodeKey);
     await storage.delete(key: _pendingUploadKey);
+    await storage.delete(key: _pendingSyncUploadKey);
     await storage.delete(key: _lastRevisionKey);
     await storage.delete(key: _backupOnExitKey);
     await storage.delete(key: _lastFullBackupKey);
@@ -165,6 +182,8 @@ final class CloudBackupStore {
   static const String _passphraseKey = 'shellvibe_sync_passphrase';
   static const String _recoveryCodeKey = 'shellvibe_sync_recovery_code';
   static const String _pendingUploadKey = 'shellvibe_sync_pending_upload';
+  static const String _pendingSyncUploadKey =
+      'shellvibe_sync_pending_ground_upload';
   static const String _lastRevisionKey = 'shellvibe_sync_last_revision';
 
   /// Read by nothing. Kept only so [clear] removes what earlier builds wrote:

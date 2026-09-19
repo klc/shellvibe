@@ -81,6 +81,28 @@ class BackupScope {
     BackupCategory.settings,
   });
 
+  /// What a sync snapshot carries: exactly what automatic sync carries.
+  ///
+  /// Not [full], and the two exclusions are the same ones automatic sync makes
+  /// (`docs/sync_v2_plan.md` 4.7, 4.8). A joining device applies this ground
+  /// in the background, without being asked, so anything the background is not
+  /// allowed to move cannot ride in on it:
+  ///
+  /// - **Known hosts.** A host key is a trust decision made on one device.
+  ///   Carrying it to another says yes to a question that device was never
+  ///   asked. A manual restore is different -- the user asked for it, once.
+  /// - **App settings.** Font size and theme are meant to differ per device.
+  ///   A ground that carried them would push one device's taste onto every
+  ///   other, every time a new one joined.
+  static const BackupScope syncGround = BackupScope._({
+    BackupCategory.hosts,
+    BackupCategory.identities,
+    BackupCategory.snippetsAndRunbooks,
+    BackupCategory.portForwards,
+    BackupCategory.templates,
+    BackupCategory.bookmarks,
+  });
+
   factory BackupScope.of(Iterable<BackupCategory> categories) =>
       BackupScope._(Set.unmodifiable(categories.toSet()));
 
@@ -99,6 +121,13 @@ class BackupScope {
   bool contains(BackupCategory category) => categories.contains(category);
 
   bool get isFull => categories.length == full.categories.length;
+
+  /// Whether this scope is complete enough to be a cold start.
+  ///
+  /// A device that joins from a narrower snapshot misses the categories it
+  /// left out, and misses them silently: the operation log only reaches back
+  /// so far, so what the snapshot skipped is not waiting anywhere else.
+  bool get coversSyncGround => categories.containsAll(syncGround.categories);
 
   /// Categories selected while the category they require is not.
   ///
