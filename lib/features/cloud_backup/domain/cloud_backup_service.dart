@@ -121,6 +121,7 @@ final class CloudBackupService {
     bool force = false,
     BackupScope scope = BackupScope.full,
     Map<String, dynamic>? settings,
+    Uint8List? syncKey,
   }) async {
     final String envelope;
     try {
@@ -130,6 +131,7 @@ final class CloudBackupService {
         recoveryCode: recoveryCode,
         scope: scope,
         settings: settings,
+        syncKey: syncKey,
       );
     } on Object catch (e) {
       return CloudBackupUploadResult.failed(
@@ -250,7 +252,7 @@ final class CloudBackupService {
   /// rather than at the next upload. Nothing touches the database -- the
   /// payload is decrypted and discarded, because the question here is only
   /// whether the key is right.
-  Future<bool> canOpen({
+  Future<OpenedBackup?> canOpen({
     required int revision,
     required String secret,
     BackupUnlockMethod unlockWith = BackupUnlockMethod.passphrase,
@@ -258,18 +260,20 @@ final class CloudBackupService {
     final stored = await api.revision(revision);
     final ciphertext = stored.ciphertext;
 
-    if (ciphertext == null || ciphertext.isEmpty) return false;
+    if (ciphertext == null || ciphertext.isEmpty) return null;
 
     try {
-      await BackupEnvelope().open(
+      // The opened envelope is returned rather than discarded, because this is
+      // also where a joining device learns the vault's sync key. It cannot be
+      // derived or invented: every device has to hold the same one, and the
+      // only place it exists is inside an envelope.
+      return await BackupEnvelope().open(
         envelopeJson: ciphertext,
         secret: secret,
         method: unlockWith,
       );
-
-      return true;
     } on BackupEnvelopeException {
-      return false;
+      return null;
     }
   }
 

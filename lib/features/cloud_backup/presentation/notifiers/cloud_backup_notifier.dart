@@ -269,13 +269,13 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
         return false;
       }
 
-      final opens = await service.canOpen(
+      final opened = await service.canOpen(
         revision: head.currentRevision,
         secret: secret,
         unlockWith: method,
       );
 
-      if (!opens) {
+      if (opened == null) {
         state = AsyncValue.data(
           current.copyWith(
             busy: false,
@@ -310,6 +310,12 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
       if (recoveryCode != null && recoveryCode.isNotEmpty) {
         await _store.writeRecoveryCode(recoveryCode);
       }
+
+      // The vault's sync key, if this backup carries one. It cannot be derived
+      // or invented: every device has to hold the same key, and the only place
+      // it exists is inside an envelope. A v3 backup has none, and this device
+      // learns it from the first v4 backup it opens instead.
+      await _store.adoptSyncKey(opened.syncKey);
 
       state = AsyncValue.data(
         CloudBackupState(
@@ -439,6 +445,14 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
     final recoveryCode = await _store.readRecoveryCode();
     final scope = await _scopeStore.read(BackupTarget.cloud);
 
+    // Automatic sync needs a key that outlives the passphrase, and a backup is
+    // the only place it can live. The first device to switch sync on mints it;
+    // every other device learns it by opening a backup that carries it, which
+    // is why sync cannot start before one exists.
+    final syncKey = await _store.syncKeyForUpload(
+      autoSyncEnabled: await _scopeStore.readAutoSyncEnabled(),
+    );
+
     // App settings live in secure storage, not the database, so they are read
     // here and handed over rather than reached for inside the sync service.
     final settings = scope.contains(BackupCategory.settings)
@@ -455,6 +469,7 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
         force: force,
         scope: scope,
         settings: settings,
+        syncKey: syncKey,
       );
 
       if (!result.succeeded) {
@@ -508,6 +523,7 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
       );
 
       await _store.writeLastKnownRevision(revision);
+      await _store.adoptSyncKey(result.syncKey);
 
       // Settings come back as the blob they were stored as. Applying them is
       // this notifier's job, not the sync service's: the service owns the
@@ -582,13 +598,13 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
       final head = await service.head();
 
       if (!head.isEmpty) {
-        final opens = await service.canOpen(
+        final opened = await service.canOpen(
           revision: head.currentRevision,
           secret: recoveryCode,
           unlockWith: BackupUnlockMethod.recoveryCode,
         );
 
-        if (!opens) {
+        if (opened == null) {
           _publish(
             (s) => s.copyWith(
               message: 'That recovery code does not open this backup.',

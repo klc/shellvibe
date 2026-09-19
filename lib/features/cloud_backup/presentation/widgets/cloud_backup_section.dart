@@ -11,6 +11,7 @@ import '../../../settings/presentation/notifiers/backup_scope_notifier.dart';
 import '../../../settings/presentation/widgets/backup_scope_picker.dart';
 import '../../data/cloud_backup_api.dart';
 import '../notifiers/cloud_backup_notifier.dart';
+import '../notifiers/sync_notifier.dart';
 
 /// Cloud backup surface in Settings → Sync.
 ///
@@ -884,21 +885,7 @@ final class _AutoSyncControls extends ConsumerWidget {
         ),
         if (enabled) ...[
           const SizedBox(height: 4),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(LucideIcons.info, size: 14, color: tokens.textSubtle),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  'Changes are being recorded on this device, but nothing '
-                  'sends them yet: the background schedule is still being '
-                  'built. Keep taking manual backups until it is.',
-                  style: TextStyle(fontSize: 11, color: tokens.textSubtle),
-                ),
-              ),
-            ],
-          ),
+          _SyncStatus(state: ref.watch(syncProvider)),
         ],
         const SizedBox(height: 8),
         BackupScopePicker(
@@ -912,5 +899,103 @@ final class _AutoSyncControls extends ConsumerWidget {
         ),
       ],
     );
+  }
+}
+
+/// What automatic sync is doing right now, in one line.
+///
+/// A switch that is on but does nothing is worse than one that is off, so
+/// every state that stops sync says which one it is and what would clear it.
+final class _SyncStatus extends ConsumerWidget {
+  const _SyncStatus({required this.state});
+
+  final AsyncValue<SyncState> state;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ShellVibeTokens.resolve(context);
+
+    final (icon, colour, text) = switch (state) {
+      AsyncLoading() => (LucideIcons.refreshCw, tokens.textSubtle, 'Starting…'),
+      AsyncError(:final error) => (
+        LucideIcons.circleAlert,
+        Theme.of(context).colorScheme.error,
+        'Sync could not start: $error',
+      ),
+      AsyncData(:final value) => _describe(context, tokens, value),
+    };
+
+    if (text.isEmpty) return const SizedBox.shrink();
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 14, color: colour),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(text, style: TextStyle(fontSize: 11, color: colour)),
+        ),
+        if (value(state)?.isActive ?? false)
+          ShellVibeIconButton(
+            icon: LucideIcons.refreshCw,
+            tooltip: 'Sync now',
+            onPressed: () => ref.read(syncProvider.notifier).syncNow(),
+          ),
+      ],
+    );
+  }
+
+  static SyncState? value(AsyncValue<SyncState> state) => state.value;
+
+  (IconData, Color, String) _describe(
+    BuildContext context,
+    ShellVibeTokens tokens,
+    SyncState value,
+  ) {
+    if (value.error != null) {
+      return (
+        LucideIcons.circleAlert,
+        value.needsSnapshotRestore
+            ? tokens.warning
+            : Theme.of(context).colorScheme.error,
+        value.error!,
+      );
+    }
+
+    return switch (value.blocker) {
+      SyncBlocker.disabled => (LucideIcons.info, tokens.textSubtle, ''),
+      SyncBlocker.notEntitled => (
+        LucideIcons.circleAlert,
+        tokens.warning,
+        'Sign in with a plan that includes cloud backup to sync.',
+      ),
+      SyncBlocker.notConfigured => (
+        LucideIcons.circleAlert,
+        tokens.warning,
+        'Set a sync passphrase first.',
+      ),
+      // The honest version of "nothing is happening yet". The key every
+      // device has to share only exists inside a backup, so one has to be
+      // taken before sync can carry anything.
+      SyncBlocker.needsBackup => (
+        LucideIcons.cloudUpload,
+        tokens.warning,
+        'Back up once to start syncing: the key your devices share is created '
+            'with that backup, and other devices pick it up when they open it.',
+      ),
+      null when value.running => (
+        LucideIcons.refreshCw,
+        tokens.textSubtle,
+        'Syncing…',
+      ),
+      null => (
+        LucideIcons.circleCheck,
+        tokens.success,
+        value.lastSyncAt == null
+            ? 'Watching for changes.'
+            : 'Up to date · sent ${value.lastPushed}, received '
+                  '${value.lastPulled}.',
+      ),
+    };
   }
 }

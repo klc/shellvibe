@@ -118,7 +118,7 @@ void main() {
 
       expect(
         await service.canOpen(revision: 1, secret: desktopPassphrase),
-        isTrue,
+        isNotNull,
       );
     });
 
@@ -130,7 +130,7 @@ void main() {
 
       expect(
         await service.canOpen(revision: 1, secret: 'a new phone passphrase'),
-        isFalse,
+        isNull,
       );
     });
 
@@ -160,7 +160,7 @@ void main() {
           secret: code,
           unlockWith: BackupUnlockMethod.recoveryCode,
         ),
-        isTrue,
+        isNotNull,
       );
     });
 
@@ -173,7 +173,7 @@ void main() {
 
       expect(
         await service.canOpen(revision: 1, secret: desktopPassphrase),
-        isFalse,
+        isNull,
       );
     });
 

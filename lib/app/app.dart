@@ -10,6 +10,7 @@ import '../features/mcp/presentation/notifiers/mcp_settings_notifier.dart';
 import '../features/mcp/presentation/widgets/mcp_approval_host.dart';
 import '../features/settings/domain/models/app_settings_model.dart';
 import '../features/settings/presentation/notifiers/settings_notifier.dart';
+import '../features/cloud_backup/presentation/notifiers/sync_notifier.dart';
 import '../features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import '../features/vault/presentation/notifiers/vault_notifier.dart';
 import 'router/app_router.dart';
@@ -163,6 +164,9 @@ class _ShellVibeAppState extends ConsumerState<ShellVibeApp>
       ref.read(terminalTabsProvider.notifier).rehomeMoshSessions();
       _reconnectDeviceLinkIfVaultUnlocked();
       unawaited(_ensureDeviceLinkServerSafely());
+      // Coming back to the app is the moment the user is most likely to be
+      // looking at data another device changed while this one was away.
+      unawaited(ref.read(syncProvider.notifier).syncNow());
     }
   }
 
@@ -191,6 +195,13 @@ class _ShellVibeAppState extends ConsumerState<ShellVibeApp>
     // relaunched with the switch on would sit there not serving, and the
     // agent's bridge would report the app as not running.
     ref.watch(mcpSettingsProvider);
+
+    // Same reasoning, for automatic sync: watched here so it runs for the
+    // whole app run rather than only while the settings screen that shows its
+    // status happens to be open. It is also what attaches the journal that
+    // records local changes, which has to happen whether or not sync itself
+    // is switched on.
+    ref.watch(syncProvider);
     // The server cannot start behind a locked vault, so a launch that begins
     // locked has to try again once it opens.
     ref.listen(vaultProvider, (_, _) {

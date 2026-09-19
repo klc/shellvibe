@@ -1,3 +1,9 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:cryptography/cryptography.dart';
+
+import '../../../core/sync/backup_envelope.dart';
 import '../../../shared/storage/secure_storage_service.dart';
 
 /// Durable state for cloud backup on this device.
@@ -79,6 +85,61 @@ final class CloudBackupStore {
   Future<void> writeBackupOnExit(bool enabled) =>
       storage.write(key: _backupOnExitKey, value: '$enabled');
 
+  /// The vault's sync key, once this device has learned it.
+  ///
+  /// Base64. The design note kept this in memory only, recovered by opening
+  /// the newest envelope at every start. In practice that means a network
+  /// round trip and an Argon2id derivation before sync can do anything, on
+  /// every launch, for a key the passphrase beside it already unlocks. The
+  /// trade is the same one the passphrase itself made: an attacker who can
+  /// read this keychain can already read the vault key and therefore the
+  /// secrets, so storing the sync key here gives up nothing new.
+  Future<String?> readSyncKey() async {
+    final value = await storage.read(key: _syncKeyKey);
+
+    return (value == null || value.isEmpty) ? null : value;
+  }
+
+  Future<void> writeSyncKey(String base64Key) =>
+      storage.write(key: _syncKeyKey, value: base64Key);
+
+  /// Keeps the vault's sync key, when a backup handed one over.
+  ///
+  /// Never overwrites one this device already holds. Two devices that each
+  /// minted a key would seal their own into their own backups, and every
+  /// operation either of them wrote would be unreadable to the other -- with
+  /// nothing failing, because both would simply skip what they could not open.
+  Future<void> adoptSyncKey(SecretKey? syncKey) async {
+    if (syncKey == null) return;
+    if (await readSyncKey() != null) return;
+
+    await writeSyncKey(base64.encode(await syncKey.extractBytes()));
+  }
+
+  /// The key the next upload should seal in, minting one if it is time.
+  ///
+  /// Returns null while automatic sync is off, which keeps the envelope at v3
+  /// and readable by builds that predate v4. There is no reason to spend that
+  /// compatibility on a feature the user has not asked for.
+  ///
+  /// The first device to switch sync on mints the key; every other device
+  /// learns it by opening a backup that carries it. That is why sync cannot
+  /// start before a backup exists -- the key has nowhere else to live.
+  Future<Uint8List?> syncKeyForUpload({
+    required bool autoSyncEnabled,
+    Uint8List Function()? mint,
+  }) async {
+    final stored = await readSyncKey();
+    if (stored != null) return base64.decode(stored);
+
+    if (!autoSyncEnabled) return null;
+
+    final minted = (mint ?? BackupEnvelope().generateSyncKey)();
+    await writeSyncKey(base64.encode(minted));
+
+    return minted;
+  }
+
   /// When this device last wrote a backup that held everything.
   ///
   /// A vault whose whole history is partial only reveals that at restore
@@ -105,6 +166,7 @@ final class CloudBackupStore {
     await storage.delete(key: _lastRevisionKey);
     await storage.delete(key: _backupOnExitKey);
     await storage.delete(key: _lastFullBackupKey);
+    await storage.delete(key: _syncKeyKey);
   }
 
   static const String _passphraseKey = 'shellvibe_sync_passphrase';
@@ -113,4 +175,5 @@ final class CloudBackupStore {
   static const String _lastRevisionKey = 'shellvibe_sync_last_revision';
   static const String _backupOnExitKey = 'shellvibe_sync_backup_on_exit';
   static const String _lastFullBackupKey = 'shellvibe_sync_last_full_backup';
+  static const String _syncKeyKey = 'shellvibe_sync_key';
 }
