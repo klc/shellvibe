@@ -260,6 +260,67 @@ void main() {
       },
     );
 
+    test(
+      'a page that ends inside a clock does not lose the rest of it',
+      () async {
+        // Two devices, each on its own counter, so both produce a clock 1 and
+        // both produce a clock 2. The page cap then lands in the middle of the
+        // clock 2 pair -- and an exclusive cursor moved to 2 would ask for
+        // everything *after* it next time, leaving the other half of the pair
+        // in a part of the log nobody asks for again.
+        final b = await device('device-b');
+        final c = await device('device-c');
+
+        await b.writeHost('b1');
+        await b.writeHost('b2');
+        await c.writeHost('c1');
+        await c.writeHost('c2');
+
+        await b.engine.push();
+        await c.engine.push();
+
+        log.pageCap = 3;
+
+        final d = await device('device-d');
+        final result = await d.engine.pull();
+
+        // Four rows, and at least four applications: the operations that
+        // shared the boundary clock are read again on the next page and
+        // written a second time. Idempotent, and the price of not losing one.
+        expect(result.pulled, greaterThanOrEqualTo(4));
+        for (final id in ['b1', 'b2', 'c1', 'c2']) {
+          expect(await d.host(id), isNotNull, reason: '$id never arrived');
+        }
+      },
+    );
+
+    test('operations this device cannot open are counted, not hidden', () async {
+      final a = await device('device-a');
+
+      await a.writeHost('h1');
+      await a.writeHost('h2');
+      await a.engine.push();
+
+      final other = AppDatabase(NativeDatabase.memory());
+      addTearDown(other.close);
+      final otherJournal = SyncJournal(db: other, deviceId: 'device-c');
+      other.syncJournal = otherJournal;
+
+      final stranger = SyncEngine(
+        db: other,
+        journal: otherJournal,
+        api: log,
+        syncKey: SecretKey(BackupEnvelope().generateSyncKey()),
+      );
+
+      final result = await stranger.pull();
+
+      // The number is the whole point: silence here is a device that syncs
+      // forever and never sees anything.
+      expect(result.unreadable, 2);
+      expect(result.pulled, 0);
+    });
+
     test('the server never sees a table name or a row id', () async {
       final a = await device('device-a');
 
@@ -341,6 +402,10 @@ final class _Log implements SyncOperationTransport {
   /// When true, every pull answers the way a pruned log does.
   bool expireCursors = false;
 
+  /// A page size the server imposes whatever the client asked for, which is
+  /// what makes a page boundary land somewhere the client did not choose.
+  int? pageCap;
+
   @override
   Future<int> push(List<SyncOperationDto> batch) async {
     operations.addAll(batch);
@@ -373,7 +438,9 @@ final class _Log implements SyncOperationTransport {
     final after = ordered
         .where((o) => o.logicalClock > sinceClock)
         .toList(growable: false);
-    final page = after.take(limit).toList(growable: false);
+    final page = after
+        .take(pageCap == null || pageCap! > limit ? limit : pageCap!)
+        .toList(growable: false);
 
     return SyncOperationPage(
       operations: page,

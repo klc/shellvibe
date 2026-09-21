@@ -36,11 +36,21 @@ final class SyncResult {
   /// References cleared because their target is not on this device.
   final int repaired;
 
+  /// Operations that could not be decrypted with this device's sync key.
+  ///
+  /// Counted rather than only skipped. One of these is a stray operation from
+  /// a vault that was re-keyed; a steady stream of them is the failure this
+  /// number exists for -- two devices that each minted their own sync key,
+  /// each pushing a log the other silently discards, with nothing on either
+  /// screen saying so.
+  final int unreadable;
+
   const SyncResult({
     this.pushed = 0,
     this.pulled = 0,
     this.skipped = 0,
     this.repaired = 0,
+    this.unreadable = 0,
   });
 
   bool get changedAnything => pushed > 0 || pulled > 0;
@@ -103,6 +113,13 @@ final class SyncEngine {
   /// Workspaces and host groups are always in: everything else is filed under
   /// them, and a host arriving without its workspace is a row that cannot be
   /// written at all.
+  ///
+  /// A category that is off leaves a gap that does not close on its own. The
+  /// cursor advances over the operations this device declined, so switching
+  /// the category back on starts from that moment rather than replaying what
+  /// it missed -- restoring a snapshot is what fills it in. Outgoing
+  /// operations behave the other way round: they stay in the outbox, one per
+  /// row, and go out whenever the category is switched back on.
   bool syncs(String entityType) {
     for (final entry in categoryTables.entries) {
       if (entry.value.contains(entityType)) return scope.contains(entry.key);
@@ -153,6 +170,7 @@ final class SyncEngine {
     var pulled = 0;
     var skipped = 0;
     var repaired = 0;
+    var unreadable = 0;
 
     for (var page = 0; page < maxPages; page++) {
       final state = await journal.readState();
@@ -170,15 +188,21 @@ final class SyncEngine {
 
       if (batch.isEmpty) break;
 
-      final outcome = await _apply(batch);
+      final outcome = await _apply(batch, sinceClock: state.pulledThroughClock);
       pulled += outcome.pulled;
       skipped += outcome.skipped;
       repaired += outcome.repaired;
+      unreadable += outcome.unreadable;
 
       if (!batch.hasMore) break;
     }
 
-    return SyncResult(pulled: pulled, skipped: skipped, repaired: repaired);
+    return SyncResult(
+      pulled: pulled,
+      skipped: skipped,
+      repaired: repaired,
+      unreadable: unreadable,
+    );
   }
 
   /// One pass: send, then receive.
@@ -195,11 +219,16 @@ final class SyncEngine {
       pulled: pulledResult.pulled,
       skipped: pulledResult.skipped,
       repaired: pulledResult.repaired,
+      unreadable: pulledResult.unreadable,
     );
   }
 
-  Future<SyncResult> _apply(SyncOperationPage batch) async {
+  Future<SyncResult> _apply(
+    SyncOperationPage batch, {
+    required int sinceClock,
+  }) async {
     final decoded = <_IncomingOperation>[];
+    var unreadable = 0;
 
     for (final operation in batch.operations) {
       // This device's own operations come back on the next pull. Applying
@@ -208,7 +237,10 @@ final class SyncEngine {
       if (operation.deviceId == deviceId) continue;
 
       final incoming = await _open(operation);
-      if (incoming == null) continue;
+      if (incoming == null) {
+        unreadable++;
+        continue;
+      }
       if (!syncs(incoming.entityType)) continue;
 
       decoded.add(incoming);
@@ -271,10 +303,49 @@ final class SyncEngine {
       // Inside the transaction, and only now. A cursor advanced before the
       // rows it accounts for are durable turns an interrupted sync into
       // permanent loss: the skipped operations are never offered again.
-      await journal.acknowledgePull(batch.maxClock);
+      //
+      // The clock still moves to the top of the page whatever the cursor
+      // does. Lamport: this device has *seen* everything the page carried,
+      // and the next change it makes has to be ordered after it.
+      await journal.observeClock(batch.maxClock);
+      await journal.acknowledgePull(_cursorFor(batch, sinceClock));
     });
 
-    return SyncResult(pulled: applied, skipped: skipped, repaired: repaired);
+    return SyncResult(
+      pulled: applied,
+      skipped: skipped,
+      repaired: repaired,
+      unreadable: unreadable,
+    );
+  }
+
+  /// How far to move the cursor after applying [batch].
+  ///
+  /// Two devices produce the same logical clock all the time -- the clock is
+  /// a per-device counter, so both start at 1 -- and the server's cursor is
+  /// exclusive. If a page ends in the middle of a clock, acknowledging that
+  /// clock asks for everything *after* it next time and the rest of the tied
+  /// operations are never offered again. Silently: nothing fails, the row
+  /// simply never arrives.
+  ///
+  /// So a page with more behind it stops one clock short of its own top,
+  /// which re-reads the tied operations on the next page. Applying is
+  /// idempotent -- last-writer-wins against the version rows -- so re-reading
+  /// them costs a little bandwidth and changes nothing.
+  ///
+  /// Held back only when the page carries more than one clock. A page that is
+  /// entirely one clock would otherwise never move the cursor at all, and a
+  /// device that cannot advance is worse off than one that skips a tie.
+  static int _cursorFor(SyncOperationPage batch, int sinceClock) {
+    final canHoldBack =
+        batch.hasMore &&
+        batch.operations.any((o) => o.logicalClock < batch.maxClock);
+
+    final cursor = canHoldBack ? batch.maxClock - 1 : batch.maxClock;
+
+    // Never backwards. A server that answers with a lower clock than this
+    // device already acknowledged would otherwise make it replay the log.
+    return cursor < sinceClock ? sinceClock : cursor;
   }
 
   /// Whether [incoming] loses to what this device already holds.
