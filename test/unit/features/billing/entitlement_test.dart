@@ -5,44 +5,37 @@ import '../../../support/contract_fixture.dart';
 
 void main() {
   group('decoding the pinned fixtures', () {
-    test('the free snapshot carries only the free capability', () {
+    test('the free snapshot carries every shipped capability', () {
       final fixture = ContractFixture.load('entitlements.index');
 
       final entitlement = Entitlement.fromJson(fixture.data);
 
       expect(entitlement.plan, BillingPlan.free);
       expect(entitlement.status, BillingStatus.active);
-      expect(entitlement.capabilities, {Capabilities.localDeviceLink});
-      expect(entitlement.limits.maxBackupSizeBytes, 0);
-      expect(entitlement.hasCloudBackup, isFalse);
+      expect(entitlement.capabilities, Entitlement.freeCapabilities);
+      expect(entitlement.limits.maxBackupSizeBytes, 5242880);
+      expect(entitlement.limits.maxBackupRevisions, 10);
+      expect(entitlement.hasCloudBackup, isTrue);
       expect(entitlement.isPaid, isFalse);
     });
 
-    test('the reconciled pro snapshot unlocks the paid capabilities', () {
-      final fixture = ContractFixture.load('billing.reconcile');
-      final nested = fixture.data['entitlements'] as Map<String, Object?>;
+    test('the fixture withholds shared workspaces and nothing else', () {
+      // The one capability the free plan does not carry. If this fixture ever
+      // shows it, the server has given the team tier away.
+      final fixture = ContractFixture.load('entitlements.index');
 
-      final entitlement = Entitlement.fromJson(nested);
+      final entitlement = Entitlement.fromJson(fixture.data);
 
-      expect(entitlement.plan, BillingPlan.pro);
-      expect(entitlement.isPaid, isTrue);
-      expect(entitlement.hasCloudBackup, isTrue);
-      expect(entitlement.has(Capabilities.remoteDeviceLink), isTrue);
       expect(entitlement.has(Capabilities.sharedWorkspaces), isFalse);
-      expect(entitlement.limits.maxBackupSizeBytes, 5242880);
-      expect(entitlement.limits.maxBackupRevisions, 10);
     });
 
-    test('a paid snapshot still carries the free capability', () {
-      // The server-side regression this mirrors: `pro` used to come back
-      // without `local_device_link`, so paying switched off a free feature.
-      final fixture = ContractFixture.load('billing.reconcile');
-      final nested = fixture.data['entitlements'] as Map<String, Object?>;
+    test('the pinned default matches what the server sends', () {
+      // `Entitlement.free` is what the app assumes offline. If it drifts from
+      // the server's free plan, an offline user sees limits that are not
+      // theirs.
+      final fixture = ContractFixture.load('entitlements.index');
 
-      expect(
-        Entitlement.fromJson(nested).capabilities,
-        contains(Capabilities.localDeviceLink),
-      );
+      expect(Entitlement.fromJson(fixture.data), Entitlement.free);
     });
   });
 
@@ -51,19 +44,20 @@ void main() {
       final entitlement = Entitlement.fromJson(const {});
 
       expect(entitlement.plan, BillingPlan.free);
-      expect(entitlement.hasCloudBackup, isFalse);
+      expect(entitlement.hasCloudBackup, isTrue);
+      expect(entitlement.has(Capabilities.sharedWorkspaces), isFalse);
     });
 
     test('an unrecognised plan is treated as the lowest tier', () {
       final entitlement = Entitlement.fromJson(const {
         'plan': 'enterprise_ultra',
         'status': 'active',
-        'capabilities': ['cloud_backup'],
+        'capabilities': ['shared_workspaces'],
       });
 
       expect(entitlement.plan, BillingPlan.free);
       expect(
-        entitlement.hasCloudBackup,
+        entitlement.has(Capabilities.sharedWorkspaces),
         isTrue,
         reason:
             'The capability list is authoritative for access; only the tier '
@@ -72,41 +66,48 @@ void main() {
       expect(entitlement.isPaid, isFalse);
     });
 
-    test('an unrecognised status locks every paid capability', () {
+    test('an unrecognised status locks what is not free', () {
       final entitlement = Entitlement.fromJson(const {
-        'plan': 'pro',
+        'plan': 'team',
         'status': 'something_new',
-        'capabilities': ['cloud_backup', 'remote_device_link'],
+        'capabilities': ['cloud_backup', 'shared_workspaces'],
       });
 
       expect(entitlement.status, BillingStatus.unknown);
-      expect(entitlement.hasCloudBackup, isFalse);
-      expect(entitlement.has(Capabilities.remoteDeviceLink), isFalse);
+      expect(entitlement.has(Capabilities.sharedWorkspaces), isFalse);
+      expect(
+        entitlement.hasCloudBackup,
+        isTrue,
+        reason: 'A free feature does not depend on the tier being current.',
+      );
     });
 
-    test('an expired plan whose capabilities the server echoes stays locked', () {
-      final entitlement = Entitlement.fromJson(const {
-        'plan': 'pro',
-        'status': 'expired',
-        'capabilities': ['cloud_backup'],
-      });
+    test(
+      'an expired tier whose capabilities the server echoes stays locked',
+      () {
+        final entitlement = Entitlement.fromJson(const {
+          'plan': 'team',
+          'status': 'expired',
+          'capabilities': ['shared_workspaces'],
+        });
 
-      expect(entitlement.hasCloudBackup, isFalse);
-      expect(entitlement.isPaid, isFalse);
-    });
+        expect(entitlement.has(Capabilities.sharedWorkspaces), isFalse);
+        expect(entitlement.isPaid, isFalse);
+      },
+    );
 
     test('a grace period still grants access', () {
       final entitlement = Entitlement.fromJson({
-        'plan': 'pro',
+        'plan': 'team',
         'status': 'grace',
-        'capabilities': const ['cloud_backup'],
+        'capabilities': const ['shared_workspaces'],
         'grace_ends_at': DateTime.now()
             .add(const Duration(days: 3))
             .toIso8601String(),
       });
 
       expect(entitlement.isInGracePeriod, isTrue);
-      expect(entitlement.hasCloudBackup, isTrue);
+      expect(entitlement.has(Capabilities.sharedWorkspaces), isTrue);
       expect(entitlement.isPaid, isTrue);
       expect(entitlement.graceEndsAt, isNotNull);
     });
@@ -123,21 +124,30 @@ void main() {
 
       expect(entitlement.plan, BillingPlan.free);
       expect(entitlement.capabilities, isEmpty);
-      expect(entitlement.limits, BillingLimits.none);
+      expect(
+        entitlement.limits,
+        BillingLimits.freePlan,
+        reason:
+            'An unreadable limits member must not read as "no quota at all"; '
+            'that would take a free feature away over a parse failure.',
+      );
       expect(entitlement.expiresAt, isNull);
-      expect(entitlement.hasCloudBackup, isFalse);
+      expect(entitlement.hasCloudBackup, isTrue);
     });
 
-    test('unknown capability codes survive without unlocking anything else', () {
-      final entitlement = Entitlement.fromJson(const {
-        'plan': 'pro',
-        'status': 'active',
-        'capabilities': ['a_future_capability'],
-      });
+    test(
+      'unknown capability codes survive without unlocking anything else',
+      () {
+        final entitlement = Entitlement.fromJson(const {
+          'plan': 'team',
+          'status': 'active',
+          'capabilities': ['a_future_capability'],
+        });
 
-      expect(entitlement.has('a_future_capability'), isTrue);
-      expect(entitlement.hasCloudBackup, isFalse);
-    });
+        expect(entitlement.has('a_future_capability'), isTrue);
+        expect(entitlement.has(Capabilities.sharedWorkspaces), isFalse);
+      },
+    );
 
     test('numeric limits sent as strings still decode', () {
       final entitlement = Entitlement.fromJson(const {
@@ -150,52 +160,52 @@ void main() {
     });
   });
 
-  group('Local Device Link is never gated', () {
-    test('the free default grants it', () {
-      expect(Entitlement.free.has(Capabilities.localDeviceLink), isTrue);
-    });
-
-    test('an empty snapshot grants it', () {
-      expect(
-        Entitlement.fromJson(const {}).has(Capabilities.localDeviceLink),
-        isTrue,
-      );
-    });
-
-    test('an expired paid plan grants it', () {
-      final entitlement = Entitlement.fromJson(const {
-        'plan': 'pro',
-        'status': 'expired',
-        'capabilities': <String>[],
+  group('the free capabilities are never gated', () {
+    for (final capability in Entitlement.freeCapabilities) {
+      test('the free default grants $capability', () {
+        expect(Entitlement.free.has(capability), isTrue);
       });
 
-      expect(
-        entitlement.has(Capabilities.localDeviceLink),
-        isTrue,
-        reason:
-            'A LAN feature that works offline must not switch off because a '
-            'subscription lapsed.',
-      );
-    });
-
-    test('a snapshot that omits it entirely still grants it', () {
-      final entitlement = Entitlement.fromJson(const {
-        'plan': 'pro',
-        'status': 'active',
-        'capabilities': ['cloud_backup'],
+      test('an empty snapshot grants $capability', () {
+        expect(Entitlement.fromJson(const {}).has(capability), isTrue);
       });
 
-      expect(entitlement.has(Capabilities.localDeviceLink), isTrue);
-    });
+      test('an expired tier grants $capability', () {
+        final entitlement = Entitlement.fromJson(const {
+          'plan': 'team',
+          'status': 'expired',
+          'capabilities': <String>[],
+        });
 
-    test('an unknown status grants it', () {
-      final entitlement = Entitlement.fromJson(const {
-        'status': 'nonsense',
-        'capabilities': <String>[],
+        expect(
+          entitlement.has(capability),
+          isTrue,
+          reason:
+              'A free feature must not switch off because a tier lapsed. '
+              'Local Device Link additionally works offline and with no '
+              'account at all.',
+        );
       });
 
-      expect(entitlement.has(Capabilities.localDeviceLink), isTrue);
-    });
+      test('a snapshot that omits $capability entirely still grants it', () {
+        final entitlement = Entitlement.fromJson(const {
+          'plan': 'team',
+          'status': 'active',
+          'capabilities': ['shared_workspaces'],
+        });
+
+        expect(entitlement.has(capability), isTrue);
+      });
+
+      test('an unknown status grants $capability', () {
+        final entitlement = Entitlement.fromJson(const {
+          'status': 'nonsense',
+          'capabilities': <String>[],
+        });
+
+        expect(entitlement.has(capability), isTrue);
+      });
+    }
   });
 
   group('round-trip', () {

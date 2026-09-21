@@ -88,18 +88,6 @@ void main() {
       );
       expect(find.byKey(const Key('cloud_backup_now_button')), findsNothing);
     });
-
-    testWidgets('an unentitled plan says so without blaming the network', (
-      tester,
-    ) async {
-      await pump(
-        tester,
-        const CloudBackupState(blocker: CloudBackupBlocker.notEntitled),
-      );
-
-      expect(find.textContaining('not included in your plan'), findsOneWidget);
-      expect(find.textContaining('always available'), findsOneWidget);
-    });
   });
 
   group('setup', () {

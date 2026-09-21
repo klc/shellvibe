@@ -43,30 +43,6 @@
             ],
             "entitlements": [
                 {
-                    "capability_code": "cloud_backup",
-                    "status": "active",
-                    "source_plan": "pro",
-                    "starts_at": "<timestamp>",
-                    "ends_at": "<timestamp>",
-                    "grace_ends_at": null
-                },
-                {
-                    "capability_code": "cloud_sync",
-                    "status": "active",
-                    "source_plan": "pro",
-                    "starts_at": "<timestamp>",
-                    "ends_at": "<timestamp>",
-                    "grace_ends_at": null
-                },
-                {
-                    "capability_code": "remote_device_link",
-                    "status": "active",
-                    "source_plan": "pro",
-                    "starts_at": "<timestamp>",
-                    "ends_at": "<timestamp>",
-                    "grace_ends_at": null
-                },
-                {
                     "capability_code": "remote_device_link",
                     "status": "active",
                     "source_plan": "pro",
@@ -84,18 +60,8 @@
                 }
             ],
             "billing": {
-                "provider_app_user_id": "usr_<ulid>",
-                "subscriptions": [
-                    {
-                        "provider": "app_store",
-                        "plan_code": "pro",
-                        "status": "active",
-                        "current_period_starts_at": "<timestamp>",
-                        "current_period_ends_at": "<timestamp>",
-                        "grace_ends_at": null,
-                        "auto_renew": true
-                    }
-                ]
+                "provider_app_user_id": null,
+                "subscriptions": []
             },
             "sync": {
                 "vault": {

@@ -32,8 +32,9 @@ enum SyncBlocker {
   /// Switched off. The resting state, and the default.
   disabled,
 
-  /// No account, or the plan does not include cloud backup.
-  notEntitled,
+  /// No account on this device. Sync itself is free; it just has nowhere to
+  /// sync to without one.
+  signedOut,
 
   /// No passphrase on this device yet.
   notConfigured,
@@ -180,13 +181,16 @@ class SyncNotifier extends _$SyncNotifier {
       return const SyncState(blocker: SyncBlocker.disabled);
     }
 
-    final entitlement = await ref.watch(entitlementProvider.future);
-
-    if (!account.isSignedIn || !entitlement.hasCloudBackup) {
+    if (!account.isSignedIn) {
       _stop();
 
-      return const SyncState(blocker: SyncBlocker.notEntitled);
+      return const SyncState(blocker: SyncBlocker.signedOut);
     }
+
+    // Read for its limits, not for permission: sync is free, and the upload
+    // size the server will accept is the one thing here the client cannot
+    // know on its own.
+    final entitlement = await ref.watch(entitlementProvider.future);
 
     final store = CloudBackupStore(
       storage: ref.watch(secureStorageServiceProvider),

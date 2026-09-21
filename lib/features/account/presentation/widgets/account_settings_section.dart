@@ -140,9 +140,7 @@ class _AccountSettingsSectionState
               ShellVibeButton(
                 buttonKey: const Key('account_submit_button'),
                 label: _isRegistering ? 'Create Account' : 'Sign In',
-                icon: _isRegistering
-                    ? LucideIcons.userPlus
-                    : LucideIcons.logIn,
+                icon: _isRegistering ? LucideIcons.userPlus : LucideIcons.logIn,
                 busy: _busy,
                 onPressed: _busy ? null : _submit,
               ),
@@ -192,15 +190,15 @@ class _AccountSettingsSectionState
           entitlement.when(
             loading: () => const _Notice(
               icon: LucideIcons.loader,
-              text: 'Checking your subscription…',
+              text: 'Checking your plan…',
             ),
-            error: (e, _) => _PlanRow(
+            error: (e, _) => const _PlanRow(
               entitlement: Entitlement.free,
-              lockedByUnavailability: true,
+              limitsAreEstimates: true,
             ),
             data: (billing) => _PlanRow(
               entitlement: billing.entitlement,
-              lockedByUnavailability: billing.isLockedByUnavailability,
+              limitsAreEstimates: billing.isFromFallback,
             ),
           ),
           const Divider(height: 20),
@@ -275,9 +273,11 @@ class _AccountSettingsSectionState
         _formError = _messageFor(e);
       });
     } on ApiTransportException catch (e) {
-      setState(() => _formError = e.timedOut
-          ? 'The server did not answer in time.'
-          : 'The server could not be reached.');
+      setState(
+        () => _formError = e.timedOut
+            ? 'The server did not answer in time.'
+            : 'The server could not be reached.',
+      );
     } on Object catch (e) {
       setState(() => _formError = '$e');
     } finally {
@@ -293,7 +293,9 @@ class _AccountSettingsSectionState
     if (e.isValidationFailure) {
       // The fields carry their own errors; a duplicate summary above them
       // would just be noise.
-      return e.validationErrors.isEmpty ? 'Check the form and try again.' : null;
+      return e.validationErrors.isEmpty
+          ? 'Check the form and try again.'
+          : null;
     }
 
     if (e.isUnauthenticated) return 'That email and password do not match.';
@@ -337,35 +339,27 @@ class _AccountSettingsSectionState
 
 // --- Presentation-only pieces ---------------------------------------------
 
-/// The plan line: tier, state, and what the limits actually are.
+/// The plan line: which tier, and what this account's quotas are.
+///
+/// Not a paywall. Every feature is free, so the only thing here a user can
+/// act on is a number -- how large a backup may be, how many revisions are
+/// kept -- and the tier is named because the server still reports one.
 final class _PlanRow extends StatelessWidget {
-  const _PlanRow({
-    required this.entitlement,
-    required this.lockedByUnavailability,
-  });
+  const _PlanRow({required this.entitlement, required this.limitsAreEstimates});
 
   final Entitlement entitlement;
-  final bool lockedByUnavailability;
+
+  /// True when the server could not be reached, so the numbers below are this
+  /// build's defaults rather than the account's actual quotas.
+  final bool limitsAreEstimates;
 
   @override
   Widget build(BuildContext context) {
     final tokens = ShellVibeTokens.resolve(context);
 
-    if (lockedByUnavailability) {
-      return _Notice(
-        icon: LucideIcons.cloudOff,
-        color: tokens.warning,
-        // Not the same sentence as "you need Pro": this one asks the user to
-        // get back online, not to pay.
-        text:
-            'Your subscription could not be checked, so paid features are '
-            'off for now. They come back when this device reaches the server.',
-      );
-    }
-
     final label = switch (entitlement.plan) {
       BillingPlan.free => 'Free',
-      BillingPlan.pro => 'Pro',
+      BillingPlan.pro => 'Free',
       BillingPlan.team => 'Team',
     };
 
@@ -380,29 +374,20 @@ final class _PlanRow extends StatelessWidget {
               '$label plan',
               style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
             ),
-            if (entitlement.isInGracePeriod) ...[
-              const SizedBox(width: 8),
-              Text(
-                '· payment overdue',
-                style: TextStyle(fontSize: 12, color: tokens.warning),
-              ),
-            ],
           ],
         ),
         const SizedBox(height: 6),
         Text(
-          entitlement.hasCloudBackup
-              ? 'Cloud backup is included: up to '
-                  '${_megabytes(entitlement.limits.maxBackupSizeBytes)} per '
-                  'backup and ${entitlement.limits.maxBackupRevisions} '
-                  'revisions kept.'
-              : 'Cloud backup is not included in this plan.',
+          'Cloud backup, sync and remote Device Link are included: up to '
+          '${_megabytes(entitlement.limits.maxBackupSizeBytes)} per backup '
+          'and ${entitlement.limits.maxBackupRevisions} revisions kept.',
           style: TextStyle(fontSize: 12, color: tokens.textMuted),
         ),
-        if (entitlement.expiresAt != null) ...[
+        if (limitsAreEstimates) ...[
           const SizedBox(height: 4),
           Text(
-            'Renews or ends ${_date(entitlement.expiresAt!)}.',
+            'Your plan could not be checked just now, so these are the '
+            'standard limits rather than this account\'s.',
             style: TextStyle(fontSize: 11, color: tokens.textSubtle),
           ),
         ],
@@ -412,13 +397,6 @@ final class _PlanRow extends StatelessWidget {
 
   static String _megabytes(int bytes) =>
       '${(bytes / (1024 * 1024)).toStringAsFixed(bytes % (1024 * 1024) == 0 ? 0 : 1)} MB';
-
-  static String _date(DateTime value) {
-    final local = value.toLocal();
-
-    return '${local.year}-${local.month.toString().padLeft(2, '0')}-'
-        '${local.day.toString().padLeft(2, '0')}';
-  }
 }
 
 /// Device list, loaded when opened rather than kept in memory.
@@ -459,8 +437,10 @@ class _DeviceListSheetState extends State<_DeviceListSheet> {
             }
 
             if (snapshot.hasError) {
-              return _ErrorText('Devices could not be loaded: '
-                  '${snapshot.error}');
+              return _ErrorText(
+                'Devices could not be loaded: '
+                '${snapshot.error}',
+              );
             }
 
             final devices = snapshot.data ?? const <AccountDevice>[];
@@ -612,9 +592,6 @@ final class _ErrorText extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Text(
     text,
-    style: TextStyle(
-      fontSize: 12,
-      color: Theme.of(context).colorScheme.error,
-    ),
+    style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.error),
   );
 }

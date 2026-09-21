@@ -67,7 +67,7 @@ void main() {
     test('every fixture carries a status and a body envelope', () {
       final fixtures = ContractFixture.loadAll();
 
-      expect(fixtures, hasLength(33));
+      expect(fixtures, hasLength(32));
 
       for (final fixture in fixtures) {
         expect(

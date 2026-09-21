@@ -5,12 +5,15 @@
             "plan": "free",
             "status": "active",
             "capabilities": [
-                "local_device_link"
+                "local_device_link",
+                "cloud_backup",
+                "cloud_sync",
+                "remote_device_link"
             ],
             "limits": {
-                "max_backup_size_bytes": 0,
-                "max_backup_revisions": 0,
-                "relay_concurrent_sessions": 0,
+                "max_backup_size_bytes": 5242880,
+                "max_backup_revisions": 10,
+                "relay_concurrent_sessions": 2,
                 "team_seats": 0
             },
             "expires_at": null,

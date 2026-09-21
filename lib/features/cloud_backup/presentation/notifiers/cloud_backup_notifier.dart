@@ -22,17 +22,15 @@ part 'cloud_backup_notifier.g.dart';
 
 /// Why the cloud backup surface is not usable right now.
 enum CloudBackupBlocker {
-  /// No account on this device.
+  /// No account on this device. The only thing standing between a user and
+  /// cloud backup -- it is on the free plan, so there is nothing to buy.
   signedOut,
 
-  /// Signed in, but the plan does not include cloud backup.
-  notEntitled,
-
-  /// Entitled, the account has no backup yet, and this device has no
+  /// Signed in, the account has no backup yet, and this device has no
   /// passphrase: a genuine first-time setup.
   notConfigured,
 
-  /// Entitled, this device has no passphrase, but the account already has a
+  /// Signed in, this device has no passphrase, but the account already has a
   /// backup written by another device.
   ///
   /// Distinct from [notConfigured] because the two need opposite actions. A
@@ -193,10 +191,10 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
       return const CloudBackupState(blocker: CloudBackupBlocker.signedOut);
     }
 
+    // Read for its limits, not for permission: cloud backup is free, and
+    // the upload size the server will accept is the one thing here the
+    // client cannot know on its own.
     final entitlement = await ref.watch(entitlementProvider.future);
-    if (!entitlement.hasCloudBackup) {
-      return const CloudBackupState(blocker: CloudBackupBlocker.notEntitled);
-    }
 
     _deviceId = account.session!.deviceId;
     _maxSizeBytes = entitlement.entitlement.limits.maxBackupSizeBytes;

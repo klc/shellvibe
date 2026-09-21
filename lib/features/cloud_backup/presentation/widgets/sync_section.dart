@@ -131,10 +131,10 @@ final class _SyncStatus extends ConsumerWidget {
 
     return switch (value.blocker) {
       SyncBlocker.disabled => (LucideIcons.info, tokens.textSubtle, ''),
-      SyncBlocker.notEntitled => (
+      SyncBlocker.signedOut => (
         LucideIcons.circleAlert,
         tokens.warning,
-        'Sign in with a plan that includes cloud backup to sync.',
+        'Sign in under Account to sync.',
       ),
       SyncBlocker.notConfigured => (
         LucideIcons.circleAlert,

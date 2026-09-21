@@ -8,42 +8,45 @@ part of 'entitlement_notifier.dart';
 
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // ignore_for_file: type=lint, type=warning
-/// Single source of truth for what the user may use.
+/// Single source of truth for the account's plan limits.
 ///
 /// Rebuilds whenever the account session changes, so signing in, signing out
 /// and a rejected token all land here without a manual subscription.
 ///
-/// Every failure path resolves to the free plan. This gate is UI only -- the
-/// server's `entitlement:` middleware enforces access on every request -- so
-/// the cost of locking wrongly is a dismissable paywall, while the cost of
-/// unlocking wrongly is giving the product away. The asymmetry decides the
-/// direction.
+/// Every failure path resolves to the free plan, which is the whole product:
+/// the only capability it does not carry is `shared_workspaces`, and no
+/// client surface asks for that one. What a failure costs is therefore
+/// accuracy about limits, not access. The server enforces both regardless --
+/// the `entitlement:` middleware answers `403` and an oversized upload
+/// answers `413` whatever this object says.
 
 @ProviderFor(EntitlementNotifier)
 final entitlementProvider = EntitlementNotifierProvider._();
 
-/// Single source of truth for what the user may use.
+/// Single source of truth for the account's plan limits.
 ///
 /// Rebuilds whenever the account session changes, so signing in, signing out
 /// and a rejected token all land here without a manual subscription.
 ///
-/// Every failure path resolves to the free plan. This gate is UI only -- the
-/// server's `entitlement:` middleware enforces access on every request -- so
-/// the cost of locking wrongly is a dismissable paywall, while the cost of
-/// unlocking wrongly is giving the product away. The asymmetry decides the
-/// direction.
+/// Every failure path resolves to the free plan, which is the whole product:
+/// the only capability it does not carry is `shared_workspaces`, and no
+/// client surface asks for that one. What a failure costs is therefore
+/// accuracy about limits, not access. The server enforces both regardless --
+/// the `entitlement:` middleware answers `403` and an oversized upload
+/// answers `413` whatever this object says.
 final class EntitlementNotifierProvider
     extends $AsyncNotifierProvider<EntitlementNotifier, EntitlementState> {
-  /// Single source of truth for what the user may use.
+  /// Single source of truth for the account's plan limits.
   ///
   /// Rebuilds whenever the account session changes, so signing in, signing out
   /// and a rejected token all land here without a manual subscription.
   ///
-  /// Every failure path resolves to the free plan. This gate is UI only -- the
-  /// server's `entitlement:` middleware enforces access on every request -- so
-  /// the cost of locking wrongly is a dismissable paywall, while the cost of
-  /// unlocking wrongly is giving the product away. The asymmetry decides the
-  /// direction.
+  /// Every failure path resolves to the free plan, which is the whole product:
+  /// the only capability it does not carry is `shared_workspaces`, and no
+  /// client surface asks for that one. What a failure costs is therefore
+  /// accuracy about limits, not access. The server enforces both regardless --
+  /// the `entitlement:` middleware answers `403` and an oversized upload
+  /// answers `413` whatever this object says.
   EntitlementNotifierProvider._()
     : super(
         from: null,
@@ -64,18 +67,19 @@ final class EntitlementNotifierProvider
 }
 
 String _$entitlementNotifierHash() =>
-    r'e9f06af818da83e5872239ab63c936c7c523e6dc';
+    r'2ed5524e52bdfe07afcd02d91bbe962bacb65ed9';
 
-/// Single source of truth for what the user may use.
+/// Single source of truth for the account's plan limits.
 ///
 /// Rebuilds whenever the account session changes, so signing in, signing out
 /// and a rejected token all land here without a manual subscription.
 ///
-/// Every failure path resolves to the free plan. This gate is UI only -- the
-/// server's `entitlement:` middleware enforces access on every request -- so
-/// the cost of locking wrongly is a dismissable paywall, while the cost of
-/// unlocking wrongly is giving the product away. The asymmetry decides the
-/// direction.
+/// Every failure path resolves to the free plan, which is the whole product:
+/// the only capability it does not carry is `shared_workspaces`, and no
+/// client surface asks for that one. What a failure costs is therefore
+/// accuracy about limits, not access. The server enforces both regardless --
+/// the `entitlement:` middleware answers `403` and an oversized upload
+/// answers `413` whatever this object says.
 
 abstract class _$EntitlementNotifier extends $AsyncNotifier<EntitlementState> {
   FutureOr<EntitlementState> build();
@@ -98,23 +102,41 @@ abstract class _$EntitlementNotifier extends $AsyncNotifier<EntitlementState> {
 
 /// Whether a single capability is unlocked right now.
 ///
-/// Reads as free while the notifier is still loading, so a widget never shows
-/// a paid control it might have to take away a frame later.
+/// Answers from [Entitlement.freeCapabilities] without reading the provider
+/// at all. Those do not depend on a server reply -- Local Device Link is a
+/// LAN feature that works with no account, and the rest are simply free -- so
+/// making them wait on one would be a round trip that can only produce the
+/// answer it already has.
+///
+/// Anything else reads as locked while the notifier is still loading, so a
+/// widget never shows a control it might have to take away a frame later.
 
 @ProviderFor(hasCapability)
 final hasCapabilityProvider = HasCapabilityFamily._();
 
 /// Whether a single capability is unlocked right now.
 ///
-/// Reads as free while the notifier is still loading, so a widget never shows
-/// a paid control it might have to take away a frame later.
+/// Answers from [Entitlement.freeCapabilities] without reading the provider
+/// at all. Those do not depend on a server reply -- Local Device Link is a
+/// LAN feature that works with no account, and the rest are simply free -- so
+/// making them wait on one would be a round trip that can only produce the
+/// answer it already has.
+///
+/// Anything else reads as locked while the notifier is still loading, so a
+/// widget never shows a control it might have to take away a frame later.
 
 final class HasCapabilityProvider extends $FunctionalProvider<bool, bool, bool>
     with $Provider<bool> {
   /// Whether a single capability is unlocked right now.
   ///
-  /// Reads as free while the notifier is still loading, so a widget never shows
-  /// a paid control it might have to take away a frame later.
+  /// Answers from [Entitlement.freeCapabilities] without reading the provider
+  /// at all. Those do not depend on a server reply -- Local Device Link is a
+  /// LAN feature that works with no account, and the rest are simply free -- so
+  /// making them wait on one would be a round trip that can only produce the
+  /// answer it already has.
+  ///
+  /// Anything else reads as locked while the notifier is still loading, so a
+  /// widget never shows a control it might have to take away a frame later.
   HasCapabilityProvider._({
     required HasCapabilityFamily super.from,
     required String super.argument,
@@ -166,12 +188,18 @@ final class HasCapabilityProvider extends $FunctionalProvider<bool, bool, bool>
   }
 }
 
-String _$hasCapabilityHash() => r'acc9de363ed23f1f46a734c8cd9ca53de120d312';
+String _$hasCapabilityHash() => r'8e1a5d08a6dbc11c11185a5a5d8d778cb8d14dfc';
 
 /// Whether a single capability is unlocked right now.
 ///
-/// Reads as free while the notifier is still loading, so a widget never shows
-/// a paid control it might have to take away a frame later.
+/// Answers from [Entitlement.freeCapabilities] without reading the provider
+/// at all. Those do not depend on a server reply -- Local Device Link is a
+/// LAN feature that works with no account, and the rest are simply free -- so
+/// making them wait on one would be a round trip that can only produce the
+/// answer it already has.
+///
+/// Anything else reads as locked while the notifier is still loading, so a
+/// widget never shows a control it might have to take away a frame later.
 
 final class HasCapabilityFamily extends $Family
     with $FunctionalFamilyOverride<bool, String> {
@@ -186,8 +214,14 @@ final class HasCapabilityFamily extends $Family
 
   /// Whether a single capability is unlocked right now.
   ///
-  /// Reads as free while the notifier is still loading, so a widget never shows
-  /// a paid control it might have to take away a frame later.
+  /// Answers from [Entitlement.freeCapabilities] without reading the provider
+  /// at all. Those do not depend on a server reply -- Local Device Link is a
+  /// LAN feature that works with no account, and the rest are simply free -- so
+  /// making them wait on one would be a round trip that can only produce the
+  /// answer it already has.
+  ///
+  /// Anything else reads as locked while the notifier is still loading, so a
+  /// widget never shows a control it might have to take away a frame later.
 
   HasCapabilityProvider call(String capability) =>
       HasCapabilityProvider._(argument: capability, from: this);

@@ -163,7 +163,7 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('shows the free plan as not including cloud backup', (
+    testWidgets('shows the free plan with cloud backup included', (
       tester,
     ) async {
       await pumpSignedIn(
@@ -175,35 +175,40 @@ void main() {
       );
 
       expect(find.text('Free plan'), findsOneWidget);
-      expect(
-        find.textContaining('not included in this plan'),
-        findsOneWidget,
-      );
+      expect(find.textContaining('are included'), findsOneWidget);
+      expect(find.textContaining('5 MB per backup'), findsOneWidget);
       expect(find.byKey(const Key('account_sign_out_button')), findsOneWidget);
     });
 
-    testWidgets('shows the real limits on a paid plan', (tester) async {
+    testWidgets('shows the account\'s own limits on a team tier', (
+      tester,
+    ) async {
       await pumpSignedIn(
         tester,
         billing: EntitlementState(
-          entitlement: _proEntitlement,
+          entitlement: _teamEntitlement,
           source: EntitlementSource.server,
         ),
       );
 
-      expect(find.text('Pro plan'), findsOneWidget);
-      expect(find.textContaining('5 MB per backup'), findsOneWidget);
-      expect(find.textContaining('10 revisions'), findsOneWidget);
+      expect(find.text('Team plan'), findsOneWidget);
+      expect(find.textContaining('15 MB per backup'), findsOneWidget);
+      expect(find.textContaining('30 revisions'), findsOneWidget);
     });
 
-    testWidgets('marks a grace period as payment overdue', (tester) async {
+    testWidgets('names a legacy pro grant as free rather than as a tier', (
+      tester,
+    ) async {
+      // Accounts granted `pro` before every feature went free still report it.
+      // Calling it a plan of its own would imply they are getting something
+      // the free plan does not carry, and they are not.
       await pumpSignedIn(
         tester,
         billing: EntitlementState(
           entitlement: Entitlement.fromJson(const {
             'plan': 'pro',
-            'status': 'grace',
-            'capabilities': ['cloud_backup'],
+            'status': 'active',
+            'capabilities': ['local_device_link', 'cloud_backup'],
             'limits': {
               'max_backup_size_bytes': 5242880,
               'max_backup_revisions': 10,
@@ -213,35 +218,34 @@ void main() {
         ),
       );
 
-      expect(find.textContaining('payment overdue'), findsOneWidget);
-      expect(
-        find.textContaining('Cloud backup is included'),
-        findsOneWidget,
-        reason: 'Grace still grants access.',
-      );
+      expect(find.text('Free plan'), findsOneWidget);
+      expect(find.text('Pro plan'), findsNothing);
     });
 
-    testWidgets(
-      'blames the network, not the subscription, when the check failed',
-      (tester) async {
-        await pumpSignedIn(
-          tester,
-          billing: const EntitlementState(
-            entitlement: Entitlement.free,
-            source: EntitlementSource.unavailable,
-          ),
-        );
+    testWidgets('says the limits are standard ones when the check failed', (
+      tester,
+    ) async {
+      await pumpSignedIn(
+        tester,
+        billing: const EntitlementState(
+          entitlement: Entitlement.free,
+          source: EntitlementSource.unavailable,
+        ),
+      );
 
-        expect(
-          find.textContaining('could not be checked'),
-          findsOneWidget,
-          reason:
-              '"You need Pro" and "we could not check" ask the user to do '
-              'different things.',
-        );
-        expect(find.text('Free plan'), findsNothing);
-      },
-    );
+      expect(
+        find.textContaining('could not be checked'),
+        findsOneWidget,
+        reason:
+            'Nothing is locked by this, but the numbers shown are this '
+            'build\'s defaults rather than the account\'s.',
+      );
+      expect(
+        find.text('Free plan'),
+        findsOneWidget,
+        reason: 'The plan row stays; only the numbers are in doubt.',
+      );
+    });
   });
 }
 
@@ -256,11 +260,11 @@ const _signedInState = AccountState(
   lastEmail: 'user@shellvibe.dev',
 );
 
-final _proEntitlement = Entitlement.fromJson(const {
-  'plan': 'pro',
+final _teamEntitlement = Entitlement.fromJson(const {
+  'plan': 'team',
   'status': 'active',
-  'capabilities': ['local_device_link', 'cloud_backup'],
-  'limits': {'max_backup_size_bytes': 5242880, 'max_backup_revisions': 10},
+  'capabilities': ['local_device_link', 'cloud_backup', 'shared_workspaces'],
+  'limits': {'max_backup_size_bytes': 15728640, 'max_backup_revisions': 30},
 });
 
 /// Publishes a fixed [AccountState] without touching storage or the network.

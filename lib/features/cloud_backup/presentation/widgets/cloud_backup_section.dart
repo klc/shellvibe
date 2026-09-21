@@ -80,11 +80,6 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
                 'Sign in under Account to use cloud backup. Local file backup '
                 'below needs no account.',
               ),
-              CloudBackupBlocker.notEntitled => _blocked(
-                tokens,
-                'Cloud backup is not included in your plan. Local file backup '
-                'below is always available.',
-              ),
               CloudBackupBlocker.needsExistingPassphrase => _buildUnlock(
                 tokens,
                 state,

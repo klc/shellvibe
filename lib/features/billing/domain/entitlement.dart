@@ -7,28 +7,33 @@ import 'package:flutter/foundation.dart';
 abstract final class Capabilities {
   /// Desktop-to-phone terminal sharing over the LAN.
   ///
-  /// **Never gate anything on this.** Local Device Link is free, works offline
-  /// and works with no account at all, so the app must not ask the server
-  /// whether the user may use it. It appears in the entitlement snapshot only
-  /// because the server describes the free plan with it.
+  /// **Never gate anything on this.** Local Device Link works offline and with
+  /// no account at all, so the app must not ask the server whether the user
+  /// may use it. It appears in the entitlement snapshot only because the
+  /// server describes the free plan with it.
   static const String localDeviceLink = 'local_device_link';
 
-  /// Revision-based encrypted vault snapshots. The paid feature this client
-  /// work exists for.
+  /// Revision-based encrypted vault snapshots. On the free plan.
   static const String cloudBackup = 'cloud_backup';
 
-  /// Multi-device operation-log sync. Server endpoints exist; the client
-  /// protocol does not, so nothing reads this yet.
+  /// Multi-device operation-log sync. On the free plan.
   static const String cloudSync = 'cloud_sync';
 
-  /// Terminal sharing through the relay, off the LAN.
+  /// Terminal sharing through the relay, off the LAN. On the free plan.
   static const String remoteDeviceLink = 'remote_device_link';
 
-  /// Team-shared workspaces.
+  /// Team-shared workspaces. The one capability the free plan does *not*
+  /// carry, and so the only one a gate here would be about. No client
+  /// surface reads it yet.
   static const String sharedWorkspaces = 'shared_workspaces';
 }
 
 /// Plan tiers, highest last.
+///
+/// Every feature this client ships is on [free]. [pro] is historical -- it
+/// exists because accounts granted it before the switch still report it --
+/// and [team] is the only tier that adds anything, which today is
+/// [Capabilities.sharedWorkspaces] and nothing the client draws.
 enum BillingPlan {
   free('free'),
   pro('pro'),
@@ -41,9 +46,10 @@ enum BillingPlan {
 
   /// Maps a server plan code, falling back to [BillingPlan.free].
   ///
-  /// An unrecognised tier is treated as the *lowest* one on purpose: a client
-  /// that guessed upward would unlock paid features for a plan it does not
-  /// understand.
+  /// An unrecognised tier is treated as the *lowest* one on purpose. Free
+  /// already carries everything the client draws, so nothing is lost by
+  /// guessing down, while guessing up would show a tier's surface to an
+  /// account this build cannot confirm is on it.
   static BillingPlan fromCode(Object? value) => switch (value) {
     'pro' => BillingPlan.pro,
     'team' => BillingPlan.team,
@@ -62,8 +68,8 @@ enum BillingStatus {
   /// Over, or never started.
   expired('expired'),
 
-  /// The server sent a status this build does not know. Treated as not
-  /// entitled.
+  /// The server sent a status this build does not know. Treated as granting
+  /// nothing beyond [Entitlement.freeCapabilities].
   unknown('unknown');
 
   const BillingStatus(this.code);
@@ -85,8 +91,7 @@ enum BillingStatus {
 /// Numeric plan limits from `data.limits`.
 @immutable
 final class BillingLimits {
-  /// Largest single backup upload, in bytes. `0` means backups are not
-  /// included in the plan at all.
+  /// Largest single backup upload, in bytes.
   final int maxBackupSizeBytes;
 
   /// How many revisions the server keeps before pruning the oldest.
@@ -102,8 +107,27 @@ final class BillingLimits {
     this.teamSeats = 0,
   });
 
-  /// All-zero limits, which is what the free plan carries.
+  /// All-zero limits. Not a plan -- it is what an object built with no
+  /// arguments holds, and it is never what a missing server answer resolves
+  /// to. See [freePlan].
   static const BillingLimits none = BillingLimits();
+
+  /// The free plan's numbers, mirroring `config/billing.limits.free` on the
+  /// server.
+  ///
+  /// This is the fallback for every ambiguous case: a body without a `limits`
+  /// member, and the snapshot the app assumes before it has heard from the
+  /// server at all. Falling back to zero would read as "backups are not
+  /// included", which is no longer a state this product has -- it would take
+  /// a free feature away over a parse failure.
+  ///
+  /// The server is still the one enforcing these. A client that guessed high
+  /// gets a `413` on upload, not free storage.
+  static const BillingLimits freePlan = BillingLimits(
+    maxBackupSizeBytes: 5 * 1024 * 1024,
+    maxBackupRevisions: 10,
+    relayConcurrentSessions: 2,
+  );
 
   static BillingLimits fromJson(Map<String, Object?> json) => BillingLimits(
     maxBackupSizeBytes: _int(json['max_backup_size_bytes']),
@@ -143,13 +167,17 @@ final class BillingLimits {
   );
 }
 
-/// A provider-independent entitlement snapshot: `GET /api/v1/entitlements`.
+/// An entitlement snapshot: `GET /api/v1/entitlements`.
 ///
-/// This gates *UI*, not access. Real enforcement is the server's `entitlement:`
-/// middleware, which answers `403` regardless of what this object says. That is
-/// why tampering with a cached snapshot buys nothing, and why every ambiguous
-/// case here resolves to locked: the cost of being wrong in that direction is a
-/// paywall the user can dismiss by going online, not a free subscription.
+/// Every feature this client ships is on the free plan, so in practice this
+/// object carries *limits* -- how large a backup may be, how many revisions
+/// the server keeps -- rather than permission. [freeCapabilities] says so in
+/// code: those never depend on what came back.
+///
+/// It still answers [has] for anything outside that set, and there the old
+/// rule holds: this gates UI, not access. Real enforcement is the server's
+/// `entitlement:` middleware, which answers `403` regardless of what this
+/// object says, so tampering with a cached snapshot buys nothing.
 @immutable
 final class Entitlement {
   final BillingPlan plan;
@@ -175,19 +203,35 @@ final class Entitlement {
     this.graceEndsAt,
   });
 
+  /// The capabilities the free plan carries, which is every one this client
+  /// draws a surface for.
+  ///
+  /// Held here rather than read off [capabilities] because they do not depend
+  /// on a subscription: no server answer -- a missing one, an unparseable
+  /// one, or one reporting an expired tier -- may switch them off. Only
+  /// [Capabilities.sharedWorkspaces] sits outside this set.
+  static const Set<String> freeCapabilities = {
+    Capabilities.localDeviceLink,
+    Capabilities.cloudBackup,
+    Capabilities.cloudSync,
+    Capabilities.remoteDeviceLink,
+  };
+
   /// What the app assumes before it has heard from the server, and whenever it
   /// cannot trust what it heard.
   static const Entitlement free = Entitlement(
     plan: BillingPlan.free,
     status: BillingStatus.active,
-    capabilities: {Capabilities.localDeviceLink},
-    limits: BillingLimits.none,
+    capabilities: freeCapabilities,
+    limits: BillingLimits.freePlan,
   );
 
   /// Decodes the `data` member of an entitlement response.
   ///
   /// Never throws. A body this build cannot make sense of resolves to
-  /// [Entitlement.free], because a parse failure must not be a way in.
+  /// [Entitlement.free] -- the whole product, minus the one tier the client
+  /// has no surface for. A parse failure is not a reason to take a free
+  /// feature away, and it is not a way into a tier either.
   static Entitlement fromJson(Map<String, Object?> json) {
     final rawCapabilities = json['capabilities'];
     final capabilities = rawCapabilities is List
@@ -202,7 +246,7 @@ final class Entitlement {
       capabilities: capabilities,
       limits: limits is Map<String, Object?>
           ? BillingLimits.fromJson(limits)
-          : BillingLimits.none,
+          : BillingLimits.freePlan,
       expiresAt: _dateTime(json['expires_at']),
       graceEndsAt: _dateTime(json['grace_ends_at']),
     );
@@ -221,25 +265,26 @@ final class Entitlement {
   ///
   /// Two rules on top of "is it in the list":
   ///
-  /// * [Capabilities.localDeviceLink] is always true. It is free, offline and
-  ///   accountless, and no server answer -- including a missing one -- may
-  ///   switch it off.
+  /// * Anything in [freeCapabilities] is always true. Those are not bought,
+  ///   so no server answer -- including a missing one -- may switch them off.
   /// * Everything else additionally requires [BillingStatus.grantsAccess], so
-  ///   an expired plan whose capability list the server still echoes stays
+  ///   an expired tier whose capability list the server still echoes stays
   ///   locked.
   bool has(String capability) {
-    if (capability == Capabilities.localDeviceLink) return true;
+    if (freeCapabilities.contains(capability)) return true;
 
     return status.grantsAccess && capabilities.contains(capability);
   }
 
-  /// Encrypted cloud backup, the paid feature behind the vault sync UI.
+  /// Encrypted cloud backup. Free, so this is always true; call sites keep
+  /// reading it because the question they are asking is a real one and the
+  /// answer is allowed to change again.
   bool get hasCloudBackup => has(Capabilities.cloudBackup);
 
   /// True while the subscription is past due but still inside grace.
   bool get isInGracePeriod => status == BillingStatus.grace;
 
-  /// True for any plan above [BillingPlan.free] that currently grants access.
+  /// True for any tier above [BillingPlan.free] that currently grants access.
   bool get isPaid => plan != BillingPlan.free && status.grantsAccess;
 
   static DateTime? _dateTime(Object? value) =>

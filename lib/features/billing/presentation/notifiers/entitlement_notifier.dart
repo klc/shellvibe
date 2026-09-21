@@ -24,8 +24,11 @@ enum EntitlementSource {
   server,
 
   /// The server could not be reached and the cache was missing or stale, so
-  /// the free plan is assumed. Paid features stay locked and the UI can say
-  /// why rather than implying the subscription is gone.
+  /// the free plan is assumed.
+  ///
+  /// Nothing the client draws is locked by this -- the free plan carries all
+  /// of it -- but the limits in the snapshot are then this build's defaults
+  /// rather than the server's, which is worth being able to say.
   unavailable,
 }
 
@@ -44,17 +47,18 @@ final class EntitlementState {
     this.isRefreshing = false,
   });
 
-  /// Whether the UI should offer a paid feature.
+  /// Whether the UI should offer [capability].
   bool has(String capability) => entitlement.has(capability);
 
-  /// The paid feature this client work is for.
+  /// Encrypted cloud backup. Free, so always true.
   bool get hasCloudBackup => entitlement.hasCloudBackup;
 
-  /// True when the lock is the network's fault, not the subscription's.
+  /// True when the snapshot is this build's assumption rather than the
+  /// server's answer.
   ///
-  /// Worth telling apart in the UI: "you need Pro" and "we could not check
-  /// your subscription" ask the user to do completely different things.
-  bool get isLockedByUnavailability => source == EntitlementSource.unavailable;
+  /// The limits shown alongside it are defaults, so an upload the client
+  /// thinks fits may still come back `413`.
+  bool get isFromFallback => source == EntitlementSource.unavailable;
 
   EntitlementState copyWith({
     Entitlement? entitlement,
@@ -67,16 +71,17 @@ final class EntitlementState {
   );
 }
 
-/// Single source of truth for what the user may use.
+/// Single source of truth for the account's plan limits.
 ///
 /// Rebuilds whenever the account session changes, so signing in, signing out
 /// and a rejected token all land here without a manual subscription.
 ///
-/// Every failure path resolves to the free plan. This gate is UI only -- the
-/// server's `entitlement:` middleware enforces access on every request -- so
-/// the cost of locking wrongly is a dismissable paywall, while the cost of
-/// unlocking wrongly is giving the product away. The asymmetry decides the
-/// direction.
+/// Every failure path resolves to the free plan, which is the whole product:
+/// the only capability it does not carry is `shared_workspaces`, and no
+/// client surface asks for that one. What a failure costs is therefore
+/// accuracy about limits, not access. The server enforces both regardless --
+/// the `entitlement:` middleware answers `403` and an oversized upload
+/// answers `413` whatever this object says.
 @Riverpod(keepAlive: true)
 class EntitlementNotifier extends _$EntitlementNotifier {
   late final EntitlementCache _cache;
@@ -84,9 +89,7 @@ class EntitlementNotifier extends _$EntitlementNotifier {
 
   @override
   Future<EntitlementState> build() async {
-    _cache = EntitlementCache(
-      storage: ref.watch(secureStorageServiceProvider),
-    );
+    _cache = EntitlementCache(storage: ref.watch(secureStorageServiceProvider));
 
     final account = await ref.watch(accountProvider.future);
 
@@ -104,14 +107,12 @@ class EntitlementNotifier extends _$EntitlementNotifier {
       client: ref.watch(accountProvider.notifier).apiClient,
     );
 
-    // Publish a fresh cached snapshot first so the UI does not flash a paywall
-    // at a paying user while the request is in flight, then refresh behind it.
+    // Publish a fresh cached snapshot first so the UI does not flash this
+    // build's default limits while the request is in flight, then refresh
+    // behind it.
     final cached = await _cache.read(forUserId: userId);
     if (cached != null &&
-        cached.isFresh(
-          now: DateTime.now(),
-          maxAge: EntitlementCache.maxAge,
-        )) {
+        cached.isFresh(now: DateTime.now(), maxAge: EntitlementCache.maxAge)) {
       Future.microtask(refresh);
 
       return EntitlementState(
@@ -141,31 +142,6 @@ class EntitlementNotifier extends _$EntitlementNotifier {
     state = AsyncValue.data(await _fetchAndStore(account.session!.userId));
   }
 
-  /// Asks the server to re-read the payment provider, then adopts the result.
-  ///
-  /// Call after a purchase or a restore. Throws [ApiFailure] so a purchase flow
-  /// can tell the user their payment went through but has not landed yet --
-  /// that one *is* worth surfacing, unlike a background refresh.
-  Future<void> reconcileAfterPurchase() async {
-    final account = await ref.read(accountProvider.future);
-    if (!account.isSignedIn) return;
-
-    final api = _api;
-    if (api == null) return;
-
-    final userId = account.session!.userId;
-    final entitlement = await api.reconcile();
-
-    await _cache.write(entitlement: entitlement, userId: userId);
-
-    state = AsyncValue.data(
-      EntitlementState(
-        entitlement: entitlement,
-        source: EntitlementSource.server,
-      ),
-    );
-  }
-
   /// Drops the cached snapshot. Called when an account stops being this
   /// device's account.
   Future<void> clearCache() => _cache.clear();
@@ -190,8 +166,8 @@ class EntitlementNotifier extends _$EntitlementNotifier {
     } on ApiFailure catch (e) {
       if (kDebugMode) debugPrint('Entitlement refresh failed: $e');
 
-      // A stale cache is not a licence. Fall back to a fresh one if the window
-      // still holds, otherwise to free.
+      // Fall back to the cache if its window still holds, otherwise to the
+      // free plan's own numbers.
       final cached = await _cache.read(forUserId: userId);
       if (cached != null &&
           cached.isFresh(
@@ -214,14 +190,17 @@ class EntitlementNotifier extends _$EntitlementNotifier {
 
 /// Whether a single capability is unlocked right now.
 ///
-/// Reads as free while the notifier is still loading, so a widget never shows
-/// a paid control it might have to take away a frame later.
+/// Answers from [Entitlement.freeCapabilities] without reading the provider
+/// at all. Those do not depend on a server reply -- Local Device Link is a
+/// LAN feature that works with no account, and the rest are simply free -- so
+/// making them wait on one would be a round trip that can only produce the
+/// answer it already has.
+///
+/// Anything else reads as locked while the notifier is still loading, so a
+/// widget never shows a control it might have to take away a frame later.
 @riverpod
 bool hasCapability(Ref ref, String capability) {
-  // Local Device Link is free, offline and accountless. Answering it from the
-  // entitlement snapshot at all would make a LAN feature depend on a server
-  // reply, so it short-circuits before the provider is even read.
-  if (capability == Capabilities.localDeviceLink) return true;
+  if (Entitlement.freeCapabilities.contains(capability)) return true;
 
   final state = ref.watch(entitlementProvider).value;
 
