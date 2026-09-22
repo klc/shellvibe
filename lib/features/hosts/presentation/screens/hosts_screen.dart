@@ -17,7 +17,7 @@ import '../../../../core/network/ssh_session_manager.dart';
 import '../../../../core/utils/platform_capabilities.dart';
 import '../../../../shared/providers/workspace_provider.dart';
 import '../../../templates/domain/models/template_model.dart';
-import '../../../templates/presentation/dialogs/save_template_dialog.dart';
+import '../../../templates/presentation/widgets/template_editor_panel.dart';
 import '../../../templates/presentation/notifiers/templates_notifier.dart';
 import '../../../terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import '../../../vault/domain/models/identity_model.dart';
@@ -224,7 +224,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
             _TemplateNavItem(
               template: template,
               onRun: () => _runTemplate(template),
-              onRename: () => _renameTemplate(template),
+              onEdit: () => TemplateEditorPanel.show(context, template),
               onDelete: () => _deleteTemplate(context, template),
             ),
         ],
@@ -867,18 +867,6 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
     }
   }
 
-  Future<void> _renameTemplate(TemplateModel template) async {
-    final details = await SaveTemplateDialog.show(
-      context,
-      initialName: template.name,
-      isRename: true,
-    );
-    if (details == null) return;
-    await ref
-        .read(templatesProvider.notifier)
-        .renameTemplate(template, details.name);
-  }
-
   Future<void> _deleteTemplate(
     BuildContext context,
     TemplateModel template,
@@ -1407,18 +1395,18 @@ class _HostTagChip extends StatelessWidget {
 /// Context-column entry for a saved layout.
 ///
 /// Shaped like [ShellVibeNavItem] so it reads as part of the column, but it runs an
-/// action rather than selecting a filter, and carries its own rename/delete
+/// action rather than selecting a filter, and carries its own edit/delete
 /// menu.
 class _TemplateNavItem extends StatelessWidget {
   final TemplateModel template;
   final VoidCallback onRun;
-  final VoidCallback onRename;
+  final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   const _TemplateNavItem({
     required this.template,
     required this.onRun,
-    required this.onRename,
+    required this.onEdit,
     required this.onDelete,
   });
 
@@ -1467,17 +1455,24 @@ class _TemplateNavItem extends StatelessWidget {
             iconSize: 14,
             icon: const Icon(LucideIcons.ellipsis, size: 14),
             onSelected: (value) {
-              if (value == 'rename') onRename();
+              if (value == 'edit') onEdit();
               if (value == 'delete') onDelete();
             },
             itemBuilder: (context) => [
+              // Name, description and every pane: one place to look at what a
+              // template opens and to change it.
               const PopupMenuItem(
-                value: 'rename',
+                value: 'edit',
                 child: Row(
                   children: [
                     Icon(LucideIcons.pencil, size: 16),
                     SizedBox(width: 8),
-                    Text('Rename template'),
+                    Flexible(
+                      child: Text(
+                        'View & edit template',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                   ],
                 ),
               ),
