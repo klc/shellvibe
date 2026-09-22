@@ -738,7 +738,18 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
     // tries again.
     await backUpNow();
 
-    if (state.value?.conflictingServerRevision != null) return;
+    // The mark is only written for an upload that actually landed. Writing it
+    // after a refusal -- a conflict, a throttle, a body over the plan's limit,
+    // a server that could not be reached -- would count the attempt as the
+    // interval's backup and wait out the whole interval again. On a weekly
+    // schedule one dropped connection is then a week with no backup, and
+    // nothing says so.
+    final after = state.value;
+    if (after == null ||
+        after.conflictingServerRevision != null ||
+        after.messageIsError) {
+      return;
+    }
 
     await _store.writeAutoBackupMark(at: now, clock: clock);
     _publish((s) => s.copyWith(lastAutoBackupAt: now));

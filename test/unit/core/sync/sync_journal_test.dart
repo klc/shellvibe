@@ -269,6 +269,48 @@ void main() {
     });
   });
 
+  group('re-keying', () {
+    test('this device\'s rows are queued again, the others are not', () async {
+      // The repair for a device that sealed its operations with a key nobody
+      // else held: the log never carried them, but the version rows say it
+      // did, and the seed step skips exactly those.
+      await writeHost('mine');
+      await journal.clearSent(await journal.pending());
+
+      // A row this device learned about from someone else, which was never
+      // part of the split.
+      await journal.setVersion(
+        entityType: 'hosts',
+        entityId: 'theirs',
+        logicalClock: 9,
+        deviceId: 'device-b',
+      );
+
+      final forgotten = await journal.forgetVersionsBy(journal.deviceId);
+
+      expect(forgotten, 1);
+      expect(
+        await journal.versionFor(entityType: 'hosts', entityId: 'mine'),
+        isNull,
+      );
+      expect(
+        await journal.versionFor(entityType: 'hosts', entityId: 'theirs'),
+        isNotNull,
+        reason:
+            'A row standing at another device\'s clock would lose to any '
+            'operation that mentions it once its version is gone.',
+      );
+
+      // And the point of it: the row is offered to the seed step again. The
+      // default workspace comes with it -- it has never been versioned either.
+      expect(await journal.seedUnversioned(), 2);
+      expect(
+        (await journal.pending()).map((o) => '${o.entityType}/${o.entityId}'),
+        containsAll(['hosts/mine', 'workspaces/default']),
+      );
+    });
+  });
+
   group('sending', () {
     test('accepted operations are dropped', () async {
       await writeHost('h1');

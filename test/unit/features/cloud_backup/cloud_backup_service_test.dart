@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:drift/native.dart';
@@ -126,7 +127,38 @@ void main() {
       );
       expect(body['base_revision'], 0);
       expect(body['device_id'], deviceId);
+
+      // The version the envelope gave itself, not this build's newest. No
+      // sync key went in, so what was sealed is a v3 -- and a revision
+      // announced as v4 is one an older build refuses although it could open
+      // it.
+      expect(body['schema_version'], kBackupSchemaVersionWithoutSyncKey);
+      expect(
+        (jsonDecode(ciphertext) as Map<String, dynamic>)['schema_version'],
+        body['schema_version'],
+      );
+    });
+
+    test('a backup carrying a sync key is announced as v4', () async {
+      enqueueHead();
+      enqueueUploadAccepted();
+
+      await service.upload(
+        db: db,
+        passphrase: passphrase,
+        deviceId: deviceId,
+        maxSizeBytes: 5 * 1024 * 1024,
+        syncKey: Uint8List.fromList(List<int>.filled(32, 7)),
+      );
+
+      final body = transport.lastBody;
+
       expect(body['schema_version'], kBackupSchemaVersion);
+      expect(
+        (jsonDecode(body['ciphertext']! as String)
+            as Map<String, dynamic>)['schema_version'],
+        kBackupSchemaVersion,
+      );
     });
 
     test('the uploaded body carries no plaintext', () async {
@@ -253,7 +285,8 @@ void main() {
       expect(
         transport.sent,
         isEmpty,
-        reason: 'The client knows the limit; spending a request to learn it '
+        reason:
+            'The client knows the limit; spending a request to learn it '
             'again is waste.',
       );
     });
@@ -400,7 +433,9 @@ void main() {
     Future<String> sha256Hex(String value) async {
       final digest = await Sha256().hash(utf8.encode(value));
 
-      return digest.bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+      return digest.bytes
+          .map((b) => b.toRadixString(16).padLeft(2, '0'))
+          .join();
     }
 
     test('round-trips a backup into a second database', () async {
@@ -567,7 +602,11 @@ void main() {
 
     test('deleting the vault clears any reserved upload id', () async {
       pendingUploadId = 'upload-1';
-      transport.enqueue(body: {'data': {'message': 'deleted'}});
+      transport.enqueue(
+        body: {
+          'data': {'message': 'deleted'},
+        },
+      );
 
       await service.deleteVault();
 

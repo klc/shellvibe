@@ -124,6 +124,14 @@ class SyncNotifier extends _$SyncNotifier {
   SyncEngine? _engine;
   SyncJoinService? _join;
   bool _joinStarted = false;
+
+  /// This device adopted the account's key over one it had minted itself.
+  ///
+  /// Set by [_resolveSyncKey]. Everything sent before it was sealed with a key
+  /// no other device holds, so the ground is rewritten once the join finishes
+  /// rather than only when it looks stale -- that rewrite is the only path
+  /// those rows have left.
+  bool _reKeyed = false;
   SyncSnapshotService? _ground;
   String? _deviceId;
   String? _passphrase;
@@ -222,7 +230,12 @@ class SyncNotifier extends _$SyncNotifier {
 
     final Uint8List syncKey;
     try {
-      syncKey = await _resolveSyncKey(store, ground, passphrase);
+      syncKey = await _resolveSyncKey(
+        store,
+        ground,
+        db.syncJournal!,
+        passphrase,
+      );
     } on _NoCompleteGround {
       _stop();
 
@@ -279,16 +292,32 @@ class SyncNotifier extends _$SyncNotifier {
   ///
   /// It cannot be derived or invented. Two devices that each minted their own
   /// would seal operations the other silently skips -- nothing would fail, and
-  /// neither would ever see the other's work. So: what this device already
-  /// holds, or what the account's ground carries, or -- only for an account
+  /// neither would ever see the other's work. So: what the account's ground
+  /// carries, or what this device already holds, or -- only for an account
   /// with no ground at all -- a new one.
+  ///
+  /// The ground comes first, and that order is the whole point. A device that
+  /// already holds a key used to stop there, which is exactly how the split
+  /// above became permanent: both devices had a key, so neither ever looked
+  /// at the other's. The ground is the one authority -- every joining device
+  /// starts from it -- so when it carries a different key, this device's is
+  /// the one that was wrong.
+  ///
+  /// The ground is only read while this device has not finished joining.
+  /// After that the log itself reports the problem, through
+  /// [SyncResult.unreadable], and re-downloading a snapshot on every start to
+  /// re-confirm a key that has no way to change is a request nobody needs.
   Future<Uint8List> _resolveSyncKey(
     CloudBackupStore store,
     SyncSnapshotService ground,
+    SyncJournal journal,
     String passphrase,
   ) async {
     final stored = await store.readSyncKey();
-    if (stored != null) return base64.decode(stored);
+
+    if (stored != null && await journal.readJoinState() == SyncJoinState.done) {
+      return base64.decode(stored);
+    }
 
     final found = await ground.readGround(secret: passphrase);
 
@@ -301,10 +330,39 @@ class SyncNotifier extends _$SyncNotifier {
 
     final carried = found.ground?.syncKey;
     if (carried != null) {
-      await store.adoptSyncKey(carried);
+      // True only when this device held a *different* key: it minted its own
+      // before the ground existed. Everything it sent is sealed with a key
+      // nobody else has, so the join has to run again and end by rewriting
+      // the ground -- which is what carries those rows to the other devices.
+      _reKeyed = await store.adoptGroundSyncKey(carried);
+
+      if (_reKeyed) {
+        // The repair, and it is durable rather than a flag in memory: the
+        // join can fail on the network and this device would otherwise come
+        // back believing it had nothing left to send.
+        //
+        // Its rows went into the log sealed with a key nobody could open, so
+        // as far as the account is concerned they were never sent -- but the
+        // version rows say they were, and the seed step skips exactly those.
+        // Dropping them puts every row this device last wrote back in the
+        // queue, under the account's key this time, and the join ends by
+        // rewriting the ground because it seeded something.
+        await journal.forgetVersionsBy(journal.deviceId);
+        await journal.writeJoinState(SyncJoinState.none);
+
+        // The guard is per-instance and this notifier survives rebuilds, so a
+        // rebuild that discovers the re-key would set the flag and then find
+        // the join already marked started -- and the forced ground rewrite,
+        // the only thing that carries those rows to the other devices, would
+        // never run. The join state on disk says it has to run again; this
+        // lets it.
+        _joinStarted = false;
+      }
 
       return Uint8List.fromList(await carried.extractBytes());
     }
+
+    if (stored != null) return base64.decode(stored);
 
     // An account with no ground, or one whose ground predates the key. This
     // device mints it and the first ground it writes carries it onward.
@@ -336,16 +394,22 @@ class SyncNotifier extends _$SyncNotifier {
       );
 
       if (!result.succeeded) {
-        debugPrint('[Sync] join refused: ${result.problem} ${result.message}');
+        if (kDebugMode) {
+          debugPrint(
+            '[Sync] join refused: ${result.problem} ${result.message}',
+          );
+        }
         _publish((s) => s.copyWith(error: result.message));
 
         return;
       }
 
-      debugPrint(
-        '[Sync] joined: applied=${result.applied} seeded=${result.seeded} '
-        'pushed=${result.pushed} firstGround=${result.wroteFirstGround}',
-      );
+      if (kDebugMode) {
+        debugPrint(
+          '[Sync] joined: applied=${result.applied} seeded=${result.seeded} '
+          'pushed=${result.pushed} firstGround=${result.wroteFirstGround}',
+        );
+      }
 
       if (result.applied > 0) invalidateRestoredData(ref);
 
@@ -358,8 +422,10 @@ class SyncNotifier extends _$SyncNotifier {
         ),
       );
     } on Object catch (e, stackTrace) {
-      debugPrint('[Sync] join failed: $e');
-      debugPrintStack(stackTrace: stackTrace);
+      if (kDebugMode) {
+        debugPrint('[Sync] join failed: $e');
+        debugPrintStack(stackTrace: stackTrace);
+      }
       _publish((s) => s.copyWith(error: '$e'));
 
       return;
@@ -369,14 +435,36 @@ class SyncNotifier extends _$SyncNotifier {
 
     // The ground and the log have to overlap, and only one device has to keep
     // them that way. A conflict here means another got there first.
-    unawaited(_refreshGround());
+    unawaited(_refreshGround(force: _reKeyed));
+    _reKeyed = false;
   }
 
-  Future<void> _refreshGround() async {
+  /// Rewrites the ground when it has fallen behind, or when [force] says the
+  /// staleness test is beside the point.
+  ///
+  /// [force] is for the device that just adopted the account's key. Its own
+  /// rows went out sealed with a key nobody else holds, so they exist nowhere
+  /// another device can read them; a fresh ground, written under the right
+  /// key, is what puts them back in reach. The ground may be minutes old and
+  /// perfectly fresh by every other measure, which is why the usual test does
+  /// not apply.
+  Future<void> _refreshGround({bool force = false}) async {
     final ground = _ground;
     if (ground == null) return;
 
     try {
+      if (force) {
+        await ground.write(
+          db: ref.read(appDatabaseProvider),
+          passphrase: _passphrase!,
+          deviceId: _deviceId!,
+          maxSizeBytes: _maxSizeBytes,
+          syncKey: _syncKey!,
+        );
+
+        return;
+      }
+
       await ground.refreshIfStale(
         db: ref.read(appDatabaseProvider),
         passphrase: _passphrase!,
@@ -387,7 +475,7 @@ class SyncNotifier extends _$SyncNotifier {
     } on Object catch (e) {
       // Housekeeping. A device that cannot refresh the ground today syncs
       // perfectly well; another one will, and this one tries again next start.
-      debugPrint('[Sync] ground refresh skipped: $e');
+      if (kDebugMode) debugPrint('[Sync] ground refresh skipped: $e');
     }
   }
 
@@ -422,6 +510,16 @@ class SyncNotifier extends _$SyncNotifier {
             lastPushed: result.pushed,
             lastPulled: result.pulled,
             needsSnapshotRestore: false,
+            // Operations this device could not open. Reported rather than
+            // counted and dropped: a device whose key does not match the
+            // account's syncs forever without ever seeing anything, and this
+            // number is the only place that shows.
+            error: result.unreadable > 0
+                ? '${result.unreadable} changes from your other devices could '
+                      'not be read on this device. Its sync key does not match '
+                      'the account. Reopen the app to take the account\'s key '
+                      'from the latest snapshot, or restore a backup here.'
+                : null,
           ),
         );
       } on SyncCursorExpired {
@@ -455,6 +553,11 @@ class SyncNotifier extends _$SyncNotifier {
       pulled: pulled.pulled,
       skipped: pulled.skipped,
       repaired: pulled.repaired,
+      // Carried, not dropped. This is the pass that runs the moment a join
+      // finishes, which is the first and likeliest place a key that does not
+      // match the account's shows itself -- and leaving the count behind here
+      // reports that device as a clean sync that pulled nothing.
+      unreadable: pulled.unreadable,
     );
   }
 
@@ -502,6 +605,7 @@ class SyncNotifier extends _$SyncNotifier {
     _join = null;
     _ground = null;
     _joinStarted = false;
+    _reKeyed = false;
   }
 
   /// The state as this notifier last knew it.

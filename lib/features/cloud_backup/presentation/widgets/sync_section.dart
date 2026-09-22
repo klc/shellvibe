@@ -58,8 +58,10 @@ final class SyncSection extends ConsumerWidget {
           title: 'What syncs automatically',
           subtitle:
               'Per device, and in both directions: a category that is off is '
-              'neither sent from here nor applied here. Manual backups are '
-              'not affected.',
+              'neither sent from here nor applied here. What the others change '
+              'while it is off does not arrive later -- switching it back on '
+              'starts from that moment, and a restore is what fills the gap. '
+              'Manual backups are not affected.',
           enabled: enabled,
         ),
         const SizedBox(height: 16),

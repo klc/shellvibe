@@ -462,6 +462,21 @@ final class SyncJournal {
     return seeded;
   }
 
+  /// Forgets the versions this device stamped, so its rows are queued again.
+  ///
+  /// The repair for a device that was sealing operations with a key nobody
+  /// else holds. Everything it sent went into the log unreadable, so as far as
+  /// the account is concerned those rows were never sent at all -- but the
+  /// version rows say they were, and `seedUnversioned` skips exactly those.
+  ///
+  /// Only the rows this device last wrote. A row standing at another device's
+  /// clock came from an operation this device could read, which means it was
+  /// never part of the split, and dropping its version would make it lose to
+  /// any operation that mentions it, however old.
+  Future<int> forgetVersionsBy(String deviceId) => (db.delete(
+    db.syncEntityVersions,
+  )..where((t) => t.deviceId.equals(deviceId))).go();
+
   /// How many rows stand at [logicalClock] as written by [deviceId].
   ///
   /// Used to count what a ground brought: the restore stamps every row it

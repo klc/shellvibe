@@ -104,8 +104,12 @@ final class BackupEnvelope {
   BackupEnvelope({EncryptionEngine? crypto})
     : _crypto = crypto ?? EncryptionEngine();
 
-  /// Bytes in a recovery code before encoding. 256 bits, so the code itself is
-  /// as strong as the key it protects and no passphrase policy applies to it.
+  /// Bytes drawn for a recovery code, one per character.
+  ///
+  /// Each byte is reduced to one symbol of a 32-letter alphabet, so the code
+  /// carries 5 bits per character: 160 bits over 32 characters. Far past
+  /// anything a passphrase policy could ask for, and the reason no policy is
+  /// applied to it -- but not the 256 bits the byte count suggests.
   static const int recoveryCodeBytes = 32;
 
   /// Bytes in a sync key. The same size as the payload key it is wrapped
@@ -227,6 +231,30 @@ final class BackupEnvelope {
     return schemaVersion >= 3
         ? _openV3(envelope, secret, method, schemaVersion)
         : _openLegacy(envelope, secret, schemaVersion);
+  }
+
+  /// The schema version [envelopeJson] declares, without opening it.
+  ///
+  /// The sealed envelope decides its own version -- v3 when it carries no sync
+  /// key, v4 when it does -- so the number that travels beside it in the
+  /// upload metadata has to be read back off it rather than assumed from this
+  /// build's newest. Sending [kBackupSchemaVersion] for a v3 envelope tells
+  /// every reader, including the restore list, that a backup an older build
+  /// could open is one it must refuse.
+  ///
+  /// Falls back to 1: an envelope whose version cannot be read is the oldest
+  /// thing it could be, and claiming otherwise would refuse it on a build that
+  /// can in fact open it.
+  static int versionOf(String envelopeJson) {
+    try {
+      final decoded = jsonDecode(envelopeJson);
+
+      return decoded is Map<String, dynamic>
+          ? decoded['schema_version'] as int? ?? 1
+          : 1;
+    } on Object {
+      return 1;
+    }
   }
 
   /// Whether [envelopeJson] carries a recovery-code path, without opening it.

@@ -60,10 +60,7 @@ void main() {
       // to read what this one backs up.
       await store.writeSyncKey(base64.encode(fixedKey(7)));
 
-      expect(
-        await store.syncKeyForUpload(autoSyncEnabled: false),
-        fixedKey(7),
-      );
+      expect(await store.syncKeyForUpload(autoSyncEnabled: false), fixedKey(7));
     });
   });
 
@@ -95,10 +92,42 @@ void main() {
     test('a device that adopts does not mint its own', () async {
       await store.adoptSyncKey(SecretKey(fixedKey(9)));
 
-      expect(
-        await store.syncKeyForUpload(autoSyncEnabled: true),
-        fixedKey(9),
-      );
+      expect(await store.syncKeyForUpload(autoSyncEnabled: true), fixedKey(9));
+    });
+  });
+
+  group('the ground overrules', () {
+    test('a key minted before the ground existed is replaced', () async {
+      // The split this closes: two devices switch sync on at the same time,
+      // each mints a key, and from then on each pushes a log the other
+      // silently discards. The ground is what every joining device starts
+      // from, so the key it carries is the account's by definition.
+      await store.writeSyncKey(base64.encode(fixedKey(1)));
+
+      final replaced = await store.adoptGroundSyncKey(SecretKey(fixedKey(2)));
+
+      expect(replaced, isTrue);
+      expect(await store.readSyncKey(), base64.encode(fixedKey(2)));
+    });
+
+    test('the same key is not a change', () async {
+      // The ordinary case, on every start. Reporting a change here would send
+      // the device off to rewrite the ground for nothing.
+      await store.writeSyncKey(base64.encode(fixedKey(3)));
+
+      expect(await store.adoptGroundSyncKey(SecretKey(fixedKey(3))), isFalse);
+    });
+
+    test('a ground with no key changes nothing', () async {
+      await store.writeSyncKey(base64.encode(fixedKey(4)));
+
+      expect(await store.adoptGroundSyncKey(null), isFalse);
+      expect(await store.readSyncKey(), base64.encode(fixedKey(4)));
+    });
+
+    test('a device with no key of its own takes the ground\'s', () async {
+      expect(await store.adoptGroundSyncKey(SecretKey(fixedKey(6))), isTrue);
+      expect(await store.readSyncKey(), base64.encode(fixedKey(6)));
     });
   });
 

@@ -162,15 +162,39 @@ final class CloudBackupStore {
 
   /// Keeps the vault's sync key, when a backup handed one over.
   ///
-  /// Never overwrites one this device already holds. Two devices that each
-  /// minted a key would seal their own into their own backups, and every
-  /// operation either of them wrote would be unreadable to the other -- with
-  /// nothing failing, because both would simply skip what they could not open.
+  /// Never overwrites one this device already holds. A backup is a snapshot of
+  /// some moment, possibly an old one, and letting any revision that happens
+  /// to be restored redefine the account's key would be a worse rule than
+  /// keeping the one already in hand. The account's *ground* is the one thing
+  /// allowed to overrule it -- see [adoptGroundSyncKey].
   Future<void> adoptSyncKey(SecretKey? syncKey) async {
     if (syncKey == null) return;
     if (await readSyncKey() != null) return;
 
     await writeSyncKey(base64.encode(await syncKey.extractBytes()));
+  }
+
+  /// Takes the key from the account's sync ground, overruling this device's.
+  ///
+  /// The ground is what every joining device starts from, so the key it
+  /// carries is the account's by definition. A device holding a different one
+  /// minted its own before any ground existed -- two devices switching sync on
+  /// at the same time is all it takes -- and from then on each pushes a log
+  /// the other silently discards. Nothing fails, nothing is empty, and neither
+  /// screen says a word.
+  ///
+  /// Returns true when the stored key actually changed, which is the caller's
+  /// signal that everything this device sent under the old key has to be
+  /// written again.
+  Future<bool> adoptGroundSyncKey(SecretKey? syncKey) async {
+    if (syncKey == null) return false;
+
+    final incoming = base64.encode(await syncKey.extractBytes());
+    if (await readSyncKey() == incoming) return false;
+
+    await writeSyncKey(incoming);
+
+    return true;
   }
 
   /// The key the next upload should seal in, minting one if it is time.
@@ -289,6 +313,10 @@ final class CloudBackupStore {
     await storage.delete(key: _groundMarkKey);
     await storage.delete(key: _autoBackupMarkKey);
     await storage.delete(key: _syncKeyKey);
+    // The schedule goes too. Left behind, a device whose vault was deleted
+    // still believes it backs up hourly, and the first passphrase set on it
+    // afterwards silently starts a schedule nobody asked for.
+    await storage.delete(key: _frequencyKey);
   }
 
   static const String _passphraseKey = 'shellvibe_sync_passphrase';

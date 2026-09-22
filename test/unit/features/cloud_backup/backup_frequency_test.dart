@@ -108,6 +108,11 @@ void main() {
       await store.clear();
 
       expect(await store.readAutoBackupMark(), isNull);
+
+      // The schedule too. A device whose vault was deleted that still
+      // believes it backs up weekly starts writing again the moment a
+      // passphrase is set on it, without anyone choosing that.
+      expect(await store.readBackupFrequency(), BackupFrequency.off);
     });
   });
 }

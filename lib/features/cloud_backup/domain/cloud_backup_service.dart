@@ -173,7 +173,10 @@ final class CloudBackupService {
         baseRevision: head.currentRevision,
         uploadId: uploadId,
         deviceId: deviceId,
-        schemaVersion: kBackupSchemaVersion,
+        // Read off the envelope, not assumed. A backup sealed without a sync
+        // key is a v3 one, and announcing it as v4 marks a revision that an
+        // older build can open as one it has to refuse.
+        schemaVersion: BackupEnvelope.versionOf(envelope),
         encryptionVersion: kEncryptionVersion,
         ciphertext: envelope,
         ciphertextSha256: checksum,
