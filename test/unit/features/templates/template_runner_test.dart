@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/features/hosts/domain/models/host_model.dart';
@@ -15,7 +17,10 @@ class _RecordingTarget implements TemplateRunnerTarget {
   var _counter = 0;
   String? _activeTabId;
 
-  _RecordingTarget({this.failingHostIds = const {}});
+  /// When set, every connection hangs on this until the test releases it.
+  final Completer<void>? connectionGate;
+
+  _RecordingTarget({this.failingHostIds = const {}, this.connectionGate});
 
   void _created(String kind) {
     _activeTabId = 'live_${_counter++}';
@@ -34,6 +39,7 @@ class _RecordingTarget implements TemplateRunnerTarget {
       return;
     }
     _created('openTabForHost(${host.id})');
+    await connectionGate?.future;
   }
 
   @override
@@ -48,6 +54,7 @@ class _RecordingTarget implements TemplateRunnerTarget {
   }) async {
     final axis = direction == Axis.horizontal ? 'h' : 'v';
     _created('splitTab($parentTabId, $axis, host=${host?.id})');
+    await connectionGate?.future;
   }
 
   @override
@@ -59,13 +66,13 @@ class _RecordingTarget implements TemplateRunnerTarget {
 }
 
 HostModel _host(String id, {String? identityId}) => HostModel(
-      id: id,
-      workspaceId: 'ws_1',
-      identityId: identityId,
-      label: 'Server $id',
-      hostname: '$id.example.com',
-      createdAt: DateTime(2026),
-    );
+  id: id,
+  workspaceId: 'ws_1',
+  identityId: identityId,
+  label: 'Server $id',
+  hostname: '$id.example.com',
+  createdAt: DateTime(2026),
+);
 
 TemplatePaneModel _pane({
   required String id,
@@ -90,10 +97,7 @@ TemplatePaneModel _pane({
   );
 }
 
-TemplateModel _template(
-  List<TemplatePaneModel> panes, {
-  String? activePaneId,
-}) {
+TemplateModel _template(List<TemplatePaneModel> panes, {String? activePaneId}) {
   return TemplateModel(
     id: 'tpl_1',
     workspaceId: 'ws_1',
@@ -109,8 +113,7 @@ Future<({bool ok, IdentityModel? identity})> _resolveOk(HostModel host) async =>
 
 Future<({bool ok, IdentityModel? identity})> _resolveFails(
   HostModel host,
-) async =>
-    (ok: false, identity: null);
+) async => (ok: false, identity: null);
 
 void main() {
   const runner = TemplateRunner();
@@ -145,6 +148,53 @@ void main() {
       ]);
     });
 
+    test('places every pane without waiting for any to connect', () async {
+      final gate = Completer<void>();
+      final target = _RecordingTarget(connectionGate: gate);
+      final hosts = {
+        for (final id in ['host_1', 'host_2', 'host_3']) id: _host(id),
+      };
+
+      final result = await runner.run(
+        _template([
+          _pane(
+            id: 'p0',
+            order: 0,
+            sessionType: TerminalSessionType.ssh,
+            hostId: 'host_1',
+          ),
+          _pane(
+            id: 'p1',
+            order: 1,
+            parentPaneId: 'p0',
+            splitDirection: Axis.horizontal,
+            sessionType: TerminalSessionType.ssh,
+            hostId: 'host_2',
+          ),
+          _pane(
+            id: 'p2',
+            order: 2,
+            sessionType: TerminalSessionType.ssh,
+            hostId: 'host_3',
+          ),
+        ]),
+        target: target,
+        hostsById: hosts,
+        resolveIdentity: _resolveOk,
+      );
+
+      // The run is over with nothing connected, and the whole layout is on
+      // screen in capture order: the caller can show the terminal now.
+      expect(target.calls.where((call) => call.contains('->')), [
+        'openTabForHost(host_1) -> live_0',
+        'splitTab(live_0, h, host=host_2) -> live_1',
+        'openTabForHost(host_3) -> live_2',
+      ]);
+      expect(result.openedPanes, 3);
+      expect(result.isComplete, isTrue);
+      gate.complete();
+    });
+
     test('applies split ratios only after every pane exists', () async {
       final target = _RecordingTarget();
 
@@ -171,16 +221,18 @@ void main() {
         resolveIdentity: _resolveOk,
       );
 
-      final firstRatioCall =
-          target.calls.indexWhere((c) => c.startsWith('setSplitRatio'));
-      final lastCreateCall =
-          target.calls.lastIndexWhere((c) => c.contains(' -> live_'));
+      final firstRatioCall = target.calls.indexWhere(
+        (c) => c.startsWith('setSplitRatio'),
+      );
+      final lastCreateCall = target.calls.lastIndexWhere(
+        (c) => c.contains(' -> live_'),
+      );
 
       expect(firstRatioCall, greaterThan(lastCreateCall));
-      expect(
-        target.calls.where((c) => c.startsWith('setSplitRatio')),
-        ['setSplitRatio(live_1, 0.3)', 'setSplitRatio(live_2, 0.7)'],
-      );
+      expect(target.calls.where((c) => c.startsWith('setSplitRatio')), [
+        'setSplitRatio(live_1, 0.3)',
+        'setSplitRatio(live_2, 0.7)',
+      ]);
     });
 
     test('root panes get no ratio call', () async {
@@ -200,13 +252,10 @@ void main() {
       final target = _RecordingTarget();
 
       await runner.run(
-        _template(
-          [
-            _pane(id: 'p0', order: 0),
-            _pane(id: 'p1', order: 1),
-          ],
-          activePaneId: 'p0',
-        ),
+        _template([
+          _pane(id: 'p0', order: 0),
+          _pane(id: 'p1', order: 1),
+        ], activePaneId: 'p0'),
         target: target,
         hostsById: const {},
         resolveIdentity: _resolveOk,
@@ -310,10 +359,7 @@ void main() {
       );
 
       expect(result.openedPanes, equals(0));
-      expect(
-        result.warnings,
-        ['prod: stored credentials could not be read.'],
-      );
+      expect(result.warnings, ['prod: stored credentials could not be read.']);
       expect(target.calls, isEmpty);
     });
 
@@ -374,38 +420,39 @@ void main() {
       expect(target.calls, ['openTabForHost(host_1) -> failed']);
     });
 
-    test('a local pane under an SSH parent is skipped, not silently SSH',
-        () async {
-      final target = _RecordingTarget();
+    test(
+      'a local pane under an SSH parent is skipped, not silently SSH',
+      () async {
+        final target = _RecordingTarget();
 
-      final result = await runner.run(
-        _template([
-          _pane(
-            id: 'p0',
-            order: 0,
-            sessionType: TerminalSessionType.ssh,
-            hostId: 'host_1',
-            title: 'prod',
-          ),
-          _pane(
-            id: 'p1',
-            order: 1,
-            parentPaneId: 'p0',
-            splitDirection: Axis.horizontal,
-            title: 'shell',
-          ),
-        ]),
-        target: target,
-        hostsById: {'host_1': _host('host_1')},
-        resolveIdentity: _resolveOk,
-      );
+        final result = await runner.run(
+          _template([
+            _pane(
+              id: 'p0',
+              order: 0,
+              sessionType: TerminalSessionType.ssh,
+              hostId: 'host_1',
+              title: 'prod',
+            ),
+            _pane(
+              id: 'p1',
+              order: 1,
+              parentPaneId: 'p0',
+              splitDirection: Axis.horizontal,
+              title: 'shell',
+            ),
+          ]),
+          target: target,
+          hostsById: {'host_1': _host('host_1')},
+          resolveIdentity: _resolveOk,
+        );
 
-      expect(result.openedPanes, equals(1));
-      expect(
-        result.warnings,
-        ['shell: a local pane cannot be split out of an SSH pane.'],
-      );
-    });
+        expect(result.openedPanes, equals(1));
+        expect(result.warnings, [
+          'shell: a local pane cannot be split out of an SSH pane.',
+        ]);
+      },
+    );
 
     test('replays panes stored out of order by paneOrder', () async {
       final target = _RecordingTarget();
@@ -429,34 +476,36 @@ void main() {
       expect(target.calls.first, equals('openLocalTab(A) -> live_0'));
     });
 
-    test('requiresUnlockedVault is true only for hosts with an identity',
-        () async {
-      final withIdentity = _template([
-        _pane(
-          id: 'p0',
-          order: 0,
-          sessionType: TerminalSessionType.ssh,
-          hostId: 'host_1',
-        ),
-      ]);
-      final withoutIdentity = _template([
-        _pane(
-          id: 'p0',
-          order: 0,
-          sessionType: TerminalSessionType.ssh,
-          hostId: 'host_2',
-        ),
-      ]);
-      final localOnly = _template([_pane(id: 'p0', order: 0)]);
+    test(
+      'requiresUnlockedVault is true only for hosts with an identity',
+      () async {
+        final withIdentity = _template([
+          _pane(
+            id: 'p0',
+            order: 0,
+            sessionType: TerminalSessionType.ssh,
+            hostId: 'host_1',
+          ),
+        ]);
+        final withoutIdentity = _template([
+          _pane(
+            id: 'p0',
+            order: 0,
+            sessionType: TerminalSessionType.ssh,
+            hostId: 'host_2',
+          ),
+        ]);
+        final localOnly = _template([_pane(id: 'p0', order: 0)]);
 
-      final hosts = {
-        'host_1': _host('host_1', identityId: 'id_1'),
-        'host_2': _host('host_2'),
-      };
+        final hosts = {
+          'host_1': _host('host_1', identityId: 'id_1'),
+          'host_2': _host('host_2'),
+        };
 
-      expect(runner.requiresUnlockedVault(withIdentity, hosts), isTrue);
-      expect(runner.requiresUnlockedVault(withoutIdentity, hosts), isFalse);
-      expect(runner.requiresUnlockedVault(localOnly, hosts), isFalse);
-    });
+        expect(runner.requiresUnlockedVault(withIdentity, hosts), isTrue);
+        expect(runner.requiresUnlockedVault(withoutIdentity, hosts), isFalse);
+        expect(runner.requiresUnlockedVault(localOnly, hosts), isFalse);
+      },
+    );
   });
 }
