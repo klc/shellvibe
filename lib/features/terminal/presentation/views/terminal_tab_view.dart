@@ -369,6 +369,14 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
                           onTap: () => ref
                               .read(terminalTabsProvider.notifier)
                               .setActiveTab(tab.id),
+                          onSecondaryTapDown: (details) => unawaited(
+                            _showTabMenu(
+                              tab,
+                              index: index,
+                              tabCount: rootTabs.length,
+                              position: details.globalPosition,
+                            ),
+                          ),
                           borderRadius: tabRadius,
                           child: AnimatedContainer(
                             duration: tokens.motionFast,
@@ -868,6 +876,55 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
       ref.read(terminalTabsProvider),
       SnippetVariableParser.substituteVariables(snippet.code, values),
     );
+  }
+
+  /// A tab's right-click menu: close it, or the tabs around it.
+  ///
+  /// The actions that would close nothing stay listed but disabled, so the
+  /// menu keeps one shape and the eye learns where each row is.
+  Future<void> _showTabMenu(
+    TerminalTabSession tab, {
+    required int index,
+    required int tabCount,
+    required Offset position,
+  }) async {
+    final notifier = ref.read(terminalTabsProvider.notifier);
+    final chosen = await showAdaptiveActionMenu<VoidCallback>(
+      context: context,
+      globalPosition: position,
+      actions: [
+        AdaptiveMenuAction(
+          itemKey: const Key('tab_menu_close'),
+          icon: LucideIcons.x,
+          label: 'Close Tab',
+          shortcut: _isApplePlatform ? '⌘W' : 'Ctrl+W',
+          value: () => unawaited(notifier.closeTab(tab.id)),
+        ),
+        AdaptiveMenuAction(
+          itemKey: const Key('tab_menu_close_others'),
+          icon: LucideIcons.squareX,
+          label: 'Close Other Tabs',
+          enabled: tabCount > 1,
+          value: () => unawaited(notifier.closeOtherTabs(tab.id)),
+        ),
+        const AdaptiveMenuDivider(),
+        AdaptiveMenuAction(
+          itemKey: const Key('tab_menu_close_left'),
+          icon: LucideIcons.arrowLeftToLine,
+          label: 'Close Tabs to the Left',
+          enabled: index > 0,
+          value: () => unawaited(notifier.closeTabsToLeft(tab.id)),
+        ),
+        AdaptiveMenuAction(
+          itemKey: const Key('tab_menu_close_right'),
+          icon: LucideIcons.arrowRightToLine,
+          label: 'Close Tabs to the Right',
+          enabled: index < tabCount - 1,
+          value: () => unawaited(notifier.closeTabsToRight(tab.id)),
+        ),
+      ],
+    );
+    chosen?.call();
   }
 
   /// Of the selected panes, how many have a live session handler (i.e. can
