@@ -328,9 +328,21 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
           return Row(
             children: [
               Expanded(
-                child: ListView.builder(
+                // Tabs are dragged into a new order. The handles are the tabs
+                // themselves rather than the grip Flutter adds on desktop: a
+                // tab is already a pill you would reach for, and a grip icon
+                // in each one would cost the title its room.
+                child: ReorderableListView.builder(
                   scrollDirection: Axis.horizontal,
                   padding: EdgeInsets.zero,
+                  buildDefaultDragHandles: false,
+                  proxyDecorator: (child, _, _) => Material(
+                    color: Colors.transparent,
+                    child: Opacity(opacity: 0.85, child: child),
+                  ),
+                  onReorderItem: (from, to) => ref
+                      .read(terminalTabsProvider.notifier)
+                      .moveTab(rootTabs[from].id, to),
                   itemCount: rootTabs.length,
                   itemBuilder: (context, index) {
                     final tab = rootTabs[index];
@@ -489,7 +501,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
                     );
                     // The tab names the host by its label; hovering it says
                     // where that label points, which the status bar used to.
-                    return endpoint == null
+                    final labelledChip = endpoint == null
                         ? tabChip
                         : Tooltip(
                             key: Key('tab_endpoint_${tab.id}'),
@@ -497,6 +509,21 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
                             waitDuration: const Duration(milliseconds: 500),
                             child: tabChip,
                           );
+                    // A pointer drags at once, past the tap slop, so a click
+                    // still selects. A finger has to hold first: on a phone a
+                    // swipe along the strip is how the tabs are scrolled.
+                    return KeyedSubtree(
+                      key: ValueKey('tab_item_${tab.id}'),
+                      child: isMobilePlatform
+                          ? ReorderableDelayedDragStartListener(
+                              index: index,
+                              child: labelledChip,
+                            )
+                          : ReorderableDragStartListener(
+                              index: index,
+                              child: labelledChip,
+                            ),
+                    );
                   },
                 ),
               ),
