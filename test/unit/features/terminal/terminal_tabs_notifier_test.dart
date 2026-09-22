@@ -375,6 +375,102 @@ void main() {
       expect(splitTab.sessionType, equals(TerminalSessionType.local));
     });
 
+    test(
+      'closeOther/Left/Right close whole tabs around the one kept',
+      () async {
+        final notifier = container.read(terminalTabsProvider.notifier);
+        final ids = <String>[];
+        for (final title in ['A', 'B', 'C', 'D']) {
+          notifier.openLocalTab(title: title);
+          ids.add(container.read(terminalTabsProvider).activeTabId!);
+        }
+        // B carries a split, which has to go with it.
+        notifier.splitTab(ids[1], direction: Axis.horizontal);
+
+        List<String> titles() => [
+          for (final tab in container.read(terminalTabsProvider).tabs)
+            if (tab.splitParentId == null) tab.title,
+        ];
+
+        await notifier.closeTabsToLeft(ids[2]);
+        expect(titles(), ['C', 'D']);
+        expect(container.read(terminalTabsProvider).tabs, hasLength(2));
+
+        await notifier.closeTabsToRight(ids[2]);
+        expect(titles(), ['C']);
+
+        // Nothing on either side: a no-op, not an error.
+        await notifier.closeOtherTabs(ids[2]);
+        await notifier.closeTabsToLeft(ids[2]);
+        expect(titles(), ['C']);
+      },
+    );
+
+    test('closeOtherTabs keeps the clicked tab and focuses it', () async {
+      final notifier = container.read(terminalTabsProvider.notifier);
+      final ids = <String>[];
+      for (final title in ['A', 'B', 'C']) {
+        notifier.openLocalTab(title: title);
+        ids.add(container.read(terminalTabsProvider).activeTabId!);
+      }
+      // C is focused; B is the one right-clicked.
+      await notifier.closeOtherTabs(ids[1]);
+
+      final state = container.read(terminalTabsProvider);
+      expect([for (final tab in state.tabs) tab.title], ['B']);
+      expect(state.activeTabId, ids[1]);
+    });
+
+    test('moveTab reorders root tabs and leaves every split pane alone', () {
+      final notifier = container.read(terminalTabsProvider.notifier);
+
+      notifier.openLocalTab(title: 'A');
+      final a = container.read(terminalTabsProvider).activeTabId!;
+      notifier.splitTab(a, direction: Axis.horizontal);
+      final aPane = container.read(terminalTabsProvider).tabs.last.id;
+      notifier.openLocalTab(title: 'B');
+      final b = container.read(terminalTabsProvider).activeTabId!;
+      notifier.openLocalTab(title: 'C');
+      final c = container.read(terminalTabsProvider).activeTabId!;
+
+      List<String> roots() => [
+        for (final tab in container.read(terminalTabsProvider).tabs)
+          if (tab.splitParentId == null) tab.id,
+      ];
+
+      notifier.moveTab(c, 0);
+      expect(roots(), [c, a, b]);
+
+      notifier.moveTab(c, 2);
+      expect(roots(), [a, b, c]);
+
+      // An index past the end lands on the last slot rather than throwing.
+      notifier.moveTab(a, 99);
+      expect(roots(), [b, c, a]);
+
+      final state = container.read(terminalTabsProvider);
+      final pane = state.tabs.firstWhere((t) => t.id == aPane);
+      expect(pane.splitParentId, a);
+      expect(pane.splitDirection, Axis.horizontal);
+      // Moving a tab is not selecting it.
+      expect(state.activeTabId, c);
+    });
+
+    test('moveTab ignores split panes and unknown ids', () {
+      final notifier = container.read(terminalTabsProvider.notifier);
+
+      notifier.openLocalTab(title: 'A');
+      final a = container.read(terminalTabsProvider).activeTabId!;
+      notifier.splitTab(a, direction: Axis.horizontal);
+      final aPane = container.read(terminalTabsProvider).tabs.last.id;
+      notifier.openLocalTab(title: 'B');
+
+      final before = [...container.read(terminalTabsProvider).tabs];
+      notifier.moveTab(aPane, 1);
+      notifier.moveTab('missing', 0);
+      expect(container.read(terminalTabsProvider).tabs, before);
+    });
+
     test('swapPanes exchanges two panes without moving the layout', () {
       final notifier = container.read(terminalTabsProvider.notifier);
 

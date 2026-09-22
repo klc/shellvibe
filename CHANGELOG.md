@@ -7,6 +7,99 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-09-23
+
+### Added
+
+**Account, cloud backup and sync**
+
+- An optional ShellVibe account. Nothing requires one: the terminal, SSH, the
+  vault and local Device Link all work signed out. Signing in keeps this
+  install's device id, so one machine stays one entry in the account's device
+  list however often it signs in again.
+- Cloud backup uploads the encrypted vault and restores it. The server only
+  ever holds the sealed envelope; the passphrase, the keys and the decrypted
+  data stay on the device. A recovery code opens the envelope when the
+  passphrase is lost.
+- Backups can run on a schedule — hourly, daily or weekly, off by default.
+  There is no background task on any platform, so "daily" means once a day,
+  the first time the app is opened, and Settings says so. A backup that
+  changed nothing is not written again.
+- A backup, to a file or to the account, carries the categories the user
+  picks. Port forwards are locked while hosts are off, since a forward cannot
+  exist without its host.
+- Automatic sync keeps devices in step in both directions. Joining an account
+  never replaces what a device holds: a phone with two hosts joining a desktop
+  with sixty ends at sixty-two, whichever joined first, and the join reports
+  what it merged.
+- A delete that sync carried to every device can be taken back from the trash,
+  on every device.
+- Cloud backup, cloud sync and remote Device Link are on the free plan; the
+  account screen shows the storage quota rather than a paywall.
+
+**Terminal**
+
+- Tabs can be dragged into a new order. A click still selects a tab; on a
+  phone the drag starts after a hold, since a swipe scrolls the strip.
+- Right-clicking a tab offers Close Tab, Close Other Tabs, and Close Tabs to
+  the Left or to the Right. Split panes close with their tab.
+
+**Templates**
+
+- A template opens every pane at once and connects them side by side. The
+  hosts screen and the ⌘K palette switch to the terminal straight away instead
+  of after the last host has connected, and a slow host no longer holds up
+  the rest of the layout.
+- Every template is listed in the ⌘K palette, not only starred ones, and in
+  Connect to Host, and both search it by name and description.
+- A template can be viewed and edited without running it: each tab with its
+  nested panes and the host each connects to, with panes a run would skip
+  flagged. Panes can be pointed at another host, split, turned or removed;
+  tabs can be added, moved or removed. It opens from the template menu on the
+  hosts screen and from the Run Template sheet.
+
+**Desktop**
+
+- ShellVibe keeps running in the system tray (the menu bar on macOS). On
+  Windows and Linux closing the window hides it, so tunnels and sessions keep
+  running, and the tray menu shows what is still open and holds Quit. It is
+  on by default and can be turned off under Settings → Appearance → Window.
+- A second launch on Windows or Linux brings the running copy forward instead
+  of starting another beside it.
+
+### Changed
+
+- The status bar under the terminal is gone. `user@host:port` is on a split
+  pane's header and a single tab's tooltip; a quiet Mosh link and an attached
+  Device Link phone are badges on the tab, the Device Link one disconnecting
+  on click.
+- Settings on a phone opens on an index of sections, each on a page of its
+  own, instead of one long scroll. AI Access, which configures a bridge that
+  only runs on a desktop, is not shown on a phone, and Device Link shows only
+  this device's side of each pairing.
+- Backup and Sync are separate sections: a backup is a copy the user takes,
+  sync is what runs on its own.
+
+### Fixed
+
+- On macOS, Option-composed characters type in apps that turn on xterm's
+  modifyOtherKeys, such as Claude Code. On a Turkish Q layout Option+Q could
+  not type `@` there, nor Option+8 `[` and the rest of the Option layer.
+  (xterm3 6.3.2)
+- Text on the alternate screen stays selectable as a session runs on, and a
+  press on blank space starts a selection. (xterm3 6.3.1)
+- The search fields were 48px tall with a wide gap before the text; they are
+  the height of the controls around them and have a clear button. The
+  terminal's find bar no longer draws a second, smaller frame inside itself.
+- Light mode gives split pane headers, the active tab and the command approval
+  dialog light chrome instead of the dark theme's.
+- Sync no longer looks healthy while doing nothing: two devices that switched
+  it on together each ended up with their own key, a page boundary could skip
+  an operation, the join reported success whatever happened, and automatic
+  sync did not run at all. Each of these now either works or says it did not.
+- Every Android phone registered on an account as "localhost"; it now takes
+  the device's name, or its platform.
+
 ## [1.2.0] - 2026-09-17
 
 ### Added

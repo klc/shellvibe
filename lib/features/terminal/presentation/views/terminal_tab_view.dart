@@ -328,9 +328,21 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
           return Row(
             children: [
               Expanded(
-                child: ListView.builder(
+                // Tabs are dragged into a new order. The handles are the tabs
+                // themselves rather than the grip Flutter adds on desktop: a
+                // tab is already a pill you would reach for, and a grip icon
+                // in each one would cost the title its room.
+                child: ReorderableListView.builder(
                   scrollDirection: Axis.horizontal,
                   padding: EdgeInsets.zero,
+                  buildDefaultDragHandles: false,
+                  proxyDecorator: (child, _, _) => Material(
+                    color: Colors.transparent,
+                    child: Opacity(opacity: 0.85, child: child),
+                  ),
+                  onReorderItem: (from, to) => ref
+                      .read(terminalTabsProvider.notifier)
+                      .moveTab(rootTabs[from].id, to),
                   itemCount: rootTabs.length,
                   itemBuilder: (context, index) {
                     final tab = rootTabs[index];
@@ -357,6 +369,14 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
                           onTap: () => ref
                               .read(terminalTabsProvider.notifier)
                               .setActiveTab(tab.id),
+                          onSecondaryTapDown: (details) => unawaited(
+                            _showTabMenu(
+                              tab,
+                              index: index,
+                              tabCount: rootTabs.length,
+                              position: details.globalPosition,
+                            ),
+                          ),
                           borderRadius: tabRadius,
                           child: AnimatedContainer(
                             duration: tokens.motionFast,
@@ -489,7 +509,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
                     );
                     // The tab names the host by its label; hovering it says
                     // where that label points, which the status bar used to.
-                    return endpoint == null
+                    final labelledChip = endpoint == null
                         ? tabChip
                         : Tooltip(
                             key: Key('tab_endpoint_${tab.id}'),
@@ -497,6 +517,21 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
                             waitDuration: const Duration(milliseconds: 500),
                             child: tabChip,
                           );
+                    // A pointer drags at once, past the tap slop, so a click
+                    // still selects. A finger has to hold first: on a phone a
+                    // swipe along the strip is how the tabs are scrolled.
+                    return KeyedSubtree(
+                      key: ValueKey('tab_item_${tab.id}'),
+                      child: isMobilePlatform
+                          ? ReorderableDelayedDragStartListener(
+                              index: index,
+                              child: labelledChip,
+                            )
+                          : ReorderableDragStartListener(
+                              index: index,
+                              child: labelledChip,
+                            ),
+                    );
                   },
                 ),
               ),
@@ -841,6 +876,55 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
       ref.read(terminalTabsProvider),
       SnippetVariableParser.substituteVariables(snippet.code, values),
     );
+  }
+
+  /// A tab's right-click menu: close it, or the tabs around it.
+  ///
+  /// The actions that would close nothing stay listed but disabled, so the
+  /// menu keeps one shape and the eye learns where each row is.
+  Future<void> _showTabMenu(
+    TerminalTabSession tab, {
+    required int index,
+    required int tabCount,
+    required Offset position,
+  }) async {
+    final notifier = ref.read(terminalTabsProvider.notifier);
+    final chosen = await showAdaptiveActionMenu<VoidCallback>(
+      context: context,
+      globalPosition: position,
+      actions: [
+        AdaptiveMenuAction(
+          itemKey: const Key('tab_menu_close'),
+          icon: LucideIcons.x,
+          label: 'Close Tab',
+          shortcut: _isApplePlatform ? '⌘W' : 'Ctrl+W',
+          value: () => unawaited(notifier.closeTab(tab.id)),
+        ),
+        AdaptiveMenuAction(
+          itemKey: const Key('tab_menu_close_others'),
+          icon: LucideIcons.squareX,
+          label: 'Close Other Tabs',
+          enabled: tabCount > 1,
+          value: () => unawaited(notifier.closeOtherTabs(tab.id)),
+        ),
+        const AdaptiveMenuDivider(),
+        AdaptiveMenuAction(
+          itemKey: const Key('tab_menu_close_left'),
+          icon: LucideIcons.arrowLeftToLine,
+          label: 'Close Tabs to the Left',
+          enabled: index > 0,
+          value: () => unawaited(notifier.closeTabsToLeft(tab.id)),
+        ),
+        AdaptiveMenuAction(
+          itemKey: const Key('tab_menu_close_right'),
+          icon: LucideIcons.arrowRightToLine,
+          label: 'Close Tabs to the Right',
+          enabled: index < tabCount - 1,
+          value: () => unawaited(notifier.closeTabsToRight(tab.id)),
+        ),
+      ],
+    );
+    chosen?.call();
   }
 
   /// Of the selected panes, how many have a live session handler (i.e. can
@@ -1640,6 +1724,10 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
 
   /// Host picker sheet. [onSelect] runs after the sheet is dismissed, so the
   /// same list drives both "new tab" and "split with another host".
+  ///
+  /// A new tab can also be a whole saved layout, so unless [onSelect] narrows
+  /// the choice to one host (a split can only take one), templates are listed
+  /// beside the hosts.
   void _showSelectHostModal(
     BuildContext context,
     WidgetRef ref, {
@@ -1654,6 +1742,12 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
           Navigator.of(ctx).pop();
           await (onSelect ?? _connectToHost)(host);
         },
+        onTemplateSelected: onSelect != null
+            ? null
+            : (template) {
+                Navigator.of(ctx).pop();
+                unawaited(_runTemplate(template));
+              },
       ),
     );
   }
@@ -1667,7 +1761,10 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
 class _SelectHostPanel extends ConsumerStatefulWidget {
   final Future<void> Function(HostModel host) onSelected;
 
-  const _SelectHostPanel({required this.onSelected});
+  /// Lists saved templates under the hosts when set.
+  final ValueChanged<TemplateModel>? onTemplateSelected;
+
+  const _SelectHostPanel({required this.onSelected, this.onTemplateSelected});
 
   @override
   ConsumerState<_SelectHostPanel> createState() => _SelectHostPanelState();
@@ -1681,9 +1778,13 @@ class _SelectHostPanelState extends ConsumerState<_SelectHostPanel> {
     final tokens = ShellVibeTokens.resolve(context);
     final hostsAsync = ref.watch(hostsProvider);
 
+    final allTemplates = widget.onTemplateSelected == null
+        ? const <TemplateModel>[]
+        : ref.watch(templatesProvider).value ?? const <TemplateModel>[];
+
     return hostsAsync.when(
       data: (hosts) {
-        if (hosts.isEmpty) {
+        if (hosts.isEmpty && allTemplates.isEmpty) {
           return const Padding(
             padding: EdgeInsets.all(24.0),
             child: Center(child: Text('No hosts available. Create one first.')),
@@ -1703,6 +1804,9 @@ class _SelectHostPanelState extends ConsumerState<_SelectHostPanel> {
         final others = hosts
             .where((host) => !bookmarkedIds.contains(host.id))
             .where((host) => hostMatchesQuery(host, _query))
+            .toList();
+        final templates = allTemplates
+            .where((template) => templateMatchesQuery(template, _query))
             .toList();
 
         Widget row(HostModel host, {required bool favorite}) {
@@ -1735,7 +1839,7 @@ class _SelectHostPanelState extends ConsumerState<_SelectHostPanel> {
               ),
             ),
             Flexible(
-              child: favorites.isEmpty && others.isEmpty
+              child: favorites.isEmpty && others.isEmpty && templates.isEmpty
                   ? Padding(
                       padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
                       child: Text(
@@ -1764,6 +1868,27 @@ class _SelectHostPanelState extends ConsumerState<_SelectHostPanel> {
                             ),
                         ],
                         for (final host in others) row(host, favorite: false),
+                        // After the hosts rather than among them: a template
+                        // opens several tabs, which is a bigger step than the
+                        // one this panel is mostly used for.
+                        if (templates.isNotEmpty) ...[
+                          const ShellVibeSectionLabel(
+                            label: 'Templates',
+                            padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
+                          ),
+                          for (final template in templates)
+                            ListTile(
+                              key: Key('select_template_row_${template.id}'),
+                              leading: const Icon(
+                                LucideIcons.layoutTemplate,
+                                size: 18,
+                              ),
+                              title: Text(template.name),
+                              subtitle: Text(templateSummary(template)),
+                              onTap: () =>
+                                  widget.onTemplateSelected?.call(template),
+                            ),
+                        ],
                       ],
                     ),
             ),

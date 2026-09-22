@@ -2,5 +2,5 @@ class AppConstants {
   AppConstants._();
 
   static const String appName = 'ShellVibe';
-  static const String appVersion = '1.2.0';
+  static const String appVersion = '1.3.0';
 }

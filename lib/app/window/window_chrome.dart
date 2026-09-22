@@ -58,10 +58,24 @@ double get windowChromeTopInset =>
 /// nowhere to land, and a window with a hidden title bar is then closable only
 /// by its traffic light. On macOS the app outlives the window and the dock icon
 /// brings it back; elsewhere the last window closing ends the app, which is
-/// what those platforms expect.
+/// what those platforms expect — unless the app keeps running in the tray,
+/// in which case the close is intercepted and the window only hidden.
 Future<void> closeHostWindow() async {
   if (_host == null) return;
   await windowManager.close();
+}
+
+/// Brings the host window back: shown if hidden to the tray, restored if
+/// minimised, and focused.
+Future<void> showHostWindow() async {
+  if (_host == null) return;
+  try {
+    if (await windowManager.isMinimized()) await windowManager.restore();
+    await windowManager.show();
+    await windowManager.focus();
+  } catch (e) {
+    debugPrint('[WindowChrome Warning] $e');
+  }
 }
 
 /// Hides the platform title bar where doing so leaves the window controllable.

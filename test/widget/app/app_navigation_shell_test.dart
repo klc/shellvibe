@@ -10,6 +10,10 @@ import 'package:shellvibe/app/widgets/app_navigation_shell.dart';
 import 'package:shellvibe/app/window/window_chrome.dart';
 import 'package:shellvibe/features/hosts/presentation/screens/hosts_screen.dart';
 import 'package:shellvibe/features/settings/presentation/screens/settings_screen.dart';
+import 'package:shellvibe/features/templates/data/repositories/templates_repository.dart';
+import 'package:shellvibe/features/templates/domain/models/template_model.dart';
+import 'package:shellvibe/features/templates/domain/models/template_pane_model.dart';
+import 'package:shellvibe/features/terminal/domain/models/terminal_tab_session.dart';
 import 'package:shellvibe/features/snippets/presentation/screens/snippets_screen.dart';
 import 'package:shellvibe/features/terminal/presentation/views/terminal_tab_view.dart';
 import 'package:shellvibe/features/tunnels/presentation/screens/tunnels_screen.dart';
@@ -370,6 +374,60 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('palette_bookmark_host-b')), findsNothing);
       expect(find.byKey(const Key('palette_host_host-a')), findsOneWidget);
+    });
+
+    testWidgets('Command palette finds templates that are not starred', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      final repo = TemplatesRepository(db.templatesDao);
+      for (final row in [('tpl-deploy', 'Deploy'), ('tpl-logs', 'Logs')]) {
+        await repo.addTemplate(
+          TemplateModel(
+            id: row.$1,
+            workspaceId: 'default',
+            name: row.$2,
+            panes: [
+              TemplatePaneModel(
+                id: '${row.$1}-p0',
+                templateId: row.$1,
+                paneOrder: 0,
+                sessionType: TerminalSessionType.local,
+              ),
+            ],
+            createdAt: DateTime.now(),
+          ),
+        );
+      }
+
+      await tester.pumpWidget(createTestWidget());
+      await pumpTabTransition(tester);
+
+      await tester.tap(find.byKey(const Key('command_palette_button')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('palette_template_tpl-deploy')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('palette_template_tpl-logs')),
+        findsOneWidget,
+      );
+
+      await tester.enterText(
+        find.byKey(const Key('command_palette_search')),
+        'depl',
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('palette_template_tpl-deploy')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('palette_template_tpl-logs')), findsNothing);
     });
 
     // Every module at every breakpoint. The initial route alone used to be
