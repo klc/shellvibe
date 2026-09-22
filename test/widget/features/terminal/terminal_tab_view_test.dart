@@ -8,7 +8,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:shellvibe/core/utils/platform_capabilities.dart';
 import 'package:shellvibe/features/bookmarks/presentation/notifiers/bookmarks_notifier.dart';
+import 'package:shellvibe/features/hosts/domain/models/host_model.dart';
 import 'package:shellvibe/features/hosts/presentation/notifiers/hosts_notifier.dart';
+import 'package:shellvibe/features/terminal/domain/models/terminal_tab_session.dart';
 import 'package:shellvibe/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import 'package:shellvibe/features/terminal/presentation/views/terminal_tab_view.dart';
 import 'package:shellvibe/features/terminal/presentation/widgets/resizable_split.dart';
@@ -143,7 +145,7 @@ void main() {
         // session has to be visible on the desktop and cuttable from there.
         shared.attachDeviceLink(deviceId: 'phone-1', columns: 52, rows: 30);
         // Opening a second tab republishes the tab list, which is how the
-        // real attach path also reaches the status bar.
+        // real attach path also reaches the tab strip.
         await tester.tap(find.byKey(const Key('new_tab_button')));
         await tester.pumpAndSettle();
         await tester.tap(find.byKey(const Key('new_tab_menu_local')));
@@ -158,7 +160,7 @@ void main() {
           findsOneWidget,
         );
         expect(
-          find.textContaining('Device Link · ${shared.title}'),
+          find.byTooltip('Device Link · ${shared.title} — click to disconnect'),
           findsOneWidget,
         );
 
@@ -350,11 +352,12 @@ void main() {
       await tester.pump();
 
       expect(find.textContaining('· BROADCAST'), findsNWidgets(2));
-      // Status bar reports deliverable/selected. flutter_pty's native library
-      // is not loadable under `flutter test`, so no pane has a live session
-      // here and nothing is deliverable — the counter has to say so rather
-      // than count panes that would silently swallow the input.
-      expect(find.text('broadcast 0/2'), findsOneWidget);
+      // Each selected pane's header reports deliverable/selected.
+      // flutter_pty's native library is not loadable under `flutter test`, so
+      // no pane has a live session here and nothing is deliverable — the
+      // counter has to say so rather than count panes that would silently
+      // swallow the input.
+      expect(find.textContaining('· BROADCAST 0/2'), findsNWidgets(2));
 
       // Plain click on an unselected pane exits broadcast.
       await tester.tap(find.byType(TerminalView).at(2));
@@ -979,6 +982,79 @@ void main() {
       // Same as the Device Link case above: the keep-alive tab notifier owns
       // the session's terminal, so the container has to be disposed inside
       // the test body or its timers outlive the tree.
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a host tab names its endpoint on the tab and pane headers', (
+      tester,
+    ) async {
+      final container = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          localPtyManagerProvider.overrideWithValue(_NoShellPtyManager()),
+        ],
+      );
+      HostModel host(String id, String hostname, int port) => HostModel(
+        id: id,
+        workspaceId: 'ws',
+        label: id,
+        hostname: hostname,
+        username: 'deploy',
+        port: port,
+        createdAt: DateTime(2026),
+      );
+      final notifier = container.read(terminalTabsProvider.notifier);
+      final root = TerminalTabSession(
+        id: 'root',
+        title: 'web-01',
+        sessionType: TerminalSessionType.ssh,
+        host: host('web-01', '10.0.0.5', 2222),
+        terminal: Terminal(maxLines: 100),
+      );
+      notifier.registerDeviceLinkSession(root);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: ShadTheme(
+            data: ShadThemeData(
+              colorScheme: const ShadSlateColorScheme.dark(),
+              brightness: Brightness.dark,
+            ),
+            child: const MaterialApp(home: TerminalTabView()),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // One pane: no header to carry it, so the tab does.
+      expect(find.byTooltip('deploy@10.0.0.5:2222'), findsOneWidget);
+      expect(find.byKey(const Key('pane_endpoint_root')), findsNothing);
+
+      notifier.registerDeviceLinkSession(
+        TerminalTabSession(
+          id: 'pane',
+          title: 'db-01',
+          sessionType: TerminalSessionType.ssh,
+          host: host('db-01', 'db.internal', 22),
+          terminal: Terminal(maxLines: 100),
+          splitParentId: 'root',
+          splitDirection: Axis.horizontal,
+        ),
+      );
+      await tester.pump();
+
+      expect(
+        tester.widget<Text>(find.byKey(const Key('pane_endpoint_root'))).data,
+        'deploy@10.0.0.5:2222',
+      );
+      expect(
+        tester.widget<Text>(find.byKey(const Key('pane_endpoint_pane'))).data,
+        'deploy@db.internal:22',
+      );
+
       await tester.pumpWidget(const SizedBox.shrink());
       container.dispose();
       await tester.pumpAndSettle();

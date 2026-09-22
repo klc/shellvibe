@@ -24,7 +24,6 @@ import '../../../templates/domain/models/template_model.dart';
 import '../../../templates/presentation/dialogs/save_template_dialog.dart';
 import '../../../templates/presentation/notifiers/templates_notifier.dart';
 import '../../../templates/presentation/widgets/template_picker_sheet.dart';
-import '../../../tunnels/presentation/providers/tunnels_providers.dart';
 import '../../../vault/domain/models/identity_model.dart';
 import '../../../vault/presentation/notifiers/identities_notifier.dart';
 import '../../domain/models/terminal_tab_session.dart';
@@ -160,7 +159,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
         },
         child: Scaffold(
           // The shell already painted the canvas; the terminal contributes the
-          // tab strip, the pane slabs and the status strip, nothing behind them.
+          // tab strip and the pane slabs, nothing behind them.
           backgroundColor: Colors.transparent,
           body: Column(
             children: [
@@ -203,8 +202,6 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
                   ],
                 ),
               ),
-              if (activeRootTab != null)
-                _buildStatusBar(context, tabsState, activeRootTab),
             ],
           ),
         ),
@@ -349,7 +346,8 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
                         ? ShellVibeDotState.online
                         : ShellVibeDotState.offline;
 
-                    return Semantics(
+                    final endpoint = _endpointLabel(tab);
+                    final tabChip = Semantics(
                       label: 'Tab ${tab.title}',
                       selected: isActive,
                       button: true,
@@ -445,6 +443,28 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
                                     ),
                                   ),
                                 ),
+                                // With the status bar gone these are the
+                                // only trace of a quiet link or an attached
+                                // device on a tab that is not on screen.
+                                for (final pane in _panesOfTab(
+                                  tabsState,
+                                  tab,
+                                )) ...[
+                                  if (_moshQuietBadge(
+                                        context,
+                                        tokens,
+                                        pane,
+                                        showText: false,
+                                      )
+                                      case final badge?) ...[
+                                    const SizedBox(width: 6),
+                                    badge,
+                                  ],
+                                  if (pane.attachment != null) ...[
+                                    const SizedBox(width: 6),
+                                    _deviceLinkBadge(tokens, pane),
+                                  ],
+                                ],
                                 const SizedBox(width: 9),
                                 Semantics(
                                   label: 'Close tab ${tab.title}',
@@ -467,6 +487,16 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
                         ),
                       ),
                     );
+                    // The tab names the host by its label; hovering it says
+                    // where that label points, which the status bar used to.
+                    return endpoint == null
+                        ? tabChip
+                        : Tooltip(
+                            key: Key('tab_endpoint_${tab.id}'),
+                            message: endpoint,
+                            waitDuration: const Duration(milliseconds: 500),
+                            child: tabChip,
+                          );
                   },
                 ),
               ),
@@ -814,109 +844,92 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
   }
 
   /// Of the selected panes, how many have a live session handler (i.e. can
-  /// actually receive input). Shown as `broadcast X/Y` in the status bar.
-  int _deliverablePaneCount(TerminalTabsState tabsState) {
-    final tabsById = {for (final tab in tabsState.tabs) tab.id: tab};
+  /// actually receive input). Shown as `BROADCAST X/Y` on a pane's header.
+  int _deliverablePaneCount(
+    List<TerminalTabSession> allTabs,
+    Set<String> selectedPaneIds,
+  ) {
+    final tabsById = {for (final tab in allTabs) tab.id: tab};
     var count = 0;
-    for (final id in tabsState.selectedPaneIds) {
+    for (final id in selectedPaneIds) {
       if (tabsById[id]?.terminal.onOutput != null) count++;
     }
     return count;
   }
 
-  Widget _buildStatusBar(
-    BuildContext context,
-    TerminalTabsState tabsState,
-    TerminalTabSession activeRootTab,
-  ) {
-    final pane = tabsState.activeTab ?? activeRootTab;
-    final activeTunnels =
-        ref.watch(activeTunnelsStreamProvider).value ?? const [];
-    final host = pane.host;
-    final attachedTabs = tabsState.tabs
-        .where((tab) => tab.attachment != null)
-        .toList(growable: false);
-    final connectionLabel = pane.errorMessage != null
-        ? 'error'
-        : pane.isConnecting
-        ? 'connecting'
-        : pane.isConnected
-        ? 'connected'
-        : 'disconnected';
+  /// Where [session] is connected, as `user@host:port`. Null for a local
+  /// shell, which has nowhere to name.
+  static String? _endpointLabel(TerminalTabSession session) {
+    final host = session.host;
+    if (host == null) return null;
+    final user = host.username;
+    final prefix = user == null || user.isEmpty ? '' : '$user@';
+    return '$prefix${host.hostname}:${host.port}';
+  }
 
-    return ShellVibeStatusBar(
-      segments: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ShellVibeStatusDot(
-              state: pane.errorMessage != null
-                  ? ShellVibeDotState.error
-                  : pane.isConnected
-                  ? ShellVibeDotState.online
-                  : ShellVibeDotState.offline,
-            ),
-            const SizedBox(width: 7),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 220),
-              child: Text(
-                pane.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
+  /// Every pane of the tab rooted at [root], the root included.
+  List<TerminalTabSession> _panesOfTab(
+    TerminalTabsState tabsState,
+    TerminalTabSession root,
+  ) => [
+    for (final tab in tabsState.tabs)
+      if (_rootOfPane(tabsState, tab).id == root.id) tab,
+  ];
+
+  /// Shown only once a Mosh link has gone quiet. Silence is not a disconnect
+  /// here — the session is alive and will catch up — but the difference
+  /// between "slow" and "dropped" is invisible without it, and on this
+  /// protocol the user cannot tell them apart any other way.
+  Widget? _moshQuietBadge(
+    BuildContext context,
+    ShellVibeTokens tokens,
+    TerminalTabSession session, {
+    required bool showText,
+  }) {
+    final link = session.moshLinkState;
+    if (link == null || link.status != MoshLinkStatus.stale) return null;
+    final seconds = link.silence.inSeconds;
+    return Tooltip(
+      key: Key('mosh_quiet_${session.id}'),
+      message: 'Mosh link quiet for ${seconds}s',
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(LucideIcons.wifiOff, size: 12, color: tokens.warning),
+          if (showText) ...[
+            const SizedBox(width: 4),
+            Text(
+              'mosh quiet ${seconds}s',
+              style: shellvibeMono(context, size: 10, color: tokens.warning),
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  /// A pane another device is attached to over Device Link. The badge is the
+  /// only place the attachment shows, so it is also where it is ended.
+  Widget _deviceLinkBadge(ShellVibeTokens tokens, TerminalTabSession attached) {
+    return Tooltip(
+      key: Key('device_link_attachment_${attached.id}'),
+      message: 'Device Link · ${attached.title} — click to disconnect',
+      child: Semantics(
+        label: 'Disconnect Device Link ${attached.title}',
+        button: true,
+        child: InkWell(
+          key: Key('device_link_disconnect_${attached.id}'),
+          onTap: () => unawaited(
+            ref
+                .read(terminalTabsProvider.notifier)
+                .disconnectDeviceLink(attached.id),
+          ),
+          borderRadius: BorderRadius.circular(4),
+          child: Padding(
+            padding: const EdgeInsets.all(2),
+            child: Icon(LucideIcons.link, size: 13, color: tokens.brand),
+          ),
         ),
-        Text(connectionLabel),
-        if (host != null) Text('${host.hostname}:${host.port}'),
-        // Only shown once a Mosh link has gone quiet. Silence is not a
-        // disconnect here — the session is alive and will catch up — but the
-        // difference between "slow" and "dropped" is invisible without it,
-        // and on this protocol the user cannot tell them apart any other way.
-        if (pane.moshLinkState?.status == MoshLinkStatus.stale)
-          Text(
-            'mosh quiet ${pane.moshLinkState!.silence.inSeconds}s',
-            style: TextStyle(color: Theme.of(context).colorScheme.tertiary),
-          ),
-        if (tabsState.selectedPaneIds.length >= 2)
-          Text(
-            'broadcast '
-            '${_deliverablePaneCount(tabsState)}/'
-            '${tabsState.selectedPaneIds.length}',
-          ),
-        Text('${pane.terminal.viewWidth}×${pane.terminal.viewHeight}'),
-        Text('tunnels ${activeTunnels.length}'),
-        for (final attachedTab in attachedTabs)
-          Row(
-            key: Key('device_link_attachment_${attachedTab.id}'),
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.link,
-                size: 13,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              const SizedBox(width: 4),
-              Text('Device Link · ${attachedTab.title}'),
-              ShellVibeIconButton(
-                key: Key('device_link_disconnect_${attachedTab.id}'),
-                icon: Icons.link_off,
-                tooltip: 'Disconnect Device Link',
-                onPressed: () => unawaited(
-                  ref
-                      .read(terminalTabsProvider.notifier)
-                      .disconnectDeviceLink(attachedTab.id),
-                ),
-              ),
-            ],
-          ),
-      ],
-      trailing: Text(
-        pane.isMosh
-            ? 'UTF-8 · mosh'
-            : pane.sessionType == TerminalSessionType.ssh
-            ? 'UTF-8 · ssh'
-            : 'UTF-8 · local',
       ),
     );
   }
@@ -949,16 +962,51 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(
-              paneSession.title,
-              style: shellvibeMono(
-                context,
-                size: 11,
-                color: tokens.textSecondary,
-              ),
-              overflow: TextOverflow.ellipsis,
+            child: Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    paneSession.title,
+                    style: shellvibeMono(
+                      context,
+                      size: 11,
+                      color: tokens.textSecondary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                // The title is the host's label, which says nothing about
+                // where it points; the endpoint is what the old status bar
+                // was read for.
+                if (_endpointLabel(paneSession) case final endpoint?) ...[
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      endpoint,
+                      key: Key('pane_endpoint_${paneSession.id}'),
+                      style: shellvibeMono(
+                        context,
+                        size: 10,
+                        color: tokens.textSubtle,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
+          if (_moshQuietBadge(context, tokens, paneSession, showText: true)
+              case final badge?) ...[
+            badge,
+            const SizedBox(width: 10),
+          ],
+          if (paneSession.attachment != null) ...[
+            _deviceLinkBadge(tokens, paneSession),
+            const SizedBox(width: 10),
+          ],
           Text(
             paneLabel,
             key: Key('pane_label_${paneSession.id}'),
@@ -1084,7 +1132,9 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
       if (paneOrder.length >= 2) {
         final paneNumber = paneOrder.indexOf(paneSession.id) + 1;
         final paneLabel = isBroadcastSelected
-            ? 'PANE $paneNumber · BROADCAST'
+            ? 'PANE $paneNumber · BROADCAST '
+                  '${_deliverablePaneCount(allTabs, selectedPaneIds)}/'
+                  '${selectedPaneIds.length}'
             : isActivePane
             ? 'PANE $paneNumber · ACTIVE'
             : 'PANE $paneNumber';
