@@ -1667,6 +1667,10 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
 
   /// Host picker sheet. [onSelect] runs after the sheet is dismissed, so the
   /// same list drives both "new tab" and "split with another host".
+  ///
+  /// A new tab can also be a whole saved layout, so unless [onSelect] narrows
+  /// the choice to one host (a split can only take one), templates are listed
+  /// beside the hosts.
   void _showSelectHostModal(
     BuildContext context,
     WidgetRef ref, {
@@ -1681,6 +1685,12 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
           Navigator.of(ctx).pop();
           await (onSelect ?? _connectToHost)(host);
         },
+        onTemplateSelected: onSelect != null
+            ? null
+            : (template) {
+                Navigator.of(ctx).pop();
+                unawaited(_runTemplate(template));
+              },
       ),
     );
   }
@@ -1694,7 +1704,10 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
 class _SelectHostPanel extends ConsumerStatefulWidget {
   final Future<void> Function(HostModel host) onSelected;
 
-  const _SelectHostPanel({required this.onSelected});
+  /// Lists saved templates under the hosts when set.
+  final ValueChanged<TemplateModel>? onTemplateSelected;
+
+  const _SelectHostPanel({required this.onSelected, this.onTemplateSelected});
 
   @override
   ConsumerState<_SelectHostPanel> createState() => _SelectHostPanelState();
@@ -1708,9 +1721,13 @@ class _SelectHostPanelState extends ConsumerState<_SelectHostPanel> {
     final tokens = ShellVibeTokens.resolve(context);
     final hostsAsync = ref.watch(hostsProvider);
 
+    final allTemplates = widget.onTemplateSelected == null
+        ? const <TemplateModel>[]
+        : ref.watch(templatesProvider).value ?? const <TemplateModel>[];
+
     return hostsAsync.when(
       data: (hosts) {
-        if (hosts.isEmpty) {
+        if (hosts.isEmpty && allTemplates.isEmpty) {
           return const Padding(
             padding: EdgeInsets.all(24.0),
             child: Center(child: Text('No hosts available. Create one first.')),
@@ -1730,6 +1747,9 @@ class _SelectHostPanelState extends ConsumerState<_SelectHostPanel> {
         final others = hosts
             .where((host) => !bookmarkedIds.contains(host.id))
             .where((host) => hostMatchesQuery(host, _query))
+            .toList();
+        final templates = allTemplates
+            .where((template) => templateMatchesQuery(template, _query))
             .toList();
 
         Widget row(HostModel host, {required bool favorite}) {
@@ -1762,7 +1782,7 @@ class _SelectHostPanelState extends ConsumerState<_SelectHostPanel> {
               ),
             ),
             Flexible(
-              child: favorites.isEmpty && others.isEmpty
+              child: favorites.isEmpty && others.isEmpty && templates.isEmpty
                   ? Padding(
                       padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
                       child: Text(
@@ -1791,6 +1811,27 @@ class _SelectHostPanelState extends ConsumerState<_SelectHostPanel> {
                             ),
                         ],
                         for (final host in others) row(host, favorite: false),
+                        // After the hosts rather than among them: a template
+                        // opens several tabs, which is a bigger step than the
+                        // one this panel is mostly used for.
+                        if (templates.isNotEmpty) ...[
+                          const ShellVibeSectionLabel(
+                            label: 'Templates',
+                            padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
+                          ),
+                          for (final template in templates)
+                            ListTile(
+                              key: Key('select_template_row_${template.id}'),
+                              leading: const Icon(
+                                LucideIcons.layoutTemplate,
+                                size: 18,
+                              ),
+                              title: Text(template.name),
+                              subtitle: Text(templateSummary(template)),
+                              onTap: () =>
+                                  widget.onTemplateSelected?.call(template),
+                            ),
+                        ],
                       ],
                     ),
             ),

@@ -156,6 +156,71 @@ void main() {
       );
     });
 
+    testWidgets('a template can be viewed and edited in place', (tester) async {
+      await seedTemplate();
+      await db.hostsDao.insertHost(
+        HostsCompanion.insert(
+          id: 'host-db',
+          workspaceId: 'default',
+          label: 'Database',
+          hostname: 'db.internal',
+          createdAt: DateTime(2026),
+        ),
+      );
+      useDesktopWindow(tester);
+
+      await tester.pumpWidget(harness());
+      await settle(tester);
+
+      await tester.tap(find.byKey(const Key('template_menu_tpl_1')));
+      await settle(tester);
+      await tester.tap(find.text('View & edit template'));
+      await settle(tester);
+
+      // What the template opens: one tab, its root and the split under it.
+      expect(find.text('TAB 1'), findsOneWidget);
+      expect(find.byKey(const Key('template_pane_pane_root')), findsOneWidget);
+      expect(find.byKey(const Key('template_pane_pane_split')), findsOneWidget);
+
+      // Point the root at a host. The local split under it can no longer
+      // open, and the editor says so before a run would.
+      await tester.tap(find.byKey(const Key('template_pane_host_pane_root')));
+      await settle(tester);
+      await tester.tap(find.byKey(const Key('template_target_host-db')));
+      await settle(tester);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('template_pane_pane_root')),
+          matching: find.text('Database'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('split out of an SSH pane'), findsOneWidget);
+
+      await tester.tap(
+        find.byKey(const Key('template_pane_remove_pane_split')),
+      );
+      await settle(tester);
+      expect(find.byKey(const Key('template_pane_pane_split')), findsNothing);
+
+      await tester.enterText(
+        find.byKey(const Key('template_editor_name')),
+        'Evening check',
+      );
+      await tester.tap(find.byKey(const Key('template_editor_save')));
+      await settle(tester);
+
+      expect(find.byKey(const Key('template_editor_name')), findsNothing);
+      final saved = (await TemplatesRepository(
+        db.templatesDao,
+      ).getTemplatesByWorkspace('default')).single;
+      expect(saved.name, 'Evening check');
+      expect(saved.panes, hasLength(1));
+      expect(saved.panes.single.sessionType, TerminalSessionType.ssh);
+      expect(saved.panes.single.hostId, 'host-db');
+      expect(find.text('Evening check'), findsOneWidget);
+    });
+
     testWidgets('deleting a template removes it from the column', (
       tester,
     ) async {

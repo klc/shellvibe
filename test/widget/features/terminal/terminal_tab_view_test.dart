@@ -10,6 +10,9 @@ import 'package:shellvibe/core/utils/platform_capabilities.dart';
 import 'package:shellvibe/features/bookmarks/presentation/notifiers/bookmarks_notifier.dart';
 import 'package:shellvibe/features/hosts/domain/models/host_model.dart';
 import 'package:shellvibe/features/hosts/presentation/notifiers/hosts_notifier.dart';
+import 'package:shellvibe/features/templates/data/repositories/templates_repository.dart';
+import 'package:shellvibe/features/templates/domain/models/template_model.dart';
+import 'package:shellvibe/features/templates/domain/models/template_pane_model.dart';
 import 'package:shellvibe/features/terminal/domain/models/terminal_tab_session.dart';
 import 'package:shellvibe/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import 'package:shellvibe/features/terminal/presentation/views/terminal_tab_view.dart';
@@ -739,6 +742,101 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(ListTile), findsNothing);
       expect(find.text('No hosts match that search.'), findsOneWidget);
+    });
+
+    testWidgets('the Connect to Host panel lists and runs templates', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(2400, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final container = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          localPtyManagerProvider.overrideWithValue(_NoShellPtyManager()),
+        ],
+      );
+
+      await container
+          .read(hostsProvider.notifier)
+          .addHost(
+            workspaceId: 'default',
+            label: 'Database',
+            hostname: 'db.internal',
+          );
+      await TemplatesRepository(db.templatesDao).addTemplate(
+        TemplateModel(
+          id: 'tpl-1',
+          workspaceId: 'default',
+          name: 'Morning shells',
+          panes: const [
+            TemplatePaneModel(
+              id: 'p0',
+              templateId: 'tpl-1',
+              paneOrder: 0,
+              sessionType: TerminalSessionType.local,
+              title: 'build',
+            ),
+            TemplatePaneModel(
+              id: 'p1',
+              templateId: 'tpl-1',
+              paneOrder: 1,
+              sessionType: TerminalSessionType.local,
+              title: 'logs',
+            ),
+          ],
+          createdAt: DateTime(2026),
+        ),
+      );
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: ShadTheme(
+            data: ShadThemeData(
+              colorScheme: const ShadSlateColorScheme.dark(),
+              brightness: Brightness.dark,
+            ),
+            child: const MaterialApp(
+              // Running a template reports its outcome in a toast.
+              home: ShadToaster(child: TerminalTabView()),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('empty_select_host_button')));
+      await tester.pumpAndSettle();
+
+      final row = find.byKey(const Key('select_template_row_tpl-1'));
+      expect(row, findsOneWidget);
+      expect(find.text('2 tabs'), findsOneWidget);
+
+      // The search covers templates too.
+      await tester.enterText(
+        find.byKey(const Key('select_host_search_input')),
+        'morning',
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Database'), findsNothing);
+      expect(row, findsOneWidget);
+
+      await tester.tap(row);
+      await tester.pumpAndSettle();
+
+      expect(
+        [
+          for (final tab in container.read(terminalTabsProvider).tabs)
+            tab.title,
+        ],
+        ['build', 'logs'],
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
+      await tester.pumpAndSettle();
     });
 
     testWidgets('dragging a pane header onto another pane swaps them', (
