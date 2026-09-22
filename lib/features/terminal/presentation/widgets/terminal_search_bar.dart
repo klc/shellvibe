@@ -60,7 +60,9 @@ class TerminalSearchBar extends StatelessWidget {
           Icon(LucideIcons.search, size: 14, color: tokens.textMuted),
           const SizedBox(width: 8),
           SizedBox(
-            width: 180,
+            // Wide enough for a path or a hostname, the things a scrollback is
+            // usually searched for, without covering most of a narrow pane.
+            width: 260,
             // Enter walks the hits, Shift+Enter walks them backwards and Esc
             // gives the keyboard back to the shell. The field has focus while
             // the bar is open, so the terminal never sees these keys and the
@@ -94,9 +96,15 @@ class TerminalSearchBar extends StatelessWidget {
                   size: 12,
                   color: noHits ? tokens.danger : tokens.textPrimary,
                 ),
+                // The bar is the field's frame. The app theme gives every
+                // input a filled, outlined box, and only `border` was cleared
+                // here, so a second, smaller outline was drawn inside the bar.
                 decoration: InputDecoration(
                   isDense: true,
+                  filled: false,
                   border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
                   contentPadding: EdgeInsets.zero,
                   hintText: 'Find in terminal',
                   hintStyle: shellvibeMono(
