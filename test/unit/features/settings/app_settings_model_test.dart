@@ -22,6 +22,18 @@ void main() {
       expect(settings.autoLockTimerSeconds, equals(0));
       expect(settings.clipboardAutoClearSeconds, equals(30));
       expect(settings.activeWorkspaceId, equals('default'));
+      expect(settings.keepRunningInTray, isTrue);
+    });
+
+    test('keepRunningInTray round-trips and defaults on when absent', () {
+      final off = const AppSettingsModel().copyWith(keepRunningInTray: false);
+      expect(
+        AppSettingsModel.fromJson(off.toJson()).keepRunningInTray,
+        isFalse,
+      );
+      // Settings saved before the option existed keep the app in the tray.
+      final legacy = off.toJson()..remove('keepRunningInTray');
+      expect(AppSettingsModel.fromJson(legacy).keepRunningInTray, isTrue);
     });
 
     test('copyWith produces updated model', () {
