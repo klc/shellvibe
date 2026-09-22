@@ -10,15 +10,6 @@ import '../../../bookmarks/presentation/notifiers/bookmarks_notifier.dart';
 import '../../domain/models/template_model.dart';
 import '../notifiers/templates_notifier.dart';
 
-/// One-line summary of what a template will open.
-String templateSummary(TemplateModel template) {
-  final tabs = template.tabCount;
-  final splits = template.panes.length - tabs;
-  final tabPart = '$tabs ${tabs == 1 ? 'tab' : 'tabs'}';
-  if (splits == 0) return tabPart;
-  return '$tabPart · $splits ${splits == 1 ? 'split pane' : 'split panes'}';
-}
-
 /// Bottom sheet listing the workspace's templates. Tapping one runs it.
 ///
 /// Mirrors the terminal's host picker sheet, so "run a template" and "connect

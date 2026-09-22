@@ -19,7 +19,6 @@ import '../../../../shared/providers/workspace_provider.dart';
 import '../../../templates/domain/models/template_model.dart';
 import '../../../templates/presentation/dialogs/save_template_dialog.dart';
 import '../../../templates/presentation/notifiers/templates_notifier.dart';
-import '../../../templates/presentation/widgets/template_picker_sheet.dart';
 import '../../../terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import '../../../vault/domain/models/identity_model.dart';
 import '../../../vault/presentation/notifiers/identities_notifier.dart';

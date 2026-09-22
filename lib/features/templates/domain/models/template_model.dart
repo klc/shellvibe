@@ -78,3 +78,21 @@ class TemplateModel {
         createdAt: DateTime.parse(json['createdAt'] as String),
       );
 }
+
+/// Whether [template] matches a free-text search: its name or description
+/// contains [query], case-insensitively. An empty query matches everything.
+bool templateMatchesQuery(TemplateModel template, String query) {
+  final needle = query.trim().toLowerCase();
+  if (needle.isEmpty) return true;
+  return template.name.toLowerCase().contains(needle) ||
+      (template.description?.toLowerCase().contains(needle) ?? false);
+}
+
+/// One-line summary of what a template will open.
+String templateSummary(TemplateModel template) {
+  final tabs = template.tabCount;
+  final splits = template.panes.length - tabs;
+  final tabPart = '$tabs ${tabs == 1 ? 'tab' : 'tabs'}';
+  if (splits == 0) return tabPart;
+  return '$tabPart · $splits ${splits == 1 ? 'split pane' : 'split panes'}';
+}

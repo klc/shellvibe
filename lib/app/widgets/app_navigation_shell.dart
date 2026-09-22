@@ -488,7 +488,7 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
     );
   }
 
-  /// Replays a bookmarked layout and moves to the terminal it opened in.
+  /// Replays a saved layout and moves to the terminal it opened in.
   Future<void> _runTemplateFromPalette(TemplateModel template) async {
     final launcher = HostLauncher(context: context, ref: ref);
     final result = await ref
@@ -715,11 +715,17 @@ class _CommandPaletteState extends ConsumerState<_CommandPalette> {
     final bookmarkedTemplates = [
       for (final id in bookmarkedTemplateIds)
         ...templates.where((template) => template.id == id),
-    ].where((template) => template.name.toLowerCase().contains(value)).toList();
+    ].where((template) => templateMatchesQuery(template, value)).toList();
 
     final otherHosts = hosts
         .where((host) => !bookmarkedHostIds.contains(host.id))
         .where((host) => hostMatchesQuery(host, value))
+        .toList();
+    // A template is a way in to several hosts at once, so it is found the
+    // same way a host is, starred or not.
+    final otherTemplates = templates
+        .where((template) => !bookmarkedTemplateIds.contains(template.id))
+        .where((template) => templateMatchesQuery(template, value))
         .toList();
 
     // Whatever is first is what Enter runs, so the highlight has to be worked
@@ -820,7 +826,7 @@ class _CommandPaletteState extends ConsumerState<_CommandPalette> {
                           key: Key('palette_bookmark_${template.id}'),
                           icon: LucideIcons.layoutTemplate,
                           label: template.name,
-                          detail: 'layout',
+                          detail: templateSummary(template),
                           highlighted:
                               bookmarkedHosts.isEmpty &&
                               template == bookmarkedTemplates.first,
@@ -843,6 +849,29 @@ class _CommandPaletteState extends ConsumerState<_CommandPalette> {
                           onTap: () => widget.onHostSelected(otherHosts[index]),
                         ),
                     ],
+                    if (otherTemplates.isNotEmpty) ...[
+                      const ShellVibeSectionLabel(
+                        label: 'Templates',
+                        padding: EdgeInsets.fromLTRB(10, 8, 10, 6),
+                      ),
+                      for (
+                        var index = 0;
+                        index < otherTemplates.length;
+                        index++
+                      )
+                        _PaletteRow(
+                          key: Key(
+                            'palette_template_${otherTemplates[index].id}',
+                          ),
+                          icon: LucideIcons.layoutTemplate,
+                          label: otherTemplates[index].name,
+                          detail: templateSummary(otherTemplates[index]),
+                          highlighted:
+                              !hasBookmarks && otherHosts.isEmpty && index == 0,
+                          onTap: () =>
+                              widget.onTemplateSelected(otherTemplates[index]),
+                        ),
+                    ],
                     if (filtered.isNotEmpty) ...[
                       const ShellVibeSectionLabel(
                         label: 'Modules',
@@ -855,7 +884,10 @@ class _CommandPaletteState extends ConsumerState<_CommandPalette> {
                           detail: filtered[index].$2.tooltip.split(' (').first,
                           trailing: filtered[index].$2.shortcut,
                           highlighted:
-                              !hasBookmarks && otherHosts.isEmpty && index == 0,
+                              !hasBookmarks &&
+                              otherHosts.isEmpty &&
+                              otherTemplates.isEmpty &&
+                              index == 0,
                           onTap: () => widget.onSelected(filtered[index].$1),
                         ),
                     ],
