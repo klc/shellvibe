@@ -882,6 +882,50 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     }
   }
 
+  /// Closes every tab except the one rooted at [tabId].
+  Future<void> closeOtherTabs(String tabId) =>
+      _closeTabsAround(tabId, left: true, right: true);
+
+  /// Closes the tabs before the one rooted at [tabId] in the strip.
+  Future<void> closeTabsToLeft(String tabId) =>
+      _closeTabsAround(tabId, left: true, right: false);
+
+  /// Closes the tabs after the one rooted at [tabId] in the strip.
+  Future<void> closeTabsToRight(String tabId) =>
+      _closeTabsAround(tabId, left: false, right: true);
+
+  /// Closes root tabs on either side of [tabId], each through [closeTab] so
+  /// its split panes and sessions go with it.
+  ///
+  /// Focus moves to [tabId] first when the focused pane is about to close:
+  /// the tab that was right-clicked is the one being kept, so it is where the
+  /// user is looking, not wherever [closeTab]'s own fallback would land.
+  Future<void> _closeTabsAround(
+    String tabId, {
+    required bool left,
+    required bool right,
+  }) async {
+    final roots = [
+      for (final tab in state.tabs)
+        if (tab.splitParentId == null) tab.id,
+    ];
+    final index = roots.indexOf(tabId);
+    if (index == -1) return;
+    final closing = [
+      if (left) ...roots.sublist(0, index),
+      if (right) ...roots.sublist(index + 1),
+    ];
+    if (closing.isEmpty) return;
+
+    final active = state.activeTab;
+    if (active != null && closing.contains(_rootIdOf(active, state.tabs))) {
+      setActiveTab(tabId);
+    }
+    for (final id in closing) {
+      await closeTab(id);
+    }
+  }
+
   /// Looks a pane up in an arbitrary list, which the close paths need on the
   /// pre-close snapshot rather than on [state].
   TerminalTabSession? _findInList(List<TerminalTabSession> tabs, String id) {

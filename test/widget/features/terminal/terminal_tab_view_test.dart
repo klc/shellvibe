@@ -1228,6 +1228,64 @@ void main() {
       await tester.pumpAndSettle();
     });
 
+    testWidgets('right-clicking a tab offers to close the tabs around it', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+      final container = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          localPtyManagerProvider.overrideWithValue(_NoShellPtyManager()),
+        ],
+      );
+      final notifier = container.read(terminalTabsProvider.notifier);
+      for (final title in ['one', 'two', 'three']) {
+        notifier.openLocalTab(title: title);
+      }
+      final ids = [
+        for (final tab in container.read(terminalTabsProvider).tabs) tab.id,
+      ];
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: ShadTheme(
+            data: ShadThemeData(
+              colorScheme: const ShadSlateColorScheme.dark(),
+              brightness: Brightness.dark,
+            ),
+            child: const MaterialApp(home: TerminalTabView()),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      Future<void> rightClick(String id) async {
+        await tester.tap(
+          find.byKey(Key('tab_header_$id')),
+          buttons: kSecondaryMouseButton,
+        );
+        await tester.pumpAndSettle();
+      }
+
+      await rightClick(ids[0]);
+      expect(find.byKey(const Key('tab_menu_close_others')), findsOneWidget);
+      expect(find.byKey(const Key('tab_menu_close_left')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('tab_menu_close_right')));
+      await tester.pumpAndSettle();
+
+      expect(
+        [for (final tab in container.read(terminalTabsProvider).tabs) tab.id],
+        [ids[0]],
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('closing the tab ends the agent session', (tester) async {
       final container = ProviderContainer(
         overrides: [
