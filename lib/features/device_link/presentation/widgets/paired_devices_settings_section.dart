@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../../../../app/widgets/shellvibe_ui.dart';
+import '../../../../core/utils/platform_capabilities.dart';
 import '../../../../shared/database/app_database.dart';
 import '../../../../shared/providers/database_providers.dart';
 import '../../data/repositories/device_link_pairing_repository.dart';
@@ -57,21 +58,25 @@ class _PairedDevicesSettingsSectionState
       children: [
         _buildIntro(theme),
         const SizedBox(height: 12),
-        desktopDevices.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, _) => Text('Could not load paired devices: $error'),
-          data: (devices) => _buildDesktopDevices(context, devices),
-        ),
-        const SizedBox(height: 12),
-        FutureBuilder<List<DeviceLinkPairingProfile>>(
-          future: _mobileProfiles,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const SizedBox.shrink();
-            }
-            return _buildMobileProfiles(context, snapshot.data ?? const []);
-          },
-        ),
+        // Each side of a pairing has its own list: a desktop is scanned and
+        // authorizes phones, a phone scans and remembers desktops. Showing a
+        // device the other side's list would be a card that is always empty.
+        if (isMobilePlatform)
+          FutureBuilder<List<DeviceLinkPairingProfile>>(
+            future: _mobileProfiles,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const SizedBox.shrink();
+              }
+              return _buildMobileProfiles(context, snapshot.data ?? const []);
+            },
+          )
+        else
+          desktopDevices.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (error, _) => Text('Could not load paired devices: $error'),
+            data: (devices) => _buildDesktopDevices(context, devices),
+          ),
       ],
     );
   }

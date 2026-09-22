@@ -779,25 +779,65 @@ class ShellVibeSearchField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = ShellVibeTokens.resolve(context);
-    return ConstrainedBox(
-      constraints: BoxConstraints(
-        minHeight: shellvibeControlHeight(tokens, tokens.controlHeight),
+    final height = shellvibeControlHeight(tokens, tokens.controlHeight);
+    // Material sizes a prefix icon to a 48px tap target unless told
+    // otherwise, which made this a 48px field with a 52px gutter in front of
+    // the text on a surface designed around 34px controls.
+    final iconConstraints = BoxConstraints.tightFor(width: 34, height: height);
+    // The typed text matches the hint, so the field does not change size
+    // under the first keystroke.
+    const textStyle = TextStyle(fontSize: 13);
+    return TextField(
+      key: fieldKey,
+      controller: controller,
+      onChanged: onChanged,
+      autofocus: autofocus,
+      style: textStyle,
+      textAlignVertical: TextAlignVertical.center,
+      decoration: InputDecoration(
+        hintText: hintText,
+        isDense: true,
+        constraints: BoxConstraints.tightFor(height: height),
+        prefixIcon: const Icon(LucideIcons.search, size: 15),
+        prefixIconConstraints: iconConstraints,
+        suffixIcon: controller == null
+            ? null
+            : _SearchClearButton(controller: controller!, onChanged: onChanged),
+        suffixIconConstraints: iconConstraints,
+        contentPadding: const EdgeInsets.only(right: 12),
       ),
-      child: TextField(
-        key: fieldKey,
-        controller: controller,
-        onChanged: onChanged,
-        autofocus: autofocus,
-        textAlignVertical: TextAlignVertical.center,
-        decoration: InputDecoration(
-          hintText: hintText,
-          prefixIcon: const Icon(LucideIcons.search, size: 17),
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 12,
-            vertical: 8,
+    );
+  }
+}
+
+/// Empties a [ShellVibeSearchField], shown only while there is something to
+/// empty.
+class _SearchClearButton extends StatelessWidget {
+  const _SearchClearButton({required this.controller, this.onChanged});
+
+  final TextEditingController controller;
+  final ValueChanged<String>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: controller,
+      builder: (context, value, _) {
+        if (value.text.isEmpty) return const SizedBox.shrink();
+        return Semantics(
+          label: 'Clear search',
+          button: true,
+          child: InkWell(
+            key: const Key('search_field_clear'),
+            borderRadius: BorderRadius.circular(6),
+            onTap: () {
+              controller.clear();
+              onChanged?.call('');
+            },
+            child: const Icon(LucideIcons.x, size: 14),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }

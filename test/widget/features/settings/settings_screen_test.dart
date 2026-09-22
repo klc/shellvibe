@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
+import 'package:shellvibe/core/utils/platform_capabilities.dart';
 import 'package:shellvibe/features/settings/presentation/screens/settings_screen.dart';
 import 'package:shellvibe/shared/database/app_database.dart';
 import 'package:shellvibe/shared/providers/database_providers.dart';
@@ -21,6 +22,7 @@ void main() {
   });
 
   tearDown(() async {
+    debugPlatformCapabilitiesOverride = null;
     await db.close();
   });
 
@@ -225,6 +227,33 @@ void main() {
         find.byKey(const Key('settings_theme_mode_dropdown')),
         findsNothing,
       );
+    });
+
+    testWidgets('A phone has no AI Access section, even by deep link', (
+      tester,
+    ) async {
+      debugPlatformCapabilitiesOverride = TargetPlatform.android;
+      tester.view.physicalSize = const Size(700, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(buildApp());
+      await tester.pumpAndSettle();
+
+      // The MCP bridge does not run on a phone, so its switches would do
+      // nothing there.
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('settings_section_deviceLink')),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.byKey(const Key('settings_section_aiAccess')), findsNothing);
+
+      // A stale link to it lands on the index rather than on the section.
+      await tester.pumpWidget(buildApp(initialLocation: '/settings/aiAccess'));
+      await tester.pumpAndSettle();
+      expect(find.text('AI Access'), findsNothing);
+      expect(find.text('Settings'), findsOneWidget);
     });
 
     testWidgets('A deep link opens the section directly', (tester) async {

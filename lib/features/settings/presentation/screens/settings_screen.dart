@@ -67,22 +67,23 @@ class SettingsScreen extends StatelessWidget {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
               children: [
-                for (final group in SettingsSectionGroup.values) ...[
-                  ShellVibeSectionLabel(label: group.label),
-                  _buildIndexCard(context, [
-                    for (final entry in group.sections)
-                      _IndexTile(
-                        itemKey: Key('settings_section_${entry.name}'),
-                        icon: entry.icon,
-                        label: entry.label,
-                        meta: entry.meta,
-                        onTap: () => GoRouter.maybeOf(
-                          context,
-                        )?.go('/settings/${entry.name}'),
-                      ),
-                  ]),
-                  const SizedBox(height: 4),
-                ],
+                for (final group in SettingsSectionGroup.values)
+                  if (group.availableSections.isNotEmpty) ...[
+                    ShellVibeSectionLabel(label: group.label),
+                    _buildIndexCard(context, [
+                      for (final entry in group.availableSections)
+                        _IndexTile(
+                          itemKey: Key('settings_section_${entry.name}'),
+                          icon: entry.icon,
+                          label: entry.label,
+                          meta: entry.meta,
+                          onTap: () => GoRouter.maybeOf(
+                            context,
+                          )?.go('/settings/${entry.name}'),
+                        ),
+                    ]),
+                    const SizedBox(height: 4),
+                  ],
                 // Tunnels, snippets and workspaces are not among the five
                 // mobile tabs, so this is their entry point.
                 ..._buildToolsGroup(context),
@@ -174,22 +175,23 @@ class SettingsScreen extends StatelessWidget {
               children: [
                 // The wide nav keeps the same grouping as the phone index, so
                 // the two layouts agree about what belongs with what.
-                for (final group in SettingsSectionGroup.values) ...[
-                  ShellVibeSectionLabel(label: group.label),
-                  for (final entry in group.sections)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 2),
-                      child: ShellVibeNavItem(
-                        itemKey: Key('settings_section_${entry.name}'),
-                        icon: entry.icon,
-                        label: entry.label,
-                        selected: entry == active,
-                        onTap: () => GoRouter.maybeOf(
-                          context,
-                        )?.go('/settings/${entry.name}'),
+                for (final group in SettingsSectionGroup.values)
+                  if (group.availableSections.isNotEmpty) ...[
+                    ShellVibeSectionLabel(label: group.label),
+                    for (final entry in group.availableSections)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 2),
+                        child: ShellVibeNavItem(
+                          itemKey: Key('settings_section_${entry.name}'),
+                          icon: entry.icon,
+                          label: entry.label,
+                          selected: entry == active,
+                          onTap: () => GoRouter.maybeOf(
+                            context,
+                          )?.go('/settings/${entry.name}'),
+                        ),
                       ),
-                    ),
-                ],
+                  ],
               ],
             ),
           ),

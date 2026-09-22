@@ -1,6 +1,8 @@
 import 'package:flutter/widgets.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
+import '../../../../core/utils/platform_capabilities.dart';
+
 /// The wireframe's settings sections, in navigation order.
 enum SettingsSection {
   appearance(
@@ -22,7 +24,7 @@ enum SettingsSection {
   deviceLink(
     'Device Link',
     LucideIcons.smartphone,
-    'Phones paired to this machine.',
+    'Phones and desktops this device is paired with.',
   ),
   aiAccess(
     'AI Access',
@@ -62,13 +64,23 @@ enum SettingsSection {
   /// The one-line description under a section's title.
   final String meta;
 
+  /// Whether this section has anything to control on this platform.
+  ///
+  /// AI Access configures the MCP bridge, which is a desktop capability: on a
+  /// phone the server refuses to start, so the section would be a page of
+  /// switches that do nothing.
+  bool get isAvailable => switch (this) {
+    SettingsSection.aiAccess => !isMobilePlatform,
+    _ => true,
+  };
+
   /// The section a `/settings/<name>` path points at, or null when the path
   /// segment names nothing — a stale deep link should land on the index
   /// rather than on a guessed section.
   static SettingsSection? byName(String? name) {
     if (name == null) return null;
     for (final section in values) {
-      if (section.name == name) return section;
+      if (section.name == name) return section.isAvailable ? section : null;
     }
     return null;
   }
@@ -97,4 +109,8 @@ enum SettingsSectionGroup {
 
   final String label;
   final List<SettingsSection> sections;
+
+  /// [sections] this platform can show; a group left empty is not shown.
+  List<SettingsSection> get availableSections =>
+      sections.where((section) => section.isAvailable).toList(growable: false);
 }
