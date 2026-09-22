@@ -1,0 +1,22 @@
+{
+    "status": 201,
+    "body": {
+        "data": {
+            "invitation": {
+                "id": "<ulid>",
+                "team_id": "<ulid>",
+                "workspace_id": null,
+                "inviter_user_id": "<ulid>",
+                "role": "editor",
+                "invitation_nonce": "<invitation_nonce>",
+                "signed_manifest": null,
+                "expires_at": "<timestamp>",
+                "accepted_at": null,
+                "revoked_at": null,
+                "created_at": "<timestamp>"
+            },
+            "token": "<token>",
+            "invite_url": "<invite_url>"
+        }
+    }
+}

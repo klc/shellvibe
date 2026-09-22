@@ -383,3 +383,142 @@ class Bookmarks extends Table {
   @override
   Set<Column> get primaryKey => {id};
 }
+
+/// 18. Pending Operations (the local outbox for automatic sync)
+///
+/// A change is recorded here in the **same transaction** as the change itself.
+/// That is the whole point: hooking the repositories instead would let a
+/// crash land the write and lose the operation, and an operation that never
+/// existed is a change that silently never syncs.
+///
+/// [payload] is the whole row, not a field diff. Conflicts are resolved at
+/// entity level, so the winning operation has to be able to reconstruct the
+/// row on its own -- a diff would leave the losing side's untouched fields
+/// wiped rather than merged.
+///
+/// [beforeImage] is the row as it was before the change. Nothing reads it yet.
+/// It is stored because a three-way merge needs a common ancestor, that
+/// ancestor is kept nowhere else, and it cannot be reconstructed after the
+/// fact: recording it now is what keeps that option open later.
+class PendingOperations extends Table {
+  TextColumn get id => text()();
+
+  /// The table the row belongs to, in its plain name (`hosts`). The opaque
+  /// alias is derived at send time -- storing the alias instead would make the
+  /// outbox unreadable without the sync key.
+  TextColumn get entityType => text()();
+  TextColumn get entityId => text()();
+
+  /// `upsert` or `delete`.
+  TextColumn get operation => text()();
+
+  /// The row as JSON, or null for a delete.
+  TextColumn get payload => text().nullable()();
+
+  /// The row as it was before, or null when it did not exist.
+  TextColumn get beforeImage => text().nullable()();
+
+  /// Lamport clock this device assigned to the change.
+  IntColumn get logicalClock => integer()();
+
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+    // One pending operation per row. A second change to the same row replaces
+    // the first: with entity level last-writer-wins the intermediate states
+    // mean nothing to any receiver, and sending them all would spend the
+    // write rate limit on states nobody applies.
+    {entityType, entityId},
+  ];
+}
+
+/// 19. Sync Tombstones (what this device deleted, and what it deleted)
+///
+/// Two jobs in one table. The ids stop a late `upsert` from resurrecting a
+/// deleted row, which is the most commonly reported failure in write-ups of
+/// home-grown sync. The bodies are the local trash: a delete stays undoable
+/// for a while, because automatic sync carries a mistaken delete to every
+/// other device within seconds.
+///
+/// Never uploaded. A delete undone here goes out as an ordinary `upsert` at a
+/// higher clock.
+class SyncTombstones extends Table {
+  TextColumn get entityType => text()();
+  TextColumn get entityId => text()();
+
+  /// The last known row as JSON, or null once the trash window has passed.
+  ///
+  /// The row is emptied rather than deleted: the id has to outlive the body,
+  /// or a late `upsert` would bring the row back.
+  TextColumn get body => text().nullable()();
+
+  IntColumn get logicalClock => integer()();
+  DateTimeColumn get deletedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {entityType, entityId};
+}
+
+/// 20. Sync State (one row, the clocks this device is working from)
+///
+/// In the database rather than in secure storage so it can be advanced inside
+/// the same transaction that writes the data it accounts for. Advancing a
+/// cursor before the rows it covers are durable is how a sync that is
+/// interrupted loses operations permanently.
+class SyncState extends Table {
+  /// Always `1`. A table rather than a key-value blob so the clock can take
+  /// part in a transaction.
+  IntColumn get id => integer()();
+
+  /// Highest clock this device has seen, from its own changes or from a pull.
+  IntColumn get lastSeenClock => integer().withDefault(const Constant(0))();
+
+  /// Clock the last pull was acknowledged at. Only ever advanced after the
+  /// operations it covers have been written.
+  IntColumn get pulledThroughClock =>
+      integer().withDefault(const Constant(0))();
+
+  /// How far this device has got through joining automatic sync.
+  ///
+  /// `none`, then `applied` once the ground has been merged in and this
+  /// device's own rows are queued, then `done` once they have been sent and
+  /// the ground rewritten.
+  ///
+  /// Stored rather than inferred, because the two halves of joining cannot be
+  /// told apart afterwards. A device that applied the ground and was closed
+  /// before its own rows went out looks exactly like one that has finished:
+  /// the clocks are set, the outbox is empty in the sense that nothing failed.
+  /// Without this it would call itself joined and the rows it never sent --
+  /// the sixty hosts that were the reason for syncing at all -- would stay on
+  /// that device forever, with nothing reporting a problem.
+  TextColumn get joinState => text().withDefault(const Constant('none'))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// 21. Sync Entity Versions (what clock each row currently stands at)
+///
+/// Entity level last-writer-wins needs to compare an incoming operation with
+/// the state this device already holds. The outbox cannot answer that: once an
+/// operation has been sent it is cleared, and the device forgets the clock its
+/// own row carries. Without this table a device that has pushed accepts every
+/// incoming operation, and two devices that edited the same row while offline
+/// end up holding *each other's* value -- they swap rather than converge.
+///
+/// One row per entity, overwritten on every local change and on every applied
+/// operation. The device id is stored because it breaks ties: two devices can
+/// produce the same clock offline, and the rule only has to be deterministic.
+class SyncEntityVersions extends Table {
+  TextColumn get entityType => text()();
+  TextColumn get entityId => text()();
+  IntColumn get logicalClock => integer()();
+  TextColumn get deviceId => text()();
+
+  @override
+  Set<Column> get primaryKey => {entityType, entityId};
+}

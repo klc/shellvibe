@@ -1,0 +1,28 @@
+{
+    "status": 200,
+    "body": {
+        "data": [
+            {
+                "id": "<ulid>",
+                "team_id": "<ulid>",
+                "user_id": "<ulid>",
+                "user": {
+                    "id": "<ulid>",
+                    "name": "Contract Fixture",
+                    "email": "contract@shellvibe.app",
+                    "email_verified": false,
+                    "created_at": "<timestamp>"
+                },
+                "role": "owner",
+                "status": "active",
+                "seat_consuming": true,
+                "joined_at": "<timestamp>",
+                "revoked_at": null,
+                "created_at": "<timestamp>"
+            }
+        ],
+        "meta": {
+            "count": 1
+        }
+    }
+}

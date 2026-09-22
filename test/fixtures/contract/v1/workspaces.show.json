@@ -1,0 +1,15 @@
+{
+    "status": 200,
+    "body": {
+        "data": {
+            "id": "<ulid>",
+            "team_id": "<ulid>",
+            "encrypted_metadata": "encrypted_workspace_name_blob",
+            "current_key_version": 1,
+            "membership_epoch": 1,
+            "status": "active",
+            "created_at": "<timestamp>",
+            "updated_at": "<timestamp>"
+        }
+    }
+}

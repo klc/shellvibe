@@ -67,6 +67,57 @@ class SettingsNotifier extends _$SettingsNotifier {
   AppSettingsModel get _base =>
       _lastKnown ?? state.value ?? const AppSettingsModel();
 
+  /// Applies a settings blob that came out of a backup.
+  ///
+  /// [AppSettingsModel.fromJson] already falls back to a default for every
+  /// field it cannot read, so a blob from another build or another platform is
+  /// safe to parse. Two things still need handling here.
+  ///
+  /// `activeWorkspaceId` points at a database row. A backup taken on another
+  /// device can name a workspace this one does not have, and the app would
+  /// then believe it had a workspace open that does not exist.
+  ///
+  /// The auto-lock and clipboard timers are security settings. A loose value
+  /// from an old backup can quietly relax a device that was tightened since.
+  /// That is the user's call to make -- they asked for settings to be restored
+  /// -- but it is not something to do without saying so, which is why the
+  /// changes are returned rather than only applied.
+  Future<List<String>> applyRestoredSettings(Map<String, dynamic> json) async {
+    final current = _base;
+    var restored = AppSettingsModel.fromJson(json);
+
+    final db = ref.read(appDatabaseProvider);
+    final workspace = await (db.select(
+      db.workspaces,
+    )..where((w) => w.id.equals(restored.activeWorkspaceId))).getSingleOrNull();
+
+    if (workspace == null) {
+      restored = restored.copyWith(activeWorkspaceId: 'default');
+    }
+
+    final notes = <String>[
+      if (restored.autoLockTimerSeconds != current.autoLockTimerSeconds)
+        'Auto-lock changed from ${_describeTimer(current.autoLockTimerSeconds)} '
+            'to ${_describeTimer(restored.autoLockTimerSeconds)}.',
+      if (restored.clipboardAutoClearSeconds !=
+          current.clipboardAutoClearSeconds)
+        'Clipboard auto-clear changed from '
+            '${_describeTimer(current.clipboardAutoClearSeconds)} to '
+            '${_describeTimer(restored.clipboardAutoClearSeconds)}.',
+    ];
+
+    await updateSettings(restored);
+
+    return notes;
+  }
+
+  static String _describeTimer(int seconds) {
+    if (seconds <= 0) return 'off';
+    if (seconds < 60) return '$seconds seconds';
+
+    return '${seconds ~/ 60} minutes';
+  }
+
   Future<void> setThemeMode(ThemeMode mode) async {
     final current = _base;
     await updateSettings(current.copyWith(themeMode: mode));

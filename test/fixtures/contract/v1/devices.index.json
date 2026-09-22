@@ -1,0 +1,30 @@
+{
+    "status": 200,
+    "body": {
+        "data": [
+            {
+                "id": "<ulid>",
+                "name": "Fixture MacBook",
+                "platform": "macos",
+                "app_version": "2.0.0",
+                "last_seen_at": "<timestamp>",
+                "revoked_at": null,
+                "crypto_identity": null,
+                "created_at": "<timestamp>"
+            },
+            {
+                "id": "<ulid>",
+                "name": "Fixture iPhone",
+                "platform": "ios",
+                "app_version": "1.0.0",
+                "last_seen_at": "<timestamp>",
+                "revoked_at": null,
+                "crypto_identity": null,
+                "created_at": "<timestamp>"
+            }
+        ],
+        "meta": {
+            "count": 2
+        }
+    }
+}

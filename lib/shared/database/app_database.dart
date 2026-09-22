@@ -5,6 +5,7 @@ import 'package:drift/native.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 
+import '../../core/sync/sync_journal.dart';
 import 'tables.dart';
 import 'daos/bookmarks_dao.dart';
 import 'daos/hosts_dao.dart';
@@ -40,6 +41,10 @@ part 'app_database.g.dart';
     McpApprovals,
     McpAuditLog,
     Bookmarks,
+    PendingOperations,
+    SyncTombstones,
+    SyncState,
+    SyncEntityVersions,
   ],
   daos: [
     HostsDao,
@@ -58,8 +63,51 @@ part 'app_database.g.dart';
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
+  /// Records local changes for automatic sync, when it is switched on.
+  ///
+  /// Null until a vault is set up. The DAOs call through [recordUpsert] and
+  /// [recordDelete] either way, so nothing in them has to know whether sync
+  /// exists -- and a device that turns sync on does not need a different write
+  /// path than one that never does.
+  SyncJournal? syncJournal;
+
+  /// Runs [write] and records it, when there is a journal to record into.
+  Future<T> recordUpsert<T>({
+    required String entityType,
+    required String entityId,
+    required Future<T> Function() write,
+  }) {
+    final journal = syncJournal;
+
+    return journal == null
+        ? write()
+        : journal.upsert(
+            entityType: entityType,
+            entityId: entityId,
+            write: write,
+          );
+  }
+
+  /// Runs [write], which deletes the row, and records it along with everything
+  /// the database cascades or rewrites.
+  Future<T> recordDelete<T>({
+    required String entityType,
+    required String entityId,
+    required Future<T> Function() write,
+  }) {
+    final journal = syncJournal;
+
+    return journal == null
+        ? write()
+        : journal.delete(
+            entityType: entityType,
+            entityId: entityId,
+            write: write,
+          );
+  }
+
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 12;
 
   @override
   MigrationStrategy get migration {
@@ -119,6 +167,33 @@ class AppDatabase extends _$AppDatabase {
         }
         if (from < 9) {
           await m.createTable(bookmarks);
+        }
+        if (from < 10) {
+          // The local outbox for automatic sync. Empty on an existing
+          // install: nothing that happened before this migration was
+          // recorded, and the first snapshot is what carries it instead.
+          await m.createTable(pendingOperations);
+          await m.createTable(syncTombstones);
+          await m.createTable(syncState);
+        }
+        if (from < 11) {
+          // Which clock each row stands at. Empty on an existing install:
+          // every row is then treated as having no version, so the first
+          // operation for it wins -- which is correct, because a device that
+          // has never synced has nothing to defend.
+          await m.createTable(syncEntityVersions);
+        }
+        if (from >= 10 && from < 12) {
+          // How far a join got. `none` on an existing install, including one
+          // that is already syncing: it joined under the old flow, which had
+          // no seed step, so telling it the join is finished would be a claim
+          // about rows that were never sent.
+          //
+          // Only when the table is already there. An install older than 10
+          // gets it from `createTable` above, which builds the table as it is
+          // defined now -- column included -- and adding it again fails the
+          // whole upgrade with `duplicate column name`.
+          await m.addColumn(syncState, syncState.joinState);
         }
       },
     );

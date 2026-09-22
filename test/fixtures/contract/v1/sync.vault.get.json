@@ -1,0 +1,13 @@
+{
+    "status": 200,
+    "body": {
+        "data": {
+            "id": "<ulid>",
+            "current_revision": 1,
+            "current_hash": "80aa6f20c6bf44b329d4676e671eb1c51bf6364e9123a16413c47a5f50350dc3",
+            "bytes_used": 38,
+            "updated_at": "<timestamp>",
+            "created_at": "<timestamp>"
+        }
+    }
+}

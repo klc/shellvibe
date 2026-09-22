@@ -1,0 +1,17 @@
+{
+    "status": 200,
+    "body": {
+        "data": {
+            "id": "<ulid>",
+            "device_id": "<ulid>",
+            "encryption_algorithm": "X25519",
+            "signing_algorithm": "Ed25519",
+            "encryption_public_key": "MCowBQYDK2VuAyEAvW...",
+            "signing_public_key": "MCowBQYDK2VwAyEA9Z...",
+            "key_generation": 1,
+            "fingerprint": "SHA256:abc123def456...",
+            "approval_statement": "Statement signed by master key",
+            "created_at": "<timestamp>"
+        }
+    }
+}

@@ -42,18 +42,25 @@ class BookmarksDao extends DatabaseAccessor<AppDatabase>
     )..where((tbl) => tbl.templateId.equals(templateId))).getSingleOrNull();
   }
 
-  Future<int> insertBookmark(BookmarksCompanion bookmark) =>
-      into(bookmarks).insert(bookmark);
+  Future<int> insertBookmark(BookmarksCompanion bookmark) => db.recordUpsert(
+    entityType: 'bookmarks',
+    entityId: bookmark.id.value,
+    write: () => into(bookmarks).insert(bookmark),
+  );
 
-  Future<int> deleteBookmark(String id) =>
-      (delete(bookmarks)..where((tbl) => tbl.id.equals(id))).go();
+  Future<int> deleteBookmark(String id) => db.recordDelete(
+    entityType: 'bookmarks',
+    entityId: id,
+    write: () => (delete(bookmarks)..where((tbl) => tbl.id.equals(id))).go(),
+  );
 
   /// The position a new bookmark takes: last in the workspace's list.
   Future<int> nextPosition(String workspaceId) async {
-    final highest = await (selectOnly(bookmarks)
-          ..addColumns([bookmarks.position.max()])
-          ..where(bookmarks.workspaceId.equals(workspaceId)))
-        .getSingleOrNull();
+    final highest =
+        await (selectOnly(bookmarks)
+              ..addColumns([bookmarks.position.max()])
+              ..where(bookmarks.workspaceId.equals(workspaceId)))
+            .getSingleOrNull();
     final current = highest?.read(bookmarks.position.max());
     return current == null ? 0 : current + 1;
   }

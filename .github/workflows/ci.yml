@@ -19,6 +19,11 @@ jobs:
     name: Secret scan
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      # The action resolves a pull request's commit range through the API, so
+      # the workflow-wide `contents: read` is not enough on its own.
+      pull-requests: read
     steps:
       - name: Check out repository
         # Full depth so the action can resolve the range it scans, and so a
@@ -30,6 +35,17 @@ jobs:
       - name: Scan for secrets
         uses: gitleaks/gitleaks-action@v2
         env:
+          # Required since gitleaks-action v2 changed how it scans a pull
+          # request: it reads the commit range from the API rather than from
+          # the checkout, and without a token it refuses to start. The job
+          # fails outright, so this cannot go unnoticed the way a misread
+          # config could -- but it also means no scan ran.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Off, so the scanner never needs write access to a pull request.
+          # A finding fails the job, which is the signal that matters; a
+          # comment would buy nothing and would widen the token this workflow
+          # runs with.
+          GITLEAKS_ENABLE_COMMENTS: false
           # Required. The action does not pick up .gitleaks.toml from the
           # repository root on its own, and without this it runs the default
           # ruleset — which flags the fixtures the allowlist exists to permit
@@ -69,7 +85,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: 3.44.2
+          flutter-version: 3.47.5
           cache: true
           pub-cache: true
 

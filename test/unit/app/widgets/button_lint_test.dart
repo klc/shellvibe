@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
 
@@ -76,6 +77,49 @@ void main() {
           'Use ShellVibeButton or ShellVibeIconButton. A button that needs '
           'something they do not offer is a change to the component, not a '
           'seventh kind of button:\n${violations.join('\n')}',
+    );
+  });
+
+  test('one label is never written in two casings', () {
+    // Not a sweep of the whole app's casing -- that is a taste call nobody has
+    // made here yet. This catches only the unarguable case: the *same* words
+    // appearing as both `Add Snippet` and `Add snippet`, which is two buttons
+    // for one action and reads as a bug wherever they sit near each other.
+    final labels = <String, Set<String>>{};
+
+    for (final file in presentationFiles()) {
+      final source = withoutComments(file.readAsStringSync());
+
+      // Only labels belonging to a button. `label:` is also how a key cap and
+      // a section heading are written, and those follow their own
+      // conventions -- a terminal's Esc key is not a button that should be
+      // retitled to match one.
+      for (final button in RegExp(r'ShellVibeButton(\.\w+)?\(')
+          .allMatches(source)) {
+        final window = source.substring(
+          button.end,
+          math.min(button.end + 400, source.length),
+        );
+        final label = RegExp("label: '([A-Za-z][^'\$]{1,44})'")
+            .firstMatch(window);
+        if (label == null) continue;
+
+        labels
+            .putIfAbsent(label.group(1)!.toLowerCase(), () => <String>{})
+            .add(label.group(1)!);
+      }
+    }
+
+    final clashes = labels.entries
+        .where((entry) => entry.value.length > 1)
+        .map((entry) => entry.value.toList()..sort())
+        .toList();
+
+    expect(
+      clashes,
+      isEmpty,
+      reason: 'The same label is written two ways:\n'
+          '${clashes.map((c) => '  ${c.join('  vs  ')}').join('\n')}',
     );
   });
 

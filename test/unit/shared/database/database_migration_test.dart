@@ -89,7 +89,27 @@ void main() {
         final appDb = AppDatabase(NativeDatabase(tempDbFile));
         db = appDb;
 
-        expect(appDb.schemaVersion, equals(9));
+        expect(appDb.schemaVersion, equals(12));
+
+        // The v10 tables have to exist after a migration, not only after a
+        // fresh create: a device that upgrades and then makes a change would
+        // otherwise fail on the write that records it.
+        for (final table in [
+          'pending_operations',
+          'sync_tombstones',
+          'sync_state',
+          'sync_entity_versions',
+        ]) {
+          final found = await appDb
+              .customSelect(
+                "SELECT name FROM sqlite_master WHERE type = 'table' "
+                'AND name = ?',
+                variables: [Variable.withString(table)],
+              )
+              .get();
+
+          expect(found, isNotEmpty, reason: '$table is missing after upgrade');
+        }
 
         // 3. Verify existing legacy host record can be fetched.
         final fetchedHost = await appDb.hostsDao.getHostById('host-v1');
@@ -417,6 +437,43 @@ void main() {
       final untouched = rows.firstWhere((row) => row.id == 'id-key');
       expect(untouched.authType, equals('key'));
       expect(untouched.privateKeyEncrypted, equals('cipher'));
+    });
+
+    test('upgrading to v12 adds join_state to a device already syncing', () {
+      // The path every device that already had sync switched on takes. The
+      // v10 table is created without the column, so the upgrade has to add
+      // it -- and an install older than v10 gets the column from the table
+      // definition instead, which is why the upgrade only adds it above v10.
+      final rawDb = sqlite3.open(tempDbFile.path);
+      rawDb.execute('''
+        CREATE TABLE IF NOT EXISTS "sync_state" (
+          "id" INTEGER NOT NULL PRIMARY KEY,
+          "last_seen_clock" INTEGER NOT NULL DEFAULT 0,
+          "pulled_through_clock" INTEGER NOT NULL DEFAULT 0
+        );
+      ''');
+      rawDb.execute(
+        'INSERT INTO sync_state (id, last_seen_clock, pulled_through_clock) '
+        'VALUES (1, 42, 42);',
+      );
+      rawDb.execute('PRAGMA user_version = 11;');
+      rawDb.close();
+
+      // Run the upgrade the way the app does, then read the row back.
+      final appDb = AppDatabase(NativeDatabase(tempDbFile));
+      db = appDb;
+
+      expect(
+        appDb.select(appDb.syncState).getSingle().then((row) => row.joinState),
+        completion('none'),
+      );
+
+      // The clocks it was already at survive: a device that loses them starts
+      // the log again from the beginning.
+      expect(
+        appDb.select(appDb.syncState).getSingle().then((r) => r.lastSeenClock),
+        completion(42),
+      );
     });
   });
 }

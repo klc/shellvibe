@@ -1,0 +1,19 @@
+{
+    "status": 201,
+    "body": {
+        "data": {
+            "id": "<ulid>",
+            "vault_id": "<ulid>",
+            "revision": 1,
+            "base_revision": 0,
+            "device_id": "<ulid>",
+            "upload_id": "upload_uuid_001",
+            "schema_version": 7,
+            "encryption_version": 2,
+            "ciphertext_sha256": "80aa6f20c6bf44b329d4676e671eb1c51bf6364e9123a16413c47a5f50350dc3",
+            "size_bytes": 38,
+            "created_at": "<timestamp>",
+            "ciphertext": "opaque_encrypted_backup_blob_123456789"
+        }
+    }
+}

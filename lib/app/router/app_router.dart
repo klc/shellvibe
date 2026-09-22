@@ -16,6 +16,7 @@ import '../../features/vault/presentation/dialogs/vault_unlock_dialog.dart';
 import '../../features/vault/presentation/notifiers/vault_notifier.dart';
 import '../../features/vault/presentation/screens/vault_screen.dart';
 import '../../features/workspaces/presentation/screens/workspace_manager_screen.dart';
+import '../theme/shellvibe_tokens.dart';
 import '../widgets/app_navigation_shell.dart';
 import '../widgets/window_chrome_frame.dart';
 
@@ -177,6 +178,37 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: '/settings',
                 builder: (context, state) => const SettingsScreen(),
+                routes: [
+                  // The compact layout opens one section at a time; the wide
+                  // one shows the same section beside its nav column and
+                  // never navigates here. A name that matches nothing falls
+                  // back to the index rather than guessing a section.
+                  GoRoute(
+                    path: ':section',
+                    redirect: (context, state) =>
+                        SettingsSection.byName(
+                              state.pathParameters['section'],
+                            ) ==
+                            null
+                        ? '/settings'
+                        : null,
+                    pageBuilder: (context, state) {
+                      final page = SettingsScreen(
+                        section: SettingsSection.byName(
+                          state.pathParameters['section'],
+                        ),
+                      );
+                      // On the wide tier a section is not a page the user
+                      // travelled to, it is the right-hand half of the screen
+                      // they are already on: sliding it in would animate a
+                      // panel swap as if it were navigation.
+                      return MediaQuery.sizeOf(context).width >=
+                              ShellVibeTokens.resolve(context).breakpointMedium
+                          ? NoTransitionPage(child: page)
+                          : MaterialPage(child: page);
+                    },
+                  ),
+                ],
               ),
             ],
           ),

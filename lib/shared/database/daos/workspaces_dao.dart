@@ -42,8 +42,12 @@ class WorkspacesDao extends DatabaseAccessor<AppDatabase>
     )..where((tbl) => tbl.id.equals(id))).getSingleOrNull();
   }
 
-  Future<int> insertWorkspace(WorkspacesCompanion workspace) =>
-      into(workspaces).insert(workspace, mode: InsertMode.insertOrIgnore);
+  Future<int> insertWorkspace(WorkspacesCompanion workspace) => db.recordUpsert(
+    entityType: 'workspaces',
+    entityId: workspace.id.value,
+    write: () =>
+        into(workspaces).insert(workspace, mode: InsertMode.insertOrIgnore),
+  );
 
   Future<void> ensureWorkspaceExists(String id, {String? name}) async {
     await into(workspaces).insert(
@@ -57,8 +61,11 @@ class WorkspacesDao extends DatabaseAccessor<AppDatabase>
   }
 
   Future<int> updateWorkspaceName(String id, String name) {
-    return (update(workspaces)..where((tbl) => tbl.id.equals(id))).write(
-      WorkspacesCompanion(name: Value(name)),
+    return db.recordUpsert(
+      entityType: 'workspaces',
+      entityId: id,
+      write: () => (update(workspaces)..where((tbl) => tbl.id.equals(id)))
+          .write(WorkspacesCompanion(name: Value(name))),
     );
   }
 
@@ -101,6 +108,10 @@ class WorkspacesDao extends DatabaseAccessor<AppDatabase>
   }
 
   Future<int> deleteWorkspace(String id) {
-    return (delete(workspaces)..where((tbl) => tbl.id.equals(id))).go();
+    return db.recordDelete(
+      entityType: 'workspaces',
+      entityId: id,
+      write: () => (delete(workspaces)..where((tbl) => tbl.id.equals(id))).go(),
+    );
   }
 }

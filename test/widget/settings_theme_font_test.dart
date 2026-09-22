@@ -52,7 +52,9 @@ void main() {
     final container = ProviderScope.containerOf(
       tester.element(find.byType(ShellVibeApp)),
     );
-    container.read(appRouterProvider).go('/settings');
+    // The terminal controls are a section of their own; on the compact tier
+    // that section is a page of its own.
+    container.read(appRouterProvider).go('/settings/terminal');
     await tester.pumpAndSettle();
 
     // Registry-driven dropdowns are wired.

@@ -94,7 +94,7 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
               // label, so at a large system text scale an unbounded one
               // overflows the button it sits in.
               ShellVibeButton(
-                label: 'Add runbook',
+                label: 'Add Runbook',
                 icon: LucideIcons.plus,
                 onPressed: _openEditor,
               ),

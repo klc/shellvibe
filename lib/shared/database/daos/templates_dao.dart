@@ -28,29 +28,54 @@ class TemplatesDao extends DatabaseAccessor<AppDatabase>
         .get();
   }
 
-  Future<int> insertTemplate(TemplatesCompanion template) =>
-      into(templates).insert(template);
+  Future<int> insertTemplate(TemplatesCompanion template) => db.recordUpsert(
+    entityType: 'templates',
+    entityId: template.id.value,
+    write: () => into(templates).insert(template),
+  );
 
-  Future<bool> updateTemplate(TemplatesCompanion template) =>
-      update(templates).replace(template);
+  Future<bool> updateTemplate(TemplatesCompanion template) => db.recordUpsert(
+    entityType: 'templates',
+    entityId: template.id.value,
+    write: () => update(templates).replace(template),
+  );
 
-  Future<int> deleteTemplate(String id) async {
-    await (delete(
-      templatePanes,
-    )..where((tbl) => tbl.templateId.equals(id))).go();
-    return (delete(templates)..where((tbl) => tbl.id.equals(id))).go();
-  }
+  /// Deletes the template. Its panes and any bookmark pointing at it go too.
+  ///
+  /// The explicit pane delete is gone: `template_panes.template_id` cascades,
+  /// so the database was going to remove them anyway, and doing it by hand
+  /// meant the sync journal saw a bare delete it could not attribute.
+  Future<int> deleteTemplate(String id) => db.recordDelete(
+    entityType: 'templates',
+    entityId: id,
+    write: () => (delete(templates)..where((tbl) => tbl.id.equals(id))).go(),
+  );
 
   Future<void> replacePanes(
     String templateId,
     List<TemplatePanesCompanion> panes,
   ) async {
     await transaction(() async {
-      await (delete(
+      final removed = await (select(
         templatePanes,
-      )..where((tbl) => tbl.templateId.equals(templateId))).go();
+      )..where((tbl) => tbl.templateId.equals(templateId))).get();
+
+      for (final pane in removed) {
+        await db.recordDelete(
+          entityType: 'template_panes',
+          entityId: pane.id,
+          write: () => (delete(
+            templatePanes,
+          )..where((tbl) => tbl.id.equals(pane.id))).go(),
+        );
+      }
+
       for (final pane in panes) {
-        await into(templatePanes).insert(pane);
+        await db.recordUpsert(
+          entityType: 'template_panes',
+          entityId: pane.id.value,
+          write: () => into(templatePanes).insert(pane),
+        );
       }
     });
   }

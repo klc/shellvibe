@@ -334,7 +334,7 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
                 'workspace.',
             actions: [
               ShellVibeButton(
-                label: 'Add snippet',
+                label: 'Add Snippet',
                 icon: LucideIcons.plus,
                 onPressed: _openSnippetForm,
               ),

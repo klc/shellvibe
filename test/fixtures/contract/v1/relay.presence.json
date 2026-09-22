@@ -1,0 +1,23 @@
+{
+    "status": 200,
+    "body": {
+        "data": [
+            {
+                "id": "<ulid>",
+                "user_id": "<ulid>",
+                "host_device_id": "<ulid>",
+                "guest_device_id": null,
+                "channel_name": "private-device-link-<ulid>",
+                "status": "active",
+                "bytes_transferred": 0,
+                "started_at": "<timestamp>",
+                "ended_at": null,
+                "termination_reason": null,
+                "created_at": "<timestamp>"
+            }
+        ],
+        "meta": {
+            "active_sessions_count": 1
+        }
+    }
+}

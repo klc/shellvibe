@@ -1,0 +1,20 @@
+{
+    "status": 200,
+    "body": {
+        "data": {
+            "membership": {
+                "id": "<ulid>",
+                "team_id": "<ulid>",
+                "user_id": "<ulid>",
+                "role": "editor",
+                "status": "accepted_pending_key",
+                "seat_consuming": true,
+                "joined_at": "<timestamp>",
+                "revoked_at": null,
+                "created_at": "<timestamp>"
+            },
+            "status": "accepted_pending_key",
+            "message": "Invitation accepted. Workspace key envelopes are pending from team admin."
+        }
+    }
+}

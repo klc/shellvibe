@@ -70,6 +70,11 @@ dist/
 docs/*
 # …except the README's screenshots, which have to ship with the repository.
 !docs/screenshots/
+# …and the sync contract, which is not an internal document: it is the
+# client half of the server's ADR 003, which requires the encryption design to
+# be open and auditable and references this file by path. A zero-knowledge
+# claim nobody can read is not one anybody has to believe.
+!docs/SYNC_CONTRACT_V1.md
 
 # graphify skill cache: local tooling output, carries absolute local paths.
 graphify-out/

@@ -1,331 +1,148 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
-import 'package:xterm3/xterm.dart';
 
 import '../../../../app/theme/shellvibe_tokens.dart';
-import '../../../../app/theme/ui_font.dart';
-import '../../../../app/widgets/adaptive_modal.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../../../core/constants/app_constants.dart';
-import '../../../../core/models/mosh_prediction_mode.dart';
-import '../../../../core/utils/platform_capabilities.dart';
-import '../../../../shared/providers/database_providers.dart';
-import '../../../device_link/presentation/widgets/paired_devices_settings_section.dart';
-import '../../../mcp/presentation/widgets/mcp_access_settings_section.dart';
-import '../../../terminal/domain/models/terminal_font.dart';
-import '../../../terminal/domain/models/terminal_palette.dart';
-import '../../../terminal/domain/models/terminal_palette_data.dart';
-import '../../../terminal/presentation/utils/terminal_font_resolver.dart';
-import '../../../vault/presentation/notifiers/identities_notifier.dart';
-import '../../../vault/presentation/notifiers/vault_notifier.dart';
-import '../../domain/models/app_settings_model.dart';
-import '../../domain/services/backup_file_service.dart';
-import '../notifiers/settings_notifier.dart';
-import '../widgets/about_settings_section.dart';
-import '../widgets/known_hosts_settings_section.dart';
+import '../../domain/models/settings_section.dart';
+import '../widgets/settings_section_view.dart';
 
-/// The wireframe's settings sections, in navigation order.
-enum SettingsSection {
-  appearance('Appearance', LucideIcons.palette),
-  terminal('Terminal', LucideIcons.squareTerminal),
-  security('Security', LucideIcons.shieldCheck),
-  deviceLink('Device Link', LucideIcons.smartphone),
-  aiAccess('AI Access', LucideIcons.bot),
-  vault('Vault', LucideIcons.lockKeyhole),
-  sync('Sync', LucideIcons.cloudCog),
-  about('About', LucideIcons.info);
+export '../../domain/models/settings_section.dart'
+    show SettingsSection, SettingsSectionGroup;
 
-  const SettingsSection(this.label, this.icon);
+/// Settings, at both tiers.
+///
+/// Which section is open lives in the route rather than in this widget, so a
+/// section is linkable, survives a rebuild, and means the same thing to both
+/// layouts: `/settings` is the index, `/settings/<name>` is one section.
+class SettingsScreen extends StatelessWidget {
+  const SettingsScreen({super.key, this.section});
 
-  final String label;
-  final IconData icon;
-}
-
-class SettingsScreen extends ConsumerStatefulWidget {
-  const SettingsScreen({super.key});
-
-  @override
-  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
-}
-
-class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  final _masterPasswordController = TextEditingController();
-  final _vaultPasswordController = TextEditingController();
-  SettingsSection _activeSection = SettingsSection.appearance;
-
-  @override
-  void dispose() {
-    _masterPasswordController.dispose();
-    _vaultPasswordController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _handleTestBiometrics() async {
-    final service = ref.read(biometricLockServiceProvider);
-    final canCheck = await service.canCheckBiometrics();
-    if (!canCheck) {
-      if (mounted) {
-        ShadToaster.of(context).show(
-          const ShadToast(
-            description: Text(
-              'Biometric authentication is not available on this device.',
-            ),
-          ),
-        );
-      }
-      return;
-    }
-
-    final success = await service.authenticate(
-      localizedReason: 'Test ${AppConstants.appName} Biometric Lock',
-    );
-    if (mounted) {
-      if (success) {
-        ShadToaster.of(context).show(
-          const ShadToast(
-            description: Text('Biometric Authentication Successful!'),
-          ),
-        );
-      } else {
-        ShadToaster.of(context).show(
-          const ShadToast.destructive(
-            description: Text('Biometric Authentication Failed/Cancelled.'),
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _handleExportE2EEBackup() async {
-    final password = _masterPasswordController.text.trim();
-    if (password.isEmpty) {
-      ShadToaster.of(context).show(
-        const ShadToast(
-          description: Text(
-            'Please enter a Master Password for Zero-Knowledge encryption.',
-          ),
-        ),
-      );
-      return;
-    }
-
-    try {
-      final db = ref.read(appDatabaseProvider);
-      final syncService = ref.read(e2eeCloudSyncServiceProvider);
-      final backupJson = await syncService.exportEncryptedBackup(
-        db: db,
-        masterPassword: password,
-      );
-
-      final path = await ref
-          .read(backupFileServiceProvider)
-          .saveBackup(backupJson);
-      // Null means the native save dialog was cancelled: nothing to report.
-      if (path == null) return;
-
-      if (mounted) {
-        ShadToaster.of(context).show(
-          ShadToast(
-            title: const Text('Backup Exported'),
-            description: Text('Saved to $path'),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ShadToaster.of(context).show(
-          ShadToast.destructive(
-            description: Text('Failed to export backup: $e'),
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _handleImportE2EEBackup() async {
-    final password = _masterPasswordController.text.trim();
-
-    if (password.isEmpty) {
-      ShadToaster.of(context).show(
-        const ShadToast(
-          description: Text(
-            'Please enter the Master Password the backup was encrypted with.',
-          ),
-        ),
-      );
-      return;
-    }
-
-    final PickedBackup? picked;
-    try {
-      picked = await ref.read(backupFileServiceProvider).pickBackup();
-    } catch (e) {
-      if (mounted) {
-        ShadToaster.of(context).show(
-          ShadToast.destructive(
-            description: Text('Could not read the backup file: $e'),
-          ),
-        );
-      }
-      return;
-    }
-    // Null means the file picker was cancelled.
-    if (picked == null) return;
-    final backupJson = picked.contents.trim();
-
-    try {
-      final db = ref.read(appDatabaseProvider);
-      final syncService = ref.read(e2eeCloudSyncServiceProvider);
-      final result = await syncService.importEncryptedBackup(
-        backupPackageJson: backupJson,
-        db: db,
-        masterPassword: password,
-      );
-
-      if (mounted) {
-        ShadToaster.of(context).show(
-          result.secretsRecovered
-              ? const ShadToast(
-                  description: Text(
-                    'Zero-Knowledge Backup Imported & Restored Successfully!',
-                  ),
-                )
-              : ShadToast.destructive(
-                  description: Text(
-                    result.warning ??
-                        'Backup restored, but stored secrets could not be recovered.',
-                  ),
-                ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ShadToaster.of(context).show(
-          ShadToast.destructive(
-            description: Text(
-              'Import failed (wrong password or corrupted backup): $e',
-            ),
-          ),
-        );
-      }
-    }
-  }
+  /// The open section, or null for the index. The wide layout has no index —
+  /// its nav column is always on screen — so there null means the first
+  /// section.
+  final SettingsSection? section;
 
   @override
   Widget build(BuildContext context) {
-    final settingsAsync = ref.watch(settingsProvider);
     final tierTokens = ShellVibeTokens.resolve(context);
 
     return LayoutBuilder(
       builder: (context, constraints) {
         // The section nav is this module's context column, so it appears at the
         // same tier every other module's does; below it the same sections
-        // become one grouped scroll.
+        // become an index that opens one section at a time.
         final showSectionNav =
             constraints.maxWidth >= tierTokens.breakpointMedium;
         return Scaffold(
           backgroundColor: Colors.transparent,
-          body: settingsAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (err, stack) => ShellVibeEmptyState(
-              icon: LucideIcons.triangleAlert,
-              title: 'Settings could not be loaded',
-              description: '$err',
-            ),
-            data: (settings) {
-              final notifier = ref.read(settingsProvider.notifier);
-              if (!showSectionNav) {
-                // Phone layout: one grouped scroll on the canvas, no slab.
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                  child: Column(
-                    children: [
-                      const ShellVibePageHeader(
-                        icon: LucideIcons.settings2,
-                        title: 'Settings',
-                        description:
-                            'Application, terminal, security and sync controls',
-                      ),
-                      Expanded(
-                        child: ListView(
-                          padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
-                          children: [
-                            for (final section in SettingsSection.values) ...[
-                              ..._sectionChildren(section, settings, notifier),
-                              const SizedBox(height: 20),
-                            ],
-                            // Tunnels, snippets and workspaces are not among
-                            // the five mobile tabs, so this is their entry
-                            // point.
-                            ..._buildToolsGroup(context),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }
-
-              // Wide layout: the section list is a slab of its own, exactly
-              // like a module's context column, so Settings reads as part of
-              // the same shell rather than a page nested inside it.
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _buildSectionNav(context),
-                  Expanded(
-                    child: ShellVibePanel(
-                      gradientExtent: 200,
-                      child: Column(
-                        children: [
-                          ShellVibeWorkToolbar(
-                            title: _activeSection.label,
-                            meta: _sectionMeta(_activeSection),
-                          ),
-                          Expanded(
-                            child: ListView(
-                              padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-                              children: _sectionChildren(
-                                _activeSection,
-                                settings,
-                                notifier,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
+          body: showSectionNav
+              ? _buildWideLayout(context)
+              : (section == null
+                    ? _buildIndex(context)
+                    : _SettingsSectionPage(section: section!)),
         );
       },
     );
   }
 
-  /// The one-line description under a section's title.
-  static String _sectionMeta(SettingsSection section) => switch (section) {
-    SettingsSection.appearance =>
-      'Theme and chrome palette. Applies immediately.',
-    SettingsSection.terminal =>
-      'Font, palette and cursor behaviour. Applies to open sessions '
-          'immediately.',
-    SettingsSection.security => 'Clipboard, host keys and biometrics.',
-    SettingsSection.deviceLink => 'Phones paired to this machine.',
-    SettingsSection.aiAccess =>
-      'AI agent access, registered clients, and the kill switch.',
-    SettingsSection.vault => 'Master password and auto-lock.',
-    SettingsSection.sync => 'Backup and restore.',
-    SettingsSection.about => 'Version, updates and licenses.',
-  };
+  /// Phone layout: an index of sections, each one a page of its own.
+  ///
+  /// The sections used to be concatenated into a single scroll here. That put
+  /// every control the app has on one page, and cloud backup and sync made it
+  /// long enough that finding anything meant scrolling past everything.
+  Widget _buildIndex(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      child: Column(
+        children: [
+          const ShellVibePageHeader(
+            icon: LucideIcons.settings2,
+            title: 'Settings',
+            description: 'Application, terminal, security and sync controls',
+          ),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
+              children: [
+                for (final group in SettingsSectionGroup.values) ...[
+                  ShellVibeSectionLabel(label: group.label),
+                  _buildIndexCard(context, [
+                    for (final entry in group.sections)
+                      _IndexTile(
+                        itemKey: Key('settings_section_${entry.name}'),
+                        icon: entry.icon,
+                        label: entry.label,
+                        meta: entry.meta,
+                        onTap: () => GoRouter.maybeOf(
+                          context,
+                        )?.go('/settings/${entry.name}'),
+                      ),
+                  ]),
+                  const SizedBox(height: 4),
+                ],
+                // Tunnels, snippets and workspaces are not among the five
+                // mobile tabs, so this is their entry point.
+                ..._buildToolsGroup(context),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Wide layout: the section list is a slab of its own, exactly like a
+  /// module's context column, so Settings reads as part of the same shell
+  /// rather than a page nested inside it.
+  Widget _buildWideLayout(BuildContext context) {
+    final active = section ?? SettingsSection.values.first;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildSectionNav(context),
+        Expanded(
+          child: ShellVibePanel(
+            gradientExtent: 200,
+            child: Column(
+              children: [
+                ShellVibeWorkToolbar(title: active.label, meta: active.meta),
+                Expanded(child: SettingsSectionView(section: active)),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// A group of index rows in one card, hairline-separated.
+  Widget _buildIndexCard(BuildContext context, List<Widget> tiles) {
+    final tokens = ShellVibeTokens.resolve(context);
+    return ShadCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        children: [
+          for (var i = 0; i < tiles.length; i++) ...[
+            if (i > 0)
+              Divider(
+                height: 1,
+                thickness: 1,
+                color: tokens.border,
+                indent: 52,
+              ),
+            tiles[i],
+          ],
+        ],
+      ),
+    );
+  }
 
   Widget _buildSectionNav(BuildContext context) {
     final tokens = ShellVibeTokens.resolve(context);
+    final active = section ?? SettingsSection.values.first;
     return ShellVibePanel(
       width: tokens.contextColumnWidth,
       gradientExtent: 140,
@@ -355,17 +172,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
               children: [
-                for (final section in SettingsSection.values)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 2),
-                    child: ShellVibeNavItem(
-                      itemKey: Key('settings_section_${section.name}'),
-                      icon: section.icon,
-                      label: section.label,
-                      selected: section == _activeSection,
-                      onTap: () => setState(() => _activeSection = section),
+                // The wide nav keeps the same grouping as the phone index, so
+                // the two layouts agree about what belongs with what.
+                for (final group in SettingsSectionGroup.values) ...[
+                  ShellVibeSectionLabel(label: group.label),
+                  for (final entry in group.sections)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 2),
+                      child: ShellVibeNavItem(
+                        itemKey: Key('settings_section_${entry.name}'),
+                        icon: entry.icon,
+                        label: entry.label,
+                        selected: entry == active,
+                        onTap: () => GoRouter.maybeOf(
+                          context,
+                        )?.go('/settings/${entry.name}'),
+                      ),
                     ),
-                  ),
+                ],
               ],
             ),
           ),
@@ -384,7 +208,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
             child: Text(
               '${AppConstants.appName} ${AppConstants.appVersion}\n'
-              '${_platformLabel()}',
+              '${platformLabel()}',
               style: shellvibeMono(
                 context,
                 size: 10.5,
@@ -397,1043 +221,153 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  static String _platformLabel() {
-    if (kIsWeb) return 'web';
-    return switch (defaultTargetPlatform) {
-      TargetPlatform.macOS => 'macOS',
-      TargetPlatform.windows => 'Windows',
-      TargetPlatform.linux => 'Linux',
-      TargetPlatform.android => 'Android',
-      TargetPlatform.iOS => 'iOS',
-      _ => 'unknown',
-    };
-  }
-
   /// Secondary modules that have no mobile tab of their own.
   List<Widget> _buildToolsGroup(BuildContext context) {
     return [
-      _buildSectionHeader('Tools', LucideIcons.blocks),
-      ShadCard(
-        child: Column(
-          children: [
-            for (final entry in const [
-              ('/tunnels', 'Tunnels', LucideIcons.network),
-              ('/snippets', 'Snippets & Runbooks', LucideIcons.zap),
-              ('/workspaces', 'Workspaces', LucideIcons.panelTop),
-            ])
-              // ShadCard paints its own background, so the tile needs a
-              // transparent Material of its own for ink to stay visible.
-              Material(
-                type: MaterialType.transparency,
-                child: ListTile(
-                  key: Key('settings_tool_${entry.$1.substring(1)}'),
-                  leading: Icon(entry.$3, size: 18),
-                  title: Text(entry.$2),
-                  trailing: const Icon(LucideIcons.chevronRight, size: 16),
-                  onTap: () => GoRouter.maybeOf(context)?.go(entry.$1),
-                ),
-              ),
-          ],
-        ),
-      ),
+      ShellVibeSectionLabel(label: 'Tools'),
+      _buildIndexCard(context, [
+        for (final entry in const [
+          (
+            '/tunnels',
+            'Tunnels',
+            LucideIcons.network,
+            'Local and remote port forwards.',
+          ),
+          (
+            '/snippets',
+            'Snippets & Runbooks',
+            LucideIcons.zap,
+            'Saved commands and multi-step runbooks.',
+          ),
+          (
+            '/workspaces',
+            'Workspaces',
+            LucideIcons.panelTop,
+            'Saved session layouts.',
+          ),
+        ])
+          _IndexTile(
+            itemKey: Key('settings_tool_${entry.$1.substring(1)}'),
+            icon: entry.$3,
+            label: entry.$2,
+            meta: entry.$4,
+            onTap: () => GoRouter.maybeOf(context)?.go(entry.$1),
+          ),
+      ]),
     ];
   }
+}
 
-  List<Widget> _sectionChildren(
-    SettingsSection section,
-    AppSettingsModel settings,
-    SettingsNotifier notifier,
-  ) {
-    switch (section) {
-      case SettingsSection.appearance:
-        return [
-          // --- Section 1: Application Appearance ---
-          _buildSectionHeader('App Theme & Appearance', LucideIcons.palette),
-          ShadCard(
-            child: Column(
-              children: [
-                ListTile(
-                  title: const Text('App Theme Mode'),
-                  trailing: ShadSelect<ThemeMode>(
-                    key: const Key('settings_theme_mode_dropdown'),
-                    initialValue: settings.themeMode,
-                    selectedOptionBuilder: (context, value) {
-                      switch (value) {
-                        case ThemeMode.dark:
-                          return const Text('Dark');
-                        case ThemeMode.light:
-                          return const Text('Light');
-                        case ThemeMode.system:
-                          return const Text('System');
-                      }
-                    },
-                    options: const [
-                      ShadOption(value: ThemeMode.dark, child: Text('Dark')),
-                      ShadOption(value: ThemeMode.light, child: Text('Light')),
-                      ShadOption(
-                        value: ThemeMode.system,
-                        child: Text('System'),
-                      ),
-                    ],
-                    onChanged: (mode) {
-                      if (mode != null) {
-                        notifier.setThemeMode(mode);
-                      }
-                    },
-                  ),
-                ),
-                const Divider(),
-                ListTile(
-                  title: const Text('App UI Color Palette'),
-                  subtitle: Text(
-                    'Current: ${settings.palette.name.toUpperCase()}',
-                  ),
-                  trailing: ShadSelect<AppPalette>(
-                    key: const Key('settings_palette_dropdown'),
-                    initialValue: settings.palette,
-                    selectedOptionBuilder: (context, value) {
-                      switch (value) {
-                        case AppPalette.dark:
-                          return const Text('ShellVibe Graphite');
-                        case AppPalette.oled:
-                          return const Text('ShellVibe OLED');
-                        case AppPalette.teal:
-                          return const Text('ShellVibe Teal');
-                        case AppPalette.catppuccin:
-                          return const Text('Catppuccin');
-                        case AppPalette.nord:
-                          return const Text('Nord');
-                        case AppPalette.dracula:
-                          return const Text('Dracula');
-                        case AppPalette.solarizedDark:
-                          return const Text('Solarized Dark');
-                        case AppPalette.tokyoNight:
-                          return const Text('Tokyo Night');
-                        case AppPalette.gruvbox:
-                          return const Text('Gruvbox');
-                        case AppPalette.oneDark:
-                          return const Text('One Dark');
-                      }
-                    },
-                    options: const [
-                      // OLED leads because it is the default the app ships
-                      // with; the list under it stays alphabetical.
-                      ShadOption(
-                        value: AppPalette.oled,
-                        child: Text('ShellVibe OLED'),
-                      ),
-                      ShadOption(
-                        value: AppPalette.dark,
-                        child: Text('ShellVibe Graphite'),
-                      ),
-                      ShadOption(
-                        value: AppPalette.teal,
-                        child: Text('ShellVibe Teal'),
-                      ),
-                      ShadOption(
-                        value: AppPalette.catppuccin,
-                        child: Text('Catppuccin'),
-                      ),
-                      ShadOption(
-                        value: AppPalette.dracula,
-                        child: Text('Dracula'),
-                      ),
-                      ShadOption(
-                        value: AppPalette.gruvbox,
-                        child: Text('Gruvbox'),
-                      ),
-                      ShadOption(value: AppPalette.nord, child: Text('Nord')),
-                      ShadOption(
-                        value: AppPalette.oneDark,
-                        child: Text('One Dark'),
-                      ),
-                      ShadOption(
-                        value: AppPalette.solarizedDark,
-                        child: Text('Solarized Dark'),
-                      ),
-                      ShadOption(
-                        value: AppPalette.tokyoNight,
-                        child: Text('Tokyo Night'),
-                      ),
-                    ],
-                    onChanged: (palette) {
-                      if (palette != null) {
-                        notifier.setPalette(palette);
-                      }
-                    },
-                  ),
-                ),
-                const Divider(),
+/// One row of the compact index: what the section is, and that it opens.
+class _IndexTile extends StatelessWidget {
+  const _IndexTile({
+    required this.itemKey,
+    required this.icon,
+    required this.label,
+    required this.meta,
+    required this.onTap,
+  });
 
-                ListTile(
-                  title: const Text('App UI Font'),
-                  subtitle: const Text(
-                    'The interface only. Terminal output keeps its own face.',
-                  ),
-                  trailing: ShadSelect<String>(
-                    key: const Key('settings_ui_font_dropdown'),
-                    initialValue: settings.uiFontFamily,
-                    selectedOptionBuilder: (context, value) {
-                      return Text(UiFont.of(value).label);
-                    },
-                    options: [
-                      for (final f in kUiFonts)
-                        ShadOption(
-                          value: f.id,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(f.label),
-                              // The bundled face is the one that survives a
-                              // first launch with no network; the rest are
-                              // fetched once and cached.
-                              if (f.source == UiFontSource.bundled) ...[
-                                const SizedBox(width: 6),
-                                const ShadBadge.secondary(
-                                  child: Text('Offline'),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                    ],
-                    onChanged: (font) {
-                      if (font != null) {
-                        notifier.setUiFontFamily(font);
-                      }
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-        ];
-      case SettingsSection.terminal:
-        return [
-          // --- Section 2: Terminal Customization & Theme ---
-          _buildSectionHeader(
-            'Terminal Theme & Shell',
-            LucideIcons.squareTerminal,
-          ),
-          ShadCard(
-            child: Column(
-              children: [
-                ListTile(
-                  title: const Text('Terminal Color Scheme'),
-                  subtitle: Text(
-                    'Current: ${TerminalPaletteData.of(settings.terminalPalette).label}',
-                  ),
-                  trailing: ShadSelect<TerminalPalette>(
-                    key: const Key('settings_terminal_palette_dropdown'),
-                    initialValue: settings.terminalPalette,
-                    selectedOptionBuilder: (context, value) {
-                      return Text(TerminalPaletteData.of(value).label);
-                    },
-                    options: [
-                      for (final p in kTerminalPalettes)
-                        ShadOption(
-                          value: p.palette,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              _PaletteSwatch(theme: p.theme),
-                              const SizedBox(width: 8),
-                              Text(p.label),
-                            ],
-                          ),
-                        ),
-                    ],
-                    onChanged: (palette) {
-                      if (palette != null) {
-                        notifier.setTerminalPalette(palette);
-                      }
-                    },
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-                  child: _TerminalThemePreview(
-                    theme: TerminalPaletteData.themeOf(
-                      settings.terminalPalette,
-                    ),
-                    fontFamily: resolveTerminalFontFamily(settings.fontFamily),
-                  ),
-                ),
-                const Divider(),
-                ListTile(
-                  title: const Text('Mosh Prediction'),
-                  subtitle: const Text(
-                    'Show locally predicted input on high-latency Mosh links',
-                  ),
-                  trailing: ShadSelect<MoshPredictionMode>(
-                    key: const Key('settings_mosh_prediction_dropdown'),
-                    initialValue: settings.moshPrediction,
-                    selectedOptionBuilder: (context, value) {
-                      switch (value) {
-                        case MoshPredictionMode.never:
-                          return const Text('Never');
-                        case MoshPredictionMode.adaptive:
-                          return const Text('Adaptive');
-                        case MoshPredictionMode.always:
-                          return const Text('Always');
-                      }
-                    },
-                    options: const [
-                      ShadOption(
-                        value: MoshPredictionMode.never,
-                        child: Text('Never'),
-                      ),
-                      ShadOption(
-                        value: MoshPredictionMode.adaptive,
-                        child: Text('Adaptive'),
-                      ),
-                      ShadOption(
-                        value: MoshPredictionMode.always,
-                        child: Text('Always'),
-                      ),
-                    ],
-                    onChanged: (mode) {
-                      if (mode != null) {
-                        notifier.setMoshPrediction(mode);
-                      }
-                    },
-                  ),
-                ),
-                const Divider(),
+  final Key itemKey;
+  final IconData icon;
+  final String label;
+  final String meta;
+  final VoidCallback onTap;
 
-                ListTile(
-                  title: const Text('Font Family'),
-                  subtitle: const Text('Terminal sessions only'),
-                  trailing: ShadSelect<String>(
-                    key: const Key('settings_font_family_dropdown'),
-                    initialValue: settings.fontFamily,
-                    selectedOptionBuilder: (context, value) {
-                      return Text(TerminalFont.of(value).label);
-                    },
-                    options: [
-                      for (final f in kTerminalFonts)
-                        ShadOption(
-                          value: f.id,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(f.label),
-                              if (f.source ==
-                                  TerminalFontSource.bundledNerdFont) ...[
-                                const SizedBox(width: 6),
-                                const ShadBadge.secondary(child: Text('NF')),
-                              ],
-                            ],
-                          ),
-                        ),
-                    ],
-                    onChanged: (font) {
-                      if (font != null) {
-                        notifier.setFontFamily(font);
-                      }
-                    },
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-                  child: _FontPreview(
-                    fontFamily: resolveTerminalFontFamily(settings.fontFamily),
-                    ligatures: settings.enableLigatures,
-                  ),
-                ),
-                const Divider(),
-
-                Material(
-                  color: Colors.transparent,
-                  child: SwitchListTile(
-                    key: const Key('settings_font_ligatures_switch'),
-                    title: const Text('Font Ligatures'),
-                    subtitle: const Text(
-                      'Enable programming ligatures (e.g. ->, ==, !=, =>)',
-                    ),
-                    value: settings.enableLigatures,
-                    onChanged: (val) => notifier.setEnableLigatures(val),
-                  ),
-                ),
-                const Divider(),
-
-                Material(
-                  color: Colors.transparent,
-                  child: SwitchListTile(
-                    key: const Key('settings_bold_bright_switch'),
-                    title: const Text('Bold Text Uses Bright Colors'),
-                    subtitle: const Text(
-                      'Draw bold text in the bright variant of its color '
-                      '(ANSI 0-7 remapped to 8-15)',
-                    ),
-                    value: settings.drawBoldTextWithBrightColors,
-                    onChanged: (val) =>
-                        notifier.setDrawBoldTextWithBrightColors(val),
-                  ),
-                ),
-                const Divider(),
-                ListTile(
-                  title: const Text('Font Size'),
-                  subtitle: Slider(
-                    key: const Key('settings_font_size_slider'),
-                    min: 10,
-                    max: 24,
-                    divisions: 14,
-                    value: settings.fontSize,
-                    label: '${settings.fontSize.toInt()} px',
-                    onChanged: (val) => notifier.setFontSize(val),
-                  ),
-                  trailing: Text('${settings.fontSize.toInt()} px'),
-                ),
-                const Divider(),
-                ListTile(
-                  title: const Text('Line Height'),
-                  subtitle: Slider(
-                    key: const Key('settings_line_height_slider'),
-                    min: 1.0,
-                    max: 2.0,
-                    divisions: 20,
-                    value: settings.lineHeightFactor,
-                    label: '${settings.lineHeightFactor.toStringAsFixed(2)}x',
-                    onChanged: (val) => notifier.setLineHeightFactor(val),
-                  ),
-                  trailing: Text(
-                    '${settings.lineHeightFactor.toStringAsFixed(2)}x',
-                  ),
-                ),
-                const Divider(),
-                ListTile(
-                  title: const Text('Cursor Style'),
-                  trailing: ShadSelect<AppCursorStyle>(
-                    key: const Key('settings_cursor_style_dropdown'),
-                    initialValue: settings.cursorStyle,
-                    selectedOptionBuilder: (context, value) {
-                      switch (value) {
-                        case AppCursorStyle.underline:
-                          return const Text('Underline');
-                        case AppCursorStyle.bar:
-                          return const Text('Bar');
-                        case AppCursorStyle.block:
-                          return const Text('Block');
-                      }
-                    },
-                    options: const [
-                      ShadOption(
-                        value: AppCursorStyle.block,
-                        child: Text('Block'),
-                      ),
-                      ShadOption(
-                        value: AppCursorStyle.underline,
-                        child: Text('Underline'),
-                      ),
-                      ShadOption(value: AppCursorStyle.bar, child: Text('Bar')),
-                    ],
-                    onChanged: (style) {
-                      if (style != null) {
-                        notifier.setCursorStyle(style);
-                      }
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          _buildTerminalPreview(settings),
-        ];
-      case SettingsSection.security:
-        return [
-          // --- Section 2: Security & Biometrics ---
-          _buildSectionHeader(
-            'Security & Biometric Controls',
-            LucideIcons.shieldCheck,
-          ),
-          ShadCard(
-            child: Column(
-              children: [
-                ListTile(
-                  title: const Text(
-                    'Biometric Lock (FaceID / TouchID / Windows Hello)',
-                  ),
-                  subtitle: const Text(
-                    'Verify identity on app launch or resume',
-                  ),
-                  trailing: ShellVibeButton(
-                    key: const Key('test_biometrics_button'),
-                    label: 'Test Lock',
-                    onPressed: _handleTestBiometrics,
-                  ),
-                ),
-                const Divider(),
-                ListTile(
-                  title: const Text('Auto-Lock Timer'),
-                  trailing: ShadSelect<int>(
-                    key: const Key('settings_autolock_dropdown'),
-                    initialValue: settings.autoLockTimerSeconds,
-                    selectedOptionBuilder: (context, value) {
-                      switch (value) {
-                        case 30:
-                          return const Text('30 Seconds');
-                        case 60:
-                          return const Text('1 Minute');
-                        case 300:
-                          return const Text('5 Minutes');
-                        case 0:
-                        default:
-                          return const Text('Disabled');
-                      }
-                    },
-                    options: const [
-                      ShadOption(value: 0, child: Text('Disabled')),
-                      ShadOption(value: 30, child: Text('30 Seconds')),
-                      ShadOption(value: 60, child: Text('1 Minute')),
-                      ShadOption(value: 300, child: Text('5 Minutes')),
-                    ],
-                    onChanged: (sec) {
-                      if (sec != null) {
-                        notifier.setAutoLockTimer(sec);
-                      }
-                    },
-                  ),
-                ),
-                const Divider(),
-                ListTile(
-                  title: const Text('Clipboard Auto-Clear'),
-                  subtitle: const Text(
-                    'Clear copied sensitive passwords/keys after timer',
-                  ),
-                  trailing: ShadSelect<int>(
-                    key: const Key('settings_clipboard_clear_dropdown'),
-                    initialValue: settings.clipboardAutoClearSeconds,
-                    selectedOptionBuilder: (context, value) {
-                      switch (value) {
-                        case 15:
-                          return const Text('15 Seconds');
-                        case 30:
-                          return const Text('30 Seconds');
-                        case 60:
-                          return const Text('60 Seconds');
-                        case 0:
-                        default:
-                          return const Text('Disabled');
-                      }
-                    },
-                    options: const [
-                      ShadOption(value: 0, child: Text('Disabled')),
-                      ShadOption(value: 15, child: Text('15 Seconds')),
-                      ShadOption(value: 30, child: Text('30 Seconds')),
-                      ShadOption(value: 60, child: Text('60 Seconds')),
-                    ],
-                    onChanged: (sec) {
-                      if (sec != null) {
-                        notifier.setClipboardAutoClear(sec);
-                      }
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-          _buildSectionHeader('Known Host Keys', LucideIcons.fingerprint),
-          const KnownHostsSettingsSection(),
-        ];
-      case SettingsSection.vault:
-        return [
-          // --- Section 3: Vault Master Password ---
-          _buildSectionHeader('Vault Master Password', LucideIcons.lockKeyhole),
-          _buildVaultMasterPasswordCard(),
-        ];
-      case SettingsSection.deviceLink:
-        return [
-          _buildSectionHeader('Paired Devices', LucideIcons.smartphone),
-          const PairedDevicesSettingsSection(),
-        ];
-      case SettingsSection.aiAccess:
-        return [
-          _buildSectionHeader('AI Access', LucideIcons.bot),
-          const McpAccessSettingsSection(),
-        ];
-      case SettingsSection.sync:
-        return [
-          // --- Section 4: Zero-Knowledge E2EE Cloud Sync ---
-          _buildSectionHeader(
-            'Zero-Knowledge E2EE Cloud Sync',
-            LucideIcons.cloudCog,
-          ),
-          ShadCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Encrypt database records locally with AES-256-GCM using Argon2id key derivation.',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: ShellVibeTokens.resolve(context).textMuted,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                ShadInput(
-                  key: const Key('sync_master_password_field'),
-                  controller: _masterPasswordController,
-                  obscureText: true,
-                  placeholder: const Text(
-                    'Enter password to encrypt/decrypt backup',
-                  ),
-                ),
-                const SizedBox(height: 12),
-                ShellVibeButton(
-                  key: const Key('export_backup_button'),
-                  label: 'Export Encrypted Backup to File',
-                  icon: LucideIcons.download,
-                  onPressed: _handleExportE2EEBackup,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  isMobilePlatform
-                      ? 'Export writes a .$kBackupFileExtension file into the app documents folder; import reads one back.'
-                      : 'Export writes a .$kBackupFileExtension file you choose; import reads one back.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: ShellVibeTokens.resolve(context).textMuted,
-                  ),
-                ),
-                const Divider(height: 24),
-                ShellVibeButton.secondary(
-                  key: const Key('import_backup_button'),
-                  label: 'Import Encrypted Backup from File',
-                  icon: LucideIcons.upload,
-                  onPressed: _handleImportE2EEBackup,
-                ),
-              ],
-            ),
-          ),
-        ];
-      case SettingsSection.about:
-        return [
-          _buildSectionHeader('About', LucideIcons.info),
-          const AboutSettingsSection(),
-        ];
-    }
-  }
-
-  /// Live preview so a font, size or ligature change is visible in place —
-  /// there is no save step to confirm it against.
-  Widget _buildTerminalPreview(AppSettingsModel settings) {
+  @override
+  Widget build(BuildContext context) {
     final tokens = ShellVibeTokens.resolve(context);
-    final style = TextStyle(
-      fontFamily: settings.fontFamily,
-      fontSize: settings.fontSize,
-      height: 1.55,
-      fontFeatures: settings.enableLigatures
-          ? const [FontFeature.enable('calt'), FontFeature.enable('liga')]
-          : const [FontFeature.disable('calt'), FontFeature.disable('liga')],
-    );
-    return Container(
-      key: const Key('settings_terminal_preview'),
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: tokens.canvas,
-        borderRadius: BorderRadius.circular(tokens.radiusSmall),
-        border: Border.all(color: tokens.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            r'ops@edge-01:~$ grep -R "timeout" --include=*.yaml .',
-            style: style.copyWith(color: tokens.textPrimary),
-          ),
-          Text(
-            'config/app.yaml:12:  timeout: 30s',
-            style: style.copyWith(color: tokens.textMuted),
-          ),
-          Text(
-            'if x != y --> retry()',
-            style: style.copyWith(color: tokens.brand),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildVaultMasterPasswordCard() {
-    final vaultStatus = ref.watch(vaultProvider).value?.status;
-    final isConfigured =
-        vaultStatus != null && vaultStatus != VaultStatus.unconfigured;
-
-    return ShadCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            isConfigured
-                ? 'Your vault key is protected by a master password. It is required '
-                      'after every app restart before identity secrets can be used. '
-                      'Removing it returns the key to the operating system keychain, '
-                      'so the app stops asking — and stops being protected by the '
-                      'password.'
-                : 'Without a master password your vault key is protected only by the '
-                      'operating system keychain. Setting one wraps the key with '
-                      'Argon2id + AES-256-GCM. Existing identities stay readable.',
-            style: TextStyle(
-              fontSize: 13,
-              color: ShellVibeTokens.resolve(context).textMuted,
-            ),
-          ),
-          const SizedBox(height: 12),
-          if (isConfigured) ...[
-            ShellVibeButton.secondary(
-              key: const Key('lock_vault_button'),
-              label: vaultStatus == VaultStatus.locked
-                  ? 'Vault Locked'
-                  : 'Lock Vault Now',
-              icon: LucideIcons.lock,
-              onPressed: vaultStatus == VaultStatus.locked
-                  ? null
-                  : () => ref.read(vaultProvider.notifier).lock(),
-            ),
-            const SizedBox(height: 12),
-            ShadInput(
-              key: const Key('remove_master_password_field'),
-              controller: _vaultPasswordController,
-              obscureText: true,
-              placeholder: const Text('Current master password'),
-            ),
-            const SizedBox(height: 12),
-            ShellVibeButton.danger(
-              key: const Key('remove_master_password_button'),
-              label: 'Remove Master Password',
-              icon: LucideIcons.lockOpen,
-              onPressed: _handleRemoveMasterPassword,
-            ),
-          ] else ...[
-            ShadInput(
-              key: const Key('vault_master_password_field'),
-              controller: _vaultPasswordController,
-              obscureText: true,
-              placeholder: const Text('New master password (min 8 characters)'),
-            ),
-            const SizedBox(height: 12),
-            ShellVibeButton(
-              key: const Key('set_master_password_button'),
-              label: 'Set Master Password',
-              icon: LucideIcons.lockKeyhole,
-              onPressed: _handleSetMasterPassword,
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Future<void> _handleRemoveMasterPassword() async {
-    final password = _vaultPasswordController.text;
-    if (password.isEmpty) {
-      ShadToaster.of(context).show(
-        const ShadToast.destructive(
-          description: Text('Enter your current master password to remove it.'),
+    // ShadCard paints its own background, so the tile needs a transparent
+    // Material of its own for ink to stay visible.
+    return Material(
+      type: MaterialType.transparency,
+      child: ListTile(
+        key: itemKey,
+        leading: Icon(icon, size: 18, color: tokens.brand),
+        title: Text(label),
+        subtitle: Text(
+          meta,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontSize: 12, color: tokens.textMuted),
         ),
-      );
-      return;
-    }
-
-    final confirmed = await showShadDialog<bool>(
-      context: context,
-      builder: (dialogContext) => ShadDialog.alert(
-        title: const Text('Remove master password?'),
-        description: const Text(
-          'Your vault key goes back to the operating system keychain. The app '
-          'will no longer ask for a password at startup, and anyone with '
-          'access to your unlocked account can use your identity secrets.',
-        ),
-        actions: adaptiveDialogActions(context, [
-          ShellVibeButton.secondary(
-            label: 'Cancel',
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-          ),
-          ShellVibeButton.danger(
-            key: const Key('confirm_remove_master_password_button'),
-            label: 'Remove',
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-          ),
-        ]),
-        actionsAxis: adaptiveDialogActionsAxis(context),
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-
-    try {
-      final removed = await ref
-          .read(vaultProvider.notifier)
-          .removeMasterPassword(password);
-      // The controller may already be disposed if the screen left the tree
-      // while the (isolate-backed) verification was running.
-      if (!mounted) return;
-      if (!removed) {
-        ShadToaster.of(context).show(
-          const ShadToast.destructive(
-            description: Text(
-              'Wrong master password, or too many failed attempts.',
-            ),
-          ),
-        );
-        return;
-      }
-      _vaultPasswordController.clear();
-      ShadToaster.of(context).show(
-        const ShadToast(
-          description: Text(
-            'Master password removed. The vault no longer locks on restart.',
-          ),
-        ),
-      );
-    } catch (e) {
-      if (mounted) {
-        ShadToaster.of(context).show(
-          ShadToast.destructive(
-            description: Text('Failed to remove master password: $e'),
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _handleSetMasterPassword() async {
-    final password = _vaultPasswordController.text;
-    if (password.length < 8) {
-      ShadToaster.of(context).show(
-        const ShadToast.destructive(
-          description: Text('Master password must be at least 8 characters.'),
-        ),
-      );
-      return;
-    }
-
-    try {
-      await ref.read(vaultProvider.notifier).setup(password);
-      // The controller may already be disposed if the screen left the tree
-      // while the (isolate-backed) setup was running.
-      if (!mounted) return;
-      _vaultPasswordController.clear();
-      ShadToaster.of(context).show(
-        const ShadToast(
-          description: Text(
-            'Master password set. The vault now locks on app restart.',
-          ),
-        ),
-      );
-    } catch (e) {
-      if (mounted) {
-        ShadToaster.of(context).show(
-          ShadToast.destructive(
-            description: Text('Failed to set master password: $e'),
-          ),
-        );
-      }
-    }
-  }
-
-  Widget _buildSectionHeader(String title, IconData icon) {
-    final tokens = ShellVibeTokens.resolve(context);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8, left: 2),
-      child: Row(
-        children: [
-          Icon(icon, size: 16, color: tokens.brand),
-          const SizedBox(width: 8),
-          Text(
-            title,
-            style: TextStyle(
-              color: tokens.textPrimary,
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
+        trailing: const Icon(LucideIcons.chevronRight, size: 16),
+        onTap: onTap,
       ),
     );
   }
 }
 
-/// Compact 8-color ANSI strip used in the theme dropdown rows.
-class _PaletteSwatch extends StatelessWidget {
-  const _PaletteSwatch({required this.theme});
-
-  final TerminalTheme theme;
-
-  @override
-  Widget build(BuildContext context) {
-    // Rounded chips with air between them: a palette is a set of colours, and
-    // a solid 88px bar reads as one colour band instead of eight choices.
-    return SizedBox(
-      width: 96,
-      height: 14,
-      child: Row(
-        children: [
-          for (final color in _themeAnsiColors(theme).take(8)) ...[
-            Expanded(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: BorderRadius.circular(3),
-                ),
-              ),
-            ),
-            const SizedBox(width: 3),
-          ],
-        ],
-      ),
-    );
-  }
+/// The platform this build is running on, for the nav column's build stamp.
+String platformLabel() {
+  if (kIsWeb) return 'web';
+  return switch (defaultTargetPlatform) {
+    TargetPlatform.macOS => 'macOS',
+    TargetPlatform.windows => 'Windows',
+    TargetPlatform.linux => 'Linux',
+    TargetPlatform.android => 'Android',
+    TargetPlatform.iOS => 'iOS',
+    _ => 'unknown',
+  };
 }
 
-/// The 16 ANSI colors of a scheme, base then bright.
-List<Color> _themeAnsiColors(TerminalTheme theme) => [
-  theme.black,
-  theme.red,
-  theme.green,
-  theme.yellow,
-  theme.blue,
-  theme.magenta,
-  theme.cyan,
-  theme.white,
-  theme.brightBlack,
-  theme.brightRed,
-  theme.brightGreen,
-  theme.brightYellow,
-  theme.brightBlue,
-  theme.brightMagenta,
-  theme.brightCyan,
-  theme.brightWhite,
-];
+/// One section on a page of its own, on the compact tier.
+///
+/// The wide tier never builds this: there the same section is shown in the
+/// work panel beside a nav column that is always on screen, so there is no
+/// page to go back from.
+class _SettingsSectionPage extends StatelessWidget {
+  const _SettingsSectionPage({required this.section});
 
-/// Live preview of the selected terminal color scheme.
-class _TerminalThemePreview extends StatelessWidget {
-  const _TerminalThemePreview({required this.theme, required this.fontFamily});
-
-  final TerminalTheme theme;
-
-  /// The font the terminal itself will use, so this preview and the font
-  /// preview right below it don't disagree about what a session looks like.
-  final String fontFamily;
+  final SettingsSection section;
 
   @override
   Widget build(BuildContext context) {
     final tokens = ShellVibeTokens.resolve(context);
-    // The preview is a small terminal, so it is built like one: a chrome strip
-    // naming what is being previewed, then the opaque body under it.
-    return Container(
-      width: double.infinity,
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(tokens.radiusLarge),
-        boxShadow: tokens.shadowPanel,
-      ),
-      // Drawn over the child: a clipped child covers a background border along
-      // the corner arcs and breaks the outline there.
-      foregroundDecoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(tokens.radiusLarge),
-        border: Border.all(color: tokens.brand.withValues(alpha: 0.24)),
-      ),
+    return SafeArea(
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            height: 32,
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            color: tokens.terminalChrome,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 8, 16, 6),
             child: Row(
               children: [
-                const ShellVibeStatusDot(
-                  state: ShellVibeDotState.online,
-                  size: 6,
+                ShellVibeIconButton(
+                  buttonKey: const Key('settings_section_back'),
+                  icon: LucideIcons.chevronLeft,
+                  tooltip: 'Settings',
+                  // go, not pop: the page is also reachable by deep link, and
+                  // then there is nothing behind it to pop to.
+                  onPressed: () => GoRouter.maybeOf(context)?.go('/settings'),
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  'preview',
-                  style: shellvibeMono(
-                    context,
-                    size: 11,
-                    color: tokens.textSecondary,
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        section.label,
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        section.meta,
+                        style: TextStyle(fontSize: 12, color: tokens.textMuted),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
           ),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-            color: theme.background,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    for (final color in _themeAnsiColors(theme)) ...[
-                      Expanded(child: Container(height: 8, color: color)),
-                      const SizedBox(width: 2),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  r'$> ssh deploy  grep "port"  ./run.sh',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontFamily: fontFamily,
-                    fontFamilyFallback: kTerminalFontFamilyFallback,
-                    fontSize: 13,
-                    color: theme.foreground,
-                  ),
-                ),
-              ],
+          Expanded(
+            child: SettingsSectionView(
+              section: section,
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// Live preview of the selected terminal font.
-class _FontPreview extends StatelessWidget {
-  const _FontPreview({required this.fontFamily, required this.ligatures});
-
-  final String fontFamily;
-
-  /// Mirrors the ligature setting: with it off the sample must show `!=` and
-  /// `=>` as separate glyphs, exactly as a session would.
-  final bool ligatures;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = ShadTheme.of(context).colorScheme;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: colorScheme.muted,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        kFontPreviewText,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontFamily: fontFamily,
-          fontFamilyFallback: kTerminalFontFamilyFallback,
-          fontSize: 15,
-          height: 1.4,
-          color: colorScheme.foreground,
-          fontFeatures: [
-            FontFeature('liga', ligatures ? 1 : 0),
-            FontFeature('calt', ligatures ? 1 : 0),
-          ],
-        ),
       ),
     );
   }

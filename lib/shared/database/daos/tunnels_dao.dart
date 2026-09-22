@@ -43,13 +43,30 @@ class TunnelsDao extends DatabaseAccessor<AppDatabase> with _$TunnelsDaoMixin {
     )..where((tbl) => tbl.id.equals(id))).getSingleOrNull();
   }
 
-  Future<int> insertRule(PortForwardRulesCompanion rule) =>
-      into(portForwardRules).insert(rule);
+  Future<int> insertRule(PortForwardRulesCompanion rule) => db.recordUpsert(
+    entityType: 'port_forward_rules',
+    entityId: rule.id.value,
+    write: () => into(portForwardRules).insert(rule),
+  );
 
-  Future<bool> updateRule(Insertable<PortForwardRule> rule) =>
-      update(portForwardRules).replace(rule);
+  /// Updates a rule.
+  ///
+  /// Takes the companion rather than a bare [Insertable] so the id is readable
+  /// here: the sync journal is keyed by row, and digging the id back out of an
+  /// opaque insertable is the kind of thing that works until someone passes a
+  /// different implementation.
+  Future<bool> updateRule(PortForwardRulesCompanion rule) => db.recordUpsert(
+    entityType: 'port_forward_rules',
+    entityId: rule.id.value,
+    write: () => update(portForwardRules).replace(rule),
+  );
 
   Future<int> deleteRule(String id) {
-    return (delete(portForwardRules)..where((tbl) => tbl.id.equals(id))).go();
+    return db.recordDelete(
+      entityType: 'port_forward_rules',
+      entityId: id,
+      write: () =>
+          (delete(portForwardRules)..where((tbl) => tbl.id.equals(id))).go(),
+    );
   }
 }
