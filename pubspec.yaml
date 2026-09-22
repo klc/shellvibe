@@ -147,6 +147,10 @@ flutter:
   # the OS shows on the app icon.
   assets:
     - assets/brand/icon.png
+    # System tray / menu bar icons, read at runtime by tray_manager.
+    - assets/brand/tray_macos.png
+    - assets/brand/tray.png
+    - assets/brand/tray.ico
 
   # Interface face. Bundled rather than fetched at runtime: the whole shell is
   # set in it, and a first launch without a network must not fall back to the

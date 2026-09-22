@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 
 import '../../../hosts/domain/models/host_model.dart';
@@ -11,8 +13,8 @@ import '../models/template_pane_model.dart';
 /// Mirrors the terminal's own `_resolveIdentity`: `ok: false` means the stored
 /// credentials could not be read, which must abort the pane rather than connect
 /// without them.
-typedef TemplateIdentityResolver = Future<({bool ok, IdentityModel? identity})>
-    Function(HostModel host);
+typedef TemplateIdentityResolver =
+    Future<({bool ok, IdentityModel? identity})> Function(HostModel host);
 
 /// The slice of the terminal tab notifier a template replay drives.
 ///
@@ -21,8 +23,14 @@ typedef TemplateIdentityResolver = Future<({bool ok, IdentityModel? identity})>
 abstract class TemplateRunnerTarget {
   /// Id of the pane created by the most recent open/split call — every one of
   /// them focuses the pane it created.
+  ///
+  /// It is read as soon as the call returns, before its future completes: the
+  /// pane is in the tab list and focused from the start, and the future only
+  /// tracks the connection that pane is making.
   String? get activeTabId;
 
+  /// Opens a tab for [host]. The returned future completes once the
+  /// connection attempt settles, however it went.
   Future<void> openTabForHost(HostModel host, {IdentityModel? identity});
 
   void openLocalTab({String? title});
@@ -56,10 +64,16 @@ class TemplateRunResult {
 
 /// Recreates a saved layout on top of whatever is already open.
 ///
-/// Replay is strictly sequential rather than concurrent: a split pane can only
-/// be created once its parent is in the tab list, and the visual order of split
-/// siblings is their insertion order, so firing the opens in parallel would
-/// scramble the layout.
+/// Panes are *placed* strictly in order: a split pane can only be created once
+/// its parent is in the tab list, and the visual order of split siblings is
+/// their insertion order. They are not *connected* in order. Every open and
+/// split puts its pane on screen before it starts connecting, so the runner
+/// places the next pane at once and lets the connections run side by side,
+/// instead of holding the whole layout behind each handshake in turn.
+///
+/// [run] returns once the layout is placed, not once it is connected, so a
+/// caller can show the terminal while the panes are still coming up — each
+/// one shows its own progress, and its own error, the way any tab does.
 class TemplateRunner {
   const TemplateRunner();
 
@@ -90,6 +104,10 @@ class TemplateRunner {
     final liveIds = <String, String>{};
     final skipped = <String>{};
     final warnings = <String>[];
+    // A failed connection is reported on its own pane, which stays open with
+    // its error and a Reconnect; it is not the run's to report again.
+    void track(Future<void> connection) =>
+        unawaited(connection.catchError((Object _) {}));
 
     void skip(TemplatePaneModel pane, String reason) {
       skipped.add(pane.id);
@@ -140,16 +158,18 @@ class TemplateRunner {
 
       if (pane.parentPaneId == null) {
         if (host != null) {
-          await target.openTabForHost(host, identity: identity);
+          track(target.openTabForHost(host, identity: identity));
         } else {
           target.openLocalTab(title: pane.title);
         }
       } else {
-        await target.splitTab(
-          liveIds[pane.parentPaneId]!,
-          direction: pane.splitDirection ?? Axis.horizontal,
-          host: host,
-          identity: identity,
+        track(
+          target.splitTab(
+            liveIds[pane.parentPaneId]!,
+            direction: pane.splitDirection ?? Axis.horizontal,
+            host: host,
+            identity: identity,
+          ),
         );
       }
 
@@ -178,9 +198,6 @@ class TemplateRunner {
       target.setActiveTab(activeLiveId);
     }
 
-    return TemplateRunResult(
-      openedPanes: liveIds.length,
-      warnings: warnings,
-    );
+    return TemplateRunResult(openedPanes: liveIds.length, warnings: warnings);
   }
 }

@@ -9,15 +9,7 @@ import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../../bookmarks/presentation/notifiers/bookmarks_notifier.dart';
 import '../../domain/models/template_model.dart';
 import '../notifiers/templates_notifier.dart';
-
-/// One-line summary of what a template will open.
-String templateSummary(TemplateModel template) {
-  final tabs = template.tabCount;
-  final splits = template.panes.length - tabs;
-  final tabPart = '$tabs ${tabs == 1 ? 'tab' : 'tabs'}';
-  if (splits == 0) return tabPart;
-  return '$tabPart · $splits ${splits == 1 ? 'split pane' : 'split panes'}';
-}
+import 'template_editor_panel.dart';
 
 /// Bottom sheet listing the workspace's templates. Tapping one runs it.
 ///
@@ -90,18 +82,32 @@ class TemplatePickerSheet extends ConsumerWidget {
               // Starring a layout is what puts it in the ⌘K palette, which is
               // the only place it can be reached without opening this sheet
               // first.
-              trailing: ShellVibeIconButton(
-                buttonKey: Key('favorite_template_${template.id}'),
-                icon: LucideIcons.star,
-                tooltip: bookmarkedIds.contains(template.id)
-                    ? 'Remove from favorites'
-                    : 'Add to favorites',
-                active: bookmarkedIds.contains(template.id),
-                onPressed: () => unawaited(
-                  ref
-                      .read(bookmarksProvider.notifier)
-                      .toggleTemplate(template.id),
-                ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Opens over this sheet rather than replacing it, so a
+                  // look at what a template holds ends back on the list.
+                  ShellVibeIconButton(
+                    buttonKey: Key('edit_template_${template.id}'),
+                    icon: LucideIcons.pencil,
+                    tooltip: 'View & edit',
+                    onPressed: () =>
+                        unawaited(TemplateEditorPanel.show(context, template)),
+                  ),
+                  ShellVibeIconButton(
+                    buttonKey: Key('favorite_template_${template.id}'),
+                    icon: LucideIcons.star,
+                    tooltip: bookmarkedIds.contains(template.id)
+                        ? 'Remove from favorites'
+                        : 'Add to favorites',
+                    active: bookmarkedIds.contains(template.id),
+                    onPressed: () => unawaited(
+                      ref
+                          .read(bookmarksProvider.notifier)
+                          .toggleTemplate(template.id),
+                    ),
+                  ),
+                ],
               ),
               onTap: () async {
                 Navigator.of(context).pop();

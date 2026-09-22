@@ -16,6 +16,7 @@ import '../features/terminal/presentation/notifiers/terminal_tabs_notifier.dart'
 import '../features/vault/presentation/notifiers/vault_notifier.dart';
 import 'router/app_router.dart';
 import 'theme/app_theme.dart';
+import 'window/desktop_tray.dart';
 import 'window/window_chrome.dart';
 
 /// Root application widget.
@@ -239,8 +240,13 @@ class _ShellVibeAppState extends ConsumerState<ShellVibeApp>
       // inside one: an agent can ask for access while the user is on any
       // screen, and an approval window that depends on where the user
       // happened to navigate would silently time out into a refusal.
-      builder: (context, child) =>
-          McpApprovalHost(child: child ?? const SizedBox.shrink()),
+      //
+      // The tray lives here too: it outlasts every route, and on a desktop it
+      // is what keeps the app running once the window is gone.
+      builder: (context, child) {
+        final host = McpApprovalHost(child: child ?? const SizedBox.shrink());
+        return isMobilePlatform ? host : DesktopTrayHost(child: host);
+      },
     );
   }
 }

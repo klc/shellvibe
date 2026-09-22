@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -435,6 +436,34 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
             ),
           ),
           const SizedBox(height: 16),
+          // A phone has no tray and no window to close.
+          if (!isMobilePlatform) ...[
+            _buildSectionHeader('Window', LucideIcons.appWindow),
+            ShadCard(
+              child: Material(
+                color: Colors.transparent,
+                child: SwitchListTile(
+                  key: const Key('settings_keep_running_in_tray_switch'),
+                  title: Text(
+                    defaultTargetPlatform == TargetPlatform.macOS
+                        ? 'Show in the Menu Bar'
+                        : 'Keep Running in the System Tray',
+                  ),
+                  subtitle: Text(
+                    defaultTargetPlatform == TargetPlatform.macOS
+                        ? 'A menu bar icon shows active tunnels and sessions '
+                              'and brings the window back.'
+                        : 'Closing the window hides it to the tray, so '
+                              'tunnels and sessions keep running. Quit from '
+                              'the tray menu.',
+                  ),
+                  value: settings.keepRunningInTray,
+                  onChanged: (val) => notifier.setKeepRunningInTray(val),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
         ];
       case SettingsSection.terminal:
         return [
