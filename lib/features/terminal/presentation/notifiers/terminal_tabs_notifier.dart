@@ -1316,6 +1316,33 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     }
   }
 
+  /// Moves the tab rooted at [tabId] so it becomes the [toIndex]th tab of the
+  /// strip, counting root tabs only.
+  ///
+  /// Only the root sessions trade places. Each one keeps the list slots the
+  /// roots occupied, in their new order, and every split pane stays exactly
+  /// where it is: the layout fold reads sibling order off this list, and a
+  /// pane's siblings are panes of its own tab, so no split can be laid out
+  /// differently because its tab moved along the strip.
+  void moveTab(String tabId, int toIndex) {
+    final rootSlots = <int>[];
+    for (var i = 0; i < state.tabs.length; i++) {
+      if (state.tabs[i].splitParentId == null) rootSlots.add(i);
+    }
+    final roots = [for (final slot in rootSlots) state.tabs[slot]];
+    final from = roots.indexWhere((tab) => tab.id == tabId);
+    if (from == -1) return;
+    final to = toIndex.clamp(0, roots.length - 1);
+    if (from == to) return;
+
+    roots.insert(to, roots.removeAt(from));
+    final reordered = [...state.tabs];
+    for (var i = 0; i < rootSlots.length; i++) {
+      reordered[rootSlots[i]] = roots[i];
+    }
+    state = state.copyWith(tabs: reordered);
+  }
+
   /// Exchanges the positions of two panes of the same tab.
   ///
   /// This is a swap of what each slot *shows*, not a rearrangement of the

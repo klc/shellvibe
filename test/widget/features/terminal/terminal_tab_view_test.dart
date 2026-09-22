@@ -1060,6 +1060,76 @@ void main() {
       await tester.pumpAndSettle();
     });
 
+    testWidgets('dragging a tab along the strip reorders it; a click selects', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+      final container = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          localPtyManagerProvider.overrideWithValue(_NoShellPtyManager()),
+        ],
+      );
+      final notifier = container.read(terminalTabsProvider.notifier);
+      notifier.openLocalTab(title: 'one');
+      notifier.openLocalTab(title: 'two');
+      notifier.openLocalTab(title: 'three');
+      final ids = [
+        for (final tab in container.read(terminalTabsProvider).tabs) tab.id,
+      ];
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: ShadTheme(
+            data: ShadThemeData(
+              colorScheme: const ShadSlateColorScheme.dark(),
+              brightness: Brightness.dark,
+            ),
+            child: const MaterialApp(home: TerminalTabView()),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final first = find.byKey(Key('tab_header_${ids[0]}'));
+      final last = find.byKey(Key('tab_header_${ids[2]}'));
+      final start = tester.getCenter(first);
+      final gesture = await tester.startGesture(
+        start,
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pump(const Duration(milliseconds: 50));
+      await gesture.moveBy(const Offset(20, 0));
+      await tester.pump(const Duration(milliseconds: 50));
+      // In steps, as a hand would: the list re-measures its gaps as the tab
+      // passes each neighbour.
+      final distance = tester.getTopRight(last).dx + 10 - start.dx;
+      for (var step = 0; step < 10; step++) {
+        await gesture.moveBy(Offset(distance / 10, 0));
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      await tester.pump(const Duration(milliseconds: 300));
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      expect(
+        [for (final tab in container.read(terminalTabsProvider).tabs) tab.id],
+        [ids[1], ids[2], ids[0]],
+      );
+
+      // The drag listener does not swallow a plain click.
+      await tester.tap(find.byKey(Key('tab_header_${ids[1]}')));
+      await tester.pump();
+      expect(container.read(terminalTabsProvider).activeTabId, ids[1]);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('closing the tab ends the agent session', (tester) async {
       final container = ProviderContainer(
         overrides: [
