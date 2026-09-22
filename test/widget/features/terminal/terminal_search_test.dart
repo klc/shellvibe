@@ -5,6 +5,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xterm3/xterm.dart';
 
+import 'package:shellvibe/app/theme/app_theme.dart';
+import 'package:shellvibe/features/settings/domain/models/app_settings_model.dart';
 import 'package:shellvibe/features/terminal/domain/models/terminal_tab_session.dart';
 import 'package:shellvibe/features/terminal/presentation/screens/terminal_screen.dart';
 
@@ -18,6 +20,7 @@ void main() {
   Future<TerminalTabSession> pumpTerminal(
     WidgetTester tester, {
     required String output,
+    ThemeData? theme,
   }) async {
     final terminal = Terminal(maxLines: 200);
     final session = TerminalTabSession(
@@ -31,6 +34,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         child: MaterialApp(
+          theme: theme,
           home: Scaffold(body: TerminalScreen(session: session)),
         ),
       ),
@@ -60,6 +64,31 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('terminal_search_field')), findsNothing);
+    });
+
+    testWidgets('the field is not boxed in a second, smaller frame', (
+      tester,
+    ) async {
+      // The app theme, whose fields are filled and outlined, is what drew the
+      // second frame; the default Material theme would hide the bug.
+      await pumpTerminal(
+        tester,
+        output: 'hello world\r\n',
+        theme: AppTheme.buildTheme(
+          const AppSettingsModel(),
+          brightness: Brightness.dark,
+        ),
+      );
+      await pressFind(tester);
+
+      final field = find.byKey(const Key('terminal_search_field'));
+      final decorator = tester.widget<InputDecorator>(
+        find.descendant(of: field, matching: find.byType(InputDecorator)),
+      );
+      expect(decorator.decoration.filled, isFalse);
+      expect(decorator.decoration.enabledBorder, InputBorder.none);
+      expect(decorator.decoration.focusedBorder, InputBorder.none);
+      expect(tester.getSize(field).width, greaterThanOrEqualTo(260));
     });
 
     testWidgets('counts the matches in the scrollback', (tester) async {
