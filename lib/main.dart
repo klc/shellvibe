@@ -4,10 +4,12 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'package:shellvibe/app/app.dart';
+import 'package:shellvibe/app/window/single_instance.dart';
 import 'package:shellvibe/app/window/window_chrome.dart';
 import 'package:shellvibe/core/perf/perf_overlay.dart';
 
@@ -39,6 +41,40 @@ Future<void> _logCrashToFile(
   }
 }
 
+/// Held for the life of the process; see [SingleInstance].
+SingleInstance? _singleInstance;
+
+/// Whether this process may run: true for the first copy of this install,
+/// false when another copy already runs and has been asked to show itself.
+///
+/// Any failure to set the claim up lets the app start: a missing guard is a
+/// smaller problem than an app that will not open.
+Future<bool> _claimSingleInstance() async {
+  try {
+    final support = await getApplicationSupportDirectory();
+    _singleInstance = await SingleInstance.claim(
+      directory: Directory(p.join(support.path, 'instance')),
+      // One claim per install: a debug build beside the installed app, or two
+      // installs, run side by side as they always have.
+      name: 'shellvibe-${_fnv1a(Platform.resolvedExecutable)}',
+      onActivate: () => unawaited(showHostWindow()),
+    );
+    return _singleInstance != null;
+  } catch (e) {
+    debugPrint('[SingleInstance Warning] $e');
+    return true;
+  }
+}
+
+/// A hash that is the same in every process, unlike [String.hashCode].
+String _fnv1a(String value) {
+  var hash = 0x811c9dc5;
+  for (final unit in value.codeUnits) {
+    hash = ((hash ^ unit) * 0x01000193) & 0xffffffff;
+  }
+  return hash.toRadixString(16);
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -57,6 +93,13 @@ void main() async {
     unawaited(_logCrashToFile('PlatformDispatcher', error, stack));
     return true; // prevent unhandled crash propagation
   };
+
+  // With the window able to hide in the tray, a second launch has to find the
+  // first copy rather than start beside it. Before any window work, so the
+  // second copy never shows one.
+  if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
+    if (!await _claimSingleInstance()) exit(0);
+  }
 
   // Desktop window manager initialization
   if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
@@ -84,7 +127,5 @@ void main() async {
 
   // Compiles to a bare `runApp(ProviderScope(...))` unless the build passed
   // --dart-define=SHELLVIBE_PERF=true; see [kPerfInstrumentationEnabled].
-  runApp(
-    PerfOverlayHost.maybeWrap(const ProviderScope(child: ShellVibeApp())),
-  );
+  runApp(PerfOverlayHost.maybeWrap(const ProviderScope(child: ShellVibeApp())));
 }

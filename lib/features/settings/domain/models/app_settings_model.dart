@@ -38,6 +38,12 @@ class AppSettingsModel {
   final int clipboardAutoClearSeconds;
   final String activeWorkspaceId;
 
+  /// Desktop only. Closing the window hides it to the system tray (the menu
+  /// bar on macOS) instead of quitting, so tunnels and sessions keep running;
+  /// Quit is on the tray menu. Off, the tray icon is gone and closing the last
+  /// window quits on Windows and Linux, as it did before.
+  final bool keepRunningInTray;
+
   const AppSettingsModel({
     this.themeMode = ThemeMode.dark,
     this.palette = AppPalette.oled,
@@ -53,6 +59,7 @@ class AppSettingsModel {
     this.autoLockTimerSeconds = 0,
     this.clipboardAutoClearSeconds = 30,
     this.activeWorkspaceId = 'default',
+    this.keepRunningInTray = true,
   });
 
   AppSettingsModel copyWith({
@@ -70,6 +77,7 @@ class AppSettingsModel {
     int? autoLockTimerSeconds,
     int? clipboardAutoClearSeconds,
     String? activeWorkspaceId,
+    bool? keepRunningInTray,
   }) {
     return AppSettingsModel(
       themeMode: themeMode ?? this.themeMode,
@@ -88,6 +96,7 @@ class AppSettingsModel {
       clipboardAutoClearSeconds:
           clipboardAutoClearSeconds ?? this.clipboardAutoClearSeconds,
       activeWorkspaceId: activeWorkspaceId ?? this.activeWorkspaceId,
+      keepRunningInTray: keepRunningInTray ?? this.keepRunningInTray,
     );
   }
 
@@ -106,6 +115,7 @@ class AppSettingsModel {
     'autoLockTimerSeconds': autoLockTimerSeconds,
     'clipboardAutoClearSeconds': clipboardAutoClearSeconds,
     'activeWorkspaceId': activeWorkspaceId,
+    'keepRunningInTray': keepRunningInTray,
   };
 
   factory AppSettingsModel.fromJson(Map<String, dynamic> json) {
@@ -143,6 +153,7 @@ class AppSettingsModel {
       clipboardAutoClearSeconds:
           (json['clipboardAutoClearSeconds'] as int?) ?? 30,
       activeWorkspaceId: (json['activeWorkspaceId'] as String?) ?? 'default',
+      keepRunningInTray: (json['keepRunningInTray'] as bool?) ?? true,
     );
   }
 }
