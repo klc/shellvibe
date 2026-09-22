@@ -1,0 +1,13 @@
+# Line endings.
+#
+# Git converts on checkout where the platform asks it to, which is normally
+# invisible. It is not invisible to a file whose bytes are pinned: the contract
+# fixtures are copies of server responses, their SHA-256 is recorded in
+# MANIFEST.sha256, and the test that verifies it reads the file from disk. A
+# Windows checkout rewrote every LF and the whole directory failed its own
+# integrity check -- the first and only test to fail on that platform, saying
+# "account.export.json was modified locally" about a file nobody had touched.
+#
+# LF for the fixtures and the manifest that measures them, always and on every
+# platform.
+test/fixtures/contract/v1/** text eol=lf
