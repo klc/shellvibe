@@ -285,23 +285,18 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
                   trailing: ShadSelect<ThemeMode>(
                     key: const Key('settings_theme_mode_dropdown'),
                     initialValue: settings.themeMode,
-                    selectedOptionBuilder: (context, value) {
-                      switch (value) {
-                        case ThemeMode.dark:
-                          return const Text('Dark');
-                        case ThemeMode.light:
-                          return const Text('Light');
-                        case ThemeMode.system:
-                          return const Text('System');
-                      }
-                    },
-                    options: const [
-                      ShadOption(value: ThemeMode.dark, child: Text('Dark')),
-                      ShadOption(value: ThemeMode.light, child: Text('Light')),
-                      ShadOption(
-                        value: ThemeMode.system,
-                        child: Text('System'),
-                      ),
+                    selectedOptionBuilder: (context, value) =>
+                        _ThemeModeLabel(mode: value),
+                    options: [
+                      for (final mode in const [
+                        ThemeMode.dark,
+                        ThemeMode.light,
+                        ThemeMode.system,
+                      ])
+                        ShadOption(
+                          value: mode,
+                          child: _ThemeModeLabel(mode: mode),
+                        ),
                     ],
                     onChanged: (mode) {
                       if (mode != null) {
@@ -484,7 +479,11 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
                     key: const Key('settings_terminal_palette_dropdown'),
                     initialValue: settings.terminalPalette,
                     selectedOptionBuilder: (context, value) {
-                      return Text(TerminalPaletteData.of(value).label);
+                      final data = TerminalPaletteData.of(value);
+                      return _IconLabel(
+                        icon: _brightnessIcon(isLight: data.isLight),
+                        label: data.label,
+                      );
                     },
                     options: [
                       for (final p in kTerminalPalettes)
@@ -494,8 +493,11 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               _PaletteSwatch(theme: p.theme),
-                              const SizedBox(width: 8),
-                              Text(p.label),
+                              const SizedBox(width: 10),
+                              _IconLabel(
+                                icon: _brightnessIcon(isLight: p.isLight),
+                                label: p.label,
+                              ),
                             ],
                           ),
                         ),
@@ -1127,6 +1129,52 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
 }
 
 /// Compact 8-color ANSI strip used in the theme dropdown rows.
+/// A sun or a moon in front of a scheme's name, so light and dark schemes can
+/// be told apart in the alphabetical list without reading the swatches.
+IconData _brightnessIcon({required bool isLight}) =>
+    isLight ? LucideIcons.sun : LucideIcons.moon;
+
+/// A muted icon set tight against its label, for dropdown rows.
+class _IconLabel extends StatelessWidget {
+  const _IconLabel({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: ShellVibeTokens.resolve(context).textMuted),
+        const SizedBox(width: 6),
+        Text(label),
+      ],
+    );
+  }
+}
+
+class _ThemeModeLabel extends StatelessWidget {
+  const _ThemeModeLabel({required this.mode});
+
+  final ThemeMode mode;
+
+  @override
+  Widget build(BuildContext context) {
+    return switch (mode) {
+      ThemeMode.dark => const _IconLabel(icon: LucideIcons.moon, label: 'Dark'),
+      ThemeMode.light => const _IconLabel(
+        icon: LucideIcons.sun,
+        label: 'Light',
+      ),
+      ThemeMode.system => const _IconLabel(
+        icon: LucideIcons.monitor,
+        label: 'System',
+      ),
+    };
+  }
+}
+
 class _PaletteSwatch extends StatelessWidget {
   const _PaletteSwatch({required this.theme});
 
@@ -1140,6 +1188,10 @@ class _PaletteSwatch extends StatelessWidget {
       width: 96,
       height: 14,
       child: Row(
+        // A childless DecoratedBox takes the smallest height it is allowed,
+        // and a Row hands its children a loose one: without the stretch the
+        // chips lay out at zero height and the swatch is an empty gap.
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           for (final color in _themeAnsiColors(theme).take(8)) ...[
             Expanded(
