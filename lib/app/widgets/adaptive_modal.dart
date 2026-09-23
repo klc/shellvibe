@@ -134,6 +134,9 @@ Future<T?> showAdaptiveActionMenu<T>({
   return showMenu<T>(
     context: context,
     position: anchor,
+    // Material's 300ms grow-in is paced for touch; a right-click menu that
+    // takes that long feels laggy next to the native ones on desktop.
+    popUpAnimationStyle: _menuAnimationStyle,
     color: tokens.surfaceRaised,
     surfaceTintColor: Colors.transparent,
     shadowColor: tokens.shadowColorStrong,
@@ -298,6 +301,11 @@ class _AdaptivePanelHeader extends StatelessWidget {
     );
   }
 }
+
+const _menuAnimationStyle = AnimationStyle(
+  duration: Duration(milliseconds: 120),
+  reverseDuration: Duration(milliseconds: 80),
+);
 
 /// The screen rectangle of [context]'s widget, as [showMenu] wants it.
 ///
