@@ -1,4 +1,7 @@
+// Branches on the host OS, so CI runs it on macOS and Windows as well as
+// Linux on every pull request (`--tags platform`).
 @TestOn('posix')
+@Tags(['platform'])
 library;
 
 import 'dart:convert';

@@ -1,3 +1,8 @@
+// Branches on the host OS, so CI runs it on macOS and Windows as well as
+// Linux on every pull request (`--tags platform`).
+@Tags(['platform'])
+library;
+
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
