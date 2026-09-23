@@ -1,17 +1,34 @@
 name: CI
 
+# Linux runs the whole suite on every pull request and push to main. macOS and
+# Windows are the slow runners (the macOS test step alone took over eleven
+# minutes), and all but a handful of tests are plain Dart that behaves the same
+# on every OS, so a pull request only runs the tests tagged `platform` there.
+# Their full suite runs weekly and on a manual run, and not at all on a push to
+# main, whose pull request has already been through it.
 on:
   pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
   push:
     branches:
       - main
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  schedule:
+    # Mondays 03:00 UTC.
+    - cron: '0 3 * * 1'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  # The event is part of the key so a push to main cannot cancel the weekly
+  # full run on the same ref.
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -63,20 +80,9 @@ jobs:
           GITLEAKS_ENABLE_SUMMARY: true
 
   quality:
-    name: ${{ matrix.name }}
-    runs-on: ${{ matrix.os }}
+    name: Linux
+    runs-on: ubuntu-latest
     timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: Linux
-            os: ubuntu-latest
-          - name: macOS
-            os: macos-latest
-          - name: Windows
-            os: windows-latest
-
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -102,8 +108,48 @@ jobs:
         run: flutter test --reporter compact
 
       - name: Verify generated sources are current
-        if: runner.os == 'Linux'
         shell: bash
         run: |
           dart run build_runner build
           git diff --exit-code
+
+  platform:
+    name: ${{ matrix.name }}
+    if: github.event_name != 'push'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-latest
+          - name: Windows
+            os: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.5
+          cache: true
+          pub-cache: true
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      # Analysis does not depend on the host, so the Linux job's run covers it.
+      - name: Test
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [[ "$EVENT_NAME" == 'pull_request' ]]; then
+            flutter test --reporter compact --tags platform
+          else
+            flutter test --reporter compact
+          fi

@@ -64,9 +64,9 @@ jobs:
 
   build:
     name: Build ${{ matrix.name }}
-    needs:
-      - metadata
-      - quality
+    # Not gated on the quality job: the two run side by side and publish waits
+    # for both, which takes the tests off the release's critical path.
+    needs: metadata
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     # A step's `if:` can read the `env` context but not `secrets`, so anything a
@@ -278,6 +278,7 @@ jobs:
     if: github.ref_type == 'tag'
     needs:
       - metadata
+      - quality
       - build
     runs-on: ubuntu-latest
     timeout-minutes: 15

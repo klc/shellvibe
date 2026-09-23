@@ -1,0 +1,8 @@
+# Tags used by the suite. Declaring them keeps `flutter test` from warning
+# about unknown tags and documents what each one selects.
+tags:
+  # Tests whose behaviour depends on the host OS. CI runs these on macOS and
+  # Windows for every pull request; the rest of the suite runs there weekly.
+  platform:
+  # Checks against the macOS project files.
+  macos:
