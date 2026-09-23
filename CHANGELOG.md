@@ -7,6 +7,33 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-09-23
+
+### Added
+
+- Eleven light terminal color schemes: GitHub Light, Tokyo Night Day,
+  Rosé Pine Dawn, Ayu Light, Everforest Light, Kanagawa Lotus, Nord Light,
+  Light Owl, Monokai Pro Light, Flexoki Light and Xcode Light. Light schemes
+  were four out of 29.
+- The terminal color scheme list marks each scheme with a sun or a moon, so
+  light and dark schemes can be told apart in the alphabetical list. The app
+  theme mode options carry the same icons, with a monitor for System.
+
+### Changed
+
+- The desktop right-click menus open in 120ms and close in 80ms instead of
+  Material's 300ms grow-in, which felt sluggish next to native menus.
+
+### Fixed
+
+- Emoji such as ✅ and ❌ no longer lose their right edge in the terminal.
+  A color emoji glyph is wider than two cells of most monospace fonts; it is
+  now shrunk to its cells instead of clipped. (xterm3 6.3.3)
+- The oh-my-zsh prompt arrow (U+279C) is drawn as an arrow instead of a bare
+  `>`. (xterm3 6.3.3)
+- The palette swatch beside each terminal color scheme was never painted,
+  leaving an empty gap in every row; it shows the scheme's colors again.
+
 ## [1.3.0] - 2026-09-23
 
 ### Added
