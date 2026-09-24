@@ -30,10 +30,13 @@ import '../../../../shared/storage/secure_storage_service.dart';
 import '../../../hosts/domain/models/host_model.dart';
 import '../../../hosts/domain/services/ssh_connect_planner.dart';
 import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
+import '../../../settings/domain/models/app_settings_model.dart';
+import '../../../settings/presentation/notifiers/settings_notifier.dart';
 import '../../../device_link/data/repositories/device_link_pairing_repository.dart';
 import '../../../vault/domain/models/identity_model.dart';
 import '../../../vault/presentation/notifiers/identities_notifier.dart';
 import '../../../vault/presentation/notifiers/vault_notifier.dart';
+import '../../domain/models/terminal_palette_data.dart';
 import '../../domain/models/terminal_tab_session.dart';
 import '../../domain/services/broadcast_input_router.dart';
 
@@ -731,6 +734,23 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     unawaited(_attachLocalShell(newTab));
   }
 
+  /// Environment a local shell starts with, on top of the app's own.
+  ///
+  /// `TERM_THEME` tells CLI tools whether they paint on a light or a dark
+  /// background. It follows the terminal palette rather than the app theme: a
+  /// light app can host a dark terminal. It is fixed at spawn, since a running
+  /// process's environment cannot be changed from outside, so a palette switch
+  /// reaches the shells opened after it.
+  ///
+  /// Settings not loaded yet fall back to the defaults, as the terminal view
+  /// does, rather than holding the shell back on a storage read.
+  Map<String, String> _localShellEnvironment() {
+    final settings =
+        ref.read(settingsProvider).value ?? const AppSettingsModel();
+    final isLight = TerminalPaletteData.of(settings.terminalPalette).isLight;
+    return {'TERM_THEME': isLight ? 'light' : 'dark'};
+  }
+
   /// Starts the shell behind [tab] and wires it up once it exists.
   Future<void> _attachLocalShell(TerminalTabSession tab) async {
     final terminal = tab.terminal;
@@ -738,6 +758,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       final manager = ref.read(localPtyManagerProvider);
       final bridge = await manager.startAndBridge(
         terminal,
+        environment: _localShellEnvironment(),
         rows: terminal.viewHeight,
         columns: terminal.viewWidth,
       );
@@ -1669,6 +1690,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       final manager = ref.read(localPtyManagerProvider);
       final bridge = await manager.startAndBridge(
         terminal,
+        environment: _localShellEnvironment(),
         rows: terminal.viewHeight,
         columns: terminal.viewWidth,
       );

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:drift/native.dart';
 import 'package:flutter/widgets.dart';
@@ -8,9 +9,14 @@ import 'package:xterm3/xterm.dart';
 
 import 'package:shellvibe/features/hosts/domain/models/host_model.dart';
 import 'package:shellvibe/features/hosts/presentation/notifiers/hosts_notifier.dart';
+import 'package:shellvibe/features/settings/domain/models/app_settings_model.dart';
+import 'package:shellvibe/features/settings/presentation/notifiers/settings_notifier.dart';
+import 'package:shellvibe/features/terminal/domain/models/terminal_palette.dart';
 import 'package:shellvibe/features/terminal/domain/models/terminal_tab_session.dart';
 import 'package:shellvibe/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import 'package:shellvibe/features/vault/presentation/notifiers/vault_notifier.dart';
+import 'package:shellvibe/core/network/local_pty_manager.dart';
+import 'package:shellvibe/core/network/providers/network_providers.dart';
 import 'package:shellvibe/core/utils/platform_capabilities.dart';
 import 'package:shellvibe/shared/database/app_database.dart';
 import 'package:shellvibe/shared/providers/database_providers.dart';
@@ -1240,6 +1246,58 @@ void main() {
       expect(container.read(terminalTabsProvider).selectedPaneIds, isEmpty);
     });
   });
+
+  group('Local shell environment', () {
+    Future<List<Map<String, String>?>> spawnedEnvironments(
+      TerminalPalette palette, {
+      bool split = false,
+    }) async {
+      final manager = _RecordingPtyManager();
+      final scoped = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(database),
+          localPtyManagerProvider.overrideWithValue(manager),
+          settingsProvider.overrideWith(
+            () => _FixedSettingsNotifier(
+              AppSettingsModel(terminalPalette: palette),
+            ),
+          ),
+        ],
+      );
+      addTearDown(scoped.dispose);
+      // The app keeps settings watched from launch; hold them loaded the same
+      // way before the shell is opened.
+      scoped.listen(settingsProvider, (_, _) {});
+      await scoped.read(settingsProvider.future);
+
+      final notifier = scoped.read(terminalTabsProvider.notifier);
+      notifier.openLocalTab();
+      await pumpEventQueue();
+      if (split) {
+        await notifier.splitTab(scoped.read(terminalTabsProvider).activeTabId!);
+      }
+      return manager.environments;
+    }
+
+    test('a light palette starts the shell with TERM_THEME=light', () async {
+      final envs = await spawnedEnvironments(TerminalPalette.catppuccinLatte);
+      expect(envs.single, containsPair('TERM_THEME', 'light'));
+    });
+
+    test('a dark palette starts the shell with TERM_THEME=dark', () async {
+      final envs = await spawnedEnvironments(TerminalPalette.oled);
+      expect(envs.single, containsPair('TERM_THEME', 'dark'));
+    });
+
+    test('a local split pane gets TERM_THEME too', () async {
+      final envs = await spawnedEnvironments(
+        TerminalPalette.catppuccinLatte,
+        split: true,
+      );
+      expect(envs, hasLength(2));
+      expect(envs.last, containsPair('TERM_THEME', 'light'));
+    });
+  });
 }
 
 class _LockedVaultNotifier extends VaultNotifier {
@@ -1265,5 +1323,35 @@ class _FailedVaultNotifier extends VaultNotifier {
   @override
   Future<VaultState> build() async {
     throw StateError('vault state unavailable');
+  }
+}
+
+class _FixedSettingsNotifier extends SettingsNotifier {
+  _FixedSettingsNotifier(this._settings);
+
+  final AppSettingsModel _settings;
+
+  @override
+  Future<AppSettingsModel> build() async => _settings;
+}
+
+/// Records the environment each shell was asked to start with, and starts
+/// none.
+class _RecordingPtyManager extends LocalPtyManager {
+  final environments = <Map<String, String>?>[];
+
+  @override
+  Future<TerminalLocalPtyBridge?> startAndBridge(
+    Terminal terminal, {
+    String? executable,
+    List<String> arguments = const [],
+    String? workingDirectory,
+    Map<String, String>? environment,
+    int rows = 24,
+    int columns = 80,
+    void Function(Uint8List bytes)? outputTap,
+  }) async {
+    environments.add(environment);
+    return null;
   }
 }
