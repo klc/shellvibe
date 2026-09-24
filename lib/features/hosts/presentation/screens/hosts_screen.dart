@@ -1157,16 +1157,35 @@ class _HostRowState extends State<_HostRow> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            host.label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.titleSmall
-                                ?.copyWith(
-                                  color: selected
-                                      ? tokens.textPrimary
-                                      : tokens.textSecondary,
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  host.label,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.titleSmall
+                                      ?.copyWith(
+                                        color: selected
+                                            ? tokens.textPrimary
+                                            : tokens.textSecondary,
+                                      ),
                                 ),
+                              ),
+                              // A phone has no pointer to hover with, so the
+                              // star is shown there only as the state it
+                              // already is; the detail sheet carries the
+                              // toggle. It rides on the label line because the
+                              // actions slot is measured for two controls.
+                              if (widget.isFavorite) ...[
+                                const SizedBox(width: 6),
+                                Icon(
+                                  LucideIcons.star,
+                                  size: 12,
+                                  color: tokens.brand,
+                                ),
+                              ],
+                            ],
                           ),
                           const SizedBox(height: 2),
                           Text(
@@ -1236,9 +1255,7 @@ class _HostRowState extends State<_HostRow> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        // A phone has no pointer to hover with, so the star is
-                        // shown there only as the state it already is; the
-                        // detail sheet carries the toggle.
+                        // A phone row shows its star on the label line.
                         if (!compact)
                           SizedBox(
                             width: _kHostStarWidth,
@@ -1253,15 +1270,6 @@ class _HostRowState extends State<_HostRow> {
                                     active: widget.isFavorite,
                                   )
                                 : const SizedBox.shrink(),
-                          )
-                        else if (widget.isFavorite)
-                          Padding(
-                            padding: const EdgeInsets.only(right: 6),
-                            child: Icon(
-                              LucideIcons.star,
-                              size: 14,
-                              color: tokens.brand,
-                            ),
                           ),
                         if (isConnecting)
                           const Padding(

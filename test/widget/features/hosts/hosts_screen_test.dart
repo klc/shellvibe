@@ -521,6 +521,41 @@ void main() {
       expect(find.byKey(const Key('connect_host_host-phone')), findsWidgets);
     });
 
+    testWidgets('A starred host row fits a phone width', (tester) async {
+      await db.hostsDao.insertHost(
+        HostsCompanion.insert(
+          id: 'host-starred',
+          workspaceId: 'default',
+          label: 'nfs-staging',
+          hostname: '10.202.1.153',
+          username: const Value('mustafa'),
+          port: const Value(22022),
+          createdAt: DateTime.now(),
+        ),
+      );
+      await db.bookmarksDao.insertBookmark(
+        BookmarksCompanion.insert(
+          id: 'bookmark-starred',
+          workspaceId: 'default',
+          hostId: const Value('host-starred'),
+          createdAt: DateTime.now(),
+        ),
+      );
+
+      tester.view.physicalSize = const Size(360, 780);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      // The star used to sit beside the row actions in a slot measured for
+      // two, pushing the overflow menu 20px past the edge.
+      expect(tester.takeException(), isNull, reason: 'starred row layout');
+      expect(find.byIcon(LucideIcons.star), findsWidgets);
+    });
+
     testWidgets('Opens HostGroupFormDialog when add_group_button is tapped', (
       tester,
     ) async {
