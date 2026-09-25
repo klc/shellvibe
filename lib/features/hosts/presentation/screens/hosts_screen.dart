@@ -32,15 +32,11 @@ import '../dialogs/host_group_form_dialog.dart';
 import '../dialogs/ssh_config_import_dialog.dart';
 import '../notifiers/host_groups_notifier.dart';
 import '../notifiers/hosts_notifier.dart';
-
-/// Whether [host] can carry an SFTP session.
-///
-/// Local hosts have no SSH transport, so file transfer is hidden rather than
-/// offered and then failing at connect time.
-bool hostSupportsFileTransfer(HostModel host) => host.protocol != 'local';
-
-/// Pseudo-group selections that sit above the real groups in the column.
-enum _HostFilter { all, connected, favorites, ungrouped }
+import '../widgets/host_detail_panel.dart';
+import '../widgets/host_list_filter.dart';
+import '../widgets/host_list_header.dart';
+import '../widgets/host_row.dart';
+import '../widgets/template_nav_item.dart';
 
 class HostsScreen extends ConsumerStatefulWidget {
   final void Function(HostModel host)? onConnectHost;
@@ -55,7 +51,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
   String _searchQuery = '';
   final Set<String> _connectingHostIds = {};
 
-  _HostFilter _filter = _HostFilter.all;
+  HostFilter _filter = HostFilter.all;
 
   /// Non-null when a real group (rather than a pseudo-filter) is selected.
   String? _selectedGroupId;
@@ -118,7 +114,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
               ),
               if (showDetailDrawer && selectedHost != null)
                 ShellVibeDetailDrawer(
-                  child: _HostDetailPanel(
+                  child: HostDetailPanel(
                     host: selectedHost,
                     hosts: hosts,
                     groups: groups,
@@ -173,35 +169,32 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
           icon: LucideIcons.layoutGrid,
           label: 'All',
           count: hosts.length,
-          selected: _selectedGroupId == null && _filter == _HostFilter.all,
-          onTap: () => _selectFilter(_HostFilter.all),
+          selected: _selectedGroupId == null && _filter == HostFilter.all,
+          onTap: () => _selectFilter(HostFilter.all),
         ),
         ShellVibeNavItem(
           itemKey: const Key('hosts_filter_connected'),
           icon: LucideIcons.radio,
           label: 'Connected',
           count: connectedIds.length,
-          selected:
-              _selectedGroupId == null && _filter == _HostFilter.connected,
-          onTap: () => _selectFilter(_HostFilter.connected),
+          selected: _selectedGroupId == null && _filter == HostFilter.connected,
+          onTap: () => _selectFilter(HostFilter.connected),
         ),
         ShellVibeNavItem(
           itemKey: const Key('hosts_filter_favorites'),
           icon: LucideIcons.star,
           label: 'Favorites',
           count: _favoriteHostIds().length,
-          selected:
-              _selectedGroupId == null && _filter == _HostFilter.favorites,
-          onTap: () => _selectFilter(_HostFilter.favorites),
+          selected: _selectedGroupId == null && _filter == HostFilter.favorites,
+          onTap: () => _selectFilter(HostFilter.favorites),
         ),
         ShellVibeNavItem(
           itemKey: const Key('hosts_filter_ungrouped'),
           icon: LucideIcons.inbox,
           label: 'Ungrouped',
           count: hosts.where((host) => host.groupId == null).length,
-          selected:
-              _selectedGroupId == null && _filter == _HostFilter.ungrouped,
-          onTap: () => _selectFilter(_HostFilter.ungrouped),
+          selected: _selectedGroupId == null && _filter == HostFilter.ungrouped,
+          onTap: () => _selectFilter(HostFilter.ungrouped),
         ),
         if (groups.isNotEmpty) const ShellVibeSectionLabel(label: 'Tags'),
         for (final group in groups)
@@ -213,7 +206,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
             selected: _selectedGroupId == group.id,
             onTap: () => setState(() {
               _selectedGroupId = group.id;
-              _filter = _HostFilter.all;
+              _filter = HostFilter.all;
             }),
           ),
         // Saved terminal layouts. Unlike the entries above these are actions,
@@ -221,7 +214,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
         if (templates.isNotEmpty) ...[
           const ShellVibeSectionLabel(label: 'Templates'),
           for (final template in templates)
-            _TemplateNavItem(
+            TemplateNavItem(
               template: template,
               onRun: () => _runTemplate(template),
               onEdit: () => TemplateEditorPanel.show(context, template),
@@ -232,7 +225,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
     );
   }
 
-  void _selectFilter(_HostFilter filter) {
+  void _selectFilter(HostFilter filter) {
     setState(() {
       _filter = filter;
       _selectedGroupId = null;
@@ -303,7 +296,19 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
             actions: actions,
           ),
         if (!showContextColumn)
-          _buildCompactFilterBar(context, groups, hostsAsync.value ?? const []),
+          HostCompactFilterBar(
+            groups: groups,
+            hosts: hostsAsync.value ?? const [],
+            selectedGroupId: _selectedGroupId,
+            filter: _filter,
+            onSearchChanged: (value) =>
+                setState(() => _searchQuery = value.toLowerCase()),
+            onSelectFilter: _selectFilter,
+            onSelectGroup: (groupId) => setState(() {
+              _selectedGroupId = groupId;
+              _filter = HostFilter.all;
+            }),
+          ),
         Expanded(
           child: hostsAsync.when(
             loading: () => const Center(child: CircularProgressIndicator()),
@@ -336,17 +341,14 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
 
                 return Column(
                   children: [
-                    _HostListHeader(
-                      tokens: tokens,
-                      compact: !showContextColumn,
-                    ),
+                    HostListHeader(tokens: tokens, compact: !showContextColumn),
                     Expanded(
                       child: ListView.builder(
                         padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
                         itemCount: visible.length,
                         itemBuilder: (context, index) {
                           final host = visible[index];
-                          return _HostRow(
+                          return HostRow(
                             key: ValueKey(host.id),
                             host: host,
                             groups: groups,
@@ -394,72 +396,6 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
     return _wrapWithConfigDropTarget(context, workArea);
   }
 
-  Widget _buildCompactFilterBar(
-    BuildContext context,
-    List<HostGroupModel> groups,
-    List<HostModel> hosts,
-  ) {
-    final tokens = ShellVibeTokens.resolve(context);
-    return Container(
-      padding: EdgeInsets.fromLTRB(
-        tokens.pagePadding,
-        10,
-        tokens.pagePadding,
-        8,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          ShellVibeSearchField(
-            fieldKey: const Key('hosts_search_input'),
-            hintText: 'Search hosts, addresses and protocols…',
-            onChanged: (value) =>
-                setState(() => _searchQuery = value.toLowerCase()),
-          ),
-          const SizedBox(height: 10),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                _FilterChip(
-                  label: 'All',
-                  selected:
-                      _selectedGroupId == null && _filter == _HostFilter.all,
-                  onTap: () => _selectFilter(_HostFilter.all),
-                ),
-                _FilterChip(
-                  label: 'Connected',
-                  selected:
-                      _selectedGroupId == null &&
-                      _filter == _HostFilter.connected,
-                  onTap: () => _selectFilter(_HostFilter.connected),
-                ),
-                _FilterChip(
-                  chipKey: const Key('hosts_filter_favorites_chip'),
-                  label: 'Favorites',
-                  selected:
-                      _selectedGroupId == null &&
-                      _filter == _HostFilter.favorites,
-                  onTap: () => _selectFilter(_HostFilter.favorites),
-                ),
-                for (final group in groups)
-                  _FilterChip(
-                    chipKey: Key('group_${group.id}'),
-                    label: group.name,
-                    selected: _selectedGroupId == group.id,
-                    onTap: () => setState(() {
-                      _selectedGroupId = group.id;
-                      _filter = _HostFilter.all;
-                    }),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   /// The narrow-width form of the detail drawer.
   void _showHostDetailSheet({
     required HostModel host,
@@ -480,7 +416,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
         child: SizedBox(
           height: MediaQuery.sizeOf(sheetContext).height * 0.72,
           child: Consumer(
-            builder: (context, sheetRef, _) => _HostDetailPanel(
+            builder: (context, sheetRef, _) => HostDetailPanel(
               host: host,
               hosts: hosts,
               groups: groups,
@@ -704,10 +640,10 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
           'Group';
     }
     return switch (_filter) {
-      _HostFilter.all => 'All',
-      _HostFilter.connected => 'Connected',
-      _HostFilter.favorites => 'Favorites',
-      _HostFilter.ungrouped => 'Ungrouped',
+      HostFilter.all => 'All',
+      HostFilter.connected => 'Connected',
+      HostFilter.favorites => 'Favorites',
+      HostFilter.ungrouped => 'Ungrouped',
     };
   }
 
@@ -729,12 +665,12 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
       return hosts.where((host) => host.groupId == _selectedGroupId).toList();
     }
     return switch (_filter) {
-      _HostFilter.all => hosts,
-      _HostFilter.connected =>
+      HostFilter.all => hosts,
+      HostFilter.connected =>
         hosts.where((host) => _connectedHostIds().contains(host.id)).toList(),
-      _HostFilter.favorites =>
+      HostFilter.favorites =>
         hosts.where((host) => _favoriteHostIds().contains(host.id)).toList(),
-      _HostFilter.ungrouped =>
+      HostFilter.ungrouped =>
         hosts.where((host) => host.groupId == null).toList(),
     };
   }
@@ -949,801 +885,5 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
       }
       await ref.read(hostsProvider.notifier).deleteHost(host.id);
     }
-  }
-}
-
-// ── list primitives ───────────────────────────────────────────────────────
-
-/// Column widths shared by the header and every row so they stay aligned.
-const List<int> _kHostColumnFlex = [5, 5, 3, 2];
-
-/// Rendered width of the row's trailing controls.
-///
-/// Measured, not guessed: the two [ShellVibeIconButton]s occupy one control
-/// height each (34px under a pointer) and the [PopupMenuButton] 48px once
-/// Material's minimum tap target is applied, plus the 12px the popup adds
-/// around its icon, plus [_kHostStarWidth] for the star.
-const double _kHostActionsWidth = 124 + _kHostStarWidth;
-
-/// The star's slot. Always reserved, even while the star is invisible: a
-/// control that appears on hover must not push the row's other controls
-/// sideways as the pointer crosses it.
-const double _kHostStarWidth = 34;
-
-/// The same measurement for a phone row, which carries one icon action and the
-/// overflow menu — never the spelled-out Open pill, which does not fit beside
-/// an address on a 400px screen.
-const double _kHostActionsWidthCompact = 92;
-
-class _HostListHeader extends StatelessWidget {
-  final ShellVibeTokens tokens;
-  final bool compact;
-
-  const _HostListHeader({required this.tokens, required this.compact});
-
-  @override
-  Widget build(BuildContext context) {
-    final style = TextStyle(
-      fontSize: 10,
-      fontWeight: FontWeight.w600,
-      letterSpacing: 1.4,
-      color: tokens.textSubtle,
-    );
-    // No rule under the header: the rows below are pills with their own
-    // spacing, so a line here would only cut the panel in half.
-    // The list below pads 10px, each row another 10 (14 when compact), so the
-    // header has to carry the sum or the labels sit off their columns.
-    return Padding(
-      padding: EdgeInsets.fromLTRB(compact ? 24 : 20, 0, compact ? 24 : 20, 6),
-      child: Row(
-        children: [
-          SizedBox(width: compact ? 15 : 24),
-          // A phone row stacks its name over its address, so there is no
-          // second column for an ADDRESS label to head.
-          Expanded(
-            flex: _kHostColumnFlex[0],
-            child: Text('NAME', style: style, maxLines: 1),
-          ),
-          if (!compact)
-            Expanded(
-              flex: _kHostColumnFlex[1],
-              child: Text('ADDRESS', style: style, maxLines: 1),
-            ),
-          if (!compact) ...[
-            Expanded(
-              flex: _kHostColumnFlex[2],
-              child: Text('TAG', style: style, maxLines: 1),
-            ),
-            Expanded(
-              flex: _kHostColumnFlex[3],
-              child: Text('LAST', style: style, maxLines: 1),
-            ),
-          ],
-          SizedBox(
-            width: compact ? _kHostActionsWidthCompact : _kHostActionsWidth,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Single-line dense host row.
-///
-/// The wireframe replaces the card grid with this so ~9 hosts fit where 6 did,
-/// and status reads as dot + text rather than colour alone.
-class _HostRow extends StatefulWidget {
-  final HostModel host;
-  final List<HostGroupModel> groups;
-  final bool connected;
-  final bool isConnecting;
-  final bool selected;
-  final bool compact;
-  final bool isFavorite;
-  final VoidCallback onSelect;
-  final VoidCallback onConnect;
-  final VoidCallback onOpenSftp;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
-  final VoidCallback onToggleFavorite;
-
-  const _HostRow({
-    super.key,
-    required this.host,
-    required this.groups,
-    required this.connected,
-    required this.isConnecting,
-    required this.selected,
-    required this.compact,
-    required this.isFavorite,
-    required this.onSelect,
-    required this.onConnect,
-    required this.onOpenSftp,
-    required this.onEdit,
-    required this.onDelete,
-    required this.onToggleFavorite,
-  });
-
-  @override
-  State<_HostRow> createState() => _HostRowState();
-}
-
-class _HostRowState extends State<_HostRow> {
-  /// Whether the pointer is over the row, which is what reveals the star.
-  ///
-  /// A star on every row would be a column of them down a list where most
-  /// hosts are not starred; showing it under the pointer keeps the list as it
-  /// was and still puts the control where the hand already is. A starred row
-  /// shows it always — that one is state, not an offer.
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final host = widget.host;
-    final connected = widget.connected;
-    final selected = widget.selected;
-    final compact = widget.compact;
-    final isConnecting = widget.isConnecting;
-    final groups = widget.groups;
-    final onSelect = widget.onSelect;
-    final onConnect = widget.onConnect;
-    final onOpenSftp = widget.onOpenSftp;
-    final onEdit = widget.onEdit;
-    final onDelete = widget.onDelete;
-    final tokens = ShellVibeTokens.resolve(context);
-    final address =
-        '${host.username != null && host.username!.isNotEmpty ? '${host.username}@' : ''}'
-        '${host.hostname}:${host.port}';
-    final groupName = groups
-        .where((group) => group.id == host.groupId)
-        .firstOrNull
-        ?.name;
-    final monoStyle = shellvibeMono(
-      context,
-      color: selected ? tokens.textSecondary : tokens.textMuted,
-    );
-
-    return Semantics(
-      button: true,
-      selected: selected,
-      label:
-          '${host.label}, ${host.protocol} host at ${host.hostname}, '
-          '${connected ? 'connected' : 'not connected'}'
-          '${widget.isFavorite ? ', favorite' : ''}',
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 2),
-        child: MouseRegion(
-          onEnter: (_) => setState(() => _hovered = true),
-          onExit: (_) => setState(() => _hovered = false),
-          child: InkWell(
-            onTap: onSelect,
-            borderRadius: BorderRadius.circular(tokens.radiusMedium),
-            child: Container(
-              padding: EdgeInsets.symmetric(horizontal: compact ? 14 : 10),
-              // Phone rows trade density for a 44px hit target on the row action.
-              height: compact ? 62 : tokens.rowHeight,
-              decoration: BoxDecoration(
-                color: selected
-                    ? tokens.brand.withValues(alpha: 0.10)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(tokens.radiusMedium),
-                border: Border.all(
-                  color: selected
-                      ? tokens.brand.withValues(alpha: 0.22)
-                      : Colors.transparent,
-                ),
-              ),
-              child: Row(
-                children: [
-                  // A lit bar rather than a dot: read down a column of nine hosts
-                  // it separates live from idle at a glance, and it doubles as
-                  // the row's left margin.
-                  SizedBox(
-                    width: compact ? 15 : 24,
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: ShellVibeRowIndicator(
-                        live: connected,
-                        height: compact ? 26 : 20,
-                      ),
-                    ),
-                  ),
-                  // Side by side the two columns split about 250px on a phone,
-                  // and `ubuntu@152.70.22.207:22` wants 160 of them on its own.
-                  // Stacked, each line gets the row's whole width.
-                  if (compact)
-                    Expanded(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  host.label,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(context).textTheme.titleSmall
-                                      ?.copyWith(
-                                        color: selected
-                                            ? tokens.textPrimary
-                                            : tokens.textSecondary,
-                                      ),
-                                ),
-                              ),
-                              // A phone has no pointer to hover with, so the
-                              // star is shown there only as the state it
-                              // already is; the detail sheet carries the
-                              // toggle. It rides on the label line because the
-                              // actions slot is measured for two controls.
-                              if (widget.isFavorite) ...[
-                                const SizedBox(width: 6),
-                                Icon(
-                                  LucideIcons.star,
-                                  size: 12,
-                                  color: tokens.brand,
-                                ),
-                              ],
-                            ],
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            // Compact drops the last-seen column, so the state
-                            // text that pairs with the bar moves onto the
-                            // address line.
-                            connected ? '$address · connected' : address,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: monoStyle,
-                          ),
-                        ],
-                      ),
-                    )
-                  else ...[
-                    Expanded(
-                      flex: _kHostColumnFlex[0],
-                      child: Text(
-                        host.label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          color: selected
-                              ? tokens.textPrimary
-                              : tokens.textSecondary,
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      flex: _kHostColumnFlex[1],
-                      child: Text(
-                        address,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: monoStyle,
-                      ),
-                    ),
-                    Expanded(
-                      flex: _kHostColumnFlex[2],
-                      child: groupName == null
-                          ? const SizedBox.shrink()
-                          : Align(
-                              alignment: Alignment.centerLeft,
-                              child: _HostTagChip(label: groupName),
-                            ),
-                    ),
-                    Expanded(
-                      flex: _kHostColumnFlex[3],
-                      child: Text(
-                        // Status is never carried by colour alone: the bar is
-                        // paired with this text so the row reads without hue.
-                        connected ? 'connected' : host.protocol,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: shellvibeMono(
-                          context,
-                          size: 11,
-                          color: connected ? tokens.brand : tokens.textSubtle,
-                        ),
-                      ),
-                    ),
-                  ],
-                  SizedBox(
-                    width: compact
-                        ? _kHostActionsWidthCompact
-                        : _kHostActionsWidth,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        // A phone row shows its star on the label line.
-                        if (!compact)
-                          SizedBox(
-                            width: _kHostStarWidth,
-                            child: (_hovered || widget.isFavorite)
-                                ? ShellVibeIconButton(
-                                    buttonKey: Key('favorite_host_${host.id}'),
-                                    icon: LucideIcons.star,
-                                    tooltip: widget.isFavorite
-                                        ? 'Remove from favorites'
-                                        : 'Add to favorites',
-                                    onPressed: widget.onToggleFavorite,
-                                    active: widget.isFavorite,
-                                  )
-                                : const SizedBox.shrink(),
-                          ),
-                        if (isConnecting)
-                          const Padding(
-                            padding: EdgeInsets.all(8),
-                            child: SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                          )
-                        // The selected row is the only one that spells its
-                        // primary action out; the rest keep quiet icons so a full
-                        // list stays dense without turning into a wall of buttons.
-                        // A phone row never spells it out — the pill plus the
-                        // menu overflowed the row, and selecting a host there
-                        // opens the detail sheet, which carries Connect anyway.
-                        else if (selected && !compact)
-                          ShellVibeButton.secondary(
-                            buttonKey: Key('connect_host_${host.id}'),
-                            label: 'Open',
-                            icon: LucideIcons.terminal,
-                            onPressed: onConnect,
-                          )
-                        else
-                          ShellVibeIconButton(
-                            buttonKey: Key('connect_host_${host.id}'),
-                            icon: LucideIcons.play,
-                            tooltip: 'Connect Terminal',
-                            onPressed: onConnect,
-                          ),
-                        // Transfer only makes sense over SSH; a local host has
-                        // no SFTP subsystem to talk to. On phones it drops out
-                        // entirely — the row has one action there, and transfer
-                        // lives in the detail sheet.
-                        if (hostSupportsFileTransfer(host) &&
-                            !selected &&
-                            !compact)
-                          ShellVibeIconButton(
-                            buttonKey: Key('sftp_host_${host.id}'),
-                            icon: LucideIcons.folderSync,
-                            tooltip: 'File Transfer (SFTP)',
-                            onPressed: onOpenSftp,
-                          ),
-                        PopupMenuButton<String>(
-                          tooltip: 'Host actions',
-                          // No `constraints` here: that property sizes the popup
-                          // menu, not the button, and pinning it clipped the menu
-                          // items.
-                          padding: EdgeInsets.zero,
-                          iconSize: 16,
-                          icon: const Icon(LucideIcons.ellipsis, size: 16),
-                          onSelected: (value) {
-                            if (value == 'edit') onEdit();
-                            if (value == 'delete') onDelete();
-                          },
-                          itemBuilder: (context) => [
-                            const PopupMenuItem(
-                              value: 'edit',
-                              child: Row(
-                                children: [
-                                  Icon(LucideIcons.pencil, size: 16),
-                                  SizedBox(width: 8),
-                                  Text('Edit host'),
-                                ],
-                              ),
-                            ),
-                            PopupMenuItem(
-                              value: 'delete',
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    LucideIcons.trash2,
-                                    size: 16,
-                                    color: tokens.danger,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Delete host',
-                                    style: TextStyle(color: tokens.danger),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Neutral tag pill on a host row.
-///
-/// Deliberately not a [ShellVibeStatusChip]: a group name is a label, not a state,
-/// so it never borrows a status hue.
-class _HostTagChip extends StatelessWidget {
-  final String label;
-
-  const _HostTagChip({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = ShellVibeTokens.resolve(context);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-      decoration: BoxDecoration(
-        color: tokens.textPrimary.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(tokens.radiusSmall),
-      ),
-      child: Text(
-        label,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: tokens.textMuted,
-        ),
-      ),
-    );
-  }
-}
-
-/// Context-column entry for a saved layout.
-///
-/// Shaped like [ShellVibeNavItem] so it reads as part of the column, but it runs an
-/// action rather than selecting a filter, and carries its own edit/delete
-/// menu.
-class _TemplateNavItem extends StatelessWidget {
-  final TemplateModel template;
-  final VoidCallback onRun;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
-
-  const _TemplateNavItem({
-    required this.template,
-    required this.onRun,
-    required this.onEdit,
-    required this.onDelete,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = ShellVibeTokens.resolve(context);
-    return Semantics(
-      button: true,
-      label: 'Run template ${template.name}, ${templateSummary(template)}',
-      child: Row(
-        children: [
-          Expanded(
-            child: InkWell(
-              key: Key('run_template_${template.id}'),
-              onTap: onRun,
-              borderRadius: BorderRadius.circular(tokens.radiusSmall),
-              child: Container(
-                height: 30,
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Row(
-                  children: [
-                    Icon(
-                      LucideIcons.layoutTemplate,
-                      size: 15,
-                      color: tokens.textMuted,
-                    ),
-                    const SizedBox(width: 9),
-                    Expanded(
-                      child: Text(
-                        template.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.labelMedium
-                            ?.copyWith(color: tokens.textMuted),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          PopupMenuButton<String>(
-            key: Key('template_menu_${template.id}'),
-            tooltip: 'Template actions',
-            padding: EdgeInsets.zero,
-            iconSize: 14,
-            icon: const Icon(LucideIcons.ellipsis, size: 14),
-            onSelected: (value) {
-              if (value == 'edit') onEdit();
-              if (value == 'delete') onDelete();
-            },
-            itemBuilder: (context) => [
-              // Name, description and every pane: one place to look at what a
-              // template opens and to change it.
-              const PopupMenuItem(
-                value: 'edit',
-                child: Row(
-                  children: [
-                    Icon(LucideIcons.pencil, size: 16),
-                    SizedBox(width: 8),
-                    Flexible(
-                      child: Text(
-                        'View & edit template',
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: 'delete',
-                child: Row(
-                  children: [
-                    Icon(LucideIcons.trash2, size: 16, color: tokens.danger),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Delete template',
-                      style: TextStyle(color: tokens.danger),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FilterChip extends StatelessWidget {
-  final Key? chipKey;
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _FilterChip({
-    this.chipKey,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = ShellVibeTokens.resolve(context);
-    return Padding(
-      padding: const EdgeInsets.only(right: 7),
-      child: InkWell(
-        key: chipKey,
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            color: selected
-                ? tokens.brand.withValues(alpha: 0.14)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: selected
-                  ? tokens.brand.withValues(alpha: 0.26)
-                  : tokens.textPrimary.withValues(alpha: 0.07),
-            ),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-              color: selected ? tokens.brandSoft : tokens.textMuted,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Inline right-hand detail panel — the wireframe's replacement for a modal.
-class _HostDetailPanel extends StatelessWidget {
-  final HostModel host;
-  final List<HostModel> hosts;
-  final List<HostGroupModel> groups;
-  final bool connected;
-  final bool isFavorite;
-  final VoidCallback onToggleFavorite;
-  final VoidCallback onConnect;
-  final VoidCallback onOpenSftp;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
-  final VoidCallback onClose;
-
-  const _HostDetailPanel({
-    required this.host,
-    required this.hosts,
-    required this.groups,
-    required this.connected,
-    required this.isFavorite,
-    required this.onToggleFavorite,
-    required this.onConnect,
-    required this.onOpenSftp,
-    required this.onEdit,
-    required this.onDelete,
-    required this.onClose,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = ShellVibeTokens.resolve(context);
-    final jumpHost = hosts
-        .where((candidate) => candidate.id == host.jumpHostId)
-        .firstOrNull;
-    final group = groups
-        .where((candidate) => candidate.id == host.groupId)
-        .firstOrNull;
-
-    final address =
-        '${host.username != null && host.username!.isNotEmpty ? '${host.username}@' : ''}'
-        '${host.hostname}:${host.port}';
-
-    return ListView(
-      key: const Key('host_detail_drawer'),
-      padding: const EdgeInsets.all(18),
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    host.label,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    address,
-                    style: shellvibeMono(
-                      context,
-                      size: 11,
-                      color: tokens.textSubtle,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // The row's star is revealed by hover, which a phone has none of,
-            // so the panel carries the toggle for both.
-            ShellVibeIconButton(
-              buttonKey: Key('detail_favorite_${host.id}'),
-              icon: LucideIcons.star,
-              tooltip: isFavorite
-                  ? 'Remove from favorites'
-                  : 'Add to favorites',
-              active: isFavorite,
-              onPressed: onToggleFavorite,
-            ),
-            ShellVibeIconButton(
-              icon: LucideIcons.x,
-              tooltip: 'Close details',
-              onPressed: onClose,
-            ),
-          ],
-        ),
-        const SizedBox(height: 14),
-        // The state pill carries the uptime as well as the state: on a detail
-        // panel the two are read together, and splitting them wastes a row.
-        _HostStatePill(connected: connected),
-        const SizedBox(height: 14),
-        ShellVibeButton(
-          buttonKey: const Key('detail_open_terminal'),
-          icon: LucideIcons.terminal,
-          label: 'Open terminal',
-          expand: true,
-          onPressed: onConnect,
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            if (hostSupportsFileTransfer(host)) ...[
-              Expanded(
-                child: ShellVibeButton.secondary(
-                  buttonKey: const Key('detail_open_sftp'),
-                  label: 'Files',
-                  expand: true,
-                  onPressed: onOpenSftp,
-                ),
-              ),
-              const SizedBox(width: 8),
-            ],
-            Expanded(
-              child: ShellVibeButton.secondary(
-                label: 'Tunnel',
-                expand: true,
-                onPressed: () => GoRouter.maybeOf(context)?.go('/tunnels'),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: ShellVibeButton.secondary(
-                label: 'Edit',
-                expand: true,
-                onPressed: onEdit,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 20),
-        const ShellVibeSectionLabel(
-          label: 'Connection',
-          padding: EdgeInsets.only(bottom: 8),
-        ),
-        ShellVibeDetailRow(label: 'protocol', value: host.protocol),
-        ShellVibeDetailRow(label: 'port', value: '${host.port}'),
-        ShellVibeDetailRow(label: 'user', value: host.username ?? '—'),
-        ShellVibeDetailRow(label: 'group', value: group?.name ?? '—'),
-        ShellVibeDetailRow(label: 'jump host', value: jumpHost?.label ?? '—'),
-        ShellVibeDetailRow(
-          label: 'identity',
-          value: host.identityId == null ? 'none' : 'from vault',
-        ),
-        const SizedBox(height: 20),
-        ShellVibeButton.danger(
-          label: 'Delete host',
-          expand: true,
-          onPressed: onDelete,
-        ),
-      ],
-    );
-  }
-}
-
-/// The connection state banner at the top of the host detail panel.
-class _HostStatePill extends StatelessWidget {
-  final bool connected;
-
-  const _HostStatePill({required this.connected});
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = ShellVibeTokens.resolve(context);
-    final color = connected ? tokens.brand : tokens.textMuted;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withValues(alpha: 0.20)),
-      ),
-      child: Row(
-        children: [
-          ShellVibeStatusDot(
-            state: connected
-                ? ShellVibeDotState.online
-                : ShellVibeDotState.idle,
-          ),
-          const SizedBox(width: 8),
-          Text(
-            connected ? 'connected' : 'not connected',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: connected ? tokens.brandSoft : tokens.textMuted,
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }
