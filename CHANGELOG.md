@@ -7,6 +7,50 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-09-25
+
+### Added
+
+- The vault has an Environment view beside Identities for the tokens and keys
+  a shell needs, so they no longer sit in a dotfile in the clear. Each value is
+  encrypted with the vault key, scoped to the workspace, and synced and backed
+  up with identities. Every new local tab and split pane starts with the
+  workspace's variables; a locked vault never holds the shell back — it starts
+  without them and says so.
+- Local shells start with `TERM_THEME` set to `light` or `dark`, following the
+  terminal palette rather than the app theme, so CLI tools can pick colors that
+  read on the terminal's background.
+- Settings → About → Report a problem opens a GitHub issue with the build and
+  the recent error log filled in. After a crash, the next launch offers the
+  same once. Home folders, IP addresses and `user@host` pairs are masked, the
+  report is shown before anything opens, and the app itself sends nothing.
+
+### Fixed
+
+- Numpad digits and operators type as plain text in agent CLIs, such as
+  Cursor's, that ask for only the kitty keyboard protocol's disambiguate flag;
+  they inserted private-use characters before. Keypad Enter sends a carriage
+  return there too. (xterm3 6.3.4)
+- On a phone, a starred host's overflow menu no longer runs 20px past the
+  screen edge; the star sits beside the host name instead.
+- Setting up cloud backup while the server could not be reached stored the new
+  passphrase anyway. The next scheduled backup then sealed this device's data
+  under a passphrase no other device had and uploaded it over the account's
+  backup. Setup now stops and says the server could not be reached.
+- A cloud backup no longer lands on top of a newer one from another device
+  without asking. Each upload now names the revision it builds on, so a device
+  that has not restored another device's later backup gets the "restore first,
+  or overwrite" choice instead of silently becoming the newest backup. Devices
+  that have joined automatic sync are unaffected, since they already hold what
+  the others wrote.
+
+### Changed
+
+- `PRIVACY.md` and the README describe the optional account: what
+  `api.shellvibe.dev` stores, what it can and cannot read, how long it keeps
+  it, and how to export or delete it. Both still said there was no account and
+  no server.
+
 ## [1.4.0] - 2026-09-23
 
 ### Added
@@ -61,8 +105,10 @@ and release versions follow [Semantic Versioning](https://semver.org/).
   what it merged.
 - A delete that sync carried to every device can be taken back from the trash,
   on every device.
-- Cloud backup, cloud sync and remote Device Link are on the free plan; the
-  account screen shows the storage quota rather than a paywall.
+- Cloud backup and cloud sync are on the free plan; the account screen shows
+  the storage quota rather than a paywall. (This entry first also listed remote
+  Device Link. The app has no relay client: Device Link works over your own
+  LAN only.)
 
 **Terminal**
 
@@ -316,7 +362,10 @@ entry describes what ShellVibe is rather than what changed.
 - iOS and Android are not released. The code builds for them and they are not
   part of this release.
 
-[Unreleased]: https://github.com/klc/shellvibe/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/klc/shellvibe/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/klc/shellvibe/compare/v1.4.0...v1.5.0
+[1.4.0]: https://github.com/klc/shellvibe/compare/v1.3.0...v1.4.0
+[1.3.0]: https://github.com/klc/shellvibe/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/klc/shellvibe/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/klc/shellvibe/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/klc/shellvibe/releases/tag/v1.0.0
