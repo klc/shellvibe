@@ -32,7 +32,10 @@ enum BackupCategory {
   /// Payload keys this category owns.
   List<String> get payloadKeys => switch (this) {
     BackupCategory.hosts => const ['hosts'],
-    BackupCategory.identities => const ['identities'],
+    // Vault environment variables are secret material like identities, and
+    // travel with them rather than under their own category: adding a new
+    // category would change the wire manifest every backup writes.
+    BackupCategory.identities => const ['identities', 'vault_env_vars'],
     BackupCategory.snippetsAndRunbooks => const [
       'snippets',
       'runbooks',

@@ -10,9 +10,12 @@ import '../../../hosts/domain/models/host_model.dart';
 import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
 import '../../../settings/presentation/notifiers/settings_notifier.dart';
 import '../../domain/models/identity_model.dart';
+import '../../domain/models/vault_env_var.dart';
 import '../dialogs/assign_identity_hosts_dialog.dart';
+import '../dialogs/env_var_form_dialog.dart';
 import '../dialogs/identity_form_dialog.dart';
 import '../notifiers/identities_notifier.dart';
+import '../notifiers/vault_env_vars_notifier.dart';
 import '../notifiers/vault_notifier.dart';
 
 /// Rendered width of one trailing control.
@@ -35,6 +38,12 @@ const double _kIdentityStackedWidth = 560;
 /// The `authType` values the context column filters on, plus an "all" bucket.
 const List<String> _kAuthTypes = ['password', 'key'];
 
+/// Which list the work area shows. Identities and environment variables are
+/// both vault-scoped secrets, but different enough in shape (title/username/
+/// auth-type vs. name/value) that they read better as separate lists than as
+/// one filtered together.
+enum _VaultView { identities, environment }
+
 class VaultScreen extends ConsumerStatefulWidget {
   const VaultScreen({super.key});
 
@@ -45,10 +54,12 @@ class VaultScreen extends ConsumerStatefulWidget {
 class _VaultScreenState extends ConsumerState<VaultScreen> {
   String _searchQuery = '';
   String? _authTypeFilter;
+  _VaultView _view = _VaultView.identities;
 
   @override
   Widget build(BuildContext context) {
     final identitiesAsync = ref.watch(identitiesProvider);
+    final envVarsAsync = ref.watch(vaultEnvVarsProvider);
     final tierTokens = ShellVibeTokens.resolve(context);
 
     return LayoutBuilder(
@@ -60,7 +71,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
           body: Row(
             children: [
               if (showContextColumn)
-                _buildContextColumn(context, identitiesAsync),
+                _buildContextColumn(context, identitiesAsync, envVarsAsync),
               Expanded(
                 child: showContextColumn
                     ? ShellVibePanel(
@@ -68,6 +79,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
                         child: _buildWorkArea(
                           context,
                           identitiesAsync,
+                          envVarsAsync,
                           showContextColumn: showContextColumn,
                         ),
                       )
@@ -78,6 +90,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
                         child: _buildWorkArea(
                           context,
                           identitiesAsync,
+                          envVarsAsync,
                           showContextColumn: showContextColumn,
                         ),
                       ),
@@ -92,9 +105,11 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
   Widget _buildContextColumn(
     BuildContext context,
     AsyncValue<List<IdentityModel>> identitiesAsync,
+    AsyncValue<List<VaultEnvVarModel>> envVarsAsync,
   ) {
     final tokens = ShellVibeTokens.resolve(context);
     final identities = identitiesAsync.value ?? const <IdentityModel>[];
+    final envVars = envVarsAsync.value ?? const <VaultEnvVarModel>[];
 
     final autoLockSeconds =
         ref.watch(settingsProvider).value?.autoLockTimerSeconds ?? 0;
@@ -122,8 +137,11 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
           icon: LucideIcons.layoutGrid,
           label: 'All',
           count: identities.length,
-          selected: _authTypeFilter == null,
-          onTap: () => setState(() => _authTypeFilter = null),
+          selected: _view == _VaultView.identities && _authTypeFilter == null,
+          onTap: () => setState(() {
+            _view = _VaultView.identities;
+            _authTypeFilter = null;
+          }),
         ),
         for (final authType in _kAuthTypes)
           ShellVibeNavItem(
@@ -133,9 +151,23 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
             count: identities
                 .where((identity) => identity.authType == authType)
                 .length,
-            selected: _authTypeFilter == authType,
-            onTap: () => setState(() => _authTypeFilter = authType),
+            selected:
+                _view == _VaultView.identities && _authTypeFilter == authType,
+            onTap: () => setState(() {
+              _view = _VaultView.identities;
+              _authTypeFilter = authType;
+            }),
           ),
+        const SizedBox(height: 8),
+        const ShellVibeSectionLabel(label: 'Environment'),
+        ShellVibeNavItem(
+          itemKey: const Key('vault_nav_env'),
+          icon: LucideIcons.variable,
+          label: 'Variables',
+          count: envVars.length,
+          selected: _view == _VaultView.environment,
+          onTap: () => setState(() => _view = _VaultView.environment),
+        ),
         const SizedBox(height: 16),
         // The lock state lives at the foot of the column rather than in its
         // header: it is a standing condition of the module, not a title.
@@ -191,9 +223,18 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
 
   Widget _buildWorkArea(
     BuildContext context,
-    AsyncValue<List<IdentityModel>> identitiesAsync, {
+    AsyncValue<List<IdentityModel>> identitiesAsync,
+    AsyncValue<List<VaultEnvVarModel>> envVarsAsync, {
     required bool showContextColumn,
   }) {
+    if (_view == _VaultView.environment) {
+      return _buildEnvWorkArea(
+        context,
+        envVarsAsync,
+        showContextColumn: showContextColumn,
+      );
+    }
+
     final settings = ref.watch(settingsProvider).value;
     final autoLockSeconds = settings?.autoLockTimerSeconds ?? 0;
     final hosts = ref.watch(hostsProvider).value ?? const [];
@@ -206,33 +247,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
       label: 'Add identity',
       onPressed: () => _openIdentityForm(context),
     );
-    // A vault with no master password stays `unconfigured` through a lock:
-    // its key is held by the device keychain, and there is no passphrase to
-    // lock it behind. Saying so beats a button that silently does nothing
-    // while the secrets it claims to have locked still copy out.
-    final canLock =
-        ref.watch(vaultProvider).value?.status != VaultStatus.unconfigured;
-    final lockButton = ShellVibeButton.secondary(
-      buttonKey: const Key('vault_lock_now_button'),
-      icon: LucideIcons.lock,
-      label: 'Lock now',
-      onPressed: () {
-        if (!canLock) {
-          ShadToaster.of(context).show(
-            const ShadToast(
-              title: Text('Nothing to lock yet'),
-              description: Text(
-                'This vault has no master password, so its key is protected '
-                'by this device alone. Set one under Settings → Vault Master '
-                'Password to be able to lock it.',
-              ),
-            ),
-          );
-          return;
-        }
-        ref.read(vaultProvider.notifier).lock();
-      },
-    );
+    final lockButton = _buildLockButton(context);
 
     return Column(
       children: [
@@ -259,6 +274,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
                 'Encrypted credentials stay separate from host definitions.',
             actions: [lockButton, addButton],
           ),
+        if (!showContextColumn) _buildViewChips(context),
         if (!showContextColumn)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
@@ -453,6 +469,466 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
         );
       }
     }
+  }
+
+  // ---- Environment variables ----
+
+  /// Locks the vault from either view's header.
+  Widget _buildLockButton(BuildContext context) {
+    // A vault with no master password stays `unconfigured` through a lock:
+    // its key is held by the device keychain, and there is no passphrase to
+    // lock it behind. Saying so beats a button that silently does nothing
+    // while the secrets it claims to have locked still copy out.
+    final canLock =
+        ref.watch(vaultProvider).value?.status != VaultStatus.unconfigured;
+    return ShellVibeButton.secondary(
+      buttonKey: const Key('vault_lock_now_button'),
+      icon: LucideIcons.lock,
+      label: 'Lock now',
+      onPressed: () {
+        if (!canLock) {
+          ShadToaster.of(context).show(
+            const ShadToast(
+              title: Text('Nothing to lock yet'),
+              description: Text(
+                'This vault has no master password, so its key is protected '
+                'by this device alone. Set one under Settings → Vault Master '
+                'Password to be able to lock it.',
+              ),
+            ),
+          );
+          return;
+        }
+        ref.read(vaultProvider.notifier).lock();
+      },
+    );
+  }
+
+  Widget _buildEnvWorkArea(
+    BuildContext context,
+    AsyncValue<List<VaultEnvVarModel>> envVarsAsync, {
+    required bool showContextColumn,
+  }) {
+    final addButton = ShellVibeButton(
+      buttonKey: const Key('add_env_var_button'),
+      icon: LucideIcons.plus,
+      label: 'Add variable',
+      onPressed: () => _openEnvVarForm(context),
+    );
+    final lockButton = _buildLockButton(context);
+
+    return Column(
+      children: [
+        if (showContextColumn)
+          ShellVibeWorkToolbar(
+            title: 'Environment variables',
+            meta: envVarsAsync.maybeWhen(
+              data: (vars) => '${vars.length} variables · local shells only',
+              orElse: () => 'local shells only',
+            ),
+            actions: [lockButton, addButton],
+          )
+        else
+          ShellVibePageHeader(
+            icon: LucideIcons.variable,
+            title: 'Environment Variables',
+            description:
+                'Added to every new local shell. Remote sessions are not '
+                'affected.',
+            actions: [lockButton, addButton],
+          ),
+        if (!showContextColumn) _buildViewChips(context),
+        Expanded(
+          child: envVarsAsync.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (err, stack) => ShellVibeEmptyState(
+              icon: LucideIcons.triangleAlert,
+              title: 'Could not load environment variables',
+              description: '$err',
+            ),
+            data: (vars) {
+              if (vars.isEmpty) {
+                return ShellVibeEmptyState(
+                  icon: LucideIcons.variable,
+                  title: 'No environment variables',
+                  description:
+                      'Variables stored here are encrypted and added to '
+                      'every new local shell.',
+                  actions: [
+                    ShellVibeButton(
+                      icon: LucideIcons.plus,
+                      label: 'Add variable',
+                      onPressed: () => _openEnvVarForm(context),
+                    ),
+                  ],
+                );
+              }
+
+              return ListView.builder(
+                padding: const EdgeInsets.fromLTRB(10, 8, 10, 12),
+                itemCount: vars.length,
+                itemBuilder: (context, index) {
+                  final item = vars[index];
+                  return _EnvVarRow(
+                    key: ValueKey(item.id),
+                    variable: item,
+                    onEdit: () => _editEnvVar(context, item),
+                    onDelete: () => _deleteEnvVar(context, item),
+                  );
+                },
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Two-chip switch shown under the header on a phone, where there is no
+  /// context column to hold the "Variables" nav item.
+  Widget _buildViewChips(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      // Scrollable rather than constrained to the available width, same as
+      // the Hosts screen's filter chips (`hosts_screen.dart`'s
+      // `_buildCompactFilterBar`): a wide label or a narrow phone must not be
+      // able to overflow a row that a `Row` alone would size to its content.
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            _VaultViewChip(
+              chipKey: const Key('vault_view_identities'),
+              label: 'Identities',
+              selected: _view == _VaultView.identities,
+              onTap: () => setState(() => _view = _VaultView.identities),
+            ),
+            _VaultViewChip(
+              chipKey: const Key('vault_view_env'),
+              label: 'Environment',
+              selected: _view == _VaultView.environment,
+              onTap: () => setState(() => _view = _VaultView.environment),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openEnvVarForm(
+    BuildContext context, {
+    VaultEnvVarModel? initialVariable,
+  }) async {
+    await showDialog(
+      context: context,
+      builder: (ctx) => EnvVarFormDialog(
+        initialVariable: initialVariable,
+        workspaceId: ref.read(activeWorkspaceIdProvider),
+      ),
+    );
+  }
+
+  Future<void> _editEnvVar(BuildContext context, VaultEnvVarModel item) async {
+    // The list never decrypts, so the value has to be fetched before the form
+    // can show it. A row that cannot be decrypted opens with the value blank
+    // rather than failing outright: the name and id are still editable, and
+    // saving writes a fresh, readable ciphertext.
+    String? decryptedValue;
+    try {
+      decryptedValue = await ref
+          .read(vaultEnvVarsProvider.notifier)
+          .decryptValue(item.id);
+    } catch (_) {
+      decryptedValue = null;
+    }
+    if (context.mounted) {
+      _openEnvVarForm(
+        context,
+        initialVariable: VaultEnvVarModel(
+          id: item.id,
+          workspaceId: item.workspaceId,
+          name: item.name,
+          value: decryptedValue,
+          createdAt: item.createdAt,
+        ),
+      );
+    }
+  }
+
+  Future<void> _deleteEnvVar(
+    BuildContext context,
+    VaultEnvVarModel item,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => ShadDialog.alert(
+        title: const Text('Delete Environment Variable'),
+        description: Text('Are you sure you want to delete "${item.name}"?'),
+        actions: adaptiveDialogActions(context, [
+          ShellVibeButton.secondary(
+            label: 'Cancel',
+            onPressed: () => Navigator.of(ctx).pop(false),
+          ),
+          ShellVibeButton.danger(
+            key: const Key('confirm_delete_env_var_button'),
+            label: 'Delete',
+            onPressed: () => Navigator.of(ctx).pop(true),
+          ),
+        ]),
+        actionsAxis: adaptiveDialogActionsAxis(context),
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await ref.read(vaultEnvVarsProvider.notifier).deleteVariable(item.id);
+    } catch (e) {
+      if (context.mounted) {
+        ShadToaster.of(context).show(
+          ShadToast.destructive(
+            description: Text('Failed to delete variable: $e'),
+          ),
+        );
+      }
+    }
+  }
+}
+
+/// Two-state chip used on a phone to switch the work area between identities
+/// and environment variables. Same look as the filter chips on the Hosts
+/// screen (`hosts_screen.dart`'s `_FilterChip`), reimplemented locally rather
+/// than shared because that one is private to its file.
+class _VaultViewChip extends StatelessWidget {
+  final Key? chipKey;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _VaultViewChip({
+    this.chipKey,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = ShellVibeTokens.resolve(context);
+    return Padding(
+      padding: const EdgeInsets.only(right: 7),
+      child: InkWell(
+        key: chipKey,
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: selected
+                ? tokens.brand.withValues(alpha: 0.14)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: selected
+                  ? tokens.brand.withValues(alpha: 0.26)
+                  : tokens.textPrimary.withValues(alpha: 0.07),
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+              color: selected ? tokens.brandSoft : tokens.textMuted,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One environment variable row: name, a masked value, and reveal/copy/edit/
+/// delete controls. Always laid out as two lines (name, then value and
+/// controls) rather than switching to a table form at wide widths like
+/// [_IdentityRow] does — there is only one text column here, so a table row
+/// buys nothing a stacked one does not already give for free, and staying
+/// stacked is what keeps this fitting a 360px phone width unconditionally.
+class _EnvVarRow extends ConsumerStatefulWidget {
+  final VaultEnvVarModel variable;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  const _EnvVarRow({
+    super.key,
+    required this.variable,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  @override
+  ConsumerState<_EnvVarRow> createState() => _EnvVarRowState();
+}
+
+class _EnvVarRowState extends ConsumerState<_EnvVarRow> {
+  bool _revealed = false;
+  String? _revealedValue;
+  bool _isBusy = false;
+
+  Future<void> _toggleReveal() async {
+    if (_revealed) {
+      setState(() {
+        _revealed = false;
+        _revealedValue = null;
+      });
+      return;
+    }
+
+    setState(() => _isBusy = true);
+    try {
+      final value = await ref
+          .read(vaultEnvVarsProvider.notifier)
+          .decryptValue(widget.variable.id);
+      if (!mounted) return;
+      setState(() {
+        _revealed = true;
+        _revealedValue = value;
+        _isBusy = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isBusy = false);
+      ShadToaster.of(context).show(
+        ShadToast.destructive(description: Text('Cannot read this value: $e')),
+      );
+    }
+  }
+
+  Future<void> _copyValue() async {
+    var value = _revealedValue;
+    if (value == null) {
+      try {
+        value = await ref
+            .read(vaultEnvVarsProvider.notifier)
+            .decryptValue(widget.variable.id);
+      } catch (e) {
+        if (mounted) {
+          ShadToaster.of(context).show(
+            ShadToast.destructive(
+              description: Text('Cannot read this value: $e'),
+            ),
+          );
+        }
+        return;
+      }
+    }
+
+    if (value == null || value.isEmpty) {
+      if (mounted) {
+        ShadToaster.of(context).show(
+          const ShadToast(
+            description: Text('No value saved for this variable'),
+          ),
+        );
+      }
+      return;
+    }
+
+    final settings = ref.read(settingsProvider).value;
+    final clearSeconds = settings?.clipboardAutoClearSeconds ?? 30;
+    await ref
+        .read(clipboardAutoClearServiceProvider)
+        .copyAndScheduleClear(value, duration: Duration(seconds: clearSeconds));
+    if (mounted) {
+      ShadToaster.of(
+        context,
+      ).show(const ShadToast(description: Text('Value copied to clipboard')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = ShellVibeTokens.resolve(context);
+    final variable = widget.variable;
+
+    final actions = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ShellVibeIconButton(
+          buttonKey: Key('reveal_env_var_button_${variable.id}'),
+          icon: _revealed ? LucideIcons.eyeOff : LucideIcons.eye,
+          tooltip: _revealed ? 'Hide value' : 'Reveal value',
+          onPressed: _isBusy ? null : _toggleReveal,
+        ),
+        ShellVibeIconButton(
+          buttonKey: Key('copy_env_var_button_${variable.id}'),
+          icon: LucideIcons.copy,
+          tooltip: 'Copy value',
+          onPressed: _copyValue,
+        ),
+        ShellVibeIconButton(
+          buttonKey: Key('edit_env_var_button_${variable.id}'),
+          icon: LucideIcons.pencil,
+          tooltip: 'Edit',
+          onPressed: widget.onEdit,
+        ),
+        ShellVibeIconButton(
+          buttonKey: Key('delete_env_var_button_${variable.id}'),
+          icon: LucideIcons.trash2,
+          tooltip: 'Delete',
+          danger: true,
+          onPressed: widget.onDelete,
+        ),
+      ],
+    );
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                SizedBox(
+                  width: 34,
+                  child: Icon(
+                    LucideIcons.variable,
+                    size: 16,
+                    color: tokens.textSubtle,
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    variable.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: shellvibeMono(context, size: 13),
+                  ),
+                ),
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.only(left: 34, top: 2),
+              child: Text(
+                _revealed ? (_revealedValue ?? '—') : '••••••••',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: shellvibeMono(
+                  context,
+                  size: 11.5,
+                  color: tokens.textMuted,
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Align(alignment: Alignment.centerRight, child: actions),
+          ],
+        ),
+      ),
+    );
   }
 }
 

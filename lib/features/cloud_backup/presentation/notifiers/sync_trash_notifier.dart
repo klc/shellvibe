@@ -38,6 +38,7 @@ final class TrashedRow {
   String get kind => switch (entityType) {
     'hosts' => 'Host',
     'identities' => 'Identity',
+    'vault_env_vars' => 'Environment variable',
     'host_groups' => 'Group',
     'workspaces' => 'Workspace',
     'port_forward_rules' => 'Port forward',

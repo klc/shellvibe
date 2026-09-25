@@ -603,6 +603,7 @@ final class SyncJournal {
   static const Map<String, List<(String, String)>> cascades = {
     'workspaces': [
       ('identities', 'workspace_id'),
+      ('vault_env_vars', 'workspace_id'),
       ('host_groups', 'workspace_id'),
       ('hosts', 'workspace_id'),
       ('snippets', 'workspace_id'),

@@ -545,6 +545,53 @@ final class McpDaoProvider extends $FunctionalProvider<McpDao, McpDao, McpDao>
 
 String _$mcpDaoHash() => r'2a10af02818ac71faa922868a3d2ea3885323def';
 
+/// Auto-disposing provider for [VaultEnvVarsDao].
+
+@ProviderFor(vaultEnvVarsDao)
+final vaultEnvVarsDaoProvider = VaultEnvVarsDaoProvider._();
+
+/// Auto-disposing provider for [VaultEnvVarsDao].
+
+final class VaultEnvVarsDaoProvider
+    extends
+        $FunctionalProvider<VaultEnvVarsDao, VaultEnvVarsDao, VaultEnvVarsDao>
+    with $Provider<VaultEnvVarsDao> {
+  /// Auto-disposing provider for [VaultEnvVarsDao].
+  VaultEnvVarsDaoProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'vaultEnvVarsDaoProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$vaultEnvVarsDaoHash();
+
+  @$internal
+  @override
+  $ProviderElement<VaultEnvVarsDao> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  VaultEnvVarsDao create(Ref ref) {
+    return vaultEnvVarsDao(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(VaultEnvVarsDao value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<VaultEnvVarsDao>(value),
+    );
+  }
+}
+
+String _$vaultEnvVarsDaoHash() => r'6ba4783eee46f18ec60c3ce640113e5b63604b6b';
+
 /// Provider for [EncryptionEngine].
 
 @ProviderFor(encryptionEngine)

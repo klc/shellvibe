@@ -194,6 +194,98 @@ void main() {
       },
     );
 
+    test('a vault environment variable survives a restore onto a different '
+        'device', () async {
+      const password = 'SuperSecretMasterPassword123!';
+
+      // Encrypt a value with device 1's vault key, same as an identity
+      // secret would be.
+      final device1Dek = await VaultKeyService(
+        encryptionEngine: engine,
+        secureStorageService: SecureStorageService(),
+      ).getDek();
+      final storedValue = await engine.encrypt(
+        plaintext: 'ghp_supersecrettoken',
+        secretKey: device1Dek,
+      );
+      await db1
+          .into(db1.vaultEnvVars)
+          .insert(
+            VaultEnvVarsCompanion.insert(
+              id: 'env_sync',
+              workspaceId: 'ws_test',
+              name: 'GITHUB_TOKEN',
+              valueEncrypted: storedValue,
+              createdAt: DateTime.now(),
+            ),
+          );
+
+      final backupJson = await syncService.exportEncryptedBackup(
+        db: db1,
+        masterPassword: password,
+      );
+
+      // Simulate a fresh device: empty keychain, hence a different vault key.
+      FlutterSecureStorage.setMockInitialValues({});
+      final device2KeyService = VaultKeyService(
+        encryptionEngine: engine,
+        secureStorageService: SecureStorageService(),
+      );
+      final device2Service = E2EECloudSyncService(
+        cryptoEngine: engine,
+        vaultKeyService: device2KeyService,
+      );
+
+      final result = await device2Service.importEncryptedBackup(
+        backupPackageJson: backupJson,
+        db: db2,
+        masterPassword: password,
+      );
+
+      expect(result.secretsRecovered, isTrue);
+
+      final restored = await (db2.select(
+        db2.vaultEnvVars,
+      )..where((t) => t.id.equals('env_sync'))).getSingle();
+      expect(restored.name, equals('GITHUB_TOKEN'));
+      expect(restored.workspaceId, equals('ws_test'));
+
+      final decrypted = await engine.decrypt(
+        encryptedBase64: restored.valueEncrypted,
+        secretKey: await device2KeyService.getDek(),
+      );
+      expect(decrypted, equals('ghp_supersecrettoken'));
+    });
+
+    test('a vault environment variable is dropped from a backup that excludes '
+        'identities', () async {
+      const password = 'SuperSecretMasterPassword123!';
+
+      await db1
+          .into(db1.vaultEnvVars)
+          .insert(
+            VaultEnvVarsCompanion.insert(
+              id: 'env_excluded',
+              workspaceId: 'ws_test',
+              name: 'EXCLUDED_VAR',
+              valueEncrypted: 'ciphertext',
+              createdAt: DateTime.now(),
+            ),
+          );
+
+      final backupJson = await syncService.exportEncryptedBackup(
+        db: db1,
+        masterPassword: password,
+        scope: BackupScope.of(const [BackupCategory.hosts]),
+      );
+
+      final opened = await BackupEnvelope().open(
+        envelopeJson: backupJson,
+        secret: password,
+      );
+      expect(opened.payloadJson, isNot(contains('vault_env_vars')));
+    });
+
     test('importEncryptedBackup restores database state into db2', () async {
       const password = 'SuperSecretMasterPassword123!';
 

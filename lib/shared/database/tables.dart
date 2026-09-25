@@ -522,3 +522,30 @@ class SyncEntityVersions extends Table {
   @override
   Set<Column> get primaryKey => {entityType, entityId};
 }
+
+/// 22. Vault Environment Variables (per-workspace, encrypted with the vault DEK)
+///
+/// Every value is encrypted the same way an identity secret is — there is no
+/// "secret vs. non-secret" distinction here, because the whole point is that
+/// these are the kind of value (API tokens, auth keys) someone would not want
+/// sitting in the database in the clear.
+///
+/// [name] is kept unique within a workspace by the repository, not by a
+/// UNIQUE constraint: two devices can each add the same name offline, and a
+/// constraint would make the second row fail to apply on sync, stalling every
+/// operation queued behind it. A duplicate that arrives that way is resolved
+/// when a shell starts instead.
+class VaultEnvVars extends Table {
+  @override
+  String get tableName => 'vault_env_vars';
+
+  TextColumn get id => text()();
+  TextColumn get workspaceId =>
+      text().references(Workspaces, #id, onDelete: KeyAction.cascade)();
+  TextColumn get name => text()();
+  TextColumn get valueEncrypted => text()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}

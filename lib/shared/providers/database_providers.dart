@@ -11,6 +11,7 @@ import '../database/daos/runbooks_dao.dart';
 import '../database/daos/snippets_dao.dart';
 import '../database/daos/templates_dao.dart';
 import '../database/daos/tunnels_dao.dart';
+import '../database/daos/vault_env_vars_dao.dart';
 import '../storage/secure_storage_service.dart';
 
 part 'database_providers.g.dart';
@@ -98,6 +99,13 @@ PairedDevicesDao pairedDevicesDao(Ref ref) {
 McpDao mcpDao(Ref ref) {
   final db = ref.watch(appDatabaseProvider);
   return db.mcpDao;
+}
+
+/// Auto-disposing provider for [VaultEnvVarsDao].
+@riverpod
+VaultEnvVarsDao vaultEnvVarsDao(Ref ref) {
+  final db = ref.watch(appDatabaseProvider);
+  return db.vaultEnvVarsDao;
 }
 
 /// Provider for [EncryptionEngine].

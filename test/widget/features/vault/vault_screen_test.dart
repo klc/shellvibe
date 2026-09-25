@@ -344,5 +344,160 @@ void main() {
         equals('fresh-key'),
       );
     });
+
+    testWidgets(
+      'The Environment nav item switches the work area and shows a variable',
+      (tester) async {
+        await db.vaultEnvVarsDao.insert(
+          VaultEnvVarsCompanion.insert(
+            id: 'env-1',
+            workspaceId: 'default',
+            name: 'GITHUB_TOKEN',
+            valueEncrypted: 'ciphertext',
+            createdAt: DateTime.now(),
+          ),
+        );
+
+        tester.view.physicalSize = const Size(1400, 1000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() => tester.view.resetPhysicalSize());
+
+        await tester.pumpWidget(createWidgetUnderTest());
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 200));
+
+        await tester.tap(find.byKey(const Key('vault_nav_env')));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 200));
+
+        expect(find.text('Environment variables'), findsOneWidget);
+        expect(find.text('GITHUB_TOKEN'), findsOneWidget);
+        expect(find.text('••••••••'), findsOneWidget);
+        expect(find.byKey(const Key('add_env_var_button')), findsOneWidget);
+      },
+    );
+
+    testWidgets('Add environment variable dialog validates the name', (
+      tester,
+    ) async {
+      await db.vaultEnvVarsDao.insert(
+        VaultEnvVarsCompanion.insert(
+          id: 'env-existing',
+          workspaceId: 'default',
+          name: 'EXISTING_VAR',
+          valueEncrypted: 'ciphertext',
+          createdAt: DateTime.now(),
+        ),
+      );
+
+      tester.view.physicalSize = const Size(1400, 1000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      await tester.tap(find.byKey(const Key('vault_nav_env')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      await tester.tap(find.byKey(const Key('add_env_var_button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.text('Add Environment Variable'), findsOneWidget);
+
+      // A reserved, automatic name.
+      await tester.enterText(
+        find.byKey(const Key('env_var_name_input')),
+        'TERM',
+      );
+      await tester.enterText(
+        find.byKey(const Key('env_var_value_input')),
+        'value',
+      );
+      await tester.tap(find.byKey(const Key('env_var_save_button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(
+        find.textContaining('set automatically and cannot be overridden'),
+        findsOneWidget,
+      );
+
+      // A duplicate of the existing row.
+      await tester.enterText(
+        find.byKey(const Key('env_var_name_input')),
+        'EXISTING_VAR',
+      );
+      await tester.tap(find.byKey(const Key('env_var_save_button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.textContaining('already exists'), findsOneWidget);
+
+      // A malformed name.
+      await tester.enterText(
+        find.byKey(const Key('env_var_name_input')),
+        '1INVALID',
+      );
+      await tester.tap(find.byKey(const Key('env_var_save_button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(
+        find.textContaining('starting with a letter or underscore'),
+        findsOneWidget,
+      );
+
+      // The dialog never closed: none of the invalid attempts saved.
+      expect(find.text('Add Environment Variable'), findsOneWidget);
+
+      // A valid, unique name saves successfully and closes the dialog.
+      await tester.enterText(
+        find.byKey(const Key('env_var_name_input')),
+        'NEW_VAR',
+      );
+      await tester.tap(find.byKey(const Key('env_var_save_button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('Add Environment Variable'), findsNothing);
+      expect(find.text('NEW_VAR'), findsOneWidget);
+    });
+
+    testWidgets('Environment view fits a 360px phone width without overflow', (
+      tester,
+    ) async {
+      await db.vaultEnvVarsDao.insert(
+        VaultEnvVarsCompanion.insert(
+          id: 'env-narrow',
+          workspaceId: 'default',
+          name: 'A_REASONABLY_LONG_ENVIRONMENT_VARIABLE_NAME',
+          valueEncrypted: 'ciphertext',
+          createdAt: DateTime.now(),
+        ),
+      );
+
+      tester.view.physicalSize = const Size(360, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      // No context column at this width: the chip row is what switches views.
+      await tester.tap(find.byKey(const Key('vault_view_env')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(
+        find.text('A_REASONABLY_LONG_ENVIRONMENT_VARIABLE_NAME'),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    });
   });
 }

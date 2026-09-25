@@ -89,7 +89,7 @@ void main() {
         final appDb = AppDatabase(NativeDatabase(tempDbFile));
         db = appDb;
 
-        expect(appDb.schemaVersion, equals(12));
+        expect(appDb.schemaVersion, equals(13));
 
         // The v10 tables have to exist after a migration, not only after a
         // fresh create: a device that upgrades and then makes a change would
@@ -474,6 +474,47 @@ void main() {
         appDb.select(appDb.syncState).getSingle().then((r) => r.lastSeenClock),
         completion(42),
       );
+    });
+
+    test('upgrading to v13 creates the vault_env_vars table', () async {
+      final rawDb = sqlite3.open(tempDbFile.path);
+      rawDb.execute('''
+        CREATE TABLE IF NOT EXISTS "workspaces" (
+          "id" TEXT NOT NULL PRIMARY KEY,
+          "name" TEXT NOT NULL,
+          "color_code" TEXT NULL,
+          "created_at" INTEGER NOT NULL
+        );
+      ''');
+      rawDb.execute('''
+        INSERT INTO workspaces (id, name, created_at)
+        VALUES ('default', 'Default Workspace', 1600000000);
+      ''');
+      rawDb.execute('PRAGMA user_version = 12;');
+      rawDb.close();
+
+      final appDb = AppDatabase(NativeDatabase(tempDbFile));
+      db = appDb;
+
+      expect(appDb.schemaVersion, equals(13));
+      expect(await appDb.vaultEnvVarsDao.getByWorkspace('default'), isEmpty);
+
+      await appDb.vaultEnvVarsDao.insert(
+        VaultEnvVarsCompanion.insert(
+          id: 'env-1',
+          workspaceId: 'default',
+          name: 'API_TOKEN',
+          valueEncrypted: 'ciphertext',
+          createdAt: DateTime.utc(2026),
+        ),
+      );
+
+      final rows = await appDb.vaultEnvVarsDao.getByWorkspace('default');
+      expect(rows.single.name, equals('API_TOKEN'));
+
+      // The cascade is what keeps an env var from outliving its workspace.
+      await appDb.workspacesDao.deleteWorkspace('default');
+      expect(await appDb.vaultEnvVarsDao.getByWorkspace('default'), isEmpty);
     });
   });
 }

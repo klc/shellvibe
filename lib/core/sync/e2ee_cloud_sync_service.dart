@@ -247,6 +247,11 @@ class E2EECloudSyncService {
     if (scope.contains(BackupCategory.identities)) {
       final identities = await db.select(db.identities).get();
       payloadMap['identities'] = identities.map(SyncRowCodec.identity).toList();
+
+      final vaultEnvVars = await db.select(db.vaultEnvVars).get();
+      payloadMap['vault_env_vars'] = vaultEnvVars
+          .map(SyncRowCodec.vaultEnvVar)
+          .toList();
     }
 
     if (scope.contains(BackupCategory.hosts)) {
@@ -439,6 +444,35 @@ class E2EECloudSyncService {
         }
       }
       final identityIds = await idsOf('identities');
+
+      // 2b. Vault Environment Variables
+      //
+      // Travels with identities (see `BackupCategory.identities`), and its
+      // value is rewrapped the same way an identity secret is: encrypted with
+      // the backup's own key, decrypted, and re-encrypted under this device's.
+      if (data['vault_env_vars'] is List) {
+        for (final item in data['vault_env_vars'] as List) {
+          if (!workspaceIds.contains(item['workspaceId'])) {
+            repairs.skippedForMissingWorkspace++;
+            continue;
+          }
+          await db
+              .into(db.vaultEnvVars)
+              .insertOnConflictUpdate(
+                VaultEnvVarsCompanion.insert(
+                  id: item['id'] as String,
+                  workspaceId: item['workspaceId'] as String,
+                  name: item['name'] as String,
+                  valueEncrypted: (await _rewrapSecret(
+                    item['valueEncrypted'] as String?,
+                    backupDek,
+                    localDek,
+                  ))!,
+                  createdAt: DateTime.parse(item['createdAt'] as String),
+                ),
+              );
+        }
+      }
 
       // 3. Host Groups
       if (data['host_groups'] is List) {

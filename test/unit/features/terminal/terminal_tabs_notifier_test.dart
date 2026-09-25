@@ -20,6 +20,11 @@ import 'package:shellvibe/core/network/providers/network_providers.dart';
 import 'package:shellvibe/core/utils/platform_capabilities.dart';
 import 'package:shellvibe/shared/database/app_database.dart';
 import 'package:shellvibe/shared/providers/database_providers.dart';
+import 'package:shellvibe/core/crypto/encryption_engine.dart';
+import 'package:shellvibe/features/vault/data/repositories/vault_env_repository.dart';
+import 'package:shellvibe/features/vault/data/vault_key_service.dart';
+import 'package:shellvibe/features/vault/presentation/notifiers/vault_env_vars_notifier.dart';
+import 'package:shellvibe/shared/storage/secure_storage_service.dart';
 
 /// Everything the terminal currently holds, scrollback included. A disposed
 /// terminal drops writes, so this is how a test tells a live pane from a dead
@@ -1248,15 +1253,22 @@ void main() {
   });
 
   group('Local shell environment', () {
+    late String firstPaneText;
+
     Future<List<Map<String, String>?>> spawnedEnvironments(
       TerminalPalette palette, {
       bool split = false,
+      Future<VaultEnvShellResolution> Function()? resolveVault,
     }) async {
       final manager = _RecordingPtyManager();
       final scoped = ProviderContainer(
         overrides: [
           appDatabaseProvider.overrideWithValue(database),
           localPtyManagerProvider.overrideWithValue(manager),
+          if (resolveVault != null)
+            vaultEnvRepositoryProvider.overrideWithValue(
+              _StubVaultEnvRepository(database, resolveVault),
+            ),
           settingsProvider.overrideWith(
             () => _FixedSettingsNotifier(
               AppSettingsModel(terminalPalette: palette),
@@ -1276,6 +1288,9 @@ void main() {
       if (split) {
         await notifier.splitTab(scoped.read(terminalTabsProvider).activeTabId!);
       }
+      firstPaneText = _bufferText(
+        scoped.read(terminalTabsProvider).tabs.first.terminal,
+      );
       return manager.environments;
     }
 
@@ -1296,6 +1311,59 @@ void main() {
       );
       expect(envs, hasLength(2));
       expect(envs.last, containsPair('TERM_THEME', 'light'));
+    });
+
+    test('vault variables reach the shell, under the built-ins', () async {
+      final envs = await spawnedEnvironments(
+        TerminalPalette.oled,
+        split: true,
+        resolveVault: () async => (
+          vars: {'API_TOKEN': 'secret', 'TERM_THEME': 'light'},
+          vaultLocked: false,
+          undecryptable: 0,
+        ),
+      );
+
+      for (final env in envs) {
+        expect(env, containsPair('API_TOKEN', 'secret'));
+        expect(env, containsPair('TERM_THEME', 'dark'));
+      }
+      expect(firstPaneText, isNot(contains('[')));
+    });
+
+    test('a locked vault still starts the shell, and says so', () async {
+      final envs = await spawnedEnvironments(
+        TerminalPalette.oled,
+        resolveVault: () async => (
+          vars: const <String, String>{},
+          vaultLocked: true,
+          undecryptable: 0,
+        ),
+      );
+
+      expect(envs.single, containsPair('TERM_THEME', 'dark'));
+      expect(firstPaneText, contains('Vault locked'));
+    });
+
+    test('undecryptable variables are counted in the pane', () async {
+      final envs = await spawnedEnvironments(
+        TerminalPalette.oled,
+        resolveVault: () async =>
+            (vars: {'GOOD': 'y'}, vaultLocked: false, undecryptable: 2),
+      );
+
+      expect(envs.single, containsPair('GOOD', 'y'));
+      expect(firstPaneText, contains('2 environment variable(s)'));
+    });
+
+    test('a vault that fails to read still starts the shell', () async {
+      final envs = await spawnedEnvironments(
+        TerminalPalette.oled,
+        resolveVault: () async => throw StateError('storage unavailable'),
+      );
+
+      expect(envs.single, containsPair('TERM_THEME', 'dark'));
+      expect(firstPaneText, contains('could not be loaded'));
     });
   });
 }
@@ -1354,4 +1422,24 @@ class _RecordingPtyManager extends LocalPtyManager {
     environments.add(environment);
     return null;
   }
+}
+
+/// Hands back a fixed vault resolution instead of reading any key.
+class _StubVaultEnvRepository extends VaultEnvRepository {
+  _StubVaultEnvRepository(AppDatabase database, this._resolve)
+    : super(
+        dao: database.vaultEnvVarsDao,
+        encryptionEngine: EncryptionEngine(),
+        vaultKeyService: VaultKeyService(
+          encryptionEngine: EncryptionEngine(),
+          secureStorageService: SecureStorageService(),
+        ),
+      );
+
+  final Future<VaultEnvShellResolution> Function() _resolve;
+
+  @override
+  Future<VaultEnvShellResolution> resolveForShell({
+    required String workspaceId,
+  }) => _resolve();
 }

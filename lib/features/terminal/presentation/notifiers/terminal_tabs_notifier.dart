@@ -26,6 +26,7 @@ import '../../../../core/network/terminal_mosh_bridge.dart';
 import '../../../../core/network/terminal_ssh_bridge.dart';
 import '../../../../core/utils/platform_capabilities.dart';
 import '../../../../shared/providers/database_providers.dart';
+import '../../../../shared/providers/workspace_provider.dart';
 import '../../../../shared/storage/secure_storage_service.dart';
 import '../../../hosts/domain/models/host_model.dart';
 import '../../../hosts/domain/services/ssh_connect_planner.dart';
@@ -33,8 +34,10 @@ import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
 import '../../../settings/domain/models/app_settings_model.dart';
 import '../../../settings/presentation/notifiers/settings_notifier.dart';
 import '../../../device_link/data/repositories/device_link_pairing_repository.dart';
+import '../../../vault/data/repositories/vault_env_repository.dart';
 import '../../../vault/domain/models/identity_model.dart';
 import '../../../vault/presentation/notifiers/identities_notifier.dart';
+import '../../../vault/presentation/notifiers/vault_env_vars_notifier.dart';
 import '../../../vault/presentation/notifiers/vault_notifier.dart';
 import '../../domain/models/terminal_palette_data.dart';
 import '../../domain/models/terminal_tab_session.dart';
@@ -736,6 +739,11 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
 
   /// Environment a local shell starts with, on top of the app's own.
   ///
+  /// Vault environment variables come first and the built-ins are applied on
+  /// top, so a stored variable can never shadow one of these — not that it
+  /// could anyway, since the vault form and repository both reject the
+  /// reserved names.
+  ///
   /// `TERM_THEME` tells CLI tools whether they paint on a light or a dark
   /// background. It follows the terminal palette rather than the app theme: a
   /// light app can host a dark terminal. It is fixed at spawn, since a running
@@ -744,11 +752,44 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
   ///
   /// Settings not loaded yet fall back to the defaults, as the terminal view
   /// does, rather than holding the shell back on a storage read.
-  Map<String, String> _localShellEnvironment() {
+  ///
+  /// A locked vault or an undecryptable row never blocks the shell: both are
+  /// announced with one dim line written to [terminal] *before* this returns,
+  /// so it lands ahead of the shell's own first output, and the shell starts
+  /// either way.
+  Future<Map<String, String>> _localShellEnvironment(Terminal terminal) async {
     final settings =
         ref.read(settingsProvider).value ?? const AppSettingsModel();
     final isLight = TerminalPaletteData.of(settings.terminalPalette).isLight;
-    return {'TERM_THEME': isLight ? 'light' : 'dark'};
+    final builtins = {'TERM_THEME': isLight ? 'light' : 'dark'};
+
+    final VaultEnvShellResolution resolved;
+    try {
+      resolved = await ref
+          .read(vaultEnvRepositoryProvider)
+          .resolveForShell(workspaceId: ref.read(activeWorkspaceIdProvider));
+    } catch (_) {
+      // Whatever went wrong reading the vault, it is no reason to withhold the
+      // shell itself.
+      terminal.write(
+        '\x1b[2m[Environment variables could not be loaded]\x1b[0m\r\n',
+      );
+      return builtins;
+    }
+
+    if (resolved.vaultLocked) {
+      terminal.write(
+        '\x1b[2m[Vault locked: environment variables not loaded]\x1b[0m\r\n',
+      );
+    }
+    if (resolved.undecryptable > 0) {
+      terminal.write(
+        '\x1b[2m[${resolved.undecryptable} environment variable(s) could '
+        'not be decrypted]\x1b[0m\r\n',
+      );
+    }
+
+    return {...resolved.vars, ...builtins};
   }
 
   /// Starts the shell behind [tab] and wires it up once it exists.
@@ -758,7 +799,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       final manager = ref.read(localPtyManagerProvider);
       final bridge = await manager.startAndBridge(
         terminal,
-        environment: _localShellEnvironment(),
+        environment: await _localShellEnvironment(terminal),
         rows: terminal.viewHeight,
         columns: terminal.viewWidth,
       );
@@ -1690,7 +1731,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       final manager = ref.read(localPtyManagerProvider);
       final bridge = await manager.startAndBridge(
         terminal,
-        environment: _localShellEnvironment(),
+        environment: await _localShellEnvironment(terminal),
         rows: terminal.viewHeight,
         columns: terminal.viewWidth,
       );

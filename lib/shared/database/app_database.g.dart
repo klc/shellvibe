@@ -10984,6 +10984,380 @@ class SyncEntityVersionsCompanion extends UpdateCompanion<SyncEntityVersion> {
   }
 }
 
+class $VaultEnvVarsTable extends VaultEnvVars
+    with TableInfo<$VaultEnvVarsTable, VaultEnvVar> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $VaultEnvVarsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _workspaceIdMeta = const VerificationMeta(
+    'workspaceId',
+  );
+  @override
+  late final GeneratedColumn<String> workspaceId = GeneratedColumn<String>(
+    'workspace_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES workspaces (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _valueEncryptedMeta = const VerificationMeta(
+    'valueEncrypted',
+  );
+  @override
+  late final GeneratedColumn<String> valueEncrypted = GeneratedColumn<String>(
+    'value_encrypted',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    workspaceId,
+    name,
+    valueEncrypted,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'vault_env_vars';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<VaultEnvVar> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('workspace_id')) {
+      context.handle(
+        _workspaceIdMeta,
+        workspaceId.isAcceptableOrUnknown(
+          data['workspace_id']!,
+          _workspaceIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_workspaceIdMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('value_encrypted')) {
+      context.handle(
+        _valueEncryptedMeta,
+        valueEncrypted.isAcceptableOrUnknown(
+          data['value_encrypted']!,
+          _valueEncryptedMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_valueEncryptedMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  VaultEnvVar map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return VaultEnvVar(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      workspaceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}workspace_id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      valueEncrypted: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}value_encrypted'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $VaultEnvVarsTable createAlias(String alias) {
+    return $VaultEnvVarsTable(attachedDatabase, alias);
+  }
+}
+
+class VaultEnvVar extends DataClass implements Insertable<VaultEnvVar> {
+  final String id;
+  final String workspaceId;
+  final String name;
+  final String valueEncrypted;
+  final DateTime createdAt;
+  const VaultEnvVar({
+    required this.id,
+    required this.workspaceId,
+    required this.name,
+    required this.valueEncrypted,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['workspace_id'] = Variable<String>(workspaceId);
+    map['name'] = Variable<String>(name);
+    map['value_encrypted'] = Variable<String>(valueEncrypted);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  VaultEnvVarsCompanion toCompanion(bool nullToAbsent) {
+    return VaultEnvVarsCompanion(
+      id: Value(id),
+      workspaceId: Value(workspaceId),
+      name: Value(name),
+      valueEncrypted: Value(valueEncrypted),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory VaultEnvVar.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return VaultEnvVar(
+      id: serializer.fromJson<String>(json['id']),
+      workspaceId: serializer.fromJson<String>(json['workspaceId']),
+      name: serializer.fromJson<String>(json['name']),
+      valueEncrypted: serializer.fromJson<String>(json['valueEncrypted']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'workspaceId': serializer.toJson<String>(workspaceId),
+      'name': serializer.toJson<String>(name),
+      'valueEncrypted': serializer.toJson<String>(valueEncrypted),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  VaultEnvVar copyWith({
+    String? id,
+    String? workspaceId,
+    String? name,
+    String? valueEncrypted,
+    DateTime? createdAt,
+  }) => VaultEnvVar(
+    id: id ?? this.id,
+    workspaceId: workspaceId ?? this.workspaceId,
+    name: name ?? this.name,
+    valueEncrypted: valueEncrypted ?? this.valueEncrypted,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  VaultEnvVar copyWithCompanion(VaultEnvVarsCompanion data) {
+    return VaultEnvVar(
+      id: data.id.present ? data.id.value : this.id,
+      workspaceId: data.workspaceId.present
+          ? data.workspaceId.value
+          : this.workspaceId,
+      name: data.name.present ? data.name.value : this.name,
+      valueEncrypted: data.valueEncrypted.present
+          ? data.valueEncrypted.value
+          : this.valueEncrypted,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('VaultEnvVar(')
+          ..write('id: $id, ')
+          ..write('workspaceId: $workspaceId, ')
+          ..write('name: $name, ')
+          ..write('valueEncrypted: $valueEncrypted, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, workspaceId, name, valueEncrypted, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is VaultEnvVar &&
+          other.id == this.id &&
+          other.workspaceId == this.workspaceId &&
+          other.name == this.name &&
+          other.valueEncrypted == this.valueEncrypted &&
+          other.createdAt == this.createdAt);
+}
+
+class VaultEnvVarsCompanion extends UpdateCompanion<VaultEnvVar> {
+  final Value<String> id;
+  final Value<String> workspaceId;
+  final Value<String> name;
+  final Value<String> valueEncrypted;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const VaultEnvVarsCompanion({
+    this.id = const Value.absent(),
+    this.workspaceId = const Value.absent(),
+    this.name = const Value.absent(),
+    this.valueEncrypted = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  VaultEnvVarsCompanion.insert({
+    required String id,
+    required String workspaceId,
+    required String name,
+    required String valueEncrypted,
+    required DateTime createdAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       workspaceId = Value(workspaceId),
+       name = Value(name),
+       valueEncrypted = Value(valueEncrypted),
+       createdAt = Value(createdAt);
+  static Insertable<VaultEnvVar> custom({
+    Expression<String>? id,
+    Expression<String>? workspaceId,
+    Expression<String>? name,
+    Expression<String>? valueEncrypted,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (workspaceId != null) 'workspace_id': workspaceId,
+      if (name != null) 'name': name,
+      if (valueEncrypted != null) 'value_encrypted': valueEncrypted,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  VaultEnvVarsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? workspaceId,
+    Value<String>? name,
+    Value<String>? valueEncrypted,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return VaultEnvVarsCompanion(
+      id: id ?? this.id,
+      workspaceId: workspaceId ?? this.workspaceId,
+      name: name ?? this.name,
+      valueEncrypted: valueEncrypted ?? this.valueEncrypted,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (workspaceId.present) {
+      map['workspace_id'] = Variable<String>(workspaceId.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (valueEncrypted.present) {
+      map['value_encrypted'] = Variable<String>(valueEncrypted.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('VaultEnvVarsCompanion(')
+          ..write('id: $id, ')
+          ..write('workspaceId: $workspaceId, ')
+          ..write('name: $name, ')
+          ..write('valueEncrypted: $valueEncrypted, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -11013,6 +11387,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $SyncStateTable syncState = $SyncStateTable(this);
   late final $SyncEntityVersionsTable syncEntityVersions =
       $SyncEntityVersionsTable(this);
+  late final $VaultEnvVarsTable vaultEnvVars = $VaultEnvVarsTable(this);
   late final HostsDao hostsDao = HostsDao(this as AppDatabase);
   late final IdentitiesDao identitiesDao = IdentitiesDao(this as AppDatabase);
   late final KnownHostsDao knownHostsDao = KnownHostsDao(this as AppDatabase);
@@ -11026,6 +11401,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   );
   late final McpDao mcpDao = McpDao(this as AppDatabase);
   late final BookmarksDao bookmarksDao = BookmarksDao(this as AppDatabase);
+  late final VaultEnvVarsDao vaultEnvVarsDao = VaultEnvVarsDao(
+    this as AppDatabase,
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -11053,6 +11431,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     syncTombstones,
     syncState,
     syncEntityVersions,
+    vaultEnvVars,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -11209,6 +11588,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('bookmarks', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'workspaces',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('vault_env_vars', kind: UpdateKind.delete)],
     ),
   ]);
 }
@@ -11394,6 +11780,24 @@ final class $$WorkspacesTableReferences
     ).filter((f) => f.workspaceId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_bookmarksRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$VaultEnvVarsTable, List<VaultEnvVar>>
+  _vaultEnvVarsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.vaultEnvVars,
+    aliasName: 'workspaces__id__vault_env_vars__workspace_id',
+  );
+
+  $$VaultEnvVarsTableProcessedTableManager get vaultEnvVarsRefs {
+    final manager = $$VaultEnvVarsTableTableManager(
+      $_db,
+      $_db.vaultEnvVars,
+    ).filter((f) => f.workspaceId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_vaultEnvVarsRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -11645,6 +12049,31 @@ class $$WorkspacesTableFilterComposer
           }) => $$BookmarksTableFilterComposer(
             $db: $db,
             $table: $db.bookmarks,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> vaultEnvVarsRefs(
+    Expression<bool> Function($$VaultEnvVarsTableFilterComposer f) f,
+  ) {
+    final $$VaultEnvVarsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.vaultEnvVars,
+      getReferencedColumn: (t) => t.workspaceId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VaultEnvVarsTableFilterComposer(
+            $db: $db,
+            $table: $db.vaultEnvVars,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -11930,6 +12359,31 @@ class $$WorkspacesTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> vaultEnvVarsRefs<T extends Object>(
+    Expression<T> Function($$VaultEnvVarsTableAnnotationComposer a) f,
+  ) {
+    final $$VaultEnvVarsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.vaultEnvVars,
+      getReferencedColumn: (t) => t.workspaceId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VaultEnvVarsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.vaultEnvVars,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$WorkspacesTableTableManager
@@ -11955,6 +12409,7 @@ class $$WorkspacesTableTableManager
             bool mcpClientsRefs,
             bool mcpPolicyRulesRefs,
             bool bookmarksRefs,
+            bool vaultEnvVarsRefs,
           })
         > {
   $$WorkspacesTableTableManager(_$AppDatabase db, $WorkspacesTable table)
@@ -12015,6 +12470,7 @@ class $$WorkspacesTableTableManager
                 mcpClientsRefs = false,
                 mcpPolicyRulesRefs = false,
                 bookmarksRefs = false,
+                vaultEnvVarsRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -12028,6 +12484,7 @@ class $$WorkspacesTableTableManager
                     if (mcpClientsRefs) db.mcpClients,
                     if (mcpPolicyRulesRefs) db.mcpPolicyRules,
                     if (bookmarksRefs) db.bookmarks,
+                    if (vaultEnvVarsRefs) db.vaultEnvVars,
                   ],
                   addJoins: null,
                   getPrefetchedDataCallback: (items) async {
@@ -12221,6 +12678,27 @@ class $$WorkspacesTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (vaultEnvVarsRefs)
+                        await $_getPrefetchedData<
+                          Workspace,
+                          $WorkspacesTable,
+                          VaultEnvVar
+                        >(
+                          currentTable: table,
+                          referencedTable: $$WorkspacesTableReferences
+                              ._vaultEnvVarsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$WorkspacesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).vaultEnvVarsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.workspaceId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -12251,6 +12729,7 @@ typedef $$WorkspacesTableProcessedTableManager =
         bool mcpClientsRefs,
         bool mcpPolicyRulesRefs,
         bool bookmarksRefs,
+        bool vaultEnvVarsRefs,
       })
     >;
 typedef $$IdentitiesTableCreateCompanionBuilder =
@@ -21056,6 +21535,325 @@ typedef $$SyncEntityVersionsTableProcessedTableManager =
       SyncEntityVersion,
       PrefetchHooks Function()
     >;
+typedef $$VaultEnvVarsTableCreateCompanionBuilder =
+    VaultEnvVarsCompanion Function({
+      required String id,
+      required String workspaceId,
+      required String name,
+      required String valueEncrypted,
+      required DateTime createdAt,
+      Value<int> rowid,
+    });
+typedef $$VaultEnvVarsTableUpdateCompanionBuilder =
+    VaultEnvVarsCompanion Function({
+      Value<String> id,
+      Value<String> workspaceId,
+      Value<String> name,
+      Value<String> valueEncrypted,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+final class $$VaultEnvVarsTableReferences
+    extends BaseReferences<_$AppDatabase, $VaultEnvVarsTable, VaultEnvVar> {
+  $$VaultEnvVarsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $WorkspacesTable _workspaceIdTable(_$AppDatabase db) =>
+      db.workspaces.createAlias('vault_env_vars__workspace_id__workspaces__id');
+
+  $$WorkspacesTableProcessedTableManager get workspaceId {
+    final $_column = $_itemColumn<String>('workspace_id')!;
+
+    final manager = $$WorkspacesTableTableManager(
+      $_db,
+      $_db.workspaces,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_workspaceIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$VaultEnvVarsTableFilterComposer
+    extends Composer<_$AppDatabase, $VaultEnvVarsTable> {
+  $$VaultEnvVarsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get valueEncrypted => $composableBuilder(
+    column: $table.valueEncrypted,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$WorkspacesTableFilterComposer get workspaceId {
+    final $$WorkspacesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.workspaceId,
+      referencedTable: $db.workspaces,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WorkspacesTableFilterComposer(
+            $db: $db,
+            $table: $db.workspaces,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$VaultEnvVarsTableOrderingComposer
+    extends Composer<_$AppDatabase, $VaultEnvVarsTable> {
+  $$VaultEnvVarsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get valueEncrypted => $composableBuilder(
+    column: $table.valueEncrypted,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$WorkspacesTableOrderingComposer get workspaceId {
+    final $$WorkspacesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.workspaceId,
+      referencedTable: $db.workspaces,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WorkspacesTableOrderingComposer(
+            $db: $db,
+            $table: $db.workspaces,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$VaultEnvVarsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $VaultEnvVarsTable> {
+  $$VaultEnvVarsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get valueEncrypted => $composableBuilder(
+    column: $table.valueEncrypted,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$WorkspacesTableAnnotationComposer get workspaceId {
+    final $$WorkspacesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.workspaceId,
+      referencedTable: $db.workspaces,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WorkspacesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.workspaces,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$VaultEnvVarsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $VaultEnvVarsTable,
+          VaultEnvVar,
+          $$VaultEnvVarsTableFilterComposer,
+          $$VaultEnvVarsTableOrderingComposer,
+          $$VaultEnvVarsTableAnnotationComposer,
+          $$VaultEnvVarsTableCreateCompanionBuilder,
+          $$VaultEnvVarsTableUpdateCompanionBuilder,
+          (VaultEnvVar, $$VaultEnvVarsTableReferences),
+          VaultEnvVar,
+          PrefetchHooks Function({bool workspaceId})
+        > {
+  $$VaultEnvVarsTableTableManager(_$AppDatabase db, $VaultEnvVarsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$VaultEnvVarsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$VaultEnvVarsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$VaultEnvVarsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> workspaceId = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String> valueEncrypted = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => VaultEnvVarsCompanion(
+                id: id,
+                workspaceId: workspaceId,
+                name: name,
+                valueEncrypted: valueEncrypted,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String workspaceId,
+                required String name,
+                required String valueEncrypted,
+                required DateTime createdAt,
+                Value<int> rowid = const Value.absent(),
+              }) => VaultEnvVarsCompanion.insert(
+                id: id,
+                workspaceId: workspaceId,
+                name: name,
+                valueEncrypted: valueEncrypted,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$VaultEnvVarsTable, VaultEnvVar>(table),
+                  $$VaultEnvVarsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({workspaceId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (workspaceId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.workspaceId,
+                                referencedTable: $$VaultEnvVarsTableReferences
+                                    ._workspaceIdTable(db),
+                                referencedColumn: $$VaultEnvVarsTableReferences
+                                    ._workspaceIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$VaultEnvVarsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $VaultEnvVarsTable,
+      VaultEnvVar,
+      $$VaultEnvVarsTableFilterComposer,
+      $$VaultEnvVarsTableOrderingComposer,
+      $$VaultEnvVarsTableAnnotationComposer,
+      $$VaultEnvVarsTableCreateCompanionBuilder,
+      $$VaultEnvVarsTableUpdateCompanionBuilder,
+      (VaultEnvVar, $$VaultEnvVarsTableReferences),
+      VaultEnvVar,
+      PrefetchHooks Function({bool workspaceId})
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -21104,4 +21902,6 @@ class $AppDatabaseManager {
       $$SyncStateTableTableManager(_db, _db.syncState);
   $$SyncEntityVersionsTableTableManager get syncEntityVersions =>
       $$SyncEntityVersionsTableTableManager(_db, _db.syncEntityVersions);
+  $$VaultEnvVarsTableTableManager get vaultEnvVars =>
+      $$VaultEnvVarsTableTableManager(_db, _db.vaultEnvVars);
 }

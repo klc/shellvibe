@@ -21,6 +21,7 @@ final class SyncRowCodec {
   static const List<String> syncableTypes = [
     'workspaces',
     'identities',
+    'vault_env_vars',
     'host_groups',
     'hosts',
     'port_forward_rules',
@@ -49,6 +50,14 @@ final class SyncRowCodec {
     'privateKeyEncrypted': i.privateKeyEncrypted,
     'passphraseEncrypted': i.passphraseEncrypted,
     'createdAt': i.createdAt.toIso8601String(),
+  };
+
+  static Map<String, dynamic> vaultEnvVar(VaultEnvVar v) => {
+    'id': v.id,
+    'workspaceId': v.workspaceId,
+    'name': v.name,
+    'valueEncrypted': v.valueEncrypted,
+    'createdAt': v.createdAt.toIso8601String(),
   };
 
   static Map<String, dynamic> hostGroup(HostGroup g) => {
@@ -190,6 +199,12 @@ final class SyncRowCodec {
           db.identities,
         )..where((t) => t.id.equals(entityId))).getSingleOrNull(),
         identity,
+      ),
+      'vault_env_vars' => one(
+        () => (db.select(
+          db.vaultEnvVars,
+        )..where((t) => t.id.equals(entityId))).getSingleOrNull(),
+        vaultEnvVar,
       ),
       'host_groups' => one(
         () => (db.select(

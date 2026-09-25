@@ -105,6 +105,25 @@ final class SyncRowWriter {
 
         return const RowWriteResult.ok();
 
+      case 'vault_env_vars':
+        if (!await exists(db.workspaces, str('workspaceId'))) {
+          return const RowWriteResult.skipped('workspace');
+        }
+
+        await db
+            .into(db.vaultEnvVars)
+            .insertOnConflictUpdate(
+              VaultEnvVarsCompanion.insert(
+                id: id(),
+                workspaceId: row['workspaceId'] as String,
+                name: row['name'] as String,
+                valueEncrypted: row['valueEncrypted'] as String,
+                createdAt: date('createdAt'),
+              ),
+            );
+
+        return const RowWriteResult.ok();
+
       case 'host_groups':
         if (!await exists(db.workspaces, str('workspaceId'))) {
           return const RowWriteResult.skipped('workspace');
@@ -407,6 +426,7 @@ final class SyncRowWriter {
   ) => switch (entityType) {
     'workspaces' => db.workspaces,
     'identities' => db.identities,
+    'vault_env_vars' => db.vaultEnvVars,
     'host_groups' => db.hostGroups,
     'hosts' => db.hosts,
     'port_forward_rules' => db.portForwardRules,

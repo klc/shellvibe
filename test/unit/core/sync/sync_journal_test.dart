@@ -47,6 +47,30 @@ void main() {
     write: () => (db.delete(db.hosts)..where((h) => h.id.equals(id))).go(),
   );
 
+  Future<void> writeEnvVar(String id, {String name = 'API_TOKEN'}) =>
+      journal.upsert(
+        entityType: 'vault_env_vars',
+        entityId: id,
+        write: () => db
+            .into(db.vaultEnvVars)
+            .insertOnConflictUpdate(
+              VaultEnvVarsCompanion.insert(
+                id: id,
+                workspaceId: 'default',
+                name: name,
+                valueEncrypted: 'ciphertext-for-$id',
+                createdAt: DateTime.now(),
+              ),
+            ),
+      );
+
+  Future<void> deleteEnvVar(String id) => journal.delete(
+    entityType: 'vault_env_vars',
+    entityId: id,
+    write: () =>
+        (db.delete(db.vaultEnvVars)..where((v) => v.id.equals(id))).go(),
+  );
+
   group('recording', () {
     test('a write produces one operation carrying the whole row', () async {
       await writeHost('h1');
@@ -148,6 +172,61 @@ void main() {
       await writeHost('h1');
 
       expect((await journal.pending()).single.beforeImage, isNull);
+    });
+  });
+
+  group('vault env vars', () {
+    test('a write produces one operation carrying the whole row', () async {
+      await writeEnvVar('env-1');
+
+      final pending = await journal.pending();
+
+      expect(pending, hasLength(1));
+      expect(pending.single.operation, 'upsert');
+      expect(pending.single.entityType, 'vault_env_vars');
+
+      final payload =
+          jsonDecode(pending.single.payload!) as Map<String, dynamic>;
+      expect(payload['id'], 'env-1');
+      expect(payload['name'], 'API_TOKEN');
+      expect(payload['workspaceId'], 'default');
+      // Entity level last-writer-wins needs the whole row, so a column the
+      // encoder forgot is a column the receiving device silently loses.
+      expect(payload.containsKey('valueEncrypted'), isTrue);
+      // Never the plaintext: only the already-encrypted column travels.
+      expect(payload['valueEncrypted'], 'ciphertext-for-env-1');
+    });
+
+    test('a row created and then deleted leaves only the delete', () async {
+      await writeEnvVar('env-1');
+      await deleteEnvVar('env-1');
+
+      final pending = await journal.pending();
+
+      expect(pending, hasLength(1));
+      expect(pending.single.operation, 'delete');
+      expect(pending.single.payload, isNull);
+    });
+
+    test('a deleted row keeps its body, restorable from the trash', () async {
+      await writeEnvVar('env-1', name: 'RESTORE_ME');
+      await deleteEnvVar('env-1');
+
+      final trashed = await journal.trash();
+      expect(trashed, hasLength(1));
+      expect(trashed.single.entityType, 'vault_env_vars');
+
+      final restored = await journal.restoreFromTrash(
+        entityType: 'vault_env_vars',
+        entityId: 'env-1',
+      );
+      expect(restored, isTrue);
+
+      final row = await (db.select(
+        db.vaultEnvVars,
+      )..where((v) => v.id.equals('env-1'))).getSingleOrNull();
+      expect(row, isNotNull);
+      expect(row!.name, 'RESTORE_ME');
     });
   });
 

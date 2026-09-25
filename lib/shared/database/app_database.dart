@@ -17,6 +17,7 @@ import 'daos/runbooks_dao.dart';
 import 'daos/snippets_dao.dart';
 import 'daos/templates_dao.dart';
 import 'daos/tunnels_dao.dart';
+import 'daos/vault_env_vars_dao.dart';
 import 'daos/workspaces_dao.dart';
 
 part 'app_database.g.dart';
@@ -45,6 +46,7 @@ part 'app_database.g.dart';
     SyncTombstones,
     SyncState,
     SyncEntityVersions,
+    VaultEnvVars,
   ],
   daos: [
     HostsDao,
@@ -58,6 +60,7 @@ part 'app_database.g.dart';
     PairedDevicesDao,
     McpDao,
     BookmarksDao,
+    VaultEnvVarsDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -107,7 +110,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 12;
+  int get schemaVersion => 13;
 
   @override
   MigrationStrategy get migration {
@@ -194,6 +197,11 @@ class AppDatabase extends _$AppDatabase {
           // defined now -- column included -- and adding it again fails the
           // whole upgrade with `duplicate column name`.
           await m.addColumn(syncState, syncState.joinState);
+        }
+        if (from < 13) {
+          // Vault-stored environment variables for local shells. Empty on an
+          // existing install: nothing wrote this table before it existed.
+          await m.createTable(vaultEnvVars);
         }
       },
     );
