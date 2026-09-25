@@ -8,6 +8,7 @@ import '../../../../app/restored_data.dart';
 import '../../../../core/api/api_exception.dart';
 import '../../../../core/sync/backup_scope_store.dart';
 import '../../../../core/sync/e2ee_cloud_sync_service.dart';
+import '../../../../core/sync/sync_journal.dart';
 import '../../../../shared/providers/database_providers.dart';
 import '../../../account/presentation/notifiers/account_notifier.dart';
 import '../../../billing/presentation/notifiers/entitlement_notifier.dart';
@@ -401,8 +402,21 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
         return;
       }
     } on Object {
-      // Offline: fall through. The upload below will fail on its own and say
-      // so, which is better than blocking setup on a network hiccup.
+      // Not knowing is not the same as the vault being empty. Storing the
+      // passphrase here marks the device configured, and the next scheduled
+      // backup would then seal this device's data under a passphrase no other
+      // device has and upload it over the account's backup -- the bug the
+      // check above exists to stop, reached through a dropped connection.
+      _publish(
+        (s) => s.copyWith(
+          message:
+              'Could not reach the server to check for an existing backup. '
+              'Nothing was saved; try again once you are online.',
+          messageIsError: true,
+        ),
+      );
+
+      return;
     }
 
     await _store.writePassphrase(passphrase);
@@ -475,18 +489,29 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
     // the only place it can live. The first device to switch sync on mints it;
     // every other device learns it by opening a backup that carries it, which
     // is why sync cannot start before one exists.
+    final autoSyncEnabled = await _scopeStore.readAutoSyncEnabled();
     final syncKey = await _store.syncKeyForUpload(
-      autoSyncEnabled: await _scopeStore.readAutoSyncEnabled(),
+      autoSyncEnabled: autoSyncEnabled,
     );
 
     // Where this snapshot sits in the operation log. A device that restores it
     // resumes pulling from here instead of replaying a log that reaches back
     // further than the server still keeps -- and without it that device counts
     // from zero, re-applying everything it just restored.
-    final syncClock = await ref
-        .read(appDatabaseProvider)
-        .syncJournal
-        ?.readState();
+    final journal = ref.read(appDatabaseProvider).syncJournal;
+    final syncClock = await journal?.readState();
+
+    // The revision this upload claims to build on. Without sync, a device's
+    // data is only as new as the last backup it wrote or restored, so that is
+    // the base: another device's later backup then comes back as a conflict
+    // for the user to settle, rather than being buried under this device's
+    // older data. A device that has joined automatic sync already holds what
+    // every other device wrote, so the server's current head is the truth.
+    final converged =
+        autoSyncEnabled && await journal?.readJoinState() == SyncJoinState.done;
+    final expectedRevision = converged
+        ? null
+        : await _store.readLastKnownRevision() ?? 0;
 
     // App settings live in secure storage, not the database, so they are read
     // here and handed over rather than reached for inside the sync service.
@@ -501,6 +526,7 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
         deviceId: deviceId,
         maxSizeBytes: _maxSizeBytes,
         recoveryCode: recoveryCode,
+        expectedRevision: expectedRevision,
         force: force,
         scope: scope,
         settings: settings,
@@ -604,9 +630,11 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
 
     await _run((state) async {
       await service.deleteVault();
+      await _store.writeLastKnownRevision(0);
 
       return state.copyWith(
         head: VaultHead.empty,
+        lastKnownRevision: 0,
         revisions: const [],
         message: 'The cloud backup and every revision were deleted.',
         messageIsError: false,
@@ -693,6 +721,11 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
     if (_service == null || _deviceId == null) return;
     if (await _store.readPassphrase() == null) return;
 
+    // A conflict waits for the user: restore the other device's backup or
+    // overwrite it. Retrying on the next tick cannot settle it, and each try
+    // seals the whole vault again only to be refused.
+    if (state.value?.conflictingServerRevision != null) return;
+
     final mark = await _store.readAutoBackupMark();
     final now = DateTime.now();
 
@@ -733,9 +766,8 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
     }
 
     // Never forced. A conflict means another device wrote since this one last
-    // read the head, and overwriting that without being asked is the one move
-    // here that destroys someone's data. The next tick reads the new head and
-    // tries again.
+    // wrote or restored, and overwriting that without being asked is the one
+    // move here that destroys someone's data.
     await backUpNow();
 
     // The mark is only written for an upload that actually landed. Writing it

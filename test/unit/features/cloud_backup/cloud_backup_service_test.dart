@@ -202,6 +202,22 @@ void main() {
       expect(transport.lastBody['base_revision'], 7);
     });
 
+    test('the revision this device knows is the base', () async {
+      enqueueHead(currentRevision: 7);
+      enqueueUploadAccepted(revision: 8);
+
+      final result = await service.upload(
+        db: db,
+        passphrase: passphrase,
+        deviceId: deviceId,
+        maxSizeBytes: 5 * 1024 * 1024,
+        expectedRevision: 7,
+      );
+
+      expect(result.succeeded, isTrue);
+      expect(transport.lastBody['base_revision'], 7);
+    });
+
     test('clears the pending upload id once the server accepts', () async {
       enqueueHead();
       enqueueUploadAccepted();
@@ -312,6 +328,90 @@ void main() {
       expect(result.failure, CloudBackupFailure.conflict);
       expect(result.serverRevision, 9);
       expect(transport.pending, 0);
+    });
+
+    test(
+      'a head past the known revision is a conflict, and nothing is sent',
+      () async {
+        // Another device backed up after this one last wrote or restored.
+        // Basing the upload on the fresh head would bury that backup under this
+        // device's older data without anyone having been asked.
+        enqueueHead(currentRevision: 7);
+
+        final result = await service.upload(
+          db: db,
+          passphrase: passphrase,
+          deviceId: deviceId,
+          maxSizeBytes: 5 * 1024 * 1024,
+          expectedRevision: 5,
+        );
+
+        expect(result.failure, CloudBackupFailure.conflict);
+        expect(result.serverRevision, 7);
+        expect(transport.sent, hasLength(1), reason: 'Only the head is read.');
+        expect(transport.lastRequest!.method, 'GET');
+        expect(
+          pendingUploadId,
+          isNull,
+          reason: 'Nothing was sent, so no id may stay reserved for it.',
+        );
+      },
+    );
+
+    test('an empty vault has nothing to conflict with', () async {
+      // Deleted from another device or the web panel: the revision this
+      // device remembers no longer exists, and refusing on it would refuse
+      // every backup from here on.
+      enqueueHead();
+      enqueueUploadAccepted();
+
+      final result = await service.upload(
+        db: db,
+        passphrase: passphrase,
+        deviceId: deviceId,
+        maxSizeBytes: 5 * 1024 * 1024,
+        expectedRevision: 5,
+      );
+
+      expect(result.succeeded, isTrue);
+      expect(transport.lastBody['base_revision'], 0);
+    });
+
+    test('a resumed upload leaves the conflict to the server', () async {
+      // The head moved because of this very upload, whose reply was lost.
+      // Only the server can recognise the id and hand that revision back.
+      pendingUploadId = 'upload-9';
+      enqueueHead(currentRevision: 8);
+      enqueueUploadAccepted(revision: 8);
+
+      final result = await service.upload(
+        db: db,
+        passphrase: passphrase,
+        deviceId: deviceId,
+        maxSizeBytes: 5 * 1024 * 1024,
+        expectedRevision: 7,
+      );
+
+      expect(result.succeeded, isTrue);
+      expect(transport.lastBody['upload_id'], 'upload-9');
+      expect(transport.lastBody['base_revision'], 7);
+    });
+
+    test('force ignores the known revision', () async {
+      enqueueHead(currentRevision: 9);
+      enqueueUploadAccepted(revision: 10);
+
+      final result = await service.upload(
+        db: db,
+        passphrase: passphrase,
+        deviceId: deviceId,
+        maxSizeBytes: 5 * 1024 * 1024,
+        expectedRevision: 5,
+        force: true,
+      );
+
+      expect(result.succeeded, isTrue);
+      expect(transport.lastBody['base_revision'], 9);
     });
 
     test('force re-reads the head and uploads on top of it', () async {

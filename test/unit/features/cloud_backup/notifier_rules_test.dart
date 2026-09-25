@@ -75,6 +75,65 @@ void main() {
     });
   });
 
+  group('backup setup and uploads', () {
+    late String source;
+
+    setUpAll(() {
+      source = File(
+        'lib/features/cloud_backup/presentation/notifiers/'
+        'cloud_backup_notifier.dart',
+      ).readAsStringSync();
+    });
+
+    test('setup that cannot read the head stores nothing', () {
+      // Storing the passphrase marks the device configured. With the head
+      // unknown, the next scheduled backup would seal this device's data
+      // under a passphrase no other device has and upload it over the
+      // account's backup -- the second-device bug, reached offline.
+      final body = bodyOf(source, 'required String recoveryCode,\n  }) async');
+
+      final catchAt = body.indexOf('} on Object {');
+      final store = body.indexOf('writePassphrase');
+
+      expect(catchAt, isNot(-1));
+      expect(store, greaterThan(catchAt));
+      expect(
+        body.substring(catchAt, store).contains('return;'),
+        isTrue,
+        reason: 'The unreachable-server branch has to return before storing.',
+      );
+    });
+
+    test('an upload names the revision it builds on', () {
+      final body = bodyOf(
+        source,
+        'Future<void> backUpNow({bool force = false}) async',
+      );
+
+      expect(
+        body.contains('expectedRevision: expectedRevision'),
+        isTrue,
+        reason:
+            'Without it the base is the fresh head, and a device with older '
+            'data silently becomes the newest backup.',
+      );
+      expect(
+        body.contains('SyncJoinState.done'),
+        isTrue,
+        reason: 'Only a device that finished joining sync may skip the check.',
+      );
+    });
+
+    test('a pending conflict stops the schedule', () {
+      final body = bodyOf(source, 'Future<void> maybeBackUpOnSchedule()');
+
+      expect(
+        body.contains('conflictingServerRevision != null) return;'),
+        isTrue,
+      );
+    });
+  });
+
   group('the sync pass', () {
     late String source;
 

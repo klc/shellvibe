@@ -105,6 +105,12 @@ final class CloudBackupService {
   /// a sentence the user can act on rather than a `429` whose code also means
   /// "too many requests".
   ///
+  /// [expectedRevision] is the revision this device last wrote or restored,
+  /// sent as the base so the server refuses the write when another device has
+  /// stored one since. Null bases the upload on whatever the server holds now,
+  /// which is only right when this device's data already reflects that
+  /// revision -- a converged sync, or a forced overwrite.
+  ///
   /// [force] re-reads the head and uploads on top of it after a conflict. That
   /// overwrites what the other device stored, so it is only ever called from an
   /// explicit user choice -- never automatically.
@@ -118,6 +124,7 @@ final class CloudBackupService {
     required String deviceId,
     required int maxSizeBytes,
     String? recoveryCode,
+    int? expectedRevision,
     bool force = false,
     BackupScope scope = BackupScope.full,
     Map<String, dynamic>? settings,
@@ -163,14 +170,37 @@ final class CloudBackupService {
     // Reserve the idempotency key before the request. A reply that never
     // arrives is indistinguishable from one that never left, and only a
     // persisted key lets the retry be recognised as the same write.
-    final uploadId = await readPendingUploadId() ?? newUploadId();
+    final pendingUploadId = await readPendingUploadId();
+    final uploadId = pendingUploadId ?? newUploadId();
     await writePendingUploadId(uploadId);
 
     try {
       final head = await api.head();
+      // An empty vault has nothing to conflict with: it was never written, or
+      // it was deleted -- from another device or the web panel -- and the
+      // revision this device remembers no longer exists anywhere.
+      final base = force || head.isEmpty
+          ? head.currentRevision
+          : expectedRevision ?? head.currentRevision;
+
+      // Read off the head rather than learned from a 409 after the upload: the
+      // envelope is several megabytes, and the answer is already known. Not
+      // for a resumed upload, though: the head may have moved because of that
+      // very upload, whose reply never arrived, and only the server can match
+      // it by its id and hand the stored revision back.
+      if (pendingUploadId == null && base != head.currentRevision) {
+        // Nothing was sent, so there is no write for the id to stand for.
+        await writePendingUploadId(null);
+
+        return CloudBackupUploadResult.failed(
+          failure: CloudBackupFailure.conflict,
+          message: _conflictMessage,
+          serverRevision: head.currentRevision,
+        );
+      }
 
       final revision = await api.upload(
-        baseRevision: head.currentRevision,
+        baseRevision: base,
         uploadId: uploadId,
         deviceId: deviceId,
         // Read off the envelope, not assumed. A backup sealed without a sync
@@ -314,9 +344,7 @@ final class CloudBackupService {
 
       return CloudBackupUploadResult.failed(
         failure: CloudBackupFailure.conflict,
-        message:
-            'Another device backed up after this one last checked. Restore '
-            'that backup first, or overwrite it.',
+        message: _conflictMessage,
         serverRevision: e.detailInt('current_revision'),
       );
     }
@@ -356,6 +384,10 @@ final class CloudBackupService {
           '${e.requestId == null ? '' : ' Reference: ${e.requestId}.'}',
     );
   }
+
+  static const String _conflictMessage =
+      'Another device backed up after this one last checked. Restore that '
+      'backup first, or overwrite it.';
 
   static String _megabytes(int bytes) {
     final mb = bytes / (1024 * 1024);
