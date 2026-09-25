@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,7 +7,9 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../../../core/constants/app_constants.dart';
+import '../../../../core/diagnostics/crash_log.dart';
 import '../../domain/services/update_check_service.dart';
+import '../dialogs/problem_report_dialog.dart';
 
 /// Address a security researcher is asked to use, kept in one place so
 /// `SECURITY.md` and the application never drift apart.
@@ -34,18 +35,17 @@ class _AboutSettingsSectionState extends ConsumerState<AboutSettingsSection> {
   UpdateCheckResult? _result;
 
   String get _buildIdentity =>
-      '${AppConstants.appName} ${AppConstants.appVersion} · ${_platformLabel()}';
+      '${AppConstants.appName} ${AppConstants.appVersion} · ${currentPlatformLabel()}';
 
-  static String _platformLabel() {
-    if (kIsWeb) return 'web';
-    return switch (defaultTargetPlatform) {
-      TargetPlatform.macOS => 'macOS',
-      TargetPlatform.windows => 'Windows',
-      TargetPlatform.linux => 'Linux',
-      TargetPlatform.android => 'Android',
-      TargetPlatform.iOS => 'iOS',
-      _ => 'unknown',
-    };
+  Future<void> _reportProblem() async {
+    String? log;
+    try {
+      log = await (await CrashLog.open()).readTail();
+    } on Object {
+      // No log to attach is still a report worth filing.
+    }
+    if (!mounted) return;
+    await showProblemReportDialog(context, report: buildProblemReport(log));
   }
 
   Future<void> _checkForUpdates() async {
@@ -87,7 +87,7 @@ class _AboutSettingsSectionState extends ConsumerState<AboutSettingsSection> {
                 leading: Icon(LucideIcons.info, color: tokens.brand),
                 title: Text(AppConstants.appName),
                 subtitle: Text(
-                  '${AppConstants.appVersion} · ${_platformLabel()}',
+                  '${AppConstants.appVersion} · ${currentPlatformLabel()}',
                   style: shellvibeMono(
                     context,
                     size: 11,
@@ -161,6 +161,22 @@ class _AboutSettingsSectionState extends ConsumerState<AboutSettingsSection> {
                       'Third-party components remain under their own licenses, '
                       'listed here.',
                 ),
+              ),
+              const Divider(),
+              ListTile(
+                key: const Key('about_report_problem'),
+                leading: Icon(LucideIcons.bug, color: tokens.brand),
+                title: const Text('Report a problem'),
+                subtitle: Text(
+                  'Opens a GitHub issue with the build and the recent error '
+                  'log filled in. You read and submit it; the app sends '
+                  'nothing.',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: tokens.textMuted),
+                ),
+                trailing: const Icon(LucideIcons.chevronRight, size: 16),
+                onTap: _reportProblem,
               ),
               const Divider(),
               ListTile(

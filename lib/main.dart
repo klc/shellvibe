@@ -11,34 +11,23 @@ import 'package:window_manager/window_manager.dart';
 import 'package:shellvibe/app/app.dart';
 import 'package:shellvibe/app/window/single_instance.dart';
 import 'package:shellvibe/app/window/window_chrome.dart';
+import 'package:shellvibe/core/diagnostics/crash_log.dart';
 import 'package:shellvibe/core/perf/perf_overlay.dart';
 
-/// Appends one crash record to `crash.log` in the app support directory.
-///
-/// `debugPrint` alone is a no-op in release builds (stdout isn't attached),
-/// so without this a release crash leaves zero trace. This is deliberately
-/// just a local file, not a telemetry SDK — good enough to ask a user for
-/// the file after a report, not for aggregate crash visibility.
-Future<void> _logCrashToFile(
-  String tag,
-  Object error,
-  StackTrace? stack,
-) async {
-  try {
-    final dir = await getApplicationSupportDirectory();
-    final file = File('${dir.path}/crash.log');
-    final entry = StringBuffer()
-      ..writeln('--- ${DateTime.now().toIso8601String()} [$tag] ---')
-      ..writeln(error.toString())
-      ..writeln(stack?.toString() ?? '');
-    await file.writeAsString(
-      entry.toString(),
-      mode: FileMode.append,
-      flush: true,
-    );
-  } catch (_) {
-    // Logging must never throw back into the error handler.
-  }
+/// Where crashes go. `debugPrint` alone is a no-op in release builds (stdout
+/// isn't attached), so without this a release crash leaves zero trace. Opened
+/// lazily: the handlers are installed before anything else, and resolving the
+/// support directory there would delay the first frame for every launch
+/// rather than for the rare one that crashes.
+Future<CrashLog>? _crashLog;
+
+void _logCrash(String tag, Object error, StackTrace? stack) {
+  unawaited(
+    (_crashLog ??= CrashLog.open()).then(
+      (log) => log.append(tag, error, stack),
+      onError: (_) {},
+    ),
+  );
 }
 
 /// Held for the life of the process; see [SingleInstance].
@@ -82,15 +71,13 @@ void main() async {
   FlutterError.onError = (FlutterErrorDetails details) {
     FlutterError.presentError(details);
     debugPrint('[FlutterError] ${details.exception}\n${details.stack}');
-    unawaited(
-      _logCrashToFile('FlutterError', details.exception, details.stack),
-    );
+    _logCrash('FlutterError', details.exception, details.stack);
   };
 
   // Setup global uncaught platform/async error handling
   PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
     debugPrint('[PlatformDispatcher Error] $error\n$stack');
-    unawaited(_logCrashToFile('PlatformDispatcher', error, stack));
+    _logCrash('PlatformDispatcher', error, stack);
     return true; // prevent unhandled crash propagation
   };
 

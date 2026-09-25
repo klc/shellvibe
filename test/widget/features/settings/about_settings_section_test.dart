@@ -49,6 +49,30 @@ void main() {
   }
 
   group('AboutSettingsSection', () {
+    testWidgets('reporting a problem shows the report before anything opens', (
+      tester,
+    ) async {
+      await pumpSection(tester);
+
+      // The log is looked up through the platform's support directory, which
+      // a widget test has no plugin for: the report still opens, without it.
+      await tester.runAsync(() async {
+        await tester.tap(find.byKey(const Key('about_report_problem')));
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      });
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('problem_report_dialog')), findsOneWidget);
+      expect(
+        find.textContaining('ShellVibe ${AppConstants.appVersion}'),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('problem_report_open_issue')),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('shows the build identity a bug report asks for', (
       tester,
     ) async {

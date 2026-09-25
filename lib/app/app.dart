@@ -9,6 +9,7 @@ import '../features/device_link/presentation/notifiers/device_link_notifier.dart
 import '../features/mcp/presentation/notifiers/mcp_settings_notifier.dart';
 import '../features/mcp/presentation/widgets/mcp_approval_host.dart';
 import '../features/settings/domain/models/app_settings_model.dart';
+import '../features/settings/presentation/dialogs/problem_report_dialog.dart';
 import '../features/settings/presentation/notifiers/settings_notifier.dart';
 import '../features/cloud_backup/presentation/notifiers/cloud_backup_notifier.dart';
 import '../features/cloud_backup/presentation/notifiers/sync_notifier.dart';
@@ -49,7 +50,21 @@ class _ShellVibeAppState extends ConsumerState<ShellVibeApp>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _maybeOpenLaunchShell(ref.read(vaultProvider));
       _syncWindowChrome();
+      _offerUnreportedCrash();
     });
+  }
+
+  /// A crash from the last run, offered once as a GitHub issue the user files
+  /// themselves. On the root navigator: this widget sits above the router and
+  /// has no navigator of its own.
+  void _offerUnreportedCrash() {
+    final context = rootNavigatorKey.currentContext;
+    if (context == null) return;
+    unawaited(
+      offerUnreportedCrash(context).catchError((Object error) {
+        debugPrint('[CrashLog] could not offer the last crash: $error');
+      }),
+    );
   }
 
   /// [ThemeMode.system] resolves against the platform, so the frame has to
