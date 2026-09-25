@@ -102,8 +102,6 @@ shellvibe/
     └── shared/         # drift database (tables/DAOs), providers, secure storage
 ```
 
-See [`AGENTS.md`](AGENTS.md) for the architecture map and the conventions this codebase is written to.
-
 ## 📥 Installing
 
 Builds for macOS, Windows and Linux are attached to each
@@ -164,13 +162,16 @@ Consequences to keep in mind:
 
 ### Privacy
 
-ShellVibe has no account, no analytics, no telemetry and no crash reporting, and
-we run no server it could talk to. It reaches the network in four places only:
-the hosts you connect to, a manual update check you press a button for, the font
-CDN if you pick a non-bundled font, and Device Link over your own LAN.
-[`PRIVACY.md`](PRIVACY.md) walks through each one.
+ShellVibe has no analytics, no telemetry and no automatic crash reporting, and
+it needs no account. Signed out, it reaches the network in four places only:
+the hosts you connect to, a manual update check you press a button for, the
+font CDN if you pick a non-bundled font, and Device Link over your own LAN.
 
-See [`AGENTS.md`](AGENTS.md) for the module breakdown and the invariants each subsystem is expected to hold.
+The account is optional and exists for cloud backup and sync. Signed in, the
+app talks to `api.shellvibe.dev`, which holds your name, email, device list and
+your backups and sync history — encrypted on your device with a passphrase the
+server never sees. [`PRIVACY.md`](PRIVACY.md) lists what is stored, who can read
+it, how long it is kept and how to export or delete it.
 
 ## Release engineering
 
