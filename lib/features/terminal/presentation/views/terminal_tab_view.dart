@@ -10,12 +10,9 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/widgets/adaptive_modal.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
-import '../../../../core/network/mosh_session_manager.dart';
 import '../../../../core/network/ssh_session_manager.dart';
 import '../../../../core/utils/platform_capabilities.dart';
 import '../../../hosts/domain/models/host_model.dart';
-import '../../../bookmarks/presentation/notifiers/bookmarks_notifier.dart';
-import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
 import '../../../snippets/domain/models/snippet_model.dart';
 import '../../../snippets/domain/services/snippet_variable_parser.dart';
 import '../../../snippets/presentation/widgets/snippet_picker_sheet.dart';
@@ -29,47 +26,22 @@ import '../../../vault/presentation/notifiers/identities_notifier.dart';
 import '../../domain/models/terminal_tab_session.dart';
 import '../dialogs/host_key_prompt_dialog.dart';
 import '../notifiers/terminal_tabs_notifier.dart';
-import '../screens/terminal_screen.dart';
-import '../widgets/pane_drop_target.dart';
-import '../widgets/resizable_split.dart';
+import '../widgets/select_host_panel.dart';
+import '../widgets/terminal_empty_state.dart';
+import '../widgets/terminal_pane_helpers.dart';
+import '../widgets/terminal_session_tree.dart';
+import '../widgets/terminal_tab_strip.dart';
 
 /// Whether this platform writes shortcuts with ⌘ rather than Ctrl+Shift.
 bool get _isApplePlatform =>
     defaultTargetPlatform == TargetPlatform.macOS ||
     defaultTargetPlatform == TargetPlatform.iOS;
 
-/// Below this bar width the trailing actions collapse into one overflow menu.
-///
-/// A hair under the compact tier rather than on it: the bar is inset from the
-/// module edge, so it goes compact slightly before the module around it does.
-const double _kTabBarCompactWidth = 620;
-
-/// Height of the tab strip, which is exactly the height of the tallest thing
-/// in it — a tab, and the grouped action pill — so it carries no slack above
-/// the terminal.
-const double _kTabBarHeight = 38;
-
 /// How far the strip reaches down over the pane below it.
 ///
 /// One pixel: the width of the pane's own top border, which the active tab has
 /// to cover for the tab and the terminal to read as a single outline.
 const double _kTabPaneOverlap = 1;
-
-/// A trailing tab-bar action, rendered either as a tab-shaped icon button or
-/// as a row in the compact overflow menu.
-class _TabBarAction {
-  const _TabBarAction({
-    required this.buttonKey,
-    required this.icon,
-    required this.label,
-    required this.onPressed,
-  });
-
-  final Key buttonKey;
-  final IconData icon;
-  final String label;
-  final VoidCallback onPressed;
-}
 
 class TerminalTabView extends ConsumerStatefulWidget {
   const TerminalTabView({super.key});
@@ -174,12 +146,17 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
                   children: [
                     Padding(
                       padding: const EdgeInsets.only(
-                        top: _kTabBarHeight - _kTabPaneOverlap,
+                        top: kTerminalTabStripHeight - _kTabPaneOverlap,
                       ),
                       child: activeRootTab == null
                           ? ShellVibePanel(
                               gradientExtent: 220,
-                              child: _buildEmptyState(context, ref),
+                              child: TerminalEmptyState(
+                                onConnectToHost: _connectToHost,
+                                onShowSelectHostModal: () =>
+                                    _showSelectHostModal(context, ref),
+                                onDeviceLinkAction: _handleDeviceLinkAction,
+                              ),
                             )
                           : _buildTabBody(
                               context,
@@ -192,11 +169,17 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
                       top: 0,
                       left: 0,
                       right: 0,
-                      child: _buildTabBar(
-                        context,
-                        ref,
-                        tabsState,
-                        activeRootTab,
+                      child: TerminalTabStrip(
+                        tabsState: tabsState,
+                        activeRootTab: activeRootTab,
+                        onPromptHostKey: _promptHostKey,
+                        onStartSplitWithHost: _startSplitWithHost,
+                        onSaveTemplate: _saveCurrentLayoutAsTemplate,
+                        onRunTemplate: _runTemplate,
+                        onDeviceLinkAction: _handleDeviceLinkAction,
+                        onShowTabMenu: _showTabMenu,
+                        onShowNewTabMenu: (buttonContext) =>
+                            _showNewTabMenu(buttonContext, ref),
                       ),
                     ),
                   ],
@@ -205,418 +188,6 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildTabBar(
-    BuildContext context,
-    WidgetRef ref,
-    TerminalTabsState tabsState,
-    TerminalTabSession? activeRootTab,
-  ) {
-    final tokens = ShellVibeTokens.resolve(context);
-    final rootTabs = tabsState.tabs
-        .where((t) => t.splitParentId == null)
-        .toList();
-
-    // Rounded at the top, square where it meets the terminal — the tab is the
-    // top of that panel, not a pill parked above it.
-    final tabRadius = BorderRadius.vertical(
-      top: Radius.circular(tokens.radiusMedium),
-    );
-    // Same value the focused pane rings itself with, so the tab's outline and
-    // the pane's are one unbroken line.
-    final activeTabRing = tokens.brand.withValues(alpha: 0.28);
-
-    // Every action except "new tab" is collapsible: on a phone six inline
-    // IconButtons eat the whole bar and the tab strip is squeezed to a single
-    // clipped character.
-    final actions = <_TabBarAction>[
-      // File transfer for the focused session. A local shell has no remote
-      // side, so the button is absent rather than disabled there.
-      if (_sftpTargetPane(tabsState, activeRootTab) case final sftpTarget?)
-        _TabBarAction(
-          buttonKey: const Key('open_sftp_button'),
-          icon: LucideIcons.folderSync,
-          label: 'File Transfer (SFTP) — ${sftpTarget.title}',
-          onPressed: () => _openSftpForPane(sftpTarget),
-        ),
-      // Split Pane Action Buttons (Vertical & Horizontal Split)
-      if (activeRootTab != null) ...[
-        _TabBarAction(
-          buttonKey: const Key('split_vertical_button'),
-          icon: LucideIcons.columns2,
-          label: 'Split Vertically (Side by Side)',
-          onPressed: () {
-            final targetId = tabsState.activeTabId ?? activeRootTab.id;
-            unawaited(
-              ref
-                  .read(terminalTabsProvider.notifier)
-                  .splitTab(
-                    targetId,
-                    direction: Axis.horizontal,
-                    onHostKeyPrompt: _promptHostKey,
-                  ),
-            );
-          },
-        ),
-        _TabBarAction(
-          buttonKey: const Key('split_horizontal_button'),
-          icon: LucideIcons.rows2,
-          label: 'Split Horizontally (Top/Bottom)',
-          onPressed: () {
-            final targetId = tabsState.activeTabId ?? activeRootTab.id;
-            unawaited(
-              ref
-                  .read(terminalTabsProvider.notifier)
-                  .splitTab(
-                    targetId,
-                    direction: Axis.vertical,
-                    onHostKeyPrompt: _promptHostKey,
-                  ),
-            );
-          },
-        ),
-        _TabBarAction(
-          buttonKey: const Key('split_with_host_button'),
-          icon: LucideIcons.serverCog,
-          label: 'Split with Another Host',
-          onPressed: () {
-            final targetId = tabsState.activeTabId ?? activeRootTab.id;
-            _startSplitWithHost(targetId);
-          },
-        ),
-      ],
-      // Layout templates: save what is open, or reopen a saved layout.
-      // Saving needs something to capture; running does not.
-      if (tabsState.tabs.isNotEmpty)
-        _TabBarAction(
-          buttonKey: const Key('save_template_button'),
-          icon: LucideIcons.bookmarkPlus,
-          label: 'Save Tabs & Panes as Template',
-          onPressed: _saveCurrentLayoutAsTemplate,
-        ),
-      _TabBarAction(
-        buttonKey: const Key('run_template_button'),
-        icon: LucideIcons.layoutTemplate,
-        label: 'Run Template',
-        onPressed: () =>
-            TemplatePickerSheet.show(context, onSelect: _runTemplate),
-      ),
-      _TabBarAction(
-        buttonKey: const Key('device_link_action_button'),
-        icon: isMobilePlatform ? LucideIcons.scanQrCode : LucideIcons.qrCode,
-        label: isMobilePlatform ? 'Scan Device Link QR' : 'Show Device Link QR',
-        onPressed: () {
-          if (isMobilePlatform) {
-            unawaited(context.push('/device-link/scan'));
-          } else {
-            unawaited(_openDeviceLinkQr(context, ref));
-          }
-        },
-      ),
-    ];
-
-    // The strip itself is not a surface: the tabs float on the canvas, and the
-    // active one is the only thing that reads as raised.
-    return SizedBox(
-      height: _kTabBarHeight,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final compact = constraints.maxWidth < _kTabBarCompactWidth;
-          return Row(
-            children: [
-              Expanded(
-                // Tabs are dragged into a new order. The handles are the tabs
-                // themselves rather than the grip Flutter adds on desktop: a
-                // tab is already a pill you would reach for, and a grip icon
-                // in each one would cost the title its room.
-                child: ReorderableListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  padding: EdgeInsets.zero,
-                  buildDefaultDragHandles: false,
-                  proxyDecorator: (child, _, _) => Material(
-                    color: Colors.transparent,
-                    child: Opacity(opacity: 0.85, child: child),
-                  ),
-                  onReorderItem: (from, to) => ref
-                      .read(terminalTabsProvider.notifier)
-                      .moveTab(rootTabs[from].id, to),
-                  itemCount: rootTabs.length,
-                  itemBuilder: (context, index) {
-                    final tab = rootTabs[index];
-                    final isActive = tab.id == activeRootTab?.id;
-                    // Tab identity is the host name plus a state dot. The old
-                    // colour-coded tab edge is gone: the wireframe wants text to
-                    // do the distinguishing so eight tabs stay readable.
-                    final dotState = tab.errorMessage != null
-                        ? ShellVibeDotState.error
-                        : tab.isConnecting
-                        ? ShellVibeDotState.idle
-                        : tab.isConnected
-                        ? ShellVibeDotState.online
-                        : ShellVibeDotState.offline;
-
-                    final endpoint = _endpointLabel(tab);
-                    final tabChip = Semantics(
-                      label: 'Tab ${tab.title}',
-                      selected: isActive,
-                      button: true,
-                      child: Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: InkWell(
-                          onTap: () => ref
-                              .read(terminalTabsProvider.notifier)
-                              .setActiveTab(tab.id),
-                          onSecondaryTapDown: (details) => unawaited(
-                            _showTabMenu(
-                              tab,
-                              index: index,
-                              tabCount: rootTabs.length,
-                              position: details.globalPosition,
-                            ),
-                          ),
-                          borderRadius: tabRadius,
-                          child: AnimatedContainer(
-                            duration: tokens.motionFast,
-                            key: Key('tab_header_${tab.id}'),
-                            height: _kTabBarHeight,
-                            constraints: BoxConstraints(
-                              minWidth: compact ? 110 : 150,
-                              maxWidth: 230,
-                            ),
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            decoration: BoxDecoration(
-                              // Only the active tab is a slab. The rest are text
-                              // on the canvas, which is what keeps eight open
-                              // sessions from reading as a toolbar.
-                              //
-                              // It lifts at the top and settles into the
-                              // terminal's own colour at the bottom, where it
-                              // has no border at all — so the tab does not end,
-                              // it becomes the pane.
-                              gradient: isActive
-                                  ? LinearGradient(
-                                      begin: Alignment.topCenter,
-                                      end: Alignment.bottomCenter,
-                                      colors: [
-                                        tokens.surfaceRaised,
-                                        tokens.terminalBg,
-                                      ],
-                                    )
-                                  : null,
-                              borderRadius: tabRadius,
-                              border: isActive
-                                  ? Border(
-                                      top: BorderSide(color: activeTabRing),
-                                      left: BorderSide(color: activeTabRing),
-                                      right: BorderSide(color: activeTabRing),
-                                    )
-                                  : null,
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                ShellVibeStatusDot(state: dotState, size: 7),
-                                const SizedBox(width: 9),
-                                // The badge is what tells the user, at a
-                                // glance across eight tabs, which shell is
-                                // being driven by something other than them.
-                                if (tab.isMcp) ...[
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 5,
-                                      vertical: 1,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: tokens.brand.withValues(
-                                        alpha: 0.16,
-                                      ),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(
-                                      'AI',
-                                      style: TextStyle(
-                                        color: tokens.brand,
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.w700,
-                                        letterSpacing: 0.5,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 7),
-                                ],
-                                Flexible(
-                                  child: Text(
-                                    tab.title,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      color: isActive
-                                          ? tokens.textPrimary
-                                          : tokens.textMuted,
-                                      fontWeight: isActive
-                                          ? FontWeight.w600
-                                          : FontWeight.w500,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                ),
-                                // With the status bar gone these are the
-                                // only trace of a quiet link or an attached
-                                // device on a tab that is not on screen.
-                                for (final pane in _panesOfTab(
-                                  tabsState,
-                                  tab,
-                                )) ...[
-                                  if (_moshQuietBadge(
-                                        context,
-                                        tokens,
-                                        pane,
-                                        showText: false,
-                                      )
-                                      case final badge?) ...[
-                                    const SizedBox(width: 6),
-                                    badge,
-                                  ],
-                                  if (pane.attachment != null) ...[
-                                    const SizedBox(width: 6),
-                                    _deviceLinkBadge(tokens, pane),
-                                  ],
-                                ],
-                                const SizedBox(width: 9),
-                                Semantics(
-                                  label: 'Close tab ${tab.title}',
-                                  button: true,
-                                  child: InkWell(
-                                    key: Key('close_tab_${tab.id}'),
-                                    onTap: () => ref
-                                        .read(terminalTabsProvider.notifier)
-                                        .closeTab(tab.id),
-                                    child: Icon(
-                                      LucideIcons.x,
-                                      size: 14,
-                                      color: tokens.textSubtle,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                    // The tab names the host by its label; hovering it says
-                    // where that label points, which the status bar used to.
-                    final labelledChip = endpoint == null
-                        ? tabChip
-                        : Tooltip(
-                            key: Key('tab_endpoint_${tab.id}'),
-                            message: endpoint,
-                            waitDuration: const Duration(milliseconds: 500),
-                            child: tabChip,
-                          );
-                    // A pointer drags at once, past the tap slop, so a click
-                    // still selects. A finger has to hold first: on a phone a
-                    // swipe along the strip is how the tabs are scrolled.
-                    return KeyedSubtree(
-                      key: ValueKey('tab_item_${tab.id}'),
-                      child: isMobilePlatform
-                          ? ReorderableDelayedDragStartListener(
-                              index: index,
-                              child: labelledChip,
-                            )
-                          : ReorderableDragStartListener(
-                              index: index,
-                              child: labelledChip,
-                            ),
-                    );
-                  },
-                ),
-              ),
-              if (compact)
-                // The same actions, one tap deeper, so the tab strip keeps its
-                // width on a phone.
-                PopupMenuButton<_TabBarAction>(
-                  key: const Key('tab_bar_overflow_button'),
-                  icon: Icon(
-                    LucideIcons.ellipsisVertical,
-                    size: 18,
-                    color: tokens.textPrimary,
-                  ),
-                  tooltip: 'More Actions',
-                  onSelected: (action) => action.onPressed(),
-                  itemBuilder: (context) => [
-                    for (final action in actions)
-                      PopupMenuItem<_TabBarAction>(
-                        key: action.buttonKey,
-                        value: action,
-                        child: Row(
-                          children: [
-                            Icon(action.icon, size: 17),
-                            const SizedBox(width: 10),
-                            Flexible(
-                              child: Text(
-                                action.label,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                  ],
-                )
-              else
-                // Grouped into one hairline cluster: seven loose icon buttons
-                // read as a second tab strip, which is exactly the noise
-                // Nocturne takes out of the top of the screen.
-                //
-                // Shaped like a tab, not a pill: rounded at the top, square
-                // and unbordered at the bottom, where the pane's own top
-                // hairline closes it. The cluster sits on the terminal the
-                // same way the active tab does.
-                Container(
-                  height: _kTabBarHeight,
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                  decoration: BoxDecoration(
-                    borderRadius: tabRadius,
-                    border: Border(
-                      top: BorderSide(color: tokens.border),
-                      left: BorderSide(color: tokens.border),
-                      right: BorderSide(color: tokens.border),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      for (final action in actions)
-                        _TabBarIconButton(
-                          buttonKey: action.buttonKey,
-                          icon: action.icon,
-                          tooltip: action.label,
-                          onPressed: action.onPressed,
-                        ),
-                    ],
-                  ),
-                ),
-              const SizedBox(width: 8),
-              // New Tab Button
-              // The Builder is the menu's anchor: on desktop the dropdown
-              // opens under this button, so it needs the button's own box
-              // rather than the strip's.
-              Builder(
-                builder: (buttonContext) => _TabBarIconButton(
-                  buttonKey: const Key('new_tab_button'),
-                  icon: LucideIcons.plus,
-                  tooltip: 'New Tab',
-                  boxed: true,
-                  onPressed: () => _showNewTabMenu(buttonContext, ref),
-                ),
-              ),
-            ],
-          );
-        },
       ),
     );
   }
@@ -635,7 +206,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
     final rootTabs = tabsState.tabs.where((t) => t.splitParentId == null);
     final activeIsFirstTab =
         rootTabs.isNotEmpty && rootTabs.first.id == activeRootTab.id;
-    return _buildSessionTree(
+    return buildTerminalSessionTree(
       context,
       ref,
       activeRootTab,
@@ -644,56 +215,9 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
       paneOrder: _paneOrder(tabsState, activeRootTab),
       activePaneId: tabsState.activeTabId,
       selectedPaneIds: tabsState.selectedPaneIds,
+      buildPaneMenuEntries: _paneMenuEntries,
       squareTopLeft: activeIsFirstTab,
     );
-  }
-
-  /// The session file transfer would run over: the focused pane when it is an
-  /// SSH session, otherwise the active tab root if that one is SSH.
-  ///
-  /// Returns null for a local shell (and when no tab is open) so the toolbar
-  /// never offers a transfer with nowhere to send files.
-  TerminalTabSession? _sftpTargetPane(
-    TerminalTabsState tabsState,
-    TerminalTabSession? activeRootTab,
-  ) {
-    final focused = tabsState.activeTab;
-    if (focused != null && focused.sessionType == TerminalSessionType.ssh) {
-      return focused;
-    }
-    if (activeRootTab != null &&
-        activeRootTab.sessionType == TerminalSessionType.ssh) {
-      return activeRootTab;
-    }
-    return null;
-  }
-
-  void _openSftpForPane(TerminalTabSession pane) {
-    final label = pane.host?.label ?? pane.title;
-    GoRouter.of(context).push(
-      '/sftp?tab=${Uri.encodeComponent(pane.id)}'
-      '&label=${Uri.encodeComponent(label)}',
-    );
-  }
-
-  /// Root pane of the tab [pane] belongs to. The loop is bounded by the list
-  /// length so a corrupted parent link cannot spin forever.
-  TerminalTabSession _rootOfPane(
-    TerminalTabsState tabsState,
-    TerminalTabSession pane,
-  ) {
-    var current = pane;
-    for (var hops = 0; hops < tabsState.tabs.length; hops++) {
-      final parentId = current.splitParentId;
-      if (parentId == null) return current;
-      final parent = tabsState.tabs.firstWhere(
-        (t) => t.id == parentId,
-        orElse: () => current,
-      );
-      if (parent.id == current.id) return current;
-      current = parent;
-    }
-    return current;
   }
 
   /// The tab-level half of a pane's right-click menu: the same actions the tab
@@ -707,9 +231,9 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
   ) {
     final tabsState = ref.read(terminalTabsProvider);
     final notifier = ref.read(terminalTabsProvider.notifier);
-    final root = _rootOfPane(tabsState, pane);
+    final root = rootOfPane(tabsState.tabs, pane);
     final paneCount = tabsState.tabs
-        .where((t) => _rootOfPane(tabsState, t).id == root.id)
+        .where((t) => rootOfPane(tabsState.tabs, t).id == root.id)
         .length;
 
     return [
@@ -720,7 +244,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
           itemKey: const Key('terminal_menu_sftp'),
           icon: LucideIcons.folderSync,
           label: 'File Transfer (SFTP)',
-          value: () => _openSftpForPane(pane),
+          value: () => openSftpForPane(context, pane),
         ),
       AdaptiveMenuAction(
         itemKey: const Key('terminal_menu_split_vertical'),
@@ -777,13 +301,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
         itemKey: const Key('terminal_menu_device_link'),
         icon: isMobilePlatform ? LucideIcons.scanQrCode : LucideIcons.qrCode,
         label: isMobilePlatform ? 'Scan Device Link QR' : 'Show Device Link QR',
-        value: () {
-          if (isMobilePlatform) {
-            unawaited(context.push('/device-link/scan'));
-          } else {
-            unawaited(_openDeviceLinkQr(context, ref));
-          }
-        },
+        value: _handleDeviceLinkAction,
       ),
       const AdaptiveMenuDivider(),
       // Closing the only pane of a tab is closing the tab, so the two rows
@@ -927,549 +445,17 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
     chosen?.call();
   }
 
-  /// Of the selected panes, how many have a live session handler (i.e. can
-  /// actually receive input). Shown as `BROADCAST X/Y` on a pane's header.
-  int _deliverablePaneCount(
-    List<TerminalTabSession> allTabs,
-    Set<String> selectedPaneIds,
-  ) {
-    final tabsById = {for (final tab in allTabs) tab.id: tab};
-    var count = 0;
-    for (final id in selectedPaneIds) {
-      if (tabsById[id]?.terminal.onOutput != null) count++;
-    }
-    return count;
-  }
-
-  /// Where [session] is connected, as `user@host:port`. Null for a local
-  /// shell, which has nowhere to name.
-  static String? _endpointLabel(TerminalTabSession session) {
-    final host = session.host;
-    if (host == null) return null;
-    final user = host.username;
-    final prefix = user == null || user.isEmpty ? '' : '$user@';
-    return '$prefix${host.hostname}:${host.port}';
-  }
-
-  /// Every pane of the tab rooted at [root], the root included.
-  List<TerminalTabSession> _panesOfTab(
-    TerminalTabsState tabsState,
-    TerminalTabSession root,
-  ) => [
-    for (final tab in tabsState.tabs)
-      if (_rootOfPane(tabsState, tab).id == root.id) tab,
-  ];
-
-  /// Shown only once a Mosh link has gone quiet. Silence is not a disconnect
-  /// here — the session is alive and will catch up — but the difference
-  /// between "slow" and "dropped" is invisible without it, and on this
-  /// protocol the user cannot tell them apart any other way.
-  Widget? _moshQuietBadge(
-    BuildContext context,
-    ShellVibeTokens tokens,
-    TerminalTabSession session, {
-    required bool showText,
-  }) {
-    final link = session.moshLinkState;
-    if (link == null || link.status != MoshLinkStatus.stale) return null;
-    final seconds = link.silence.inSeconds;
-    return Tooltip(
-      key: Key('mosh_quiet_${session.id}'),
-      message: 'Mosh link quiet for ${seconds}s',
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(LucideIcons.wifiOff, size: 12, color: tokens.warning),
-          if (showText) ...[
-            const SizedBox(width: 4),
-            Text(
-              'mosh quiet ${seconds}s',
-              style: shellvibeMono(context, size: 10, color: tokens.warning),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  /// A pane another device is attached to over Device Link. The badge is the
-  /// only place the attachment shows, so it is also where it is ended.
-  Widget _deviceLinkBadge(ShellVibeTokens tokens, TerminalTabSession attached) {
-    return Tooltip(
-      key: Key('device_link_attachment_${attached.id}'),
-      message: 'Device Link · ${attached.title} — click to disconnect',
-      child: Semantics(
-        label: 'Disconnect Device Link ${attached.title}',
-        button: true,
-        child: InkWell(
-          key: Key('device_link_disconnect_${attached.id}'),
-          onTap: () => unawaited(
-            ref
-                .read(terminalTabsProvider.notifier)
-                .disconnectDeviceLink(attached.id),
-          ),
-          borderRadius: BorderRadius.circular(4),
-          child: Padding(
-            padding: const EdgeInsets.all(2),
-            child: Icon(LucideIcons.link, size: 13, color: tokens.brand),
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Title bar of one pane of a split tab. Also its drag handle.
-  Widget _paneHeader(
-    BuildContext context,
-    WidgetRef ref,
-    ShellVibeTokens tokens,
-    TerminalTabSession paneSession, {
-    required String paneLabel,
-    required Color paneLabelColor,
-    required bool isBroadcastSelected,
-  }) {
-    return Container(
-      height: 34,
-      padding: const EdgeInsets.symmetric(horizontal: 14),
-      color: isBroadcastSelected
-          ? tokens.brand.withValues(alpha: 0.08)
-          : tokens.terminalChrome,
-      child: Row(
-        children: [
-          ShellVibeStatusDot(
-            state: paneSession.errorMessage != null
-                ? ShellVibeDotState.error
-                : paneSession.isConnected
-                ? ShellVibeDotState.online
-                : ShellVibeDotState.idle,
-            size: 6,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Row(
-              children: [
-                Flexible(
-                  child: Text(
-                    paneSession.title,
-                    style: shellvibeMono(
-                      context,
-                      size: 11,
-                      color: tokens.textSecondary,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                // The title is the host's label, which says nothing about
-                // where it points; the endpoint is what the old status bar
-                // was read for.
-                if (_endpointLabel(paneSession) case final endpoint?) ...[
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      endpoint,
-                      key: Key('pane_endpoint_${paneSession.id}'),
-                      style: shellvibeMono(
-                        context,
-                        size: 10,
-                        color: tokens.textSubtle,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          if (_moshQuietBadge(context, tokens, paneSession, showText: true)
-              case final badge?) ...[
-            badge,
-            const SizedBox(width: 10),
-          ],
-          if (paneSession.attachment != null) ...[
-            _deviceLinkBadge(tokens, paneSession),
-            const SizedBox(width: 10),
-          ],
-          Text(
-            paneLabel,
-            key: Key('pane_label_${paneSession.id}'),
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 1,
-              color: paneLabelColor,
-            ),
-          ),
-          // Every pane of a split tab closes on its own, the root one
-          // included — closing it promotes a split into its place
-          // instead of taking the tab down.
-          const SizedBox(width: 10),
-          Semantics(
-            label: 'Close split pane ${paneSession.title}',
-            button: true,
-            child: InkWell(
-              key: Key('close_split_${paneSession.id}'),
-              onTap: () => ref
-                  .read(terminalTabsProvider.notifier)
-                  .closePane(paneSession.id),
-              child: Padding(
-                padding: const EdgeInsets.all(2.0),
-                child: Icon(LucideIcons.x, size: 13, color: tokens.textSubtle),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// What follows the pointer while a pane header is being dragged.
+  /// Scans the Device Link QR on a phone, or shows it on a desktop.
   ///
-  /// It rides under the finger rather than keeping the grab offset, so on a
-  /// phone the chip is not hidden by the hand holding it. The header itself is
-  /// as wide as its pane, which would be a feedback widget wider than the
-  /// screen; this is a chip that just names what is being carried.
-  Widget _paneDragFeedback(
-    BuildContext context,
-    ShellVibeTokens tokens,
-    TerminalTabSession paneSession,
-  ) {
-    return Material(
-      color: Colors.transparent,
-      child: Transform.translate(
-        offset: const Offset(-24, -18),
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 220),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: tokens.terminalChrome,
-            borderRadius: BorderRadius.circular(tokens.radiusSmall),
-            border: Border.all(color: tokens.brand.withValues(alpha: 0.55)),
-            boxShadow: tokens.shadowPanel,
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(LucideIcons.gripVertical, size: 13, color: tokens.brand),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  paneSession.title,
-                  style: shellvibeMono(
-                    context,
-                    size: 11,
-                    color: tokens.textPrimary,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSessionTree(
-    BuildContext context,
-    WidgetRef ref,
-    TerminalTabSession session,
-    List<TerminalTabSession> allTabs,
-    ShellVibeTokens tokens, {
-    required List<String> paneOrder,
-    required String? activePaneId,
-    required Set<String> selectedPaneIds,
-    bool squareTopLeft = false,
-  }) {
-    final children = allTabs
-        .where((t) => t.splitParentId == session.id)
-        .toList();
-
-    Widget buildSinglePane(TerminalTabSession paneSession) {
-      // Key by pane id: reusing the element across session switches would
-      // leave stale state behind and never re-fire the pane's focus logic.
-      final screen = TerminalScreen(
-        key: ValueKey(paneSession.id),
-        session: paneSession,
-        buildPaneMenuEntries: _paneMenuEntries,
-        // An AI tab is a window onto an agent's session, not a shell the user
-        // drives: the keyboard is off here, so a stray keystroke cannot enter
-        // a command the agent never asked for and nobody approved.
-        readOnly: paneSession.isMcp,
-      );
-      final isActivePane = paneSession.id == activePaneId;
-      final isBroadcastSelected = selectedPaneIds.contains(paneSession.id);
-      final baseRingColor = paneSession.errorMessage != null
-          ? tokens.danger.withValues(alpha: 0.30)
-          : paneSession.isConnecting
-          ? tokens.warning.withValues(alpha: 0.28)
-          : isBroadcastSelected || isActivePane
-          ? tokens.brand.withValues(alpha: 0.28)
-          : tokens.textPrimary.withValues(alpha: 0.06);
-
-      // Every pane is its own slab: rounded, ringed in the colour of its
-      // state, and opaque inside. A single-pane tab still gets the ring, but
-      // only a split tab gets the header — the header is what names the
-      // snippet target, and with one pane there is nothing to disambiguate.
-      Widget body = screen;
-      if (paneOrder.length >= 2) {
-        final paneNumber = paneOrder.indexOf(paneSession.id) + 1;
-        final paneLabel = isBroadcastSelected
-            ? 'PANE $paneNumber · BROADCAST '
-                  '${_deliverablePaneCount(allTabs, selectedPaneIds)}/'
-                  '${selectedPaneIds.length}'
-            : isActivePane
-            ? 'PANE $paneNumber · ACTIVE'
-            : 'PANE $paneNumber';
-        final paneLabelColor = isBroadcastSelected || isActivePane
-            ? tokens.brand
-            : tokens.textSubtle;
-        // The header doubles as the pane's drag handle: dropping it on another
-        // pane swaps the two. The terminal below is never the handle — a drag
-        // starting there is a text selection.
-        body = Column(
-          children: [
-            Draggable<String>(
-              data: paneSession.id,
-              dragAnchorStrategy: pointerDragAnchorStrategy,
-              feedback: _paneDragFeedback(context, tokens, paneSession),
-              childWhenDragging: Opacity(
-                opacity: 0.4,
-                child: _paneHeader(
-                  context,
-                  ref,
-                  tokens,
-                  paneSession,
-                  paneLabel: paneLabel,
-                  paneLabelColor: paneLabelColor,
-                  isBroadcastSelected: isBroadcastSelected,
-                ),
-              ),
-              child: _paneHeader(
-                context,
-                ref,
-                tokens,
-                paneSession,
-                paneLabel: paneLabel,
-                paneLabelColor: paneLabelColor,
-                isBroadcastSelected: isBroadcastSelected,
-              ),
-            ),
-            Expanded(child: body),
-          ],
-        );
-      }
-
-      final radius = Radius.circular(tokens.radiusLarge);
-      // A corner cannot curve away underneath the tab that is supposed to be
-      // growing out of it, so the merged tab squares the one it covers.
-      final paneRadius = BorderRadius.only(
-        topLeft: squareTopLeft ? Radius.zero : radius,
-        topRight: radius,
-        bottomLeft: radius,
-        bottomRight: radius,
-      );
-      final paneBox = Container(
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
-          color: tokens.terminalBg,
-          borderRadius: paneRadius,
-          boxShadow: tokens.shadowPanel,
-        ),
-        // The ring is painted over the child, not behind it. A clipped child
-        // fills the whole rounded box, so a border in the background
-        // decoration survives only where the content happens to be inset —
-        // along the corner arcs the terminal painted straight over it and the
-        // outline broke.
-        foregroundDecoration: BoxDecoration(
-          borderRadius: paneRadius,
-          border: Border.all(color: baseRingColor),
-        ),
-        child: body,
-      );
-
-      // A single-pane tab has no header to drag and nothing to drop on.
-      if (paneOrder.length < 2) return paneBox;
-
-      // The whole pane is the drop target, not just its header: aiming at a
-      // 34px strip is far harder than aiming at the pane it belongs to.
-      return PaneDropTarget(
-        acceptedPaneIds: paneOrder.where((id) => id != paneSession.id).toSet(),
-        borderRadius: paneRadius,
-        tokens: tokens,
-        onSwap: (draggedId) => ref
-            .read(terminalTabsProvider.notifier)
-            .swapPanes(draggedId, paneSession.id),
-        onDock: (draggedId, edge) => ref
-            .read(terminalTabsProvider.notifier)
-            .movePaneTo(draggedId, paneSession.id, edge),
-        child: paneBox,
-      );
+  /// The one place this branch is written: the tab bar, the pane menu, the
+  /// empty state and the "+" menu all offer the same action and share this
+  /// method rather than repeating the platform check four times.
+  void _handleDeviceLinkAction() {
+    if (isMobilePlatform) {
+      unawaited(context.push('/device-link/scan'));
+    } else {
+      unawaited(_openDeviceLinkQr(context, ref));
     }
-
-    Widget resultWidget = buildSinglePane(session);
-
-    if (children.isEmpty) {
-      return resultWidget;
-    }
-
-    // Newest child first, so it ends up innermost: a split subdivides the
-    // rectangle of the pane it was taken from, not that pane plus every sibling
-    // split off it earlier. Folding in creation order instead would make a
-    // second split of the first pane cut across the whole tab.
-    for (final child in children.reversed) {
-      final childTree = _buildSessionTree(
-        context,
-        ref,
-        child,
-        allTabs,
-        tokens,
-        paneOrder: paneOrder,
-        activePaneId: activePaneId,
-        selectedPaneIds: selectedPaneIds,
-      );
-      final direction = child.splitDirection ?? Axis.horizontal;
-      resultWidget = ResizableSplit(
-        axis: direction,
-        first: resultWidget,
-        second: childTree,
-        ratio: child.splitRatio,
-        dividerColor: Colors.transparent,
-        dividerKey: Key('split_divider_${child.id}'),
-        onRatioChanged: (ratio) => ref
-            .read(terminalTabsProvider.notifier)
-            .setSplitRatio(child.id, ratio),
-      );
-    }
-
-    return resultWidget;
-  }
-
-  Widget _buildEmptyState(BuildContext context, WidgetRef ref) {
-    // The empty screen is where a keyboard-first app teaches its keys. Only on
-    // a keyboard, though: a phone has no ⌘ to press, and the row is 96px wider
-    // than a 375px screen anyway.
-    final tokens = ShellVibeTokens.resolve(context);
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final body = _buildEmptyStateBody(context, ref);
-        if (constraints.maxWidth < tokens.breakpointCompact) return body;
-        return Column(
-          children: [
-            Expanded(child: body),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 40),
-              child: DefaultTextStyle.merge(
-                style: shellvibeMono(
-                  context,
-                  size: 11,
-                  color: ShellVibeTokens.resolve(context).textSubtle,
-                ),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text('⌘T new tab'),
-                    SizedBox(width: 22),
-                    Text('⌘K command palette'),
-                    SizedBox(width: 22),
-                    Text('⌘1…7 modules'),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  /// Bookmarked hosts as one-tap chips on the empty screen.
-  ///
-  /// This costs nothing while the app is in use — the empty state is only on
-  /// screen when no session is open, which is exactly when a shortcut is what
-  /// is wanted. Returns null when nothing is starred, so the screen keeps the
-  /// shape it had.
-  Widget? _bookmarkShortcuts(BuildContext context) {
-    final bookmarks = ref.watch(bookmarksProvider).value ?? const [];
-    final hosts = ref.watch(hostsProvider).value ?? const <HostModel>[];
-    final starred = [
-      for (final bookmark in bookmarks)
-        if (bookmark.hostId != null)
-          ...hosts.where((host) => host.id == bookmark.hostId),
-    ];
-    if (starred.isEmpty) return null;
-
-    final tokens = ShellVibeTokens.resolve(context);
-    return Column(
-      children: [
-        Text(
-          'FAVORITES',
-          style: TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 1.2,
-            color: tokens.textSubtle,
-          ),
-        ),
-        const SizedBox(height: 12),
-        Wrap(
-          alignment: WrapAlignment.center,
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final host in starred)
-              ShellVibeButton.secondary(
-                buttonKey: Key('empty_bookmark_${host.id}'),
-                icon: LucideIcons.star,
-                label: host.label,
-                onPressed: () => unawaited(_connectToHost(host)),
-              ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildEmptyStateBody(BuildContext context, WidgetRef ref) {
-    return ShellVibeEmptyState(
-      footer: _bookmarkShortcuts(context),
-      icon: LucideIcons.squareTerminal,
-      title: 'No open sessions',
-      description: isMobilePlatform
-          ? 'Connect to a saved server, or take over a session from your '
-                'desktop.'
-          : 'Open a local shell, connect to a saved server, or take over a '
-                'session from your phone.',
-      actions: [
-        if (supportsLocalShell)
-          ShellVibeButton(
-            buttonKey: const Key('empty_open_local_button'),
-            icon: LucideIcons.monitor,
-            label: 'Local shell',
-            onPressed: () =>
-                ref.read(terminalTabsProvider.notifier).openLocalTab(),
-          ),
-        ShellVibeButton.secondary(
-          buttonKey: const Key('empty_select_host_button'),
-          icon: LucideIcons.server,
-          label: 'Connect to host',
-          onPressed: () => _showSelectHostModal(context, ref),
-        ),
-        ShellVibeButton.secondary(
-          buttonKey: const Key('empty_device_link_button'),
-          icon: isMobilePlatform ? LucideIcons.scanQrCode : LucideIcons.qrCode,
-          label: 'Device Link',
-          onPressed: () {
-            if (isMobilePlatform) {
-              unawaited(context.push('/device-link/scan'));
-            } else {
-              unawaited(_openDeviceLinkQr(context, ref));
-            }
-          },
-        ),
-      ],
-    );
   }
 
   Future<void> _openDeviceLinkQr(BuildContext context, WidgetRef ref) async {
@@ -1526,11 +512,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
       case _NewTabAction.connectToHost:
         _showSelectHostModal(this.context, ref);
       case _NewTabAction.deviceLink:
-        if (isMobilePlatform) {
-          unawaited(this.context.push('/device-link/scan'));
-        } else {
-          unawaited(_openDeviceLinkQr(this.context, ref));
-        }
+        _handleDeviceLinkAction();
     }
   }
 
@@ -1737,7 +719,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
       context: context,
       title: 'Connect to Host',
       desktopHeight: 420,
-      builder: (ctx) => _SelectHostPanel(
+      builder: (ctx) => SelectHostPanel(
         onSelected: (host) async {
           Navigator.of(ctx).pop();
           await (onSelect ?? _connectToHost)(host);
@@ -1753,207 +735,6 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
   }
 }
 
-/// Host picker shown by the "Connect to Host" panel.
-///
-/// Stateful for the query alone: the list it filters is long enough on a real
-/// workspace that scrolling it is the slow way to reach a host, and typing is
-/// the fast one.
-class _SelectHostPanel extends ConsumerStatefulWidget {
-  final Future<void> Function(HostModel host) onSelected;
-
-  /// Lists saved templates under the hosts when set.
-  final ValueChanged<TemplateModel>? onTemplateSelected;
-
-  const _SelectHostPanel({required this.onSelected, this.onTemplateSelected});
-
-  @override
-  ConsumerState<_SelectHostPanel> createState() => _SelectHostPanelState();
-}
-
-class _SelectHostPanelState extends ConsumerState<_SelectHostPanel> {
-  String _query = '';
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = ShellVibeTokens.resolve(context);
-    final hostsAsync = ref.watch(hostsProvider);
-
-    final allTemplates = widget.onTemplateSelected == null
-        ? const <TemplateModel>[]
-        : ref.watch(templatesProvider).value ?? const <TemplateModel>[];
-
-    return hostsAsync.when(
-      data: (hosts) {
-        if (hosts.isEmpty && allTemplates.isEmpty) {
-          return const Padding(
-            padding: EdgeInsets.all(24.0),
-            child: Center(child: Text('No hosts available. Create one first.')),
-          );
-        }
-
-        // Starred hosts lead, in the order they were starred, exactly as they
-        // do in the ⌘K palette: a picker and a palette that disagree about
-        // where a favourite sits are two things to learn instead of one.
-        final bookmarkedIds = [
-          for (final bookmark in ref.watch(bookmarksProvider).value ?? const [])
-            if (bookmark.hostId != null) bookmark.hostId!,
-        ];
-        final favorites = [
-          for (final id in bookmarkedIds) ...hosts.where((h) => h.id == id),
-        ].where((host) => hostMatchesQuery(host, _query)).toList();
-        final others = hosts
-            .where((host) => !bookmarkedIds.contains(host.id))
-            .where((host) => hostMatchesQuery(host, _query))
-            .toList();
-        final templates = allTemplates
-            .where((template) => templateMatchesQuery(template, _query))
-            .toList();
-
-        Widget row(HostModel host, {required bool favorite}) {
-          return ListTile(
-            key: Key('select_host_row_${host.id}'),
-            leading: Icon(
-              favorite ? LucideIcons.star : LucideIcons.server,
-              size: 18,
-              color: favorite ? tokens.brand : null,
-            ),
-            title: Text(host.label),
-            subtitle: Text('${host.hostname}:${host.port}'),
-            onTap: () => widget.onSelected(host),
-          );
-        }
-
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              child: ShellVibeSearchField(
-                fieldKey: const Key('select_host_search_input'),
-                hintText: 'Search hosts, addresses and protocols…',
-                // On a phone this panel is a sheet, and a keyboard raised over
-                // the list on open hides the very rows it filters.
-                autofocus: !isMobilePlatform,
-                onChanged: (value) => setState(() => _query = value),
-              ),
-            ),
-            Flexible(
-              child: favorites.isEmpty && others.isEmpty && templates.isEmpty
-                  ? Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-                      child: Text(
-                        'No hosts match that search.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: tokens.textSubtle),
-                      ),
-                    )
-                  : ListView(
-                      shrinkWrap: true,
-                      children: [
-                        // The headings only appear once there is something to
-                        // separate: with nothing starred the list is the plain
-                        // one it was.
-                        if (favorites.isNotEmpty) ...[
-                          const ShellVibeSectionLabel(
-                            label: 'Favorites',
-                            padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
-                          ),
-                          for (final host in favorites)
-                            row(host, favorite: true),
-                          if (others.isNotEmpty)
-                            const ShellVibeSectionLabel(
-                              label: 'All hosts',
-                              padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
-                            ),
-                        ],
-                        for (final host in others) row(host, favorite: false),
-                        // After the hosts rather than among them: a template
-                        // opens several tabs, which is a bigger step than the
-                        // one this panel is mostly used for.
-                        if (templates.isNotEmpty) ...[
-                          const ShellVibeSectionLabel(
-                            label: 'Templates',
-                            padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
-                          ),
-                          for (final template in templates)
-                            ListTile(
-                              key: Key('select_template_row_${template.id}'),
-                              leading: const Icon(
-                                LucideIcons.layoutTemplate,
-                                size: 18,
-                              ),
-                              title: Text(template.name),
-                              subtitle: Text(templateSummary(template)),
-                              onTap: () =>
-                                  widget.onTemplateSelected?.call(template),
-                            ),
-                        ],
-                      ],
-                    ),
-            ),
-          ],
-        );
-      },
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, s) => Center(child: Text('Error loading hosts: $e')),
-    );
-  }
-}
-
 /// The rows of the "+" menu, so the choice survives the modal being a dropdown
 /// on one host and a sheet on another.
 enum _NewTabAction { localShell, connectToHost, deviceLink }
-
-/// A 32px quiet icon action in the terminal's top strip.
-///
-/// [boxed] gives it its own hairline, shaped like a tab — rounded on top,
-/// square and open at the bottom where the pane's hairline closes it — for the
-/// one action that sits outside the grouped cluster.
-class _TabBarIconButton extends StatelessWidget {
-  final Key buttonKey;
-  final IconData icon;
-  final String tooltip;
-  final bool boxed;
-  final VoidCallback onPressed;
-
-  const _TabBarIconButton({
-    required this.buttonKey,
-    required this.icon,
-    required this.tooltip,
-    required this.onPressed,
-    this.boxed = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = ShellVibeTokens.resolve(context);
-    final boxedRadius = BorderRadius.vertical(
-      top: Radius.circular(tokens.radiusMedium),
-    );
-    return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        key: buttonKey,
-        onTap: onPressed,
-        borderRadius: boxed ? boxedRadius : BorderRadius.circular(8),
-        child: Container(
-          width: boxed ? 34 : 32,
-          height: boxed ? _kTabBarHeight : 32,
-          alignment: Alignment.center,
-          decoration: boxed
-              ? BoxDecoration(
-                  borderRadius: boxedRadius,
-                  border: Border(
-                    top: BorderSide(color: tokens.border),
-                    left: BorderSide(color: tokens.border),
-                    right: BorderSide(color: tokens.border),
-                  ),
-                )
-              : null,
-          child: Icon(icon, size: boxed ? 17 : 16, color: tokens.textMuted),
-        ),
-      ),
-    );
-  }
-}

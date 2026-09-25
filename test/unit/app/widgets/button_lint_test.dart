@@ -22,7 +22,7 @@ void main() {
     'lib/app/widgets/app_navigation_shell.dart':
         '_RailButton is a navigation item — it carries a selected state and '
         'stacks its label under its glyph, which no button does',
-    'lib/features/terminal/presentation/views/terminal_tab_view.dart':
+    'lib/features/terminal/presentation/widgets/terminal_tab_strip.dart':
         '_TabBarIconButton is shaped as a tab: full tab-strip height, rounded '
         'on the top corners only, and ruled on three sides so it joins the '
         'strip rather than floating on it',
@@ -39,8 +39,10 @@ void main() {
   );
 
   /// A locally declared button class — the other way the house component gets
-  /// bypassed, and the one that produced the four icon-button sizes.
-  final localButtonClass = RegExp(r'^class\s+_\w*Button\b', multiLine: true);
+  /// bypassed, and the one that produced the four icon-button sizes. Public or
+  /// private: making the class public to share it across files does not make
+  /// it any less a seventh kind of button.
+  final localButtonClass = RegExp(r'^class\s+\w*Button\b', multiLine: true);
 
   List<File> presentationFiles() =>
       Directory('lib')
@@ -94,14 +96,16 @@ void main() {
       // a section heading are written, and those follow their own
       // conventions -- a terminal's Esc key is not a button that should be
       // retitled to match one.
-      for (final button in RegExp(r'ShellVibeButton(\.\w+)?\(')
-          .allMatches(source)) {
+      for (final button in RegExp(
+        r'ShellVibeButton(\.\w+)?\(',
+      ).allMatches(source)) {
         final window = source.substring(
           button.end,
           math.min(button.end + 400, source.length),
         );
-        final label = RegExp("label: '([A-Za-z][^'\$]{1,44})'")
-            .firstMatch(window);
+        final label = RegExp(
+          "label: '([A-Za-z][^'\$]{1,44})'",
+        ).firstMatch(window);
         if (label == null) continue;
 
         labels
@@ -118,7 +122,8 @@ void main() {
     expect(
       clashes,
       isEmpty,
-      reason: 'The same label is written two ways:\n'
+      reason:
+          'The same label is written two ways:\n'
           '${clashes.map((c) => '  ${c.join('  vs  ')}').join('\n')}',
     );
   });
