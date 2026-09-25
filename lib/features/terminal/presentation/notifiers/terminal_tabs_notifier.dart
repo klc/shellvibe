@@ -1,35 +1,22 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:dart_mosh/dart_mosh.dart';
-import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
-import 'package:nsd/nsd.dart' as nsd;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:uuid/uuid.dart';
 import 'package:xterm3/xterm.dart';
 
 import '../../../../core/network/device_link/device_link_local_session_transport.dart';
-import '../../../../core/network/device_link/device_discovery.dart';
-import '../../../../core/network/device_link/device_link_identity.dart';
 import '../../../../core/network/device_link/device_link_server.dart';
 import '../../../../core/network/device_link/device_link_session_transport.dart';
-import '../../../../core/constants/app_constants.dart';
 import '../../../../core/network/local_pty_manager.dart';
-import '../../../../core/network/mosh_session_manager.dart';
 import '../../../../core/network/providers/network_providers.dart';
 import '../../../../core/network/ssh_session_manager.dart';
-import '../../../../core/network/terminal_mosh_bridge.dart';
-import '../../../../core/network/terminal_ssh_bridge.dart';
 import '../../../../core/utils/platform_capabilities.dart';
 import '../../../../shared/providers/database_providers.dart';
 import '../../../../shared/providers/workspace_provider.dart';
-import '../../../../shared/storage/secure_storage_service.dart';
 import '../../../hosts/domain/models/host_model.dart';
-import '../../../hosts/domain/services/ssh_connect_planner.dart';
 import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
 import '../../../settings/domain/models/app_settings_model.dart';
 import '../../../settings/presentation/notifiers/settings_notifier.dart';
@@ -42,6 +29,12 @@ import '../../../vault/presentation/notifiers/vault_notifier.dart';
 import '../../domain/models/terminal_palette_data.dart';
 import '../../domain/models/terminal_tab_session.dart';
 import '../../domain/services/broadcast_input_router.dart';
+import '../../domain/services/device_link_server_host.dart';
+import '../../domain/services/terminal_pane_layout.dart';
+import '../../domain/services/terminal_session_connector.dart';
+import 'terminal_tabs_state.dart';
+
+export 'terminal_tabs_state.dart';
 
 part 'terminal_tabs_notifier.g.dart';
 
@@ -63,53 +56,12 @@ TerminalTargetPlatform _terminalTargetPlatform() {
   };
 }
 
-class TerminalTabsState {
-  final List<TerminalTabSession> tabs;
-  final String? activeTabId;
-
-  /// Panes picked with ⌘+click. When two or more are selected the terminal
-  /// broadcasts keyboard input and snippets to all of them.
-  final Set<String> selectedPaneIds;
-
-  const TerminalTabsState({
-    this.tabs = const [],
-    this.activeTabId,
-    this.selectedPaneIds = const {},
-  });
-
-  /// True when broadcast input is live (two or more panes selected).
-  bool get isBroadcasting => selectedPaneIds.length >= 2;
-
-  TerminalTabSession? get activeTab {
-    if (activeTabId == null) return null;
-    try {
-      return tabs.firstWhere((t) => t.id == activeTabId);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  TerminalTabsState copyWith({
-    List<TerminalTabSession>? tabs,
-    String? activeTabId,
-    bool clearActiveTabId = false,
-    Set<String>? selectedPaneIds,
-  }) {
-    return TerminalTabsState(
-      tabs: tabs ?? this.tabs,
-      activeTabId: clearActiveTabId ? null : (activeTabId ?? this.activeTabId),
-      selectedPaneIds: selectedPaneIds ?? this.selectedPaneIds,
-    );
-  }
-}
-
 @Riverpod(keepAlive: true)
 class TerminalTabsNotifier extends _$TerminalTabsNotifier {
   final Set<TerminalTabSession> _ownedTabs = {};
   final Map<String, DeviceLinkLocalSessionTransport> _deviceLinkTransports = {};
-  final StreamController<void> _deviceLinkPairingEvents =
-      StreamController<void>.broadcast();
   final BroadcastInputRouter _broadcastRouter = BroadcastInputRouter();
+  final TerminalPaneLayout _paneLayout = TerminalPaneLayout();
 
   /// Per-tab teardown that has to run *before* the tab's own dispose, for
   /// tabs whose real session lives somewhere else: a Device Link peer, an MCP
@@ -117,11 +69,16 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
   /// is what keeps "close the tab, which closes the session, which closes the
   /// tab" from looping.
   final Map<String, FutureOr<void> Function()> _tabCloseCallbacks = {};
-  DeviceLinkServer? _deviceLinkServer;
-  nsd.Registration? _deviceLinkMdnsRegistration;
-  Future<DeviceLinkServer>? _deviceLinkServerStartup;
-  Future<void>? _deviceLinkServerStop;
-  int _deviceLinkLifecycleGeneration = 0;
+
+  /// Establishes and reconnects SSH/Mosh sessions. Constructed once in
+  /// [build] with callbacks into this notifier's `state` and `ref`, so the
+  /// actual connect/reconnect machinery lives outside Riverpod. See
+  /// [TerminalSessionConnector].
+  late final TerminalSessionConnector _sessionConnector;
+
+  /// Hosts the desktop-side Device Link listener. Constructed once in
+  /// [build]; see [DeviceLinkServerHost].
+  late final DeviceLinkServerHost _deviceLinkHost;
 
   /// Set when the provider is torn down.
   ///
@@ -129,8 +86,6 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
   /// come up first — so the pane it was starting for can be gone by the time
   /// it is ready, and touching `state` past disposal throws.
   bool _notifierDisposed = false;
-
-  bool _deviceLinkDisposed = false;
 
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
 
@@ -150,14 +105,31 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
   TerminalTabsState build() {
     // Interceptors read the notifier's live selection, never a snapshot.
     _broadcastRouter.forwardCallback = _broadcastFrom;
+    _sessionConnector = TerminalSessionConnector(
+      knownHostsDao: () => ref.read(knownHostsDaoProvider),
+      hostsRepository: () => ref.read(hostsRepositoryProvider),
+      fetchIdentityById: (id) =>
+          ref.read(vaultRepositoryProvider).getIdentityById(id),
+      decryptIdentityById: (id) =>
+          ref.read(identitiesProvider.notifier).getDecryptedIdentity(id),
+      findTab: tabById,
+      tabIsOpen: (tabId) => state.tabs.any((t) => t.id == tabId),
+      notifyChanged: () => state = state.copyWith(tabs: [...state.tabs]),
+      syncBroadcast: _syncBroadcast,
+      watchConnectivity: _watchConnectivity,
+    );
+    _deviceLinkHost = DeviceLinkServerHost(
+      pairingRepository: () => ref.read(deviceLinkPairingRepositoryProvider),
+      secureStorage: () => ref.read(secureStorageServiceProvider),
+      isVaultAvailable: () => _isVaultAvailable,
+      sessionTransportsProvider: deviceLinkSessionTransports,
+    );
     ref.listen(vaultProvider, (_, next) {
       if (_vaultAllowsDeviceLink(next)) return;
       unawaited(stopDeviceLinkServer());
     });
     ref.onDispose(() {
       _notifierDisposed = true;
-      _deviceLinkDisposed = true;
-      _deviceLinkLifecycleGeneration++;
       unawaited(_connectivitySub?.cancel() ?? Future.value());
       _connectivitySub = null;
       // Reading `state` is forbidden during life-cycles; drop interceptors
@@ -171,16 +143,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       // The owners these call back into are being torn down alongside this
       // notifier, so drop them rather than invoking them.
       _tabCloseCallbacks.clear();
-      unawaited(_deviceLinkPairingEvents.close());
-      final server = _deviceLinkServer;
-      _deviceLinkServer = null;
-      _deviceLinkServerStartup = null;
-      if (server != null) unawaited(server.close());
-      final registration = _deviceLinkMdnsRegistration;
-      _deviceLinkMdnsRegistration = null;
-      if (registration != null) {
-        unawaited(_unregisterDeviceLinkMdnsRegistration(registration));
-      }
+      _deviceLinkHost.dispose();
     });
     return const TerminalTabsState();
   }
@@ -248,469 +211,21 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     final updatedTabs = [...state.tabs, newTab];
     state = state.copyWith(tabs: updatedTabs, activeTabId: tabId);
 
-    await _connectSshTab(newTab, host, identity, onHostKeyPrompt);
-  }
-
-  /// Opens an SSH shell on [tab] against [host] and wires the resulting
-  /// session into the tab's terminal and bridge.
-  ///
-  /// Shared by [openTabForHost] and by `splitTab` so that splitting an SSH
-  /// host session opens a second SSH session to the same host (and keeps
-  /// splits working on mobile, where a local PTY is not available).
-  Future<void> _connectSshTab(
-    TerminalTabSession tab,
-    HostModel host,
-    IdentityModel? identity,
-    HostKeyPromptCallback? onHostKeyPrompt,
-  ) async {
-    final terminal = tab.terminal;
-    // A reconnect reuses the emulator, so it starts from whatever the dead
-    // session left latched. See [_resetTerminalForNewSession].
-    _resetTerminalForNewSession(terminal);
-    try {
-      // ProxyJump: connect each hop in turn, tunneling every subsequent hop's
-      // transport through the previous hop's already-authenticated client.
-      //
-      // Gated on the synchronous `jumpHostId` check, not just an empty
-      // resolved chain: `await` always inserts a microtask gap even for an
-      // already-completed Future, so unconditionally awaiting
-      // `_resolveJumpChain` would delay `tab.sshSessionManager` being set
-      // below past the caller's next synchronous read of it — every hostless
-      // connect, not just jump ones.
-      SSHClient? viaClient;
-      if (host.jumpHostId != null) {
-        final jumpChain = await _resolveJumpChain(host);
-        for (final jumpHost in jumpChain) {
-          final jumpIdentity = jumpHost.identityId == null
-              ? null
-              : await ref
-                    .read(vaultRepositoryProvider)
-                    .getIdentityById(jumpHost.identityId!);
-          final jumpManager = SSHSessionManager(
-            knownHostsDao: ref.read(knownHostsDaoProvider),
-          );
-          tab.jumpSessionManagers.add(jumpManager);
-          final jumpConfig = _buildConnectConfig(
-            jumpHost,
-            jumpIdentity,
-            onHostKeyPrompt: onHostKeyPrompt,
-          );
-          terminal.write(
-            '\x1b[1;34m[SSH]\x1b[0m Connecting via jump host \x1b[1;36m'
-            '${jumpConfig.username}@${jumpConfig.hostname}:${jumpConfig.port}'
-            '\x1b[0m...\r\n',
-          );
-          viaClient = await jumpManager.connect(
-            jumpConfig,
-            viaClient: viaClient,
-          );
-        }
-      }
-
-      final sessionManager = SSHSessionManager(
-        knownHostsDao: ref.read(knownHostsDaoProvider),
-      );
-      tab.sshSessionManager = sessionManager;
-
-      final config = _buildConnectConfig(
-        host,
-        identity,
-        onHostKeyPrompt: onHostKeyPrompt,
-      );
-
-      terminal.write(
-        '\x1b[1;34m[SSH]\x1b[0m Connecting to \x1b[1;36m'
-        '${config.username}@${config.hostname}:${config.port}\x1b[0m...\r\n',
-      );
-
-      await sessionManager.connect(config, viaClient: viaClient);
-      try {
-        // Mosh only changes *how* the shell is opened: the SSH connect, host
-        // key verification, and identity resolution above are shared, and the
-        // client stays live underneath either way.
-        final startedMosh = host.protocol == 'mosh'
-            ? await _startMoshShell(tab, host, config, sessionManager)
-            : false;
-
-        if (!startedMosh) {
-          final sshSession = await sessionManager.openShell(
-            width: terminal.viewWidth,
-            height: terminal.viewHeight,
-          );
-
-          final bridge = TerminalSSHBridge(
-            terminal: terminal,
-            session: sshSession,
-            onClosed: () => _handleRemoteExit(tab),
-          );
-
-          tab.sshBridge = bridge;
-          // A dropped SSH keep-alive means a dead tab here. On a Mosh tab it
-          // means nothing — surviving exactly that is the point — so the
-          // listener is deliberately not wired in that branch.
-          tab.sshClientChangesSub = sessionManager.clientChanges.listen(
-            (client) => _handleClientChange(tab, client),
-          );
-          // The view has already sized the terminal by now, so `onResize` —
-          // only wired when the bridge is built — never fires for that first
-          // layout and the remote PTY would stay at whatever openShell
-          // requested.
-          bridge.resizeTerminal(terminal.viewWidth, terminal.viewHeight);
-        }
-
-        tab.isConnecting = false;
-        tab.isConnected = true;
-        tab.disconnectCause = null;
-
-        state = state.copyWith(tabs: [...state.tabs]);
-        // Wire broadcast if this pane is already part of the selection.
-        _syncBroadcast();
-      } catch (e) {
-        // A failure after a successful connect (e.g. server refuses a PTY)
-        // must tear the client down; otherwise the socket and keep-alive
-        // timer keep running against a dead tab.
-        await sessionManager.close();
-        rethrow;
-      }
-    } catch (e) {
-      tab.isConnecting = false;
-      tab.isConnected = false;
-      tab.errorMessage = e.toString();
-      terminal.write(
-        '\r\n\x1b[1;31m[Connection Error]\x1b[0m Failed to connect: $e\r\n',
-      );
-      state = state.copyWith(tabs: [...state.tabs]);
-      // Not nulled: the error banner/reconnect path expects a failed tab to
-      // still carry a (now-closed) session manager, and the next connect
-      // attempt (see `tab.sshSessionManager = sessionManager` above) always
-      // overwrites this with a fresh one anyway.
-      await tab.sshSessionManager?.close();
-      await tab.moshLinkSub?.cancel();
-      tab.moshLinkSub = null;
-      await tab.moshSessionManager?.close();
-      tab.moshSessionManager = null;
-      for (final jumpManager in tab.jumpSessionManagers.reversed) {
-        await jumpManager.close();
-      }
-      tab.jumpSessionManagers = [];
-    }
-  }
-
-  /// Starts a Mosh shell on [tab] over the already-authenticated
-  /// [sessionManager], returning false when the caller should open a plain SSH
-  /// shell instead.
-  ///
-  /// Every failure here is recoverable: the SSH client is connected and idle,
-  /// so a host without `mosh-server` — the common case — lands the user in a
-  /// working shell with one line of explanation rather than on an error screen.
-  Future<bool> _startMoshShell(
-    TerminalTabSession tab,
-    HostModel host,
-    SSHConnectConfig config,
-    SSHSessionManager sessionManager,
-  ) async {
-    final terminal = tab.terminal;
-
-    if (host.jumpHostId != null) {
-      // UDP does not travel through an SSH channel, so there is no path for
-      // the Mosh datagrams to take. Saying so beats a session that silently
-      // never comes up.
-      terminal.write(
-        '\r\n\x1b[33m[Mosh]\x1b[0m Not available through a jump host '
-        '(UDP cannot be tunneled). Using SSH.\r\n',
-      );
-      return false;
-    }
-
-    final client = sessionManager.client;
-    if (client == null) return false;
-
-    final manager = MoshSessionManager();
-    tab.moshSessionManager = manager;
-
-    try {
-      final address = await _resolveMoshAddress(config.hostname);
-
-      terminal.write(
-        '\x1b[1;34m[Mosh]\x1b[0m Starting mosh-server on \x1b[1;36m'
-        '${config.hostname}\x1b[0m...\r\n',
-      );
-
-      final transport = await manager.connect(
-        client: client,
-        address: address,
-        bootstrap: _buildMoshBootstrap(host),
-        columns: terminal.viewWidth,
-        rows: terminal.viewHeight,
-      );
-
-      final bridge = TerminalMoshBridge(
-        terminal: terminal,
-        session: transport,
-        predictionEngine: tab.moshPredictionEngine,
-        onPredictionChanged: tab.refreshMoshPredictionText,
-        onClosed: () => _handleRemoteExit(tab),
-      );
-      tab.moshBridge = bridge;
-      // Same first-layout gap as the SSH branch: the view sized the terminal
-      // before `onResize` existed.
-      bridge.resizeTerminal(terminal.viewWidth, terminal.viewHeight);
-
-      tab.moshLinkSub = manager.linkStates.listen(
-        (linkState) => _handleMoshLinkState(tab, linkState),
-      );
-      _watchConnectivity();
-      return true;
-    } catch (e) {
-      terminal.write(
-        '\r\n\x1b[33m[Mosh]\x1b[0m $e\r\n'
-        '\x1b[33m[Mosh]\x1b[0m Falling back to SSH.\r\n',
-      );
-      await manager.close();
-      tab.moshSessionManager = null;
-      return false;
-    }
-  }
-
-  /// Builds the `mosh-server` command from the host's own settings, falling
-  /// back to the mosh defaults for anything left blank.
-  ///
-  /// The port range is re-checked here rather than trusted: the form validates
-  /// it, but a row can also arrive from an import or an older write, and
-  /// `MoshSshBootstrap` throws on a range it cannot use — which would turn a
-  /// bad stored value into a failed connect instead of a default one.
-  MoshSshBootstrap _buildMoshBootstrap(HostModel host) {
-    const defaults = MoshSshBootstrap();
-    final binary = host.moshServerPath?.trim();
-    final range = host.moshPortRange?.trim().split(':') ?? const [];
-    final start = range.length == 2 ? int.tryParse(range[0].trim()) : null;
-    final end = range.length == 2 ? int.tryParse(range[1].trim()) : null;
-    final usable =
-        start != null &&
-        end != null &&
-        start >= 1 &&
-        end <= 65535 &&
-        end >= start;
-
-    return MoshSshBootstrap(
-      serverBinary: (binary == null || binary.isEmpty)
-          ? defaults.serverBinary
-          : binary,
-      serverPort: usable ? start : defaults.serverPort,
-      serverPortEnd: usable ? end : defaults.serverPortEnd,
+    await _sessionConnector.connectSshTab(
+      newTab,
+      host,
+      identity,
+      onHostKeyPrompt,
     );
   }
-
-  /// Resolves the address the Mosh datagrams are sent to.
-  ///
-  /// An IP literal — what most saved hosts are — is used as-is, with no lookup
-  /// at all. A name is resolved once, here, and the result is handed to the
-  /// session manager so nothing downstream can resolve it a second time.
-  ///
-  /// The residual case is round-robin DNS, where this lookup can land on a
-  /// different machine than the SSH connection did. `mosh-server` binds to the
-  /// address SSH arrived on, so the mismatch shows up as a session that never
-  /// answers rather than as a shell on the wrong host, and the connect fails
-  /// into the SSH fallback above. Reading the address off the SSH socket would
-  /// close the gap, but dartssh2 does not expose it.
-  Future<InternetAddress> _resolveMoshAddress(String hostname) async {
-    final literal = InternetAddress.tryParse(hostname);
-    if (literal != null) return literal;
-
-    final addresses = await InternetAddress.lookup(hostname);
-    if (addresses.isEmpty) {
-      throw MoshBootstrapException('Could not resolve $hostname.');
-    }
-    return addresses.first;
-  }
-
-  /// Records a Mosh link update so the tab can show it.
-  ///
-  /// Nothing here changes the connection state. A stale link is a working
-  /// session that has been quiet, and the end of a session arrives through the
-  /// bridge's `onClosed` like any other.
-  void _handleMoshLinkState(TerminalTabSession tab, MoshLinkState linkState) {
-    if (!state.tabs.any((t) => t.id == tab.id)) return;
-    tab.moshLinkState = linkState;
-    state = state.copyWith(tabs: [...state.tabs]);
-  }
-
-  /// The planner that turns a stored host into a jump chain and a connect
-  /// config. Shared with the Tunnels screen, which needs the same two answers
-  /// to open a background SSH session for a port forward.
-  SshConnectPlanner get _connectPlanner =>
-      SshConnectPlanner(ref.read(hostsRepositoryProvider));
-
-  Future<List<HostModel>> _resolveJumpChain(HostModel target) =>
-      _connectPlanner.resolveJumpChain(target);
-
-  SSHConnectConfig _buildConnectConfig(
-    HostModel host,
-    IdentityModel? identity, {
-    HostKeyPromptCallback? onHostKeyPrompt,
-  }) => _connectPlanner.buildConnectConfig(
-    host,
-    identity,
-    onHostKeyPrompt: onHostKeyPrompt,
-  );
 
   /// Re-establishes the SSH session of a tab whose connection dropped or
   /// failed, re-reading the host so any edit made since the tab was opened
   /// applies, and reusing the stored host key prompt callback. The old bridge
   /// and manager are torn down first so a single live session per tab is
-  /// preserved.
-  Future<void> reconnectTab(String tabId) async {
-    final index = state.tabs.indexWhere((t) => t.id == tabId);
-    if (index == -1) return;
-    final tab = state.tabs[index];
-    if (tab.sessionType != TerminalSessionType.ssh) return;
-    if (tab.host == null) return;
-    if (tab.isConnecting) return;
-
-    // Flip the tab state before anything awaits: the old manager's `close()`
-    // null emission is then ignored by the drop listener, the UI shows the
-    // reconnect in flight straight away, and the guard above rejects a second
-    // reconnect for this tab.
-    tab.isConnected = false;
-    tab.isConnecting = true;
-    tab.errorMessage = null;
-    tab.disconnectCause = null;
-    state = state.copyWith(tabs: [...state.tabs]);
-
-    await _refreshTabHost(tab);
-    final host = tab.host!;
-
-    await tab.sshClientChangesSub?.cancel();
-    tab.sshClientChangesSub = null;
-    await tab.moshLinkSub?.cancel();
-    tab.moshLinkSub = null;
-    tab.moshLinkState = null;
-    if (tab.sshBridge != null) {
-      await tab.sshBridge!.dispose(closeSession: true);
-      tab.sshBridge = null;
-    }
-    // A Mosh session cannot be reattached — the client holds the OCB counter
-    // state and the server's replay filter rejects an old sequence — so a
-    // reconnect always starts a fresh one.
-    if (tab.moshBridge != null) {
-      await tab.moshBridge!.dispose(closeSession: true);
-      tab.moshBridge = null;
-    }
-    if (tab.moshSessionManager != null) {
-      await tab.moshSessionManager!.close();
-      tab.moshSessionManager = null;
-    }
-    if (tab.sshSessionManager != null) {
-      await tab.sshSessionManager!.close();
-      tab.sshSessionManager = null;
-    }
-    for (final jumpManager in tab.jumpSessionManagers.reversed) {
-      await jumpManager.close();
-    }
-    tab.jumpSessionManagers = [];
-
-    await _connectSshTab(tab, host, tab.identity, tab.hostKeyPromptCallback);
-  }
-
-  /// Returns [terminal] to a state a fresh shell can be typed into.
-  ///
-  /// A full-screen program that dies with its transport — htop when the link
-  /// drops — never gets to send the sequences that undo what it turned on, so
-  /// mouse reporting, bracketed paste, application cursor keys and the
-  /// alternate screen stay latched in the emulator. The reconnected shell then
-  /// answers a scroll with `\x1b[<65;62;41M`, which it has no idea how to read
-  /// and echoes back as `65;62;41M` across the prompt.
-  ///
-  /// A soft reset (DECSTR) drops exactly those modes and leaves the scrollback
-  /// alone, so the session history above the reconnect survives.
-  void _resetTerminalForNewSession(Terminal terminal) {
-    if (terminal.isUsingAltBuffer) terminal.useMainBuffer();
-    terminal.softReset();
-  }
-
-  /// Re-reads [tab]'s host row, and its identity when the host now points at a
-  /// different one, so a reconnect uses the current settings.
-  ///
-  /// A tab holds the host it was opened with. Without this, editing a host and
-  /// reconnecting an open tab silently keeps connecting with the old values —
-  /// switching a host to Mosh and reconnecting would come up on SSH with no
-  /// explanation.
-  ///
-  /// Best-effort by design: the tab's own copy is a valid connection target on
-  /// its own, so a host that has since been deleted, or an identity that cannot
-  /// be decrypted right now, leaves the reconnect to proceed with what the tab
-  /// already holds instead of refusing to reconnect at all.
-  Future<void> _refreshTabHost(TerminalTabSession tab) async {
-    final hostId = tab.host?.id;
-    if (hostId == null) return;
-
-    final HostModel? fresh;
-    try {
-      fresh = await ref.read(hostsRepositoryProvider).getHostById(hostId);
-    } catch (_) {
-      return;
-    }
-    if (fresh == null) return;
-
-    if (fresh.identityId != tab.identity?.id) {
-      try {
-        tab.identity = fresh.identityId == null
-            ? null
-            : await ref
-                  .read(identitiesProvider.notifier)
-                  .getDecryptedIdentity(fresh.identityId!);
-      } catch (_) {
-        // Leave the previous credentials in place; a locked vault surfaces as
-        // an authentication failure from the connect itself, which says more
-        // than anything this could report.
-      }
-    }
-    tab.host = fresh;
-  }
-
-  /// Reacts to [SSHSessionManager.clientChanges]: a `null` client means the
-  /// session was closed, either by the local manager (reconnect teardown,
-  /// tab close) or by a dropped keep-alive connection. Only the drop case
-  /// needs the UI flipped to disconnected; the tab must still be live in
-  /// the state (the manager also emits null during [closeTab] teardown).
-  void _handleClientChange(TerminalTabSession tab, SSHClient? client) {
-    if (client != null) return;
-    if (!tab.isConnected) return;
-    if (!state.tabs.any((t) => t.id == tab.id)) return;
-    _markTabDisconnected(tab, TerminalDisconnectCause.connectionLost);
-  }
-
-  /// Reacts to the bridge's remote streams ending: the shell on the other side
-  /// exited. That is an ordinary end to a session, so it is recorded as such
-  /// and not reported as a failure — the bridge has already written its own
-  /// `[Session closed / Process exited]` notice to the buffer.
-  void _handleRemoteExit(TerminalTabSession tab) {
-    if (!tab.isConnected) return;
-    if (!state.tabs.any((t) => t.id == tab.id)) return;
-    _markTabDisconnected(tab, TerminalDisconnectCause.remoteExit);
-  }
-
-  /// Flips [tab] to the disconnected state, detaches its bridge, and records
-  /// [cause] so the view can offer a reconnect with the right tone. Only a
-  /// dropped transport is announced in the terminal buffer; a remote exit was
-  /// already announced by the bridge.
-  void _markTabDisconnected(
-    TerminalTabSession tab,
-    TerminalDisconnectCause cause,
-  ) {
-    tab.isConnected = false;
-    tab.isConnecting = false;
-    tab.disconnectCause = cause;
-    unawaited(tab.sshBridge?.dispose(closeSession: true) ?? Future.value());
-    tab.sshBridge = null;
-    unawaited(tab.moshBridge?.dispose(closeSession: true) ?? Future.value());
-    tab.moshBridge = null;
-    tab.moshLinkState = null;
-    if (cause == TerminalDisconnectCause.connectionLost) {
-      tab.terminal.write('\r\n\x1b[1;31m[Connection lost]\x1b[0m\r\n');
-    }
-    state = state.copyWith(tabs: [...state.tabs]);
-  }
+  /// preserved. See [TerminalSessionConnector.reconnectTab].
+  Future<void> reconnectTab(String tabId) =>
+      _sessionConnector.reconnectTab(tabId);
 
   void openLocalTab({String? title}) {
     final tabId = const Uuid().v4();
@@ -914,8 +429,9 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     String? newActiveId = state.activeTabId;
 
     if (closingIds.contains(state.activeTabId)) {
-      newActiveId = _focusAfterClose(
+      newActiveId = _paneLayout.focusAfterClose(
         closedTab: state.tabs[index],
+        oldTabs: state.tabs,
         remainingTabs: remainingTabs,
       );
     }
@@ -980,88 +496,13 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     if (closing.isEmpty) return;
 
     final active = state.activeTab;
-    if (active != null && closing.contains(_rootIdOf(active, state.tabs))) {
+    if (active != null &&
+        closing.contains(_paneLayout.rootIdOf(active, state.tabs))) {
       setActiveTab(tabId);
     }
     for (final id in closing) {
       await closeTab(id);
     }
-  }
-
-  /// Looks a pane up in an arbitrary list, which the close paths need on the
-  /// pre-close snapshot rather than on [state].
-  TerminalTabSession? _findInList(List<TerminalTabSession> tabs, String id) {
-    for (final tab in tabs) {
-      if (tab.id == id) return tab;
-    }
-    return null;
-  }
-
-  /// Walks [tabs] up the split tree and returns the id of [tab]'s root pane —
-  /// the tab it is displayed in. The loop is bounded by the list length so a
-  /// corrupted parent link cannot spin forever.
-  String _rootIdOf(TerminalTabSession tab, List<TerminalTabSession> tabs) {
-    var current = tab;
-    for (var hops = 0; hops < tabs.length; hops++) {
-      final parentId = current.splitParentId;
-      if (parentId == null) return current.id;
-      final parent = _findInList(tabs, parentId);
-      if (parent == null) return current.id;
-      current = parent;
-    }
-    return current.id;
-  }
-
-  /// Picks the pane that takes focus once [closedTab] and its subtree are gone.
-  ///
-  /// Focus must not leave the tab the user was working in: closing one pane of
-  /// a split hands focus to another pane of the *same* root tab, and only a tab
-  /// that disappears entirely moves focus to a neighbouring tab. Both searches
-  /// run in root order rather than by flat index into [state.tabs], where split
-  /// panes are appended after every other tab — indexing there lands on an
-  /// unrelated tab's pane and silently switches tabs under the user.
-  String? _focusAfterClose({
-    required TerminalTabSession closedTab,
-    required List<TerminalTabSession> remainingTabs,
-  }) {
-    if (remainingTabs.isEmpty) return null;
-
-    final oldTabs = state.tabs;
-    final rootId = _rootIdOf(closedTab, oldTabs);
-
-    // The closed pane's tab survives: stay inside it. The nearest surviving
-    // ancestor is the pane that grows into the freed space, so it gets focus;
-    // failing that, any surviving pane of the tab beats leaving the tab.
-    final survivorsInTab = remainingTabs
-        .where((t) => _rootIdOf(t, oldTabs) == rootId)
-        .toList();
-    if (survivorsInTab.isNotEmpty) {
-      final survivingIds = survivorsInTab.map((t) => t.id).toSet();
-      var ancestorId = closedTab.splitParentId;
-      for (var hops = 0; hops < oldTabs.length && ancestorId != null; hops++) {
-        if (survivingIds.contains(ancestorId)) return ancestorId;
-        ancestorId = _findInList(oldTabs, ancestorId)?.splitParentId;
-      }
-      return survivorsInTab.first.id;
-    }
-
-    // The whole tab went away: fall back to the neighbouring tab, counted
-    // among root panes only.
-    final oldRootIds = oldTabs
-        .where((t) => t.splitParentId == null)
-        .map((t) => t.id)
-        .toList();
-    final remainingRoots = remainingTabs
-        .where((t) => t.splitParentId == null)
-        .toList();
-    if (remainingRoots.isEmpty) return remainingTabs.first.id;
-
-    final closedRootIndex = oldRootIds.indexOf(rootId);
-    final newIndex =
-        closedRootIndex < 0 || closedRootIndex >= remainingRoots.length
-        ? remainingRoots.length - 1
-        : closedRootIndex;
-    return remainingRoots[newIndex].id;
   }
 
   /// Closes a single pane, keeping the rest of its tab alive.
@@ -1088,26 +529,8 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       return;
     }
 
+    final remainingTabs = _paneLayout.promoteHeir(state.tabs, pane, children);
     final heir = children.last;
-    heir.splitParentId = pane.splitParentId;
-    heir.splitDirection = pane.splitDirection;
-    heir.splitRatio = pane.splitRatio;
-    for (final child in children) {
-      if (identical(child, heir)) continue;
-      child.splitParentId = heir.id;
-    }
-
-    // The fold that lays panes out reads sibling order off this list, so the
-    // heir has to inherit the closed pane's position in it, not keep its own.
-    final remainingTabs = <TerminalTabSession>[];
-    for (final tab in state.tabs) {
-      if (tab.id == paneId) {
-        remainingTabs.add(heir);
-        continue;
-      }
-      if (identical(tab, heir)) continue;
-      remainingTabs.add(tab);
-    }
 
     final newActiveId = state.activeTabId == paneId
         ? heir.id
@@ -1142,7 +565,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
   DeviceLinkSessionTransport? deviceLinkSessionTransport(String sessionId) =>
       _deviceLinkTransports[sessionId];
 
-  Stream<void> get deviceLinkPairingEvents => _deviceLinkPairingEvents.stream;
+  Stream<void> get deviceLinkPairingEvents => _deviceLinkHost.pairingEvents;
 
   /// Disconnects the phone currently owning [sessionId], if any. Closing the
   /// Device Link connection deliberately goes through the server's normal
@@ -1168,227 +591,28 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
   }
 
   /// Starts (or reuses) the desktop-side Device Link listener and creates the
-  /// short-lived QR payload used by the first pairing flow. The server stays
-  /// alive after the QR screen closes so the newly paired connection can keep
-  /// using the same listener.
-  Future<DeviceLinkQrPayload> createDeviceLinkPairingPayload() async {
-    final server = await _ensureDeviceLinkServer();
-    final registeredName = _deviceLinkMdnsRegistration?.service.name;
-    final mdnsName = registeredName == null
-        ? null
-        : '$registeredName.$deviceLinkMdnsServiceType.local';
-    return server.createPairingPayload(mdnsName: mdnsName);
-  }
+  /// short-lived QR payload used by the first pairing flow. See
+  /// [DeviceLinkServerHost.createPairingPayload].
+  Future<DeviceLinkQrPayload> createDeviceLinkPairingPayload() =>
+      _deviceLinkHost.createPairingPayload();
 
   /// Ensures the desktop listener exists when a previous QR pairing is
   /// already persisted. A clean install must not open a LAN listener merely
   /// because the app was launched.
   Future<void> ensureDeviceLinkServerForPairedDevices() async {
     if (!supportsLocalShell) return;
-    if (!_isVaultAvailable) return;
-    final pairingRepository = ref.read(deviceLinkPairingRepositoryProvider);
-    if ((await pairingRepository.getAll()).isEmpty) return;
-    if (!_isVaultAvailable) return;
-    await _ensureDeviceLinkServer();
+    await _deviceLinkHost.ensureServerForPairedDevices();
   }
 
   /// Stops the Device Link listener, all authenticated connections, and its
-  /// mDNS advertisement. The lifecycle generation also cancels a startup that
-  /// is still loading the identity or registering mDNS, preventing an orphan
-  /// server/registration from being published after the vault is locked.
-  Future<void> stopDeviceLinkServer() {
-    final existingStop = _deviceLinkServerStop;
-    if (existingStop != null) return existingStop;
-
-    ++_deviceLinkLifecycleGeneration;
-    final startup = _deviceLinkServerStartup;
-    final server = _deviceLinkServer;
-    _deviceLinkServer = null;
-    final registration = _deviceLinkMdnsRegistration;
-    _deviceLinkMdnsRegistration = null;
-
-    final stop = () async {
-      // Let an in-flight start observe the new generation before closing any
-      // server instance it may have created.
-      try {
-        await startup;
-      } on Object catch (_) {}
-
-      await server?.close();
-      if (registration != null) {
-        await _unregisterDeviceLinkMdnsRegistration(registration);
-      }
-    }();
-
-    late final Future<void> trackedStop;
-    trackedStop = stop.whenComplete(() {
-      if (identical(_deviceLinkServerStop, trackedStop)) {
-        _deviceLinkServerStop = null;
-      }
-    });
-    _deviceLinkServerStop = trackedStop;
-    return trackedStop;
-  }
+  /// mDNS advertisement. See [DeviceLinkServerHost.stop].
+  Future<void> stopDeviceLinkServer() => _deviceLinkHost.stop();
 
   @visibleForTesting
-  bool get isDeviceLinkServerRunning => _deviceLinkServer?.isRunning ?? false;
+  bool get isDeviceLinkServerRunning => _deviceLinkHost.isRunning;
 
   @visibleForTesting
   bool get deviceLinkVaultAvailable => _isVaultAvailable;
-
-  Future<DeviceLinkServer> _ensureDeviceLinkServer() async {
-    if (!_isVaultAvailable) {
-      throw StateError('Device Link is unavailable while the vault is locked');
-    }
-
-    final stop = _deviceLinkServerStop;
-    if (stop != null) await stop;
-    if (_deviceLinkDisposed || !_isVaultAvailable) {
-      throw StateError('Device Link startup cancelled');
-    }
-
-    final existing = _deviceLinkServer;
-    if (existing != null && existing.isRunning) return Future.value(existing);
-
-    final inFlight = _deviceLinkServerStartup;
-    if (inFlight != null) return inFlight;
-
-    final startup = _startDeviceLinkServer(_deviceLinkLifecycleGeneration);
-    late final Future<DeviceLinkServer> trackedStartup;
-    trackedStartup = startup.whenComplete(() {
-      if (identical(_deviceLinkServerStartup, trackedStartup)) {
-        _deviceLinkServerStartup = null;
-      }
-    });
-    _deviceLinkServerStartup = trackedStartup;
-    return trackedStartup;
-  }
-
-  Future<DeviceLinkServer> _startDeviceLinkServer(int generation) async {
-    var server = _deviceLinkServer;
-    if (server == null) {
-      final pairingRepository = ref.read(deviceLinkPairingRepositoryProvider);
-      final identity = await _loadDeviceLinkIdentity();
-      if (_deviceLinkDisposed || generation != _deviceLinkLifecycleGeneration) {
-        throw StateError('Device Link notifier disposed during startup');
-      }
-      server = DeviceLinkServer(
-        identity: identity,
-        hostName: Platform.localHostname.isEmpty
-            ? 'shellvibe-desktop'
-            : Platform.localHostname,
-        appVersion: AppConstants.appVersion,
-        sessionTransportsProvider: deviceLinkSessionTransports,
-        pairedDeviceAuthenticator: pairingRepository.authenticate,
-        pairedDevicePersister: (record) => pairingRepository.savePairedDevice(
-          id: record.id,
-          name: record.name,
-          platform: record.platform,
-          secret: record.secret,
-          publicKey: record.publicKey,
-          pairedAt: record.pairedAt,
-        ),
-        // Only reached for an id the phone authenticated as its own, so this
-        // deletes the row the same phone left behind under an older identity.
-        pairedDeviceRemover: pairingRepository.remove,
-        onPairingCompleted: () {
-          if (!_deviceLinkPairingEvents.isClosed) {
-            _deviceLinkPairingEvents.add(null);
-          }
-        },
-      );
-      await server.start();
-      if (_deviceLinkDisposed || generation != _deviceLinkLifecycleGeneration) {
-        await server.close();
-        throw StateError('Device Link notifier disposed during startup');
-      }
-      _deviceLinkServer = server;
-    } else if (!server.isRunning) {
-      await server.start();
-      if (_deviceLinkDisposed || generation != _deviceLinkLifecycleGeneration) {
-        await server.close();
-        throw StateError('Device Link startup cancelled');
-      }
-    }
-
-    await _ensureDeviceLinkMdnsRegistration(server, generation);
-    if (_deviceLinkDisposed || generation != _deviceLinkLifecycleGeneration) {
-      if (identical(_deviceLinkServer, server)) _deviceLinkServer = null;
-      await server.close();
-      throw StateError('Device Link startup cancelled');
-    }
-    return server;
-  }
-
-  Future<void> _ensureDeviceLinkMdnsRegistration(
-    DeviceLinkServer server,
-    int generation,
-  ) async {
-    if (_deviceLinkMdnsRegistration != null) return;
-    final discovery = DeviceDiscovery();
-    if (!discovery.supportsMdns) return;
-    try {
-      final registration = await discovery.register(
-        name: server.hostName,
-        port: server.port,
-      );
-      if (_deviceLinkDisposed || generation != _deviceLinkLifecycleGeneration) {
-        await _unregisterDeviceLinkMdnsRegistration(
-          registration,
-          discovery: discovery,
-        );
-        return;
-      }
-      _deviceLinkMdnsRegistration = registration;
-    } on Object catch (error) {
-      // Direct QR addresses remain valid when mDNS is unavailable (Linux,
-      // missing permission, or an isolated Wi-Fi network).
-      debugPrint('[Device Link] mDNS registration unavailable: $error');
-    }
-  }
-
-  Future<void> _unregisterDeviceLinkMdnsRegistration(
-    nsd.Registration registration, {
-    DeviceDiscovery? discovery,
-  }) async {
-    try {
-      await (discovery ?? DeviceDiscovery()).unregister(registration);
-    } on Object catch (error) {
-      debugPrint('[Device Link] mDNS unregistration unavailable: $error');
-    }
-  }
-
-  Future<DeviceLinkIdentity> _loadDeviceLinkIdentity() async {
-    final storage = ref.read(secureStorageServiceProvider);
-    final stored = await storage.getToken(
-      SecureStorageKeys.deviceLinkServerIdentity,
-    );
-    if (stored != null) {
-      try {
-        final object = jsonDecode(stored);
-        if (object is Map<String, dynamic> &&
-            object['certificatePem'] is String &&
-            object['privateKeyPem'] is String) {
-          return DeviceLinkIdentity.fromPem(
-            certificatePem: object['certificatePem'] as String,
-            privateKeyPem: object['privateKeyPem'] as String,
-          );
-        }
-      } catch (_) {
-        await storage.deleteToken(SecureStorageKeys.deviceLinkServerIdentity);
-      }
-    }
-
-    final identity = DeviceLinkIdentity.generate();
-    await storage.saveToken(
-      SecureStorageKeys.deviceLinkServerIdentity,
-      jsonEncode({
-        'certificatePem': identity.certificatePem,
-        'privateKeyPem': identity.privateKeyPem,
-      }),
-    );
-    return identity;
-  }
 
   void _registerDeviceLinkTransport(
     TerminalTabSession tab,
@@ -1423,159 +647,30 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
   }
 
   /// Moves the tab rooted at [tabId] so it becomes the [toIndex]th tab of the
-  /// strip, counting root tabs only.
-  ///
-  /// Only the root sessions trade places. Each one keeps the list slots the
-  /// roots occupied, in their new order, and every split pane stays exactly
-  /// where it is: the layout fold reads sibling order off this list, and a
-  /// pane's siblings are panes of its own tab, so no split can be laid out
-  /// differently because its tab moved along the strip.
+  /// strip, counting root tabs only. See [TerminalPaneLayout.reorderRoots].
   void moveTab(String tabId, int toIndex) {
-    final rootSlots = <int>[];
-    for (var i = 0; i < state.tabs.length; i++) {
-      if (state.tabs[i].splitParentId == null) rootSlots.add(i);
-    }
-    final roots = [for (final slot in rootSlots) state.tabs[slot]];
-    final from = roots.indexWhere((tab) => tab.id == tabId);
-    if (from == -1) return;
-    final to = toIndex.clamp(0, roots.length - 1);
-    if (from == to) return;
-
-    roots.insert(to, roots.removeAt(from));
-    final reordered = [...state.tabs];
-    for (var i = 0; i < rootSlots.length; i++) {
-      reordered[rootSlots[i]] = roots[i];
-    }
+    final reordered = _paneLayout.reorderRoots(state.tabs, tabId, toIndex);
+    if (reordered == null) return;
     state = state.copyWith(tabs: reordered);
   }
 
-  /// Exchanges the positions of two panes of the same tab.
-  ///
-  /// This is a swap of what each slot *shows*, not a rearrangement of the
-  /// layout: the split directions, the ratios and the nesting all stay exactly
-  /// where they are, and only the two sessions trade places. So the children of
-  /// each pane stay with the slot rather than travelling with their parent,
-  /// which is why they are re-pointed at the other pane before the two slot
-  /// descriptions (parent, direction, ratio) are exchanged.
-  ///
-  /// Keeping the shape of the tree fixed is also what makes this always safe.
-  /// Swapping only the parent links would relabel edges the rest of the tree
-  /// still points at, and for an ancestor and a descendant two levels apart
-  /// that closes a cycle (`a -> b -> a`) and the layout fold never terminates.
-  /// Permuting two positions of an unchanged tree cannot.
-  ///
-  /// Panes of different tabs are refused: only one tab is on screen, so such a
-  /// drop cannot be aimed, and it would move a pane out from under the
-  /// selection and focus state of the tab it was in.
+  /// Exchanges the positions of two panes of the same tab. See
+  /// [TerminalPaneLayout.swapPanes].
   void swapPanes(String paneId, String otherPaneId) {
-    if (paneId == otherPaneId) return;
-
-    final index = state.tabs.indexWhere((t) => t.id == paneId);
-    final otherIndex = state.tabs.indexWhere((t) => t.id == otherPaneId);
-    if (index == -1 || otherIndex == -1) return;
-
-    final pane = state.tabs[index];
-    final other = state.tabs[otherIndex];
-    if (_rootIdOf(pane, state.tabs) != _rootIdOf(other, state.tabs)) return;
-
-    for (final tab in state.tabs) {
-      if (tab.id == paneId || tab.id == otherPaneId) continue;
-      if (tab.splitParentId == paneId) {
-        tab.splitParentId = otherPaneId;
-      } else if (tab.splitParentId == otherPaneId) {
-        tab.splitParentId = paneId;
-      }
-    }
-
-    final paneParentId = pane.splitParentId;
-    final paneDirection = pane.splitDirection;
-    final paneRatio = pane.splitRatio;
-
-    // When one pane is the other's parent, the slot it is moving into hangs off
-    // the slot it is vacating — which the other pane now holds.
-    pane.splitParentId = other.splitParentId == paneId
-        ? otherPaneId
-        : other.splitParentId;
-    pane.splitDirection = other.splitDirection;
-    pane.splitRatio = other.splitRatio;
-
-    other.splitParentId = paneParentId == otherPaneId ? paneId : paneParentId;
-    other.splitDirection = paneDirection;
-    other.splitRatio = paneRatio;
-
-    // Sibling order is read off this list by the layout fold, so the two panes
-    // have to take each other's place here as well. Leaving the order alone
-    // would move a pane into a slot and then lay it out on the wrong side of
-    // the sibling it shares that slot's container with.
-    final reordered = [...state.tabs];
-    reordered[index] = other;
-    reordered[otherIndex] = pane;
-
+    final reordered = _paneLayout.swapPanes(state.tabs, paneId, otherPaneId);
+    if (reordered == null) return;
     state = state.copyWith(tabs: reordered);
   }
 
   /// Moves [paneId] out of its slot and splits [targetId] with it, along
-  /// [edge].
-  ///
-  /// The pane travels alone. Its own children stay behind and are promoted into
-  /// the slot it vacates, exactly as [closePane] promotes them — a pane's
-  /// children describe how its rectangle is subdivided, so they belong to the
-  /// slot rather than to the pane that happens to sit in it.
-  ///
-  /// A pane always joins its parent's split on the trailing side (the fold that
-  /// lays panes out puts the newest child there), so docking to the left or the
-  /// top is the trailing case followed by a swap: the arriving pane takes the
-  /// target's slot and the target becomes the child. That leaves the same two
-  /// rectangles with their occupants exchanged, which is what the leading edges
-  /// mean, and it costs nothing in the model — no pane has to record which side
-  /// of its split it is on.
+  /// [edge]. See [TerminalPaneLayout.dockPane].
   void movePaneTo(String paneId, String targetId, PaneDockEdge edge) {
     if (paneId == targetId) return;
 
-    final pane = _findInList(state.tabs, paneId);
-    final target = _findInList(state.tabs, targetId);
-    if (pane == null || target == null) return;
-    if (_rootIdOf(pane, state.tabs) != _rootIdOf(target, state.tabs)) return;
+    final result = _paneLayout.dockPane(state.tabs, paneId, targetId, edge);
+    if (result == null) return;
 
-    var tabs = [...state.tabs];
-    final children = tabs.where((t) => t.splitParentId == paneId).toList();
-
-    if (children.isEmpty) {
-      tabs.removeWhere((t) => t.id == paneId);
-    } else {
-      // Same heir rule as closePane: the last child is the one laid out
-      // directly against the departing pane, so it takes the vacated slot and
-      // the earlier children hang off it, preserving their nesting and their
-      // order on screen.
-      final heir = children.last;
-      heir.splitParentId = pane.splitParentId;
-      heir.splitDirection = pane.splitDirection;
-      heir.splitRatio = pane.splitRatio;
-      for (final child in children) {
-        if (identical(child, heir)) continue;
-        child.splitParentId = heir.id;
-      }
-      final rebuilt = <TerminalTabSession>[];
-      for (final tab in tabs) {
-        if (tab.id == paneId) {
-          rebuilt.add(heir);
-          continue;
-        }
-        if (identical(tab, heir)) continue;
-        rebuilt.add(tab);
-      }
-      tabs = rebuilt;
-    }
-
-    pane.splitParentId = targetId;
-    pane.splitDirection = edge.axis;
-    pane.splitRatio = 0.5;
-    // Appended last so it is the innermost child of its new parent: it splits
-    // the target's own rectangle rather than the target plus everything already
-    // split off it.
-    tabs.add(pane);
-
-    state = state.copyWith(tabs: tabs);
+    state = state.copyWith(tabs: result);
 
     if (edge.isLeading) {
       swapPanes(paneId, targetId);
@@ -1706,7 +801,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       );
       // Returning the connection future lets callers (and tests) await the
       // SSH handshake; UI call sites fire-and-forget via unawaited(...).
-      return _connectSshTab(
+      return _sessionConnector.connectSshTab(
         splitTab,
         targetHost!,
         splitTab.identity,
