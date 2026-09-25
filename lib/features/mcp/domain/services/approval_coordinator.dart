@@ -66,7 +66,7 @@ class _PendingHostAccess {
 /// comes back in through [resolveCommand] / [resolveHostAccess] to complete
 /// the [Future] the caller (a tool handler, deep in `domain/services`, with
 /// no `BuildContext` anywhere near it) is awaiting. This is deliberate, per
-/// `docs/mcp_plan.md`'s AGENTS.md-alignment section: no class under
+/// `docs/mcp_plan.md` §"AGENTS.md ile uyum": no class under
 /// `domain/services` may take a `BuildContext` or import Flutter.
 ///
 /// **Every timeout is fail-closed.** An unanswered command approval resolves

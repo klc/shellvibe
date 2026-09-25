@@ -9,7 +9,7 @@ import 'dart:io';
 /// `McpClients.tokenHash` (see `docs/mcp_plan.md` §Faz 3 and
 /// `McpToken.hash`) stores a SHA-256 hash, never the raw token — but the
 /// bridge binary has no access to the vault or the database at all (it is
-/// pure Dart with no Flutter/Drift dependency, see `AGENTS.md` layering) and
+/// pure Dart with no Flutter/Drift dependency) and
 /// the only thing it can do with a hash is fail to reconnect with it. It
 /// needs the *raw* token, because that is what it puts in the
 /// `Authorization: Bearer <token>` header on every request it forwards.

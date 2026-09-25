@@ -47,9 +47,10 @@ work output has authorised it; `CLA.md` section 8 covers this.
 
 ### Before opening a PR
 
-Anything larger than a bug fix, open an issue first. The architecture is opinionated
-and documented in [`AGENTS.md`](AGENTS.md);
-a design that cuts across it is better discussed than rewritten.
+Anything larger than a bug fix, open an issue first. The architecture is
+opinionated — layered features under `lib/features/<name>/{data,domain,presentation}`,
+Riverpod for state, Drift DAOs as the only way to the database — and a design
+that cuts across it is better discussed than rewritten.
 
 ### The bar
 
