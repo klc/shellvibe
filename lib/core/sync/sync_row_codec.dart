@@ -33,6 +33,20 @@ final class SyncRowCodec {
     'bookmarks',
   ];
 
+  /// Columns that hold a secret encrypted under the device's own vault key.
+  ///
+  /// Every device has a vault key of its own, so these cannot travel between
+  /// devices as they are stored: they are re-encrypted on the way out and on
+  /// the way in, by the snapshot restore and by the operation log alike.
+  static const Map<String, List<String>> secretColumns = {
+    'identities': [
+      'passwordEncrypted',
+      'privateKeyEncrypted',
+      'passphraseEncrypted',
+    ],
+    'vault_env_vars': ['valueEncrypted'],
+  };
+
   static Map<String, dynamic> workspace(Workspace w) => {
     'id': w.id,
     'name': w.name,

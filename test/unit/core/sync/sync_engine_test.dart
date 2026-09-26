@@ -1,10 +1,14 @@
+import 'dart:convert';
+
 import 'package:cryptography/cryptography.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/core/api/api_exception.dart';
+import 'package:shellvibe/core/crypto/encryption_engine.dart';
 import 'package:shellvibe/core/sync/backup_envelope.dart';
 import 'package:shellvibe/core/sync/backup_scope.dart';
+import 'package:shellvibe/core/sync/sync_aliases.dart';
 import 'package:shellvibe/core/sync/sync_engine.dart';
 import 'package:shellvibe/core/sync/sync_journal.dart';
 import 'package:shellvibe/features/cloud_backup/data/sync_operations_api.dart';
@@ -28,25 +32,54 @@ void main() {
   });
 
   /// One device: its own database, journal and engine over the shared log.
-  Future<_Device> device(String id, {BackupScope? scope}) async {
+  ///
+  /// Every device gets a vault key of its own, as a real one does.
+  /// [vaultKey] replaces the lookup, to stand in for a locked vault.
+  Future<_Device> device(
+    String id, {
+    BackupScope? scope,
+    Future<SecretKey> Function()? vaultKey,
+  }) async {
     final db = AppDatabase(NativeDatabase.memory());
     final journal = SyncJournal(db: db, deviceId: id);
     db.syncJournal = journal;
 
     addTearDown(db.close);
 
+    final dek = SecretKey(EncryptionEngine().generateKey());
+
     return _Device(
       db: db,
       journal: journal,
+      dek: dek,
       engine: SyncEngine(
         db: db,
         journal: journal,
         api: log,
         syncKey: syncKey,
         scope: scope ?? BackupScope.full,
+        vaultKey: vaultKey ?? () async => dek,
       ),
     );
   }
+
+  /// [original] as the server could rewrite it: every field outside the
+  /// ciphertext is the server's to change.
+  SyncOperationDto rewritten(
+    SyncOperationDto original, {
+    String? operation,
+    String? deviceId,
+    int? logicalClock,
+    String? encryptedPayload,
+  }) => SyncOperationDto(
+    id: original.id,
+    deviceId: deviceId ?? original.deviceId,
+    logicalClock: logicalClock ?? original.logicalClock,
+    entityType: original.entityType,
+    entityId: original.entityId,
+    operation: operation ?? original.operation,
+    encryptedPayload: encryptedPayload ?? original.encryptedPayload,
+  );
 
   group('convergence', () {
     test('a host written on one device arrives on the other', () async {
@@ -207,6 +240,82 @@ void main() {
     });
   });
 
+  group('identity secrets', () {
+    test('arrive under the receiving device\'s own vault key', () async {
+      final a = await device('device-a');
+      final b = await device('device-b');
+
+      await a.writeIdentity('i1', password: 'hunter2');
+      await a.engine.syncOnce();
+      await b.engine.syncOnce();
+
+      final stored = (await b.identity('i1'))!.passwordEncrypted!;
+      expect(await b.open(stored), 'hunter2');
+      expect(
+        () => a.open(stored),
+        throwsA(anything),
+        reason: 'still under the sending device\'s key',
+      );
+    });
+
+    test('a vault variable does too', () async {
+      final a = await device('device-a');
+      final b = await device('device-b');
+
+      await a.writeEnvVar('e1', value: 's3cret');
+      await a.engine.syncOnce();
+      await b.engine.syncOnce();
+
+      final stored = await (b.db.select(
+        b.db.vaultEnvVars,
+      )..where((v) => v.id.equals('e1'))).getSingle();
+      expect(await b.open(stored.valueEncrypted), 's3cret');
+    });
+
+    test('never reach the server in the clear', () async {
+      final a = await device('device-a');
+
+      await a.writeIdentity('i1', password: 'hunter2');
+      await a.engine.push();
+
+      expect(log.operations.single.encryptedPayload, isNot(contains('hunter2')));
+    });
+
+    test('behind a locked vault nothing is applied or acknowledged', () async {
+      final a = await device('device-a');
+      var locked = true;
+      final bKey = SecretKey(EncryptionEngine().generateKey());
+      final b = await device(
+        'device-b',
+        vaultKey: () async {
+          if (locked) throw StateError('vault locked');
+          return bKey;
+        },
+      );
+
+      await a.writeIdentity('i1', password: 'hunter2');
+      await a.writeHost('h1', identityId: 'i1');
+      await a.engine.syncOnce();
+
+      await expectLater(b.engine.pull(), throwsStateError);
+      expect(await b.host('h1'), isNull);
+      expect((await b.journal.readState()).pulledThroughClock, 0);
+
+      locked = false;
+      await b.engine.pull();
+
+      expect((await b.host('h1'))!.identityId, 'i1');
+      final stored = (await b.identity('i1'))!.passwordEncrypted!;
+      expect(
+        await EncryptionEngine().decrypt(
+          encryptedBase64: stored,
+          secretKey: bKey,
+        ),
+        'hunter2',
+      );
+    });
+  });
+
   group('the log', () {
     test('a pruned cursor asks for the snapshot instead', () async {
       final a = await device('device-a');
@@ -321,6 +430,84 @@ void main() {
       expect(result.pulled, 0);
     });
 
+    test('the server cannot turn an upsert into a delete', () async {
+      final a = await device('device-a');
+      final b = await device('device-b');
+
+      await a.writeHost('h1', label: 'first');
+      await a.engine.syncOnce();
+      await b.engine.syncOnce();
+
+      await a.writeHost('h1', label: 'second');
+      await a.engine.push();
+      log.operations.last = rewritten(log.operations.last, operation: 'delete');
+
+      final result = await b.engine.pull();
+
+      expect(result.unreadable, 1);
+      expect((await b.host('h1'))!.label, 'first');
+    });
+
+    test('the server cannot raise a clock or swap the device', () async {
+      final a = await device('device-a');
+      final b = await device('device-b');
+
+      await a.writeHost('h1', label: 'first');
+      await a.engine.syncOnce();
+      await b.engine.syncOnce();
+
+      // b's own edit, later than anything a has sent.
+      await b.writeHost('h1', label: 'from b');
+
+      await a.writeHost('h1', label: 'from a');
+      await a.engine.push();
+      final sent = log.operations.last;
+      log.operations
+        ..removeLast()
+        ..add(rewritten(sent, logicalClock: sent.logicalClock + 1000))
+        ..add(rewritten(sent, deviceId: 'device-z'));
+
+      final result = await b.engine.pull();
+
+      expect(result.unreadable, 2);
+      expect((await b.host('h1'))!.label, 'from b');
+    });
+
+    test('an upsert that carries no row is skipped, not fatal', () async {
+      // An operation from a build that did not seal its kind, flipped from
+      // delete to upsert. It used to throw inside the apply transaction and
+      // fail the same page on every pull after it.
+      final a = await device('device-a');
+      final b = await device('device-b');
+
+      await a.writeHost('h1');
+      await a.engine.syncOnce();
+      await b.engine.syncOnce();
+
+      final aliases = SyncAliases(syncKey: syncKey);
+      log.operations.add(
+        SyncOperationDto(
+          id: 'legacy-1',
+          deviceId: 'device-old',
+          logicalClock: 50,
+          entityType: await aliases.forType('hosts'),
+          entityId: await aliases.forEntity(entityType: 'hosts', entityId: 'h1'),
+          operation: 'upsert',
+          encryptedPayload: await EncryptionEngine().encrypt(
+            plaintext: jsonEncode({'t': 'hosts', 'i': 'h1'}),
+            secretKey: syncKey,
+          ),
+        ),
+      );
+      await a.writeHost('h2');
+      await a.engine.push();
+
+      final result = await b.engine.pull();
+
+      expect(result.unreadable, 1);
+      expect(await b.host('h2'), isNotNull, reason: 'the log moved on');
+    });
+
     test('the server never sees a table name or a row id', () async {
       final a = await device('device-a');
 
@@ -343,11 +530,45 @@ final class _Device {
   final SyncJournal journal;
   final SyncEngine engine;
 
+  /// This device's vault key.
+  final SecretKey dek;
+
   const _Device({
     required this.db,
     required this.journal,
     required this.engine,
+    required this.dek,
   });
+
+  Future<Identity?> identity(String id) => (db.select(
+    db.identities,
+  )..where((i) => i.id.equals(id))).getSingleOrNull();
+
+  /// Decrypts [ciphertext] with this device's vault key.
+  Future<String> open(String ciphertext) =>
+      EncryptionEngine().decrypt(encryptedBase64: ciphertext, secretKey: dek);
+
+  Future<void> writeEnvVar(String id, {required String value}) async {
+    final sealed = await EncryptionEngine().encrypt(
+      plaintext: value,
+      secretKey: dek,
+    );
+    await db.syncJournal!.upsert(
+      entityType: 'vault_env_vars',
+      entityId: id,
+      write: () => db
+          .into(db.vaultEnvVars)
+          .insert(
+            VaultEnvVarsCompanion.insert(
+              id: id,
+              workspaceId: 'default',
+              name: 'TOKEN_$id',
+              valueEncrypted: sealed,
+              createdAt: DateTime.now(),
+            ),
+          ),
+    );
+  }
 
   Future<Host?> host(String id) =>
       (db.select(db.hosts)..where((h) => h.id.equals(id))).getSingleOrNull();
@@ -383,16 +604,25 @@ final class _Device {
 
   Future<void> deleteHost(String id) => db.hostsDao.deleteHost(id);
 
-  Future<void> writeIdentity(String id) => db.identitiesDao.insertIdentity(
-    IdentitiesCompanion.insert(
-      id: id,
-      workspaceId: 'default',
-      title: 'key',
-      username: 'deploy',
-      authType: 'key',
-      createdAt: DateTime.now(),
-    ),
-  );
+  Future<void> writeIdentity(String id, {String? password}) async =>
+      db.identitiesDao.insertIdentity(
+        IdentitiesCompanion.insert(
+          id: id,
+          workspaceId: 'default',
+          title: 'key',
+          username: 'deploy',
+          authType: 'key',
+          passwordEncrypted: Value(
+            password == null
+                ? null
+                : await EncryptionEngine().encrypt(
+                    plaintext: password,
+                    secretKey: dek,
+                  ),
+          ),
+          createdAt: DateTime.now(),
+        ),
+      );
 }
 
 /// The operation log, in memory, shared by every device in a test.

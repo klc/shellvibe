@@ -16,6 +16,7 @@ import '../../../../shared/database/app_database.dart';
 import '../../../../shared/providers/database_providers.dart';
 import '../../../account/presentation/notifiers/account_notifier.dart';
 import '../../../billing/presentation/notifiers/entitlement_notifier.dart';
+import '../../../vault/data/vault_key_service.dart';
 import '../../../vault/presentation/notifiers/identities_notifier.dart';
 import '../../../settings/presentation/notifiers/backup_scope_notifier.dart';
 import '../../data/cloud_backup_api.dart';
@@ -258,6 +259,7 @@ class SyncNotifier extends _$SyncNotifier {
       api: SyncOperationsApi(client: client),
       syncKey: SecretKey(syncKey),
       scope: await ref.watch(backupScopeProvider(BackupTarget.autoSync).future),
+      vaultKey: ref.read(vaultKeyServiceProvider).getDek,
     );
 
     _join = SyncJoinService(
@@ -532,6 +534,18 @@ class SyncNotifier extends _$SyncNotifier {
             error:
                 'This device is too far behind to catch up from the change '
                 'log. Restore the latest backup to resume.',
+          ),
+        );
+      } on VaultLockedException {
+        // Identity secrets move between vault keys on the way out and in,
+        // which cannot happen behind a locked vault. The pass stopped before
+        // sending or acknowledging anything, so nothing is lost.
+        _publish(
+          (s) => s.copyWith(
+            running: false,
+            error:
+                'Unlock the vault to sync identity changes. Sync picks up '
+                'where it left off once it is unlocked.',
           ),
         );
       } on ApiException catch (e) {

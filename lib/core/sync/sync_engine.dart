@@ -88,11 +88,25 @@ final class SyncEngine {
     required SecretKey syncKey,
     this.scope = BackupScope.full,
     EncryptionEngine? crypto,
+    Future<SecretKey> Function()? vaultKey,
   }) : aliases = SyncAliases(syncKey: syncKey),
        crypto = crypto ?? EncryptionEngine(),
-       _syncKey = syncKey;
+       _syncKey = syncKey,
+       // A named parameter cannot start with an underscore.
+       // ignore: prefer_initializing_formals
+       _vaultKey = vaultKey;
 
   final SecretKey _syncKey;
+
+  /// This device's vault key, for the secret columns of identities and vault
+  /// variables (see [SyncRowCodec.secretColumns]).
+  ///
+  /// Asked for only when an operation carries a secret, and it may throw:
+  /// behind a locked vault the pass fails as a whole and nothing is sent,
+  /// applied or acknowledged, so it picks up where it was once the vault is
+  /// unlocked. Sending the rest would let a host arrive before the identity
+  /// it uses, and the receiving device would clear the reference for good.
+  final Future<SecretKey> Function()? _vaultKey;
 
   /// Tables each category owns, for filtering in both directions.
   static const Map<BackupCategory, List<String>> categoryTables = {
@@ -136,6 +150,7 @@ final class SyncEngine {
 
     if (pending.isEmpty) return 0;
 
+    final vaultKey = _LazyKey(_vaultKey);
     final operations = <SyncOperationDto>[];
     for (final operation in pending) {
       operations.add(
@@ -149,7 +164,7 @@ final class SyncEngine {
             entityId: operation.entityId,
           ),
           operation: operation.operation,
-          encryptedPayload: await _seal(operation),
+          encryptedPayload: await _seal(operation, vaultKey),
         ),
       );
     }
@@ -229,6 +244,7 @@ final class SyncEngine {
   }) async {
     final decoded = <_IncomingOperation>[];
     var unreadable = 0;
+    final vaultKey = _LazyKey(_vaultKey);
 
     for (final operation in batch.operations) {
       // This device's own operations come back on the next pull. Applying
@@ -236,7 +252,7 @@ final class SyncEngine {
       // have changed since back to what they were when they were sent.
       if (operation.deviceId == deviceId) continue;
 
-      final incoming = await _open(operation);
+      final incoming = await _open(operation, vaultKey);
       if (incoming == null) {
         unreadable++;
         continue;
@@ -411,19 +427,118 @@ final class SyncEngine {
   /// only their HMAC aliases, which cannot be inverted, so without this the
   /// receiving device would have no way to know what a pulled operation is
   /// about.
-  Future<String> _seal(PendingOperation operation) async {
+  ///
+  /// So do the kind of operation, the device and the clock. The server
+  /// stores copies of those outside the ciphertext and could rewrite them:
+  /// turn an upsert into a delete, or raise the clock or swap the device id
+  /// to win last-writer-wins. Sealed in, they are checked against the copies
+  /// when the operation is opened.
+  Future<String> _seal(PendingOperation operation, _LazyKey vaultKey) async {
+    final row = operation.payload == null
+        ? null
+        : jsonDecode(operation.payload!) as Map<String, dynamic>;
+    final underSyncKey = row == null
+        ? const <String>[]
+        : await _secretsToSyncKey(operation.entityType, row, vaultKey);
+
     final body = <String, Object?>{
       't': operation.entityType,
       'i': operation.entityId,
-      if (operation.payload != null)
-        'r': jsonDecode(operation.payload!) as Map<String, dynamic>,
+      'o': operation.operation,
+      'd': deviceId,
+      'c': operation.logicalClock,
+      'r': ?row,
+      if (underSyncKey.isNotEmpty) 'sk': underSyncKey,
     };
 
     return crypto.encrypt(plaintext: jsonEncode(body), secretKey: _syncKey);
   }
 
+  /// Re-encrypts [row]'s secret columns from this device's vault key to the
+  /// sync key, in place, and returns the columns it converted.
+  ///
+  /// Every device has a vault key of its own, so a secret sent as it is
+  /// stored cannot be opened anywhere else, and the identity it belongs to
+  /// fails to log in on every other device. The sync key is the one they all
+  /// share; the receiving device moves the secret on to its own vault key.
+  ///
+  /// A column this device cannot open with its own key -- one an older build
+  /// wrote from another device's operation -- is sent as it is, which is what
+  /// that build did. Sending it empty instead would wipe it on the device
+  /// that can still open it.
+  Future<List<String>> _secretsToSyncKey(
+    String entityType,
+    Map<String, dynamic> row,
+    _LazyKey vaultKey,
+  ) async {
+    final columns = SyncRowCodec.secretColumns[entityType];
+    if (columns == null || !vaultKey.isAvailable) return const [];
+
+    final converted = <String>[];
+    for (final column in columns) {
+      final value = row[column];
+      if (value is! String) continue;
+
+      final key = await vaultKey.key;
+      final String plaintext;
+      try {
+        plaintext = await crypto.decrypt(encryptedBase64: value, secretKey: key);
+      } on Object {
+        continue;
+      }
+      row[column] = await crypto.encrypt(
+        plaintext: plaintext,
+        secretKey: _syncKey,
+      );
+      converted.add(column);
+    }
+
+    return converted;
+  }
+
+  /// Moves the columns [sealed] lists from the sync key to this device's
+  /// vault key, in place. Returns false when the operation cannot be trusted.
+  Future<bool> _secretsToVaultKey(
+    String entityType,
+    Map<String, Object?> row,
+    Object? sealed,
+    _LazyKey vaultKey,
+  ) async {
+    if (sealed == null) return true;
+    if (sealed is! List || !vaultKey.isAvailable) return false;
+
+    final allowed = SyncRowCodec.secretColumns[entityType] ?? const <String>[];
+    for (final column in sealed) {
+      if (column is! String || !allowed.contains(column)) return false;
+      final value = row[column];
+      if (value == null) continue;
+      if (value is! String) return false;
+
+      final String plaintext;
+      try {
+        plaintext = await crypto.decrypt(
+          encryptedBase64: value,
+          secretKey: _syncKey,
+        );
+      } on Object {
+        return false;
+      }
+      // Outside the try: a locked vault is not a bad operation, and has to
+      // fail the pass rather than be counted as unreadable and skipped.
+      row[column] = await crypto.encrypt(
+        plaintext: plaintext,
+        secretKey: await vaultKey.key,
+      );
+    }
+
+    return true;
+  }
+
   /// Opens one pulled operation, or returns null when it cannot be trusted.
-  Future<_IncomingOperation?> _open(SyncOperationDto operation) async {
+  Future<_IncomingOperation?> _open(
+    SyncOperationDto operation,
+    _LazyKey vaultKey,
+  ) async {
     final Map<String, Object?> body;
     try {
       body =
@@ -454,13 +569,41 @@ final class SyncEngine {
     );
     if (expectedId != operation.entityId) return null;
 
+    // The copies the server could have rewritten must match the sealed ones.
+    // Operations from builds that did not seal them carry none of the three
+    // and are taken as they come, as they always were.
+    final sealedOperation = body['o'];
+    final sealedDevice = body['d'];
+    final sealedClock = body['c'];
+    final isSealed =
+        sealedOperation != null || sealedDevice != null || sealedClock != null;
+    if (isSealed &&
+        (sealedOperation != operation.operation ||
+            sealedDevice != operation.deviceId ||
+            sealedClock != operation.logicalClock)) {
+      return null;
+    }
+
+    final rawRow = body['r'];
+    if (rawRow != null && rawRow is! Map<String, Object?>) return null;
+    final row = rawRow as Map<String, Object?>?;
+    // An upsert with nothing to write would throw inside the apply
+    // transaction, roll the page back and fail the same way on every pull
+    // after it: sync stuck for good on one bad operation.
+    if (!operation.isDelete && row == null) return null;
+
+    if (row != null &&
+        !await _secretsToVaultKey(entityType, row, body['sk'], vaultKey)) {
+      return null;
+    }
+
     return _IncomingOperation(
       entityType: entityType,
       entityId: entityId,
       deviceId: operation.deviceId,
       logicalClock: operation.logicalClock,
       isDelete: operation.isDelete,
-      row: body['r'] as Map<String, Object?>?,
+      row: row,
     );
   }
 }
@@ -489,4 +632,16 @@ final class _IncomingOperation implements Comparable<_IncomingOperation> {
 
     return byClock != 0 ? byClock : deviceId.compareTo(other.deviceId);
   }
+}
+
+/// A key fetched the first time a pass needs it, and only then.
+final class _LazyKey {
+  _LazyKey(this._fetch);
+
+  final Future<SecretKey> Function()? _fetch;
+  Future<SecretKey>? _key;
+
+  bool get isAvailable => _fetch != null;
+
+  Future<SecretKey> get key => _key ??= _fetch!();
 }
