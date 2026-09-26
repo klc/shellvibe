@@ -94,6 +94,75 @@ void main() {
     expect(state.lastSeenClock, 42);
   });
 
+  group('an unsent local change to a restored row', () {
+    Future<void> addHostLabelled(AppDatabase db, String id, String label) =>
+        db.hostsDao.insertHost(
+          HostsCompanion.insert(
+            id: id,
+            workspaceId: 'default',
+            label: label,
+            hostname: '$id.example.com',
+            createdAt: DateTime.now(),
+          ),
+        );
+
+    Future<Host> hostOn(AppDatabase db, String id) =>
+        (db.select(db.hosts)..where((h) => h.id.equals(id))).getSingle();
+
+    test('is dropped when the snapshot is later', () async {
+      // The bug this pins: the row became the snapshot's, but the change
+      // stayed in the outbox and went out later, so every other device took
+      // the change while this one kept the snapshot's row.
+      await addHost(source, 'h1');
+      final journal = SyncJournal(db: target, deviceId: 'target-device');
+      target.syncJournal = journal;
+      await addHostLabelled(target, 'h1', 'local edit');
+      expect(await journal.pendingFor(entityType: 'hosts', entityId: 'h1'),
+          isNotNull);
+
+      await sync.importEncryptedBackup(
+        backupPackageJson: await exportAt(42),
+        db: target,
+        masterPassword: passphrase,
+        snapshotDeviceId: 'source-device',
+      );
+
+      expect((await hostOn(target, 'h1')).label, 'h1');
+      expect(
+        await journal.pendingFor(entityType: 'hosts', entityId: 'h1'),
+        isNull,
+      );
+    });
+
+    test('stays, here and in the outbox, when it is later', () async {
+      await addHost(source, 'h1');
+      final journal = SyncJournal(db: target, deviceId: 'target-device');
+      target.syncJournal = journal;
+      await journal.observeClock(100);
+      await addHostLabelled(target, 'h1', 'local edit');
+
+      await sync.importEncryptedBackup(
+        backupPackageJson: await exportAt(42),
+        db: target,
+        masterPassword: passphrase,
+        snapshotDeviceId: 'source-device',
+      );
+
+      expect((await hostOn(target, 'h1')).label, 'local edit');
+      final pending = await journal.pendingFor(
+        entityType: 'hosts',
+        entityId: 'h1',
+      );
+      expect(pending, isNotNull);
+      final version = await journal.versionFor(
+        entityType: 'hosts',
+        entityId: 'h1',
+      );
+      expect(version!.logicalClock, pending!.logicalClock);
+      expect(version.deviceId, 'target-device');
+    });
+  });
+
   test('restored rows stand at the snapshot clock', () async {
     await addHost(source, 'h1');
     target.syncJournal = SyncJournal(db: target, deviceId: 'target-device');

@@ -9,6 +9,7 @@ import '../crypto/encryption_engine.dart';
 import 'backup_envelope.dart';
 import 'backup_scope.dart';
 import 'sync_row_codec.dart';
+import 'sync_row_writer.dart';
 
 export 'backup_envelope.dart'
     show
@@ -824,6 +825,34 @@ class E2EECloudSyncService {
             final id = item is Map ? item['id'] as String? : null;
             if (id == null || !present.contains(id)) continue;
 
+            // A change of this device's that has not been sent yet -- its
+            // category was off, or it was made offline -- was just
+            // overwritten, but its operation is still in the outbox. Sent
+            // later, it would put that change on every other device while
+            // this one kept the snapshot's row. Settle it the way the log
+            // would: the later of the two stays, here and everywhere.
+            final local = await journal.pendingFor(
+              entityType: type,
+              entityId: id,
+            );
+            if (local != null &&
+                _localChangeWins(
+                  local,
+                  localDeviceId: journal.deviceId,
+                  snapshotClock: syncClock,
+                  snapshotDeviceId: snapshotDeviceId,
+                )) {
+              await _reapplyPending(db, local);
+              await journal.setVersion(
+                entityType: type,
+                entityId: id,
+                logicalClock: local.logicalClock,
+                deviceId: journal.deviceId,
+              );
+              continue;
+            }
+            if (local != null) await journal.discardPending(local);
+
             await journal.setVersion(
               entityType: type,
               entityId: id,
@@ -901,6 +930,36 @@ class E2EECloudSyncService {
     );
 
     return count;
+  }
+
+  /// Whether an unsent change of this device's is later than the snapshot
+  /// that overwrote its row, by the same `(clock, deviceId)` order the
+  /// operation log resolves conflicts with.
+  static bool _localChangeWins(
+    PendingOperation local, {
+    required String localDeviceId,
+    required int snapshotClock,
+    required String snapshotDeviceId,
+  }) {
+    if (local.logicalClock != snapshotClock) {
+      return local.logicalClock > snapshotClock;
+    }
+    return localDeviceId.compareTo(snapshotDeviceId) > 0;
+  }
+
+  /// Puts an unsent change back over the row a restore just wrote.
+  Future<void> _reapplyPending(AppDatabase db, PendingOperation local) async {
+    if (local.operation == 'delete') {
+      await SyncRowWriter.deleteRow(db, local.entityType, local.entityId);
+      return;
+    }
+    final payload = local.payload;
+    if (payload == null) return;
+    await SyncRowWriter.write(
+      db,
+      local.entityType,
+      jsonDecode(payload) as Map<String, Object?>,
+    );
   }
 
   /// Maps auth types this build no longer supports onto `'password'`.

@@ -209,6 +209,25 @@ final class SyncJournal {
     db.pendingOperations,
   )..orderBy([(t) => OrderingTerm.asc(t.logicalClock)])).get();
 
+  /// The operation waiting to be sent for one row, if there is one.
+  ///
+  /// At most one: [_write] coalesces a row's changes into a single operation.
+  Future<PendingOperation?> pendingFor({
+    required String entityType,
+    required String entityId,
+  }) =>
+      (db.select(db.pendingOperations)..where(
+            (t) =>
+                t.entityType.equals(entityType) & t.entityId.equals(entityId),
+          ))
+          .getSingleOrNull();
+
+  /// Drops [operation] without sending it: something newer replaced the row.
+  Future<void> discardPending(PendingOperation operation) =>
+      (db.delete(
+        db.pendingOperations,
+      )..where((t) => t.id.equals(operation.id))).go();
+
   /// Drops the operations that were accepted by the server.
   ///
   /// Only the rows still holding the clock they were sent with: a row that
