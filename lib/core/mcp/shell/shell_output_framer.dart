@@ -228,10 +228,13 @@ class _CappedAccumulator {
     }
 
     _tail.addAll(remaining);
-    // Bound tail memory: once it is comfortably larger than what will ever
-    // be kept, drop everything except the last _keepBytes bytes. The slack
-    // factor avoids re-slicing the list on every single small chunk.
-    if (_tail.length > _keepBytes * 4) {
+    // Bound tail memory: once the stream is over the cap, and so will be
+    // reported truncated, drop everything except the last _keepBytes bytes.
+    // Trimming any sooner loses bytes from output that is returned whole
+    // and unmarked (a cap that is not a multiple of 5 left that gap). The
+    // slack of roughly four _keepBytes avoids re-slicing the list on every
+    // small chunk.
+    if (_tail.length > capBytes - _keepBytes) {
       _tail = _tail.sublist(_tail.length - _keepBytes);
     }
   }

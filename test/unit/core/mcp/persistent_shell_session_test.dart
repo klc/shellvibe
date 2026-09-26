@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/core/mcp/shell/persistent_shell_session.dart';
 import 'package:shellvibe/features/mcp/domain/models/mcp_enums.dart';
@@ -409,6 +411,68 @@ void main() {
       expect(result.exitCode, 0);
       expect(reopened.single.envelopes.last, contains('echo alive'));
     });
+  });
+
+  group('interrupt races', () {
+    test('a run started right after an idle interrupt waits for the rebuild',
+        () async {
+      // interrupt() does not take the run queue, so a command enqueued while
+      // it rebuilds used to be written into the channel being closed and
+      // then sat out its whole timeout.
+      final channel = FakeShellChannel();
+      final reopened = <FakeShellChannel>[];
+      final session = await _session(channel, reopened: reopened);
+      final envelopesBefore = channel.envelopes.length;
+
+      final interrupting = session.interrupt();
+      final result = await session.run(
+        'echo next',
+        timeout: const Duration(seconds: 1),
+      );
+      await interrupting;
+
+      expect(result.exitCode, 0);
+      expect(result.sessionReset, isFalse);
+      expect(
+        channel.envelopes.length,
+        envelopesBefore,
+        reason: 'nothing may be written to the channel being torn down',
+      );
+      expect(reopened, hasLength(1));
+      expect(reopened.single.envelopes.last, contains('echo next'));
+    });
+
+    test('an interrupt during a hang-recovery rebuild joins it', () async {
+      final channel = FakeShellChannel();
+      final reopened = <FakeShellChannel>[];
+      final reopenStarted = Completer<void>();
+      final releaseReopen = Completer<void>();
+      final session = PersistentShellSession(
+        channel: channel,
+        reopen: () async {
+          if (!reopenStarted.isCompleted) reopenStarted.complete();
+          await releaseReopen.future;
+          final next = FakeShellChannel(cwd: channel.cwd);
+          reopened.add(next);
+          return next;
+        },
+      );
+      await session.initialize();
+
+      channel.autoRespond = false;
+      final run = session.run('hang', timeout: const Duration(milliseconds: 50));
+      // Step 3 of recovery is now rebuilding the channel.
+      await reopenStarted.future;
+
+      final interrupting = session.interrupt();
+      releaseReopen.complete();
+      await interrupting;
+      final result = await run;
+
+      expect(reopened, hasLength(1), reason: 'one rebuild, not two racing');
+      expect(result.sessionReset, isTrue);
+      expect((await session.run('echo ok')).exitCode, 0);
+    }, timeout: const Timeout(Duration(seconds: 60)));
   });
 
   group('close', () {

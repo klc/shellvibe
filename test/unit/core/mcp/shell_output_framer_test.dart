@@ -148,6 +148,34 @@ void main() {
       },
     );
 
+    test('output at the cap is returned whole for any cap size', () async {
+      // The bug this pins: the tail was trimmed past 4 × (cap ~/ 5) bytes, so
+      // a cap that is not a multiple of 5 dropped bytes from output that was
+      // still reported as not truncated.
+      for (final cap in [100, 101, 103, 104, 1001]) {
+        final framer = ShellOutputFramer(nonce: _nonce, capBytes: cap);
+        final text = List.generate(cap, (i) => 'abcdefghij'[i % 10]).join();
+        framer.feedStdout(_bytes(text));
+        framer.feedStdout(_bytes(_sentinelLine(0, '/')));
+
+        await framer.sentinel;
+        expect(framer.truncation, isNull, reason: 'cap $cap');
+        expect(framer.stdout, text, reason: 'cap $cap');
+      }
+    });
+
+    test('one byte over the cap is marked for any cap size', () async {
+      for (final cap in [100, 101, 103, 104]) {
+        final framer = ShellOutputFramer(nonce: _nonce, capBytes: cap);
+        framer.feedStdout(_bytes('y' * (cap + 1)));
+        framer.feedStdout(_bytes(_sentinelLine(0, '/')));
+
+        await framer.sentinel;
+        expect(framer.truncation, isNotNull, reason: 'cap $cap');
+        expect(framer.stdout, contains('kırpıldı'), reason: 'cap $cap');
+      }
+    });
+
     test('stdout and stderr are capped independently', () async {
       final framer = ShellOutputFramer(nonce: _nonce, capBytes: 1000);
       framer.feedStdout(_bytes('o' * 4000));

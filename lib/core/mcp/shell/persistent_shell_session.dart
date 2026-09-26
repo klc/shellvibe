@@ -67,11 +67,17 @@ class PersistentShellSession {
   /// waits on its own sentinels normally.
   Completer<void> _interruptSignal = Completer<void>();
 
-  /// The channel rebuild [interrupt] is currently running, so the run it
-  /// interrupted can wait for a usable session before it returns rather than
-  /// handing the queue on to a command that would write into a half-open
-  /// channel.
-  Future<void>? _interruptReset;
+  /// The channel rebuild in progress, whether [interrupt] or step 3 of hang
+  /// recovery started it.
+  ///
+  /// Both join it rather than starting a second one: two rebuilds at once
+  /// would each reopen a channel, leak one of them and overwrite the other's
+  /// listeners. Every run waits for it before writing its command, since
+  /// [interrupt] does not take the run queue and a command written now would
+  /// land in a channel that is being closed or replaced. The run that was
+  /// interrupted waits for it too, so it hands the queue on to a usable
+  /// session.
+  Future<void>? _reset;
 
   /// Framers currently eligible to receive bytes from the channel. Normally
   /// holds exactly one entry (the in-flight command); during hang recovery
@@ -141,7 +147,14 @@ class PersistentShellSession {
     _liveFramers.add(framer);
     try {
       _channel.write(utf8.encode(_buildEnvelope('true', nonce)));
-      final match = await _waitSentinel(framer, _kProbeTimeout);
+      // Not woken by [interrupt]: the rebuild an interrupt starts runs this
+      // very probe, and an interrupt landing on a rebuild already under way
+      // joins it rather than cutting it short.
+      final match = await _waitSentinel(
+        framer,
+        _kProbeTimeout,
+        interruptible: false,
+      );
       if (match == null) {
         throw const McpToolException(
           McpErrorCode.shellUnsupported,
@@ -190,13 +203,8 @@ class PersistentShellSession {
     final waiter = _interruptSignal;
     _interruptSignal = Completer<void>();
     final reset = _resetChannel();
-    _interruptReset = reset;
     if (!waiter.isCompleted) waiter.complete();
-    try {
-      await reset;
-    } finally {
-      if (identical(_interruptReset, reset)) _interruptReset = null;
-    }
+    await reset;
   }
 
   Future<void> close() async {
@@ -209,11 +217,41 @@ class PersistentShellSession {
     Duration timeout,
   ) async {
     final stopwatch = Stopwatch()..start();
+
+    // An [interrupt] that arrived while the queue was idle, or just before
+    // this run reached the head of it, may still be rebuilding the channel.
+    while (_reset != null) {
+      try {
+        await _reset;
+      } catch (_) {
+        // A failed rebuild leaves a dead channel behind; this command's own
+        // hang recovery tries to rebuild it again.
+      }
+    }
+
     final framer = ShellOutputFramer(
       nonce: _newNonce(),
       capBytes: outputCapBytes,
     );
     _liveFramers.add(framer);
+
+    // [interrupt] tore the channel down while this command was running.
+    // Waiting for the rebuild before returning keeps the queue honest: the
+    // next command must not be handed a channel that is still being
+    // re-normalized.
+    Future<ShellCommandResult> interruptedResult() async {
+      await _reset;
+      return ShellCommandResult(
+        stdout: framer.stdout,
+        stderr: framer.stderr,
+        exitCode: -1,
+        cwd: _cwd,
+        durationMs: stopwatch.elapsedMilliseconds,
+        truncated: framer.truncation,
+        interrupted: true,
+        sessionReset: true,
+      );
+    }
 
     try {
       _channel.write(utf8.encode(_buildEnvelope(command, framer.nonce)));
@@ -224,24 +262,7 @@ class PersistentShellSession {
         _cwd = match.cwd;
         return _resultFrom(framer, match, stopwatch.elapsedMilliseconds);
       }
-
-      // [interrupt] tore the channel down while this command was running.
-      // Waiting for the rebuild before returning keeps the queue honest: the
-      // next command must not be handed a channel that is still being
-      // re-normalized.
-      if (_interruptCount != epoch) {
-        await _interruptReset;
-        return ShellCommandResult(
-          stdout: framer.stdout,
-          stderr: framer.stderr,
-          exitCode: -1,
-          cwd: _cwd,
-          durationMs: stopwatch.elapsedMilliseconds,
-          truncated: framer.truncation,
-          interrupted: true,
-          sessionReset: true,
-        );
-      }
+      if (_interruptCount != epoch) return await interruptedResult();
 
       // --- Hang-recovery chain -------------------------------------------
       //
@@ -271,6 +292,7 @@ class PersistentShellSession {
           interrupted: true,
         );
       }
+      if (_interruptCount != epoch) return await interruptedResult();
 
       // Step 2: probe with a fresh sentinel. Ctrl-C can land on a subshell
       // or a process that ignores SIGINT while the outer shell is actually
@@ -298,6 +320,7 @@ class PersistentShellSession {
             interrupted: true,
           );
         }
+        if (_interruptCount != epoch) return await interruptedResult();
       } finally {
         _liveFramers.remove(probeFramer);
       }
@@ -326,7 +349,12 @@ class PersistentShellSession {
   /// Closes the dead channel, opens a new one via [_reopen], re-normalizes
   /// it, and restores the working directory the agent was in — everything
   /// except that `cd` (variables, background jobs) is gone for good.
-  Future<void> _resetChannel() async {
+  ///
+  /// Joins the rebuild already in progress, if there is one (see [_reset]).
+  Future<void> _resetChannel() =>
+      _reset ??= _rebuildChannel().whenComplete(() => _reset = null);
+
+  Future<void> _rebuildChannel() async {
     final previousCwd = _cwd;
     _liveFramers.clear();
     await _detachListeners();
@@ -350,7 +378,11 @@ class PersistentShellSession {
           _buildEnvelope('cd ${_shellQuote(previousCwd)}', framer.nonce),
         ),
       );
-      final match = await _waitSentinel(framer, _kProbeTimeout);
+      final match = await _waitSentinel(
+        framer,
+        _kProbeTimeout,
+        interruptible: false,
+      );
       // If even this does not respond, `cwd` stays whatever initialize()
       // reported (the shell's own login directory) — a known-wrong cwd,
       // communicated honestly via the already-returned `sessionReset: true`,
@@ -400,13 +432,14 @@ class PersistentShellSession {
 
   Future<SentinelMatch?> _waitSentinel(
     ShellOutputFramer framer,
-    Duration wait,
-  ) async {
+    Duration wait, {
+    bool interruptible = true,
+  }) async {
     final interrupted = _interruptSignal.future;
     try {
       return await Future.any<SentinelMatch?>([
         framer.sentinel,
-        interrupted.then<SentinelMatch?>((_) => null),
+        if (interruptible) interrupted.then<SentinelMatch?>((_) => null),
       ]).timeout(wait);
     } on TimeoutException {
       return null;
