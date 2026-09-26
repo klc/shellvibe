@@ -521,7 +521,11 @@ final class DeviceLinkBinaryFrame {
   DeviceLinkBinaryFrame({required this.type, required List<int> payload})
     : _payload = Uint8List.fromList(payload);
 
-  Uint8List get payload => Uint8List.fromList(_payload);
+  /// Takes [payload] as is; only for bytes nothing else holds a reference to.
+  DeviceLinkBinaryFrame._owned(this.type, this._payload);
+
+  /// A read-only view, so reading the payload of a large frame costs no copy.
+  Uint8List get payload => _payload.asUnmodifiableView();
 
   Uint8List encode() {
     final maxPayloadLength = _maxPayloadLengthForType(type);
@@ -560,7 +564,9 @@ final class DeviceLinkBinaryFrame {
         'Device Link binary payload exceeds the maximum size',
       );
     }
-    return DeviceLinkBinaryFrame(type: type, payload: frame.sublist(1));
+    final payload = Uint8List(payloadLength)
+      ..setRange(0, payloadLength, frame, 1);
+    return DeviceLinkBinaryFrame._owned(type, payload);
   }
 }
 

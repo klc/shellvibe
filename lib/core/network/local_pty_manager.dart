@@ -31,7 +31,7 @@ class TerminalLocalPtyBridge {
   /// desktop is going to notice on its behalf.
   void Function()? onExit;
 
-  StreamSubscription<String>? _outputSubscription;
+  StreamSubscription<Uint8List>? _outputSubscription;
   bool _isDisposed = false;
 
   /// Output reaches the terminal batched by frame and then paced, rather than
@@ -97,41 +97,45 @@ class TerminalLocalPtyBridge {
     };
 
     // 2. Wire local PTY output stream -> xterm Terminal
-    _outputSubscription = session.output
-        .cast<List<int>>()
-        .map<List<int>>((bytes) {
-          final rawBytes = Uint8List.fromList(bytes);
-          try {
-            outputTap?.call(rawBytes);
-          } catch (_) {
-            // A diagnostic/transport tap must never break local terminal
-            // rendering when its consumer is unavailable.
-          }
-          return rawBytes;
-        })
-        .transform<String>(const Utf8Decoder(allowMalformed: true))
-        .listen(
-          (String data) {
-            if (_isDisposed) return;
-            // Read both stages before the chunk joins them: what the
-            // coalescer is holding says whether batching is engaging, and
-            // what the pacer has queued says whether it has anything to pace.
-            if (isWritePathInstrumented) {
-              writePathMetrics.recordChunk(
-                chars: data.length,
-                pendingChunks: _writer.pendingChunks,
-                bufferedChars: _writer.bufferedChars,
-              );
-            }
-            _unacknowledgedBatches++;
-            _writer.write(data);
-          },
-          onError: (Object error) {
-            if (_isDisposed) return;
-            _writer.write('\r\n[PTY stream error: $error]\r\n');
-          },
-          onDone: _onStreamDone,
-        );
+    //
+    // Decoded here rather than through a stream transformer so each batch
+    // can be matched to what it produced: a batch holding only part of a
+    // UTF-8 character produces no text, never reaches the writer, and would
+    // otherwise hold its credit forever.
+    final decoder = const Utf8Decoder(
+      allowMalformed: true,
+    ).startChunkedConversion(_TextSink(_onDecodedText));
+    _outputSubscription = session.output.listen(
+      (Uint8List bytes) {
+        if (_isDisposed) return;
+        try {
+          // The batch is private to this bridge (materialized from the
+          // reader isolate's transfer) and nothing below mutates it, so the
+          // tap gets it without a copy.
+          outputTap?.call(bytes);
+        } catch (_) {
+          // A diagnostic/transport tap must never break local terminal
+          // rendering when its consumer is unavailable.
+        }
+        _unacknowledgedBatches++;
+        _decodedInBatch = false;
+        decoder.add(bytes);
+        if (!_decodedInBatch && !_isDisposed) {
+          // Nothing to parse, so nothing will hand this batch off.
+          _unacknowledgedBatches--;
+          session.acknowledge();
+        }
+      },
+      onError: (Object error) {
+        if (_isDisposed) return;
+        _writer.write('\r\n[PTY stream error: $error]\r\n');
+      },
+      onDone: () {
+        // Flushes a trailing partial character as U+FFFD.
+        decoder.close();
+        _onStreamDone();
+      },
+    );
 
     // 3. Wire window resize event from xterm Terminal -> Local PTY resize
     // Note: flutter_pty resize takes (rows, cols)
@@ -139,6 +143,25 @@ class TerminalLocalPtyBridge {
         (int width, int height, int pixelWidth, int pixelHeight) {
           resizeTerminal(width, height);
         };
+  }
+
+  /// Whether the batch being decoded produced any text.
+  bool _decodedInBatch = false;
+
+  void _onDecodedText(String data) {
+    if (_isDisposed || data.isEmpty) return;
+    _decodedInBatch = true;
+    // Read both stages before the chunk joins them: what the coalescer is
+    // holding says whether batching is engaging, and what the pacer has
+    // queued says whether it has anything to pace.
+    if (isWritePathInstrumented) {
+      writePathMetrics.recordChunk(
+        chars: data.length,
+        pendingChunks: _writer.pendingChunks,
+        bufferedChars: _writer.bufferedChars,
+      );
+    }
+    _writer.write(data);
   }
 
   /// Batches taken from the reader that have not been reported back yet.
@@ -220,6 +243,19 @@ class TerminalLocalPtyBridge {
 
     await session.dispose(kill: killPty);
   }
+}
+
+/// Forwards each piece of decoded text as it is produced.
+class _TextSink implements Sink<String> {
+  _TextSink(this._onText);
+
+  final void Function(String text) _onText;
+
+  @override
+  void add(String data) => _onText(data);
+
+  @override
+  void close() {}
 }
 
 /// Manages local shell process creation using `flutter_pty` across platforms

@@ -219,6 +219,35 @@ void main() {
       await bridge.dispose();
     });
 
+    test('a batch holding only part of a character is still acknowledged',
+        () async {
+      // The bug this pins: the decoder emits nothing for a batch that ends
+      // mid-character, so a credit counted per decoded chunk was never
+      // returned. Four such batches and the reader stopped for good.
+      final terminal = Terminal();
+      final session = FakePtySession(exitCode: 0);
+      final bridge = TerminalLocalPtyBridge(
+        terminal: terminal,
+        session: session,
+        writerOverride: CoalescingTerminalWriter(
+          PacedTerminalWriter(terminal),
+          waitForFrame: () async {},
+        ),
+      );
+
+      // 'ş' is C5 9F; a slow writer can hand it over one byte at a time.
+      session.emitOutput(const [0xC5]);
+      await pumpEventQueue();
+      expect(session.ackCount, equals(1));
+
+      session.emitOutput(const [0x9F]);
+      await pumpEventQueue();
+      expect(session.ackCount, equals(2));
+      expect(terminal.buffer.lines[0].toString(), contains('ş'));
+
+      await bridge.dispose();
+    });
+
     test('nothing is acknowledged while a batch is still buffered', () async {
       // A batch that never reaches the writer is a batch the reader must not
       // be told about, or the brake would release on output nobody parsed.
