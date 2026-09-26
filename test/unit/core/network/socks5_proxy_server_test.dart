@@ -18,6 +18,12 @@ class FakeSSHForwardChannel implements SSHForwardChannel {
 
   Stream<List<int>> get sinkStream => _channelSinkController.stream;
 
+  /// Delivers [data] as if the remote end of the forward had sent it.
+  void remoteSend(List<int> data) => _channelStreamController.add(Uint8List.fromList(data));
+
+  /// Ends the remote side's stream (EOF) without touching the local side.
+  Future<void> remoteEof() => _channelStreamController.close();
+
   @override
   Future<void> close() async {
     await _channelStreamController.close();
@@ -208,5 +214,75 @@ void main() {
     expect(fakeSshClient.lastForwardedPort, equals(443));
 
     await clientSocket.close();
+  });
+
+  Future<Socket> connectThroughProxy(List<int> received, Completer<void> replied) async {
+    final clientSocket = await Socket.connect('127.0.0.1', serverPort);
+    clientSocket.listen((data) {
+      received.addAll(data);
+      if (received.length >= 12 && !replied.isCompleted) replied.complete();
+    });
+    clientSocket.add([
+      0x05, 0x01, 0x00, // Handshake
+      0x05, 0x01, 0x00, 0x01, 127, 0, 0, 1, 0x1F, 0x90, // CONNECT 127.0.0.1:8080
+    ]);
+    await clientSocket.flush();
+    await replied.future;
+    return clientSocket;
+  }
+
+  test('Socks5ProxyServer keeps piping both ways after the CONNECT reply', () async {
+    final forwarded = <int>[];
+    final gotLater = Completer<void>();
+    fakeChannel.sinkStream.listen((data) {
+      forwarded.addAll(data);
+      if (String.fromCharCodes(forwarded).contains('LATER') && !gotLater.isCompleted) {
+        gotLater.complete();
+      }
+    });
+
+    final received = <int>[];
+    final clientSocket = await connectThroughProxy(received, Completer<void>());
+
+    // Sent in its own packet, after the handshake is over.
+    clientSocket.add('LATER'.codeUnits);
+    await clientSocket.flush();
+    await gotLater.future.timeout(const Duration(seconds: 5));
+
+    fakeChannel.remoteSend('REPLY'.codeUnits);
+    await Future.doWhile(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      return received.length < 17;
+    }).timeout(const Duration(seconds: 5));
+    expect(String.fromCharCodes(received.sublist(12)), equals('REPLY'));
+
+    clientSocket.destroy();
+  });
+
+  test('Socks5ProxyServer delivers the reply after the client half-closes', () async {
+    final channelEof = Completer<void>();
+    final forwarded = <int>[];
+    fakeChannel.sinkStream.listen(forwarded.addAll, onDone: channelEof.complete);
+
+    final received = <int>[];
+    final clientDone = Completer<void>();
+    final clientSocket = await Socket.connect('127.0.0.1', serverPort);
+    clientSocket.listen(received.addAll, onDone: clientDone.complete);
+    clientSocket.add([
+      0x05, 0x01, 0x00,
+      0x05, 0x01, 0x00, 0x01, 127, 0, 0, 1, 0x1F, 0x90,
+      ...'REQUEST'.codeUnits,
+    ]);
+    // Shut down only the sending side, like `nc -N` does.
+    await clientSocket.close();
+
+    await channelEof.future.timeout(const Duration(seconds: 5));
+    expect(String.fromCharCodes(forwarded), equals('REQUEST'));
+
+    fakeChannel.remoteSend('RESPONSE'.codeUnits);
+    await fakeChannel.remoteEof();
+    await clientDone.future.timeout(const Duration(seconds: 5));
+
+    expect(String.fromCharCodes(received.sublist(12)), equals('RESPONSE'));
   });
 }

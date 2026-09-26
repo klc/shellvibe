@@ -4,6 +4,8 @@ import 'dart:typed_data';
 
 import 'package:dartssh2/dartssh2.dart';
 
+import 'socket_channel_pipe.dart';
+
 typedef BytesTransferredCallback = void Function(int bytes);
 
 /// Pure Dart SOCKS5 Proxy Server for Dynamic Port Forwarding (-D).
@@ -14,7 +16,7 @@ class Socks5ProxyServer {
   final BytesTransferredCallback? onBytesTransferred;
 
   ServerSocket? _serverSocket;
-  final List<StreamSubscription> _activeSubscriptions = [];
+  final Set<SocketChannelPipe> _activePipes = {};
   final Set<Socket> _activeSockets = {};
   final Set<SSHForwardChannel> _activeChannels = {};
   bool _isListening = false;
@@ -168,109 +170,31 @@ class Socks5ProxyServer {
       }
       _activeChannels.add(sshChannel);
 
-      // Detach reader before piping directly from clientSocket
-      final unconsumed = await reader.detach();
-
       // Send SOCKS5 Success Response
       clientSocket.add([0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0]);
       await clientSocket.flush();
 
-      // Forward any unconsumed bytes received during handshake/request parsing
-      if (unconsumed.isNotEmpty) {
-        try {
-          sshChannel.sink.add(unconsumed);
-          if (onBytesTransferred != null) {
-            onBytesTransferred!(unconsumed.length);
-          }
-        } catch (_) {}
+      if (reader.hasFailed) {
+        throw const SocketException('SOCKS5 client failed during handshake');
       }
 
-      // Step 4: Pipe data bidirectionally
-      StreamSubscription? sub1;
-      StreamSubscription? sub2;
-      bool cleanedUp = false;
-
-      void cleanupSubscriptions() {
-        if (cleanedUp) return;
-        cleanedUp = true;
-        sub1?.cancel();
-        sub2?.cancel();
-        if (sub1 != null) {
-          _activeSubscriptions.remove(sub1);
-        }
-        if (sub2 != null) {
-          _activeSubscriptions.remove(sub2);
-        }
-        _activeSockets.remove(clientSocket);
-        if (sshChannel != null) {
-          _activeChannels.remove(sshChannel);
-        }
-      }
-
-      sub1 = clientSocket.listen(
-        (data) {
-          if (cleanedUp) return;
-          try {
-            sshChannel?.sink.add(data);
-            if (onBytesTransferred != null) {
-              onBytesTransferred!(data.length);
-            }
-          } catch (_) {}
-        },
-        onError: (_) {
-          cleanupSubscriptions();
-          clientSocket.destroy();
-          sshChannel?.close();
-        },
-        onDone: () {
-          cleanupSubscriptions();
-          clientSocket.destroy();
-          sshChannel?.close();
+      // Step 4: Pipe data bidirectionally. The reader's subscription is
+      // handed over rather than cancelled: a Socket can only be listened to
+      // once, so listening again here would throw.
+      final channel = sshChannel;
+      late final SocketChannelPipe pipe;
+      pipe = SocketChannelPipe(
+        socket: clientSocket,
+        channel: channel,
+        onBytes: onBytesTransferred,
+        onClosed: () {
+          _activePipes.remove(pipe);
+          _activeSockets.remove(clientSocket);
+          _activeChannels.remove(channel);
         },
       );
-      _activeSubscriptions.add(sub1);
-
-      if (cleanedUp) {
-        cleanupSubscriptions();
-        clientSocket.destroy();
-        // sub1/sub2 were torn down above; the channel may still be open if
-        // cleanup fired while building sub1, so close it exactly once here.
-        _activeChannels.remove(sshChannel);
-        sshChannel.close();
-        return;
-      }
-
-      sub2 = sshChannel.stream.listen(
-        (data) {
-          if (cleanedUp) return;
-          try {
-            clientSocket.add(data);
-            if (onBytesTransferred != null) {
-              onBytesTransferred!(data.length);
-            }
-          } catch (_) {}
-        },
-        onError: (_) {
-          cleanupSubscriptions();
-          clientSocket.destroy();
-          sshChannel?.close();
-        },
-        onDone: () {
-          cleanupSubscriptions();
-          clientSocket.destroy();
-          sshChannel?.close();
-        },
-      );
-      _activeSubscriptions.add(sub2);
-
-      if (cleanedUp) {
-        cleanupSubscriptions();
-        clientSocket.destroy();
-        // sub2 was torn down above; the channel may still be open if cleanup
-        // fired while building sub2, so close it exactly once here.
-        _activeChannels.remove(sshChannel);
-        sshChannel.close();
-      }
+      _activePipes.add(pipe);
+      reader.handOffTo(pipe);
     } catch (_) {
       try {
         if (sshChannel != null) {
@@ -293,10 +217,10 @@ class Socks5ProxyServer {
   /// Stops the SOCKS5 proxy server.
   Future<void> stop() async {
     _isListening = false;
-    for (final sub in List<StreamSubscription>.from(_activeSubscriptions)) {
-      await sub.cancel();
+    for (final pipe in List<SocketChannelPipe>.from(_activePipes)) {
+      pipe.close();
     }
-    _activeSubscriptions.clear();
+    _activePipes.clear();
 
     for (final socket in List<Socket>.from(_activeSockets)) {
       socket.destroy();
@@ -320,6 +244,7 @@ class _BufferedSocketReader {
   Completer<void>? _dataCompleter;
   bool _isDone = false;
   bool _hasError = false;
+  bool _detached = false;
 
   _BufferedSocketReader(this._socket) {
     _subscription = _socket.listen(
@@ -345,7 +270,7 @@ class _BufferedSocketReader {
   }
 
   Future<Uint8List> readExact(int count) async {
-    while (_builder.length < count && !_isDone && !_hasError) {
+    while (_builder.length < count && !_isDone && !_hasError && !_detached) {
       _dataCompleter = Completer<void>();
       await _dataCompleter!.future;
     }
@@ -364,13 +289,28 @@ class _BufferedSocketReader {
     return bytes;
   }
 
+  bool get hasFailed => _hasError;
+
   Future<Uint8List> detach() async {
-    _isDone = true;
+    _detached = true;
     if (_dataCompleter != null && !_dataCompleter!.isCompleted) {
       _dataCompleter!.complete();
     }
     await _subscription?.cancel();
     _subscription = null;
     return _builder.takeBytes();
+  }
+
+  /// Hands the socket subscription over to [pipe], together with the bytes
+  /// read past the request and whether the client already sent EOF.
+  void handOffTo(SocketChannelPipe pipe) {
+    final subscription = _subscription;
+    _subscription = null;
+    _detached = true;
+    pipe.start(
+      socketSubscription: subscription,
+      initialBytes: _builder.takeBytes(),
+      socketEnded: _isDone,
+    );
   }
 }

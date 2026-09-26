@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:dartssh2/dartssh2.dart';
+import 'socket_channel_pipe.dart';
 import 'socks5_proxy_server.dart';
 
 /// Upper bound for dialing the local target of a remote (`-R`) forward. A
@@ -183,81 +184,16 @@ class TunnelEngine {
           }
           _activeChannels[ruleId]?.add(sshChannel);
 
-          StreamSubscription? sub1;
-          StreamSubscription? sub2;
-          bool cleanedUp = false;
-
-          void cleanupSubscriptions() {
-            if (cleanedUp) return;
-            cleanedUp = true;
-            sub1?.cancel();
-            sub2?.cancel();
-            if (sub1 != null) {
-              _subscriptions[ruleId]?.remove(sub1);
-            }
-            if (sub2 != null) {
-              _subscriptions[ruleId]?.remove(sub2);
-            }
-            _activeSockets[ruleId]?.remove(clientSocket);
-            if (sshChannel != null) {
-              _activeChannels[ruleId]?.remove(sshChannel);
-            }
-          }
-
-          sub1 = clientSocket.listen(
-            (data) {
-              try {
-                sshChannel?.sink.add(data);
-                _addBytes(ruleId, data.length);
-              } catch (_) {}
+          final channel = sshChannel;
+          SocketChannelPipe(
+            socket: clientSocket,
+            channel: channel,
+            onBytes: (bytes) => _addBytes(ruleId, bytes),
+            onClosed: () {
+              _activeSockets[ruleId]?.remove(clientSocket);
+              _activeChannels[ruleId]?.remove(channel);
             },
-            onError: (_) {
-              cleanupSubscriptions();
-              clientSocket.destroy();
-              sshChannel?.close();
-            },
-            onDone: () {
-              cleanupSubscriptions();
-              clientSocket.destroy();
-              sshChannel?.close();
-            },
-          );
-          _subscriptions[ruleId]?.add(sub1);
-
-          if (cleanedUp) {
-            cleanupSubscriptions();
-            clientSocket.destroy();
-            // ignore: invalid_null_aware_operator
-            sshChannel?.close();
-            return;
-          }
-
-          sub2 = sshChannel.stream.listen(
-            (data) {
-              try {
-                clientSocket.add(data);
-                _addBytes(ruleId, data.length);
-              } catch (_) {}
-            },
-            onError: (_) {
-              cleanupSubscriptions();
-              clientSocket.destroy();
-              sshChannel?.close();
-            },
-            onDone: () {
-              cleanupSubscriptions();
-              clientSocket.destroy();
-              sshChannel?.close();
-            },
-          );
-          _subscriptions[ruleId]?.add(sub2);
-
-          if (cleanedUp) {
-            cleanupSubscriptions();
-            clientSocket.destroy();
-            // ignore: invalid_null_aware_operator
-            sshChannel?.close();
-          }
+          ).start();
         } catch (_) {
           _activeSockets[ruleId]?.remove(clientSocket);
           clientSocket.destroy();
@@ -344,79 +280,16 @@ class TunnelEngine {
             }
             _activeSockets[ruleId]?.add(localSocket);
 
-            StreamSubscription? sub1;
-            StreamSubscription? sub2;
-            bool cleanedUp = false;
-
-            void cleanupSubscriptions() {
-              if (cleanedUp) return;
-              cleanedUp = true;
-              sub1?.cancel();
-              sub2?.cancel();
-              if (sub1 != null) {
-                _subscriptions[ruleId]?.remove(sub1);
-              }
-              if (sub2 != null) {
-                _subscriptions[ruleId]?.remove(sub2);
-              }
-              if (localSocket != null) {
-                _activeSockets[ruleId]?.remove(localSocket);
-              }
-              _activeChannels[ruleId]?.remove(connection);
-            }
-
-            sub1 = localSocket.listen(
-              (data) {
-                try {
-                  connection.sink.add(data);
-                  _addBytes(ruleId, data.length);
-                } catch (_) {}
+            final socket = localSocket;
+            SocketChannelPipe(
+              socket: socket,
+              channel: connection,
+              onBytes: (bytes) => _addBytes(ruleId, bytes),
+              onClosed: () {
+                _activeSockets[ruleId]?.remove(socket);
+                _activeChannels[ruleId]?.remove(connection);
               },
-              onError: (_) {
-                cleanupSubscriptions();
-                localSocket?.destroy();
-                connection.close();
-              },
-              onDone: () {
-                cleanupSubscriptions();
-                localSocket?.destroy();
-                connection.close();
-              },
-            );
-            _subscriptions[ruleId]?.add(sub1);
-
-            if (cleanedUp) {
-              cleanupSubscriptions();
-              localSocket.destroy();
-              connection.close();
-              return;
-            }
-
-            sub2 = connection.stream.listen(
-              (data) {
-                try {
-                  localSocket?.add(data);
-                  _addBytes(ruleId, data.length);
-                } catch (_) {}
-              },
-              onError: (_) {
-                cleanupSubscriptions();
-                localSocket?.destroy();
-                connection.close();
-              },
-              onDone: () {
-                cleanupSubscriptions();
-                localSocket?.destroy();
-                connection.close();
-              },
-            );
-            _subscriptions[ruleId]?.add(sub2);
-
-            if (cleanedUp) {
-              cleanupSubscriptions();
-              localSocket.destroy();
-              connection.close();
-            }
+            ).start();
           } catch (_) {
             _activeChannels[ruleId]?.remove(connection);
             if (localSocket != null) {
