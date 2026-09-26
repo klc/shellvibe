@@ -380,6 +380,48 @@ void main() {
     },
     timeout: const Timeout(_timeout),
   );
+  test(
+    'a connection that closes mid-attach does not leave the session attached',
+    () async {
+      // The bug this pins: close() released the attachment before the
+      // transport had recorded its owner, so there was nothing to undo; when
+      // attach then finished, the transport stayed attached to a dead
+      // connection and every later phone got session_in_use.
+      final slowTransport = _SlowAttachTransport();
+      final slowServer = DeviceLinkServer(
+        identity: identity,
+        hostName: 'test-host',
+        appVersion: 'test',
+        sessionTransportsProvider: () => [slowTransport],
+      );
+      await slowServer.start();
+      addTearDown(slowServer.close);
+
+      final dropped = await _pair(identity, slowServer);
+      await dropped.sendAttach(
+        const DeviceLinkAttach(sessionId: 'slow', cols: 52, rows: 30),
+      );
+      await slowTransport.attachStarted.future.timeout(_timeout);
+
+      await dropped.close();
+      await _waitUntil(() => slowTransport.detachCalls >= 1);
+      slowTransport.finishAttach.complete();
+      await slowTransport.attachFinished.future.timeout(_timeout);
+
+      await _waitUntil(() => !slowTransport.isAttached);
+
+      final next = await _pair(identity, slowServer, deviceId: 'phone-2');
+      addTearDown(next.close);
+      await next.sendAttach(
+        const DeviceLinkAttach(sessionId: 'slow', cols: 52, rows: 30),
+      );
+      expect(
+        await next.nextControl(timeout: _timeout),
+        isA<DeviceLinkAttached>(),
+      );
+    },
+    timeout: const Timeout(Duration(seconds: 15)),
+  );
 }
 
 Future<void> _waitUntil(bool Function() condition) async {
@@ -570,6 +612,85 @@ final class _ResponseSendFailureTransport
   }) async {
     _attached = false;
     detachCalls++;
+    return null;
+  }
+
+  @override
+  Future<void> dispose() async {}
+}
+
+/// Records its owner only after an await, as a transport that has to talk to
+/// something before it can attach would.
+final class _SlowAttachTransport implements DeviceLinkSessionTransport {
+  @override
+  final info = const DeviceLinkSessionInfo(
+    id: 'slow',
+    title: 'Slow attach',
+    type: 'local',
+  );
+
+  final attachStarted = Completer<void>();
+  final finishAttach = Completer<void>();
+  final attachFinished = Completer<void>();
+  DeviceLinkServerConnection? _owner;
+  int detachCalls = 0;
+
+  @override
+  bool get isAttached => _owner != null;
+
+  @override
+  Future<DeviceLinkSessionAttachResult> attach({
+    required DeviceLinkServerConnection connection,
+    required DeviceLinkAttach request,
+  }) async {
+    if (_owner != null) {
+      throw const DeviceLinkSessionException(
+        'session_in_use',
+        'Another device owns this session',
+      );
+    }
+    if (!attachStarted.isCompleted) attachStarted.complete();
+    await finishAttach.future;
+    _owner = connection;
+    if (!attachFinished.isCompleted) attachFinished.complete();
+    return DeviceLinkSessionAttachResult(
+      attached: DeviceLinkAttached(
+        sessionId: info.id,
+        cols: request.cols,
+        rows: request.rows,
+        alt: false,
+        bracketedPaste: false,
+        scrollbackLines: 0,
+      ),
+      snapshotPayload: const [],
+    );
+  }
+
+  @override
+  Future<void> writeInput({
+    required DeviceLinkServerConnection connection,
+    required Uint8List bytes,
+  }) async {}
+
+  @override
+  Future<void> resize({
+    required DeviceLinkServerConnection connection,
+    required int columns,
+    required int rows,
+  }) async {}
+
+  @override
+  Future<DeviceLinkAttachment?> detach({
+    required DeviceLinkServerConnection connection,
+  }) async {
+    detachCalls++;
+    if (!identical(_owner, connection)) {
+      throw const DeviceLinkSessionException(
+        'session_not_attached',
+        'This connection does not own the session',
+      );
+    }
+    _owner = null;
     return null;
   }
 

@@ -559,6 +559,19 @@ final class DeviceLinkServer {
         connection: connection,
         request: request,
       );
+      if (!identical(connection._attachedTransport, transport)) {
+        // The connection closed or detached while attach was still running.
+        // That release can reach the transport before it has recorded this
+        // owner, in which case it had nothing to undo; left alone, the
+        // transport stays attached to a connection that is gone and every
+        // later phone gets `session_in_use` until the tab is closed.
+        try {
+          await transport.detach(connection: connection);
+        } on DeviceLinkSessionException {
+          // The earlier release did reach it after all.
+        }
+        return;
+      }
       if (connection.isClosed) {
         await _releaseAttachment(connection);
         return;
