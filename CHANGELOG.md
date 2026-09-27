@@ -7,6 +7,87 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-09-27
+
+### Changed
+
+- Every interface and terminal font ships with the app. The optional families,
+  and the default terminal face Roboto Mono, were fetched from Google's font
+  CDN on first use; choosing a font in Settings now makes no network request
+  at all, and the "Offline" badge is gone.
+
+### Security
+
+- The sync server could change what an operation does without the sync key:
+  whether it is a delete, and its device and clock, sat only in fields outside
+  the encryption, enough to turn an edit into a delete or to win
+  last-writer-wins. They are now sealed inside the payload and checked when it
+  is opened. Operations from earlier builds are accepted as before.
+- An MCP "This session" approval answered for every later connection, exactly
+  like "Always". It now ends with the connection that granted it.
+- In autonomous mode, MCP commands that read credentials (`cat ~/.env`,
+  private keys, `printenv`) ran without asking. They now always ask, cannot be
+  remembered, and an approval stored for one before is ignored.
+- A phone woken after sleeping past the auto-lock delay could show the vault
+  unlocked, because the lock ran only on a timer that does not count while the
+  device sleeps. Returning to the app now checks the time away as well.
+
+### Fixed
+
+- A synced identity could not log in on any other device: its secrets
+  travelled encrypted under the sending device's own vault key. They now
+  travel under the sync key and are re-encrypted for the receiving device.
+  Identities synced from an earlier build may need their secrets entered again
+  on the devices that received them.
+- A change made offline, or held back behind a locked vault, could never reach
+  the other devices: the operation log was paged by the clock each change was
+  recorded with, so one sent late landed behind a cursor that had already
+  passed it. Devices now page by the order the server stores operations. This
+  takes effect once `api.shellvibe.dev` runs the matching server; until then
+  sync works as it did.
+- A locked vault no longer stops sync altogether. Hosts and other changes
+  still arrive and only sending waits, and unlocking resumes sync at once
+  instead of at the next five-minute poll. Joining sync with a locked vault
+  says so and picks up on unlock.
+- Restoring a sync snapshot no longer drops an unsent local change. Each row
+  is compared with the version the snapshot holds for it, and a newer local
+  edit is kept and still sent.
+- An incoming change carrying no row failed the same page on every pull and
+  stalled sync; it is skipped.
+- Bookmarks, templates and vault environment variables showed what was there
+  before a restore until the app restarted.
+- Two first uses of an empty keychain at once — sync applying an identity
+  while you save another — each created a vault key, and the second replaced
+  the first, leaving whatever was sealed under it unreadable.
+- A device that sat closed past its cloud backup interval backs up on
+  opening, rather than a quarter of an hour later.
+- Every dynamic (`-D`, SOCKS5) forward connection died right after the
+  handshake.
+- `-L`, `-R` and `-D` forwards closed the SSH channel as soon as either side
+  finished sending, dropping the reply to clients that shut their write side
+  (`nc -N`, `printf | nc`, HTTP/1.0). A forward whose local client resets the
+  connection now closes its channel too.
+- The local terminal could freeze for good when output split a multi-byte
+  character across reads several times in a row.
+- A phone that disconnected while attaching to a Device Link session left the
+  desktop tab refusing every later phone with `session_in_use` until the tab
+  was closed.
+- An MCP command sent while an interrupt rebuilt the shell waited out its
+  full timeout, and an interrupt during hang recovery leaked a shell channel.
+  Output caps that were not a multiple of five dropped bytes without a
+  truncation marker, and approving the same command twice made its next run
+  fail.
+- On macOS, closing the window with the tray icon off quit the app and took
+  every session and tunnel down with it. On a desktop without a tray host,
+  turning the tray on could leave the close button doing nothing.
+- Switching windows no longer runs a sync round trip and rebinds every Mosh
+  session; only hiding or leaving the app counts.
+- The window frame takes the selected palette's color instead of the default
+  one, and the Device Link pairing screen has window controls and a drag
+  strip.
+- The command palette's arrow keys move the selection, and a long result no
+  longer hides the detail beside it.
+
 ## [1.5.0] - 2026-09-25
 
 ### Added
@@ -362,7 +443,8 @@ entry describes what ShellVibe is rather than what changed.
 - iOS and Android are not released. The code builds for them and they are not
   part of this release.
 
-[Unreleased]: https://github.com/klc/shellvibe/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/klc/shellvibe/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/klc/shellvibe/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/klc/shellvibe/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/klc/shellvibe/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/klc/shellvibe/compare/v1.2.0...v1.3.0
