@@ -12,6 +12,7 @@ import 'package:shellvibe/core/sync/sync_aliases.dart';
 import 'package:shellvibe/core/sync/sync_engine.dart';
 import 'package:shellvibe/core/sync/sync_journal.dart';
 import 'package:shellvibe/features/cloud_backup/data/sync_operations_api.dart';
+import 'package:shellvibe/features/vault/data/vault_key_service.dart';
 import 'package:shellvibe/shared/database/app_database.dart';
 
 /// Two devices, one log, and the question the whole design turns on: do they
@@ -313,6 +314,40 @@ void main() {
         ),
         'hunter2',
       );
+    });
+
+    test('a locked vault holds back sending, not receiving', () async {
+      // An identity waiting in the outbox used to stop the whole pass, so a
+      // device left locked never saw another host arrive either.
+      final a = await device('device-a');
+      var locked = true;
+      late final _Device b;
+      b = await device(
+        'device-b',
+        vaultKey: () async {
+          if (locked) throw const VaultLockedException();
+          return b.dek;
+        },
+      );
+
+      await b.writeIdentity('i1', password: 'hunter2');
+      await a.writeHost('h1');
+      await a.engine.push();
+
+      await expectLater(
+        b.engine.syncOnce(),
+        throwsA(isA<VaultLockedException>()),
+      );
+      expect(await b.host('h1'), isNotNull);
+      expect(await b.journal.pending(), hasLength(1));
+      expect(log.operations.where((o) => o.deviceId == 'device-b'), isEmpty);
+
+      locked = false;
+      await b.engine.syncOnce();
+      await a.engine.pull();
+
+      final stored = (await a.identity('i1'))!.passwordEncrypted!;
+      expect(await a.open(stored), 'hunter2');
     });
   });
 

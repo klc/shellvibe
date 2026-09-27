@@ -18,6 +18,7 @@ import '../../../account/presentation/notifiers/account_notifier.dart';
 import '../../../billing/presentation/notifiers/entitlement_notifier.dart';
 import '../../../vault/data/vault_key_service.dart';
 import '../../../vault/presentation/notifiers/identities_notifier.dart';
+import '../../../vault/presentation/notifiers/vault_notifier.dart';
 import '../../../settings/presentation/notifiers/backup_scope_notifier.dart';
 import '../../data/cloud_backup_api.dart';
 import '../../data/cloud_backup_store.dart';
@@ -125,6 +126,10 @@ class SyncNotifier extends _$SyncNotifier {
   SyncEngine? _engine;
   SyncJoinService? _join;
   bool _joinStarted = false;
+
+  /// A pass stopped at a locked vault, and unlocking it should run another
+  /// rather than leave it to the next poll.
+  bool _heldByVault = false;
 
   /// This device adopted the account's key over one it had minted itself.
   ///
@@ -271,6 +276,15 @@ class SyncNotifier extends _$SyncNotifier {
 
     _start(db);
 
+    // A pass the vault held back runs again the moment it is unlocked. The
+    // error it left says so, and five minutes is a long time for an unlock
+    // to look as if it did nothing.
+    ref.listen(vaultProvider, (previous, next) {
+      final unlocked = next.value?.status == VaultStatus.unlocked;
+      final wasUnlocked = previous?.value?.status == VaultStatus.unlocked;
+      if (unlocked && !wasUnlocked) _resumeAfterUnlock();
+    });
+
     // Joining comes before anything else, and is safe to run every start: a
     // device that has finished returns at once, and one that was closed
     // halfway through finishes rather than calling itself done.
@@ -395,7 +409,16 @@ class SyncNotifier extends _$SyncNotifier {
         syncKey: _syncKey!,
       );
 
+      // Before the verdict: a join the vault stopped after the merge has
+      // still written the ground's rows.
+      if (result.applied > 0) invalidateRestoredData(ref);
+
       if (!result.succeeded) {
+        // The one refusal that clears on its own. Letting the join start
+        // again is what lets unlocking finish it.
+        if (result.problem == SyncJoinProblem.vaultLocked) {
+          _joinStarted = false;
+        }
         if (kDebugMode) {
           debugPrint(
             '[Sync] join refused: ${result.problem} ${result.message}',
@@ -412,8 +435,6 @@ class SyncNotifier extends _$SyncNotifier {
           'pushed=${result.pushed} firstGround=${result.wroteFirstGround}',
         );
       }
-
-      if (result.applied > 0) invalidateRestoredData(ref);
 
       _publish(
         (s) => s.copyWith(
@@ -439,6 +460,19 @@ class SyncNotifier extends _$SyncNotifier {
     // them that way. A conflict here means another got there first.
     unawaited(_refreshGround(force: _reKeyed));
     _reKeyed = false;
+  }
+
+  /// Picks up what a locked vault stopped: the join, if that is where it
+  /// stopped, or else the pass.
+  void _resumeAfterUnlock() {
+    if (_join != null && !_joinStarted) {
+      unawaited(_startJoinOnce());
+
+      return;
+    }
+    if (!_heldByVault) return;
+
+    unawaited(syncNow());
   }
 
   /// Rewrites the ground when it has fallen behind, or when [force] says the
@@ -493,8 +527,12 @@ class SyncNotifier extends _$SyncNotifier {
 
     _inFlight = _inFlight.then((_) async {
       _publish((s) => s.copyWith(running: true, clearError: true));
+      _heldByVault = false;
 
+      int? pulledThrough;
       try {
+        pulledThrough = (await engine.journal.readState()).pulledThroughClock;
+
         final result = pullFirst
             ? await _pullThenPush(engine)
             : await engine.syncOnce();
@@ -538,8 +576,13 @@ class SyncNotifier extends _$SyncNotifier {
         );
       } on VaultLockedException {
         // Identity secrets move between vault keys on the way out and in,
-        // which cannot happen behind a locked vault. The pass stopped before
-        // sending or acknowledging anything, so nothing is lost.
+        // which cannot happen behind a locked vault. Nothing was sent, and
+        // nothing is lost: the outbox and the unapplied pages wait. But the
+        // pass may have got somewhere first -- pages ahead of the one that
+        // needed the vault, or a whole pull ahead of a held-back push -- and
+        // those rows are already in the database.
+        _heldByVault = true;
+        await _invalidateIfPulled(engine, pulledThrough);
         _publish(
           (s) => s.copyWith(
             running: false,
@@ -556,6 +599,21 @@ class SyncNotifier extends _$SyncNotifier {
     });
 
     return _inFlight;
+  }
+
+  /// Re-reads the lists when a pass that failed had already applied rows.
+  ///
+  /// The cursor moves only inside the transaction that writes a page, so a
+  /// cursor that moved is a page that landed.
+  Future<void> _invalidateIfPulled(SyncEngine engine, int? before) async {
+    try {
+      final after = (await engine.journal.readState()).pulledThroughClock;
+      if (before != null && after == before) return;
+    } on Object {
+      // Unknown counts as moved: a needless re-read beats a stale list.
+    }
+
+    invalidateRestoredData(ref);
   }
 
   Future<SyncResult> _pullThenPush(SyncEngine engine) async {
@@ -619,6 +677,7 @@ class SyncNotifier extends _$SyncNotifier {
     _join = null;
     _ground = null;
     _joinStarted = false;
+    _heldByVault = false;
     _reKeyed = false;
   }
 

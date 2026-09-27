@@ -60,13 +60,17 @@ final class SyncJoinResult {
     this.message,
   });
 
-  const SyncJoinResult.failed({required this.problem, required this.message})
-    : applied = 0,
-      seeded = 0,
-      pushed = 0,
-      wroteFirstGround = false,
-      refreshedGround = false,
-      repaired = 0;
+  /// [applied] is for a join that stopped after the ground was merged in:
+  /// those rows are on this device whatever else failed.
+  const SyncJoinResult.failed({
+    required this.problem,
+    required this.message,
+    this.applied = 0,
+  }) : seeded = 0,
+       pushed = 0,
+       wroteFirstGround = false,
+       refreshedGround = false,
+       repaired = 0;
 
   bool get succeeded => problem == null;
 }
@@ -239,7 +243,22 @@ final class SyncJoinService {
     required Uint8List syncKey,
     String? recoveryCode,
   }) async {
-    final pushed = await engine.push();
+    final int pushed;
+    try {
+      pushed = await engine.push();
+    } on VaultLockedException {
+      // Identity secrets go out under the sync key, and reaching them takes
+      // the vault key. The state stays at `applied`, so unlocking resumes
+      // from here with the queue intact: the engine sends all of it or none.
+      return SyncJoinResult.failed(
+        problem: SyncJoinProblem.vaultLocked,
+        message:
+            'Unlock the vault to finish joining sync. What the snapshot '
+            'brought is already on this device; your own changes go out '
+            'once it is unlocked.',
+        applied: applied,
+      );
+    }
 
     // The ground is still the one this device started from, and it does not
     // mention any of the rows just sent. Left alone, it stays the starting

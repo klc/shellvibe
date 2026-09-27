@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:cryptography/cryptography.dart';
 
 import '../../features/cloud_backup/data/sync_operations_api.dart';
+import '../../features/vault/data/vault_key_service.dart';
 import '../../shared/database/app_database.dart';
 import '../api/api_exception.dart';
 import '../crypto/encryption_engine.dart';
@@ -101,11 +102,12 @@ final class SyncEngine {
   /// This device's vault key, for the secret columns of identities and vault
   /// variables (see [SyncRowCodec.secretColumns]).
   ///
-  /// Asked for only when an operation carries a secret, and it may throw:
-  /// behind a locked vault the pass fails as a whole and nothing is sent,
-  /// applied or acknowledged, so it picks up where it was once the vault is
-  /// unlocked. Sending the rest would let a host arrive before the identity
-  /// it uses, and the receiving device would clear the reference for good.
+  /// Asked for only when an operation carries a secret, and it may throw.
+  /// Behind a locked vault [push] sends nothing, and [pull] stops at the first
+  /// page that carries a secret, keeping the pages it already applied; both
+  /// pick up where they stopped once the vault is unlocked. Sending the rest
+  /// would let a host arrive before the identity it uses, and the receiving
+  /// device would clear the reference for good.
   final Future<SecretKey> Function()? _vaultKey;
 
   /// Tables each category owns, for filtering in both directions.
@@ -225,8 +227,21 @@ final class SyncEngine {
   /// Push first so this device's own changes carry a clock below anything it
   /// is about to learn, which keeps its edits from losing to operations it had
   /// not seen when it made them.
+  ///
+  /// A locked vault holds back the sending half only. Receiving needs the
+  /// vault key just for operations that carry a secret, so everything else
+  /// other devices sent still arrives, and the [VaultLockedException] is
+  /// thrown once it has. Receiving ahead of sending is safe here: a queued
+  /// operation keeps the clock it was recorded with, and its version row
+  /// already defends the row it changed.
   Future<SyncResult> syncOnce() async {
-    final pushed = await push();
+    final int pushed;
+    try {
+      pushed = await push();
+    } on VaultLockedException {
+      await pull();
+      rethrow;
+    }
     final pulledResult = await pull();
 
     return SyncResult(

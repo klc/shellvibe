@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:cryptography/cryptography.dart';
 import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:drift/native.dart';
@@ -44,7 +42,12 @@ void main() {
     syncKey = BackupEnvelope().generateSyncKey();
   });
 
-  Future<_Device> device(String id) async {
+  /// [vaultKey] replaces the engine's vault key lookup, to stand in for a
+  /// locked vault.
+  Future<_Device> device(
+    String id, {
+    Future<SecretKey> Function()? vaultKey,
+  }) async {
     final db = AppDatabase(NativeDatabase.memory());
     final journal = SyncJournal(db: db, deviceId: id);
     db.syncJournal = journal;
@@ -78,6 +81,7 @@ void main() {
       journal: journal,
       api: log,
       syncKey: SecretKey(syncKey),
+      vaultKey: vaultKey,
     );
 
     return _Device(
@@ -243,6 +247,45 @@ void main() {
       expect(await phone.journal.readJoinState(), SyncJoinState.done);
     });
 
+    test(
+      'a locked vault stops it before sending, and unlocking finishes it',
+      () async {
+        final desktop = await device('desktop');
+        await desktop.addHosts(60);
+        await desktop.joinSync(syncKey, passphrase);
+
+        var locked = true;
+        final phone = await device(
+          'phone',
+          vaultKey: () async {
+            if (locked) throw const VaultLockedException();
+            return SecretKey(EncryptionEngine().generateKey());
+          },
+        );
+        await phone.addHosts(2, prefix: 'phone');
+        await phone.addIdentity('phone-identity');
+
+        final refused = await phone.joinSync(syncKey, passphrase);
+
+        expect(refused.problem, SyncJoinProblem.vaultLocked);
+        expect(
+          refused.applied,
+          greaterThanOrEqualTo(60),
+          reason: 'The ground is merged in, and the lists have to show it.',
+        );
+        expect(await phone.journal.readJoinState(), SyncJoinState.applied);
+        expect(await phone.journal.pending(), hasLength(3));
+
+        locked = false;
+        final result = await phone.joinSync(syncKey, passphrase);
+
+        expect(result.succeeded, isTrue);
+        expect(result.pushed, 3);
+        expect(result.refreshedGround, isTrue);
+        expect(await phone.journal.readJoinState(), SyncJoinState.done);
+      },
+    );
+
     test('a finished join does nothing on the next start', () async {
       final desktop = await device('desktop');
       await desktop.addHosts(5);
@@ -395,6 +438,22 @@ final class _Device {
       );
 
   Future<int> hostCount() async => (await db.select(db.hosts).get()).length;
+
+  /// An identity carrying a secret, which is what needs the vault key to go
+  /// out.
+  Future<void> addIdentity(String id) => db
+      .into(db.identities)
+      .insert(
+        IdentitiesCompanion.insert(
+          id: id,
+          workspaceId: 'default',
+          title: id,
+          username: 'deploy',
+          authType: 'password',
+          passwordEncrypted: const Value('sealed under this device\'s key'),
+          createdAt: DateTime.now(),
+        ),
+      );
 
   Future<void> addHosts(int count, {String prefix = 'host'}) async {
     for (var i = 1; i <= count; i++) {
