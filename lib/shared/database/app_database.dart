@@ -203,26 +203,14 @@ class AppDatabase extends _$AppDatabase {
           // existing install: nothing wrote this table before it existed.
           await m.createTable(vaultEnvVars);
         }
-        if (from >= 10 &&
-            from < 14 &&
-            await _tableExists(syncState.actualTableName)) {
+        if (from >= 10 && from < 14) {
           // Null on an existing install: the first pull after the upgrade
           // starts from the clock cursor and the server answers with a
-          // position. Only when the table is already there, for the same
-          // reason as `joinState` above.
+          // position. Only above 10, for the same reason as `joinState`.
           await m.addColumn(syncState, syncState.pulledThroughSeq);
         }
       },
     );
-  }
-
-  Future<bool> _tableExists(String name) async {
-    final rows = await customSelect(
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
-      variables: [Variable.withString(name)],
-    ).get();
-
-    return rows.isNotEmpty;
   }
 
   /// Rewrites identities stored with the removed `'agent'` auth type to

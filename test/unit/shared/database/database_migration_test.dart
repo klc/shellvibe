@@ -519,6 +519,16 @@ void main() {
         INSERT INTO workspaces (id, name, created_at)
         VALUES ('default', 'Default Workspace', 1600000000);
       ''');
+      // Every install at 10 or above has it, and the v14 step adds a column
+      // to it on the way up.
+      rawDb.execute('''
+        CREATE TABLE IF NOT EXISTS "sync_state" (
+          "id" INTEGER NOT NULL PRIMARY KEY,
+          "last_seen_clock" INTEGER NOT NULL DEFAULT 0,
+          "pulled_through_clock" INTEGER NOT NULL DEFAULT 0,
+          "join_state" TEXT NOT NULL DEFAULT 'none'
+        );
+      ''');
       rawDb.execute('PRAGMA user_version = 12;');
       rawDb.close();
 
