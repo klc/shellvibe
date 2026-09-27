@@ -21,10 +21,17 @@ import 'theme/app_theme.dart';
 import 'window/desktop_tray.dart';
 import 'window/window_chrome.dart';
 
+/// Overrides the wall clock an auto-lock absence is measured against, so a
+/// test can stage a suspension the timer never saw.
+@visibleForTesting
+DateTime Function()? debugAutoLockClockOverride;
+
+DateTime _wallClockNow() => (debugAutoLockClockOverride ?? DateTime.now)();
+
 /// Root application widget.
 ///
 /// Converts to [ConsumerStatefulWidget] to install an [AppLifecycleListener]
-/// that auto-locks the vault when the app moves to the background.
+/// that auto-locks the vault after it has been in the background too long.
 class ShellVibeApp extends ConsumerStatefulWidget {
   const ShellVibeApp({super.key});
 
@@ -36,6 +43,13 @@ class _ShellVibeAppState extends ConsumerState<ShellVibeApp>
     with WidgetsBindingObserver {
   late final AppLifecycleListener _lifecycleListener;
   Timer? _autoLockTimer;
+
+  /// Wall-clock time the app went to the background, or null while it is in
+  /// the foreground.
+  DateTime? _backgroundedAt;
+
+  /// Auto-lock delay in force for the current absence, read when it began.
+  Duration _autoLockDelay = Duration.zero;
 
   /// Last canvas and brightness handed to the window frame, so a rebuild that
   /// did not change the theme does not cross the method channel again.
@@ -167,36 +181,79 @@ class _ShellVibeAppState extends ConsumerState<ShellVibeApp>
     unawaited(ref.read(deviceLinkProvider.notifier).reconnectStoredProfiles());
   }
 
-  /// Locks the vault after the configured auto-lock delay when the app enters
-  /// a background or hidden state. Honors `autoLockTimerSeconds` (0 = disabled)
-  /// instead of locking instantly and unconditionally.
+  /// Tracks the app leaving and returning to the foreground.
+  ///
+  /// Only hidden and paused count as leaving. A desktop window going inactive
+  /// is a focus change, not an absence: it flips between inactive and resumed
+  /// on every alt-tab, and treating that as a return would run a sync round
+  /// trip and rebind every Mosh socket each time. The return is handled at
+  /// the first state past hidden (inactive on the way to resumed), which is
+  /// the earliest point the vault can be locked before it is looked at.
   void _onLifecycleChange(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.hidden) {
-      final settings = ref.read(settingsProvider).value;
-      final delaySeconds = settings?.autoLockTimerSeconds ?? 0;
-      if (delaySeconds <= 0) return;
-      _autoLockTimer?.cancel();
-      _autoLockTimer = Timer(Duration(seconds: delaySeconds), () {
-        ref.read(vaultProvider.notifier).lock();
-      });
-    } else if (state == AppLifecycleState.resumed) {
-      _autoLockTimer?.cancel();
-      _autoLockTimer = null;
-      // iOS tears the UDP socket down while the app is suspended, so a Mosh
-      // session needs a rebind on the way back in even when the network never
-      // changed. Harmless for every other tab: it only touches live Mosh ones.
-      ref.read(terminalTabsProvider.notifier).rehomeMoshSessions();
-      _reconnectDeviceLinkIfVaultUnlocked();
-      unawaited(_ensureDeviceLinkServerSafely());
-      // Coming back to the app is the moment the user is most likely to be
-      // looking at data another device changed while this one was away.
-      unawaited(ref.read(syncProvider.notifier).syncNow());
-      // And the only other moment a scheduled backup can run. There is no
-      // background task, so a device that sat closed past its interval is due
-      // the moment someone opens it again.
-      unawaited(ref.read(cloudBackupProvider.notifier).maybeBackUpOnSchedule());
+    switch (state) {
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.paused:
+        _onBackgrounded();
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.resumed:
+        _onReturned();
+      case AppLifecycleState.detached:
+        break;
     }
+  }
+
+  /// Starts the auto-lock clock. Honors `autoLockTimerSeconds` (0 = disabled)
+  /// instead of locking instantly and unconditionally.
+  void _onBackgrounded() {
+    // hidden is followed by paused on the way out; the absence began at the
+    // first of them.
+    if (_backgroundedAt != null) return;
+    _backgroundedAt = _wallClockNow();
+    final settings = ref.read(settingsProvider).value;
+    _autoLockDelay = Duration(seconds: settings?.autoLockTimerSeconds ?? 0);
+    if (_autoLockDelay <= Duration.zero) return;
+    // Locks on time while the process keeps running in the background, which
+    // a desktop does. A suspended phone runs no timers at all, and while it
+    // sleeps the monotonic clock a Timer counts on stops too, so this alone
+    // would let the vault open unlocked hours later; [_onReturned] checks the
+    // wall clock for that case.
+    _autoLockTimer?.cancel();
+    _autoLockTimer = Timer(_autoLockDelay, () {
+      unawaited(ref.read(vaultProvider.notifier).lock());
+    });
+  }
+
+  void _onReturned() {
+    final backgroundedAt = _backgroundedAt;
+    if (backgroundedAt == null) return;
+    _backgroundedAt = null;
+    _autoLockTimer?.cancel();
+    _autoLockTimer = null;
+
+    if (_autoLockDelay > Duration.zero) {
+      final away = _wallClockNow().difference(backgroundedAt);
+      // A clock set backwards while away reads as a negative absence. That is
+      // no proof the delay has not passed, so it locks too.
+      if (away.isNegative || away >= _autoLockDelay) {
+        // Flips the vault to locked synchronously, so the Device Link calls
+        // below already see it closed.
+        unawaited(ref.read(vaultProvider.notifier).lock());
+      }
+    }
+
+    // iOS tears the UDP socket down while the app is suspended, so a Mosh
+    // session needs a rebind on the way back in even when the network never
+    // changed. Harmless for every other tab: it only touches live Mosh ones.
+    ref.read(terminalTabsProvider.notifier).rehomeMoshSessions();
+    _reconnectDeviceLinkIfVaultUnlocked();
+    unawaited(_ensureDeviceLinkServerSafely());
+    // Coming back to the app is the moment the user is most likely to be
+    // looking at data another device changed while this one was away.
+    unawaited(ref.read(syncProvider.notifier).syncNow());
+    // And the only other moment a scheduled backup can run. There is no
+    // background task, so a device that sat closed past its interval is due
+    // the moment someone opens it again.
+    unawaited(ref.read(cloudBackupProvider.notifier).maybeBackUpOnSchedule());
   }
 
   @override
