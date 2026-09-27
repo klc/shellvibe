@@ -20,24 +20,52 @@ void main() {
   late AppDatabase db;
   late List<MethodCall> trayCalls;
   late List<MethodCall> windowCalls;
+  late List<MethodCall> platformCalls;
+
+  /// Tray and window calls in the order they were made, across both channels.
+  late List<String> log;
+
+  /// What the native side reports for `isPreventClose`: the last value the
+  /// app set, which a test may overwrite to stage an intercepted close.
+  late bool preventClose;
+  late bool failSetIcon;
 
   setUp(() {
     FlutterSecureStorage.setMockInitialValues({});
     db = AppDatabase(NativeDatabase.memory());
     trayCalls = [];
     windowCalls = [];
+    platformCalls = [];
+    log = [];
+    preventClose = false;
+    failSetIcon = false;
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(const MethodChannel('tray_manager'), (
       call,
     ) async {
       trayCalls.add(call);
+      log.add('tray.${call.method}');
+      if (call.method == 'setIcon' && failSetIcon) {
+        throw PlatformException(code: 'no_tray_host');
+      }
       return null;
     });
     messenger.setMockMethodCallHandler(const MethodChannel('window_manager'), (
       call,
     ) async {
       windowCalls.add(call);
+      switch (call.method) {
+        case 'setPreventClose':
+          preventClose = (call.arguments as Map)['isPreventClose'] as bool;
+          log.add('window.setPreventClose($preventClose)');
+        case 'isPreventClose':
+          return preventClose;
+      }
+      return null;
+    });
+    messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      platformCalls.add(call);
       return null;
     });
   });
@@ -53,6 +81,8 @@ void main() {
       const MethodChannel('window_manager'),
       null,
     );
+    messenger.setMockMethodCallHandler(SystemChannels.platform, null);
+    debugTrayInterceptsCloseOverride = null;
     await db.close();
   });
 
@@ -72,8 +102,7 @@ void main() {
     }
   }
 
-  testWidgets('the tray shows what runs behind the window, and follows the '
-      'setting', (tester) async {
+  Future<ProviderContainer> pumpTray(WidgetTester tester) async {
     final container = ProviderContainer(
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
@@ -91,6 +120,18 @@ void main() {
       ),
     );
     await settle(tester);
+    return container;
+  }
+
+  Future<void> unpump(WidgetTester tester, ProviderContainer container) async {
+    await tester.pumpWidget(const SizedBox.shrink());
+    container.dispose();
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('the tray shows what runs behind the window, and follows the '
+      'setting', (tester) async {
+    final container = await pumpTray(tester);
 
     expect(trayCalls.map((c) => c.method), contains('setIcon'));
     expect(lastMenu(), [
@@ -104,7 +145,9 @@ void main() {
     await settle(tester);
     expect(lastMenu(), contains('1 open tab'));
 
-    // Closing the window while the tray is on hides it; nothing quits.
+    // An intercepted close while the tray is on hides the window; nothing
+    // quits.
+    preventClose = true;
     final host = tester.state(find.byType(DesktopTrayHost)) as WindowListener;
     host.onWindowClose();
     await settle(tester);
@@ -115,9 +158,72 @@ void main() {
     await settle(tester);
     expect(trayCalls.last.method, 'destroy');
 
-    await tester.pumpWidget(const SizedBox.shrink());
-    container.dispose();
-    await tester.pumpAndSettle();
+    await unpump(tester, container);
+  });
+
+  // window_manager reports every close, including the ones nothing
+  // intercepted: on macOS every close, and on Windows or Linux any close with
+  // the tray off. Treating those as a request to quit ended the whole app
+  // when the red traffic light was clicked.
+  testWidgets('a close that was not intercepted is left alone', (tester) async {
+    debugTrayInterceptsCloseOverride = true;
+    final container = await pumpTray(tester);
+    await container.read(settingsProvider.notifier).setKeepRunningInTray(false);
+    await settle(tester);
+    windowCalls.clear();
+    trayCalls.clear();
+
+    preventClose = false;
+    final host = tester.state(find.byType(DesktopTrayHost)) as WindowListener;
+    host.onWindowClose();
+    await settle(tester);
+
+    expect(windowCalls.map((c) => c.method), isNot(contains('hide')));
+    expect(windowCalls.map((c) => c.method), isNot(contains('destroy')));
+    expect(
+      platformCalls.map((c) => c.method),
+      isNot(contains('SystemNavigator.pop')),
+    );
+
+    await unpump(tester, container);
+  });
+
+  testWidgets('the close is intercepted only once the icon is up', (
+    tester,
+  ) async {
+    debugTrayInterceptsCloseOverride = true;
+    final container = await pumpTray(tester);
+
+    expect(preventClose, isTrue);
+    expect(
+      log.indexOf('tray.setIcon'),
+      lessThan(log.indexOf('window.setPreventClose(true)')),
+    );
+
+    await unpump(tester, container);
+  });
+
+  // A desktop with no tray host still has to be closable: hiding the window
+  // there leaves nothing on screen to bring it back.
+  testWidgets('a tray that cannot show an icon leaves the close alone', (
+    tester,
+  ) async {
+    debugTrayInterceptsCloseOverride = true;
+    failSetIcon = true;
+    final container = await pumpTray(tester);
+
+    expect(trayCalls.map((c) => c.method), contains('setIcon'));
+    expect(preventClose, isFalse);
+    expect(
+      windowCalls.where(
+        (c) =>
+            c.method == 'setPreventClose' &&
+            (c.arguments as Map)['isPreventClose'] == true,
+      ),
+      isEmpty,
+    );
+
+    await unpump(tester, container);
   });
 }
 

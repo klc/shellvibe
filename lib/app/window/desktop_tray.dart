@@ -13,6 +13,11 @@ import '../../features/terminal/presentation/notifiers/terminal_tabs_notifier.da
 import '../../features/tunnels/presentation/providers/tunnels_providers.dart';
 import 'window_chrome.dart';
 
+/// Overrides whether the window close is intercepted, so tests cover the
+/// Windows and Linux path on any host.
+@visibleForTesting
+bool? debugTrayInterceptsCloseOverride;
+
 /// Puts ShellVibe in the system tray (the menu bar on macOS) and, where the
 /// platform would otherwise quit, turns closing the window into hiding it.
 ///
@@ -47,7 +52,9 @@ class _DesktopTrayHostState extends ConsumerState<DesktopTrayHost>
   /// together must not interleave `setIcon` with `destroy`.
   Future<void> _pending = Future.value();
 
-  bool get _interceptsClose => Platform.isWindows || Platform.isLinux;
+  bool get _interceptsClose =>
+      debugTrayInterceptsCloseOverride ??
+      (Platform.isWindows || Platform.isLinux);
 
   @override
   void initState() {
@@ -70,8 +77,6 @@ class _DesktopTrayHostState extends ConsumerState<DesktopTrayHost>
 
   void _sync() {
     _pending = _pending.then((_) => _apply()).catchError((Object e) {
-      // A desktop without a tray host (a bare Linux window manager) still
-      // runs the app; it just has no icon to hide behind.
       debugPrint('[DesktopTray] $e');
     });
   }
@@ -79,9 +84,12 @@ class _DesktopTrayHostState extends ConsumerState<DesktopTrayHost>
   Future<void> _apply() async {
     if (!mounted) return;
     final enabled = _enabled;
-    if (_interceptsClose) await windowManager.setPreventClose(enabled);
 
     if (!enabled) {
+      // Let the close through before the icon goes: in between, a close that
+      // is still intercepted would hide the window with no icon to bring it
+      // back through.
+      if (_interceptsClose) await windowManager.setPreventClose(false);
       if (_trayShown) {
         await trayManager.destroy();
         _trayShown = false;
@@ -90,21 +98,32 @@ class _DesktopTrayHostState extends ConsumerState<DesktopTrayHost>
     }
 
     if (!_trayShown) {
-      if (Platform.isMacOS) {
-        await trayManager.setIcon(
-          'assets/brand/tray_macos.png',
-          isTemplate: true,
-        );
-      } else {
-        await trayManager.setIcon(
-          Platform.isWindows
-              ? 'assets/brand/tray.ico'
-              : 'assets/brand/tray.png',
-        );
+      try {
+        if (Platform.isMacOS) {
+          await trayManager.setIcon(
+            'assets/brand/tray_macos.png',
+            isTemplate: true,
+          );
+        } else {
+          await trayManager.setIcon(
+            Platform.isWindows
+                ? 'assets/brand/tray.ico'
+                : 'assets/brand/tray.png',
+          );
+        }
+        if (!Platform.isLinux) await trayManager.setToolTip('ShellVibe');
+      } catch (_) {
+        // A desktop without a tray host (a bare Linux window manager) still
+        // runs the app, but has no icon to hide behind, so closing the window
+        // has to go on quitting it.
+        if (_interceptsClose) await windowManager.setPreventClose(false);
+        rethrow;
       }
-      if (!Platform.isLinux) await trayManager.setToolTip('ShellVibe');
       _trayShown = true;
     }
+    // Only once the icon is up: intercepting the close earlier hides the
+    // window with nothing on screen to show it again.
+    if (_interceptsClose) await windowManager.setPreventClose(true);
     await trayManager.setContextMenu(_buildMenu());
   }
 
@@ -153,12 +172,26 @@ class _DesktopTrayHostState extends ConsumerState<DesktopTrayHost>
 
   @override
   void onWindowClose() {
-    // Only reached while the close is intercepted, which is only while the
-    // tray is on — but the setting may have just been turned off.
-    if (_enabled) {
-      unawaited(windowManager.hide());
+    unawaited(
+      _onWindowClose().catchError((Object e) {
+        debugPrint('[DesktopTray] close failed: $e');
+      }),
+    );
+  }
+
+  Future<void> _onWindowClose() async {
+    // window_manager reports every close, intercepted or not, on every
+    // platform. One that was not intercepted is already going through and is
+    // not ours to finish: on macOS the app outlives its window (AppDelegate),
+    // and elsewhere the runner ends with it. Quitting here would take every
+    // session and tunnel down with a window that was only being closed.
+    if (!await windowManager.isPreventClose()) return;
+    // Intercepted, but the setting may have just been turned off, or the icon
+    // may be gone: hiding then would leave no way back.
+    if (_enabled && _trayShown) {
+      await windowManager.hide();
     } else {
-      unawaited(_quit());
+      await _quit();
     }
   }
 
