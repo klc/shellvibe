@@ -1,10 +1,8 @@
 import 'dart:io';
-import 'dart:ui' show Size;
+import 'dart:ui' show Color, Size;
 
 import 'package:flutter/foundation.dart';
 import 'package:window_manager/window_manager.dart';
-
-import '../theme/shellvibe_tokens.dart';
 
 /// Overrides the host platform in tests without changing Flutter globals.
 @visibleForTesting
@@ -90,7 +88,8 @@ Future<void> applyWindowChrome() async {
   );
 }
 
-/// Re-tints the native window frame to the active theme.
+/// Re-tints the native window frame to the active theme: [canvas] is the
+/// selected palette's canvas at [brightness].
 ///
 /// On macOS the Flutter view covers the window, but the frame still shows
 /// through during a live resize; on Windows and Linux, which keep their
@@ -99,13 +98,13 @@ Future<void> applyWindowChrome() async {
 /// Called from the widget layer, so it swallows its own failures: a test
 /// harness or a headless run has no window behind the method channel, and the
 /// frame's tint is never worth taking the app down for.
-Future<void> syncWindowChromeToTheme(Brightness brightness) async {
+Future<void> syncWindowChromeToTheme({
+  required Color canvas,
+  required Brightness brightness,
+}) async {
   if (_host == null) return;
-  final tokens = brightness == Brightness.dark
-      ? ShellVibeTokens.dark
-      : ShellVibeTokens.light;
   try {
-    await windowManager.setBackgroundColor(tokens.canvas);
+    await windowManager.setBackgroundColor(canvas);
     await windowManager.setBrightness(brightness);
   } catch (e) {
     debugPrint('[WindowChrome Warning] $e');

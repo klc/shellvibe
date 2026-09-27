@@ -127,6 +127,8 @@ class _DeviceLinkPairingQrScreenState extends State<DeviceLinkPairingQrScreen> {
     final tokens = ShellVibeTokens.resolve(context);
 
     return Scaffold(
+      // Drawn inside WindowChromeFrame, whose canvas shows through.
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         title: const Text('Pair a device'),
         actions: [

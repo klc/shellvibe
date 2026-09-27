@@ -94,22 +94,29 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/device-link/scan',
         builder: (context, state) => const DeviceLinkPairingFlowScreen(),
       ),
+      // Desktop only (a phone scans instead), and pushed over the shell like
+      // /sftp, so it draws the shell's chrome itself: the traffic lights and
+      // the drag strip.
       GoRoute(
         path: '/device-link/pair',
         builder: (context, state) {
           final payload = state.extra;
-          if (payload is! DeviceLinkQrPayload) {
-            return const Scaffold(
-              body: Center(child: Text('Device Link pairing data is missing.')),
-            );
-          }
-          return DeviceLinkPairingQrScreen(
-            payload: payload,
-            pairingEvents: ref
-                .read(terminalTabsProvider.notifier)
-                .deviceLinkPairingEvents,
-            onCancel: () => context.pop(),
-            onPaired: () => context.pop(),
+          return WindowChromeFrame(
+            child: payload is DeviceLinkQrPayload
+                ? DeviceLinkPairingQrScreen(
+                    payload: payload,
+                    pairingEvents: ref
+                        .read(terminalTabsProvider.notifier)
+                        .deviceLinkPairingEvents,
+                    onCancel: () => context.pop(),
+                    onPaired: () => context.pop(),
+                  )
+                : const Scaffold(
+                    backgroundColor: Colors.transparent,
+                    body: Center(
+                      child: Text('Device Link pairing data is missing.'),
+                    ),
+                  ),
           );
         },
       ),

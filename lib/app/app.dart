@@ -16,6 +16,7 @@ import '../features/cloud_backup/presentation/notifiers/sync_notifier.dart';
 import '../features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import '../features/vault/presentation/notifiers/vault_notifier.dart';
 import 'router/app_router.dart';
+import 'theme/app_palette_definitions.dart';
 import 'theme/app_theme.dart';
 import 'window/desktop_tray.dart';
 import 'window/window_chrome.dart';
@@ -36,9 +37,9 @@ class _ShellVibeAppState extends ConsumerState<ShellVibeApp>
   late final AppLifecycleListener _lifecycleListener;
   Timer? _autoLockTimer;
 
-  /// Last brightness handed to the window frame, so a rebuild that did not
-  /// change the theme does not cross the method channel again.
-  Brightness? _appliedChromeBrightness;
+  /// Last canvas and brightness handed to the window frame, so a rebuild that
+  /// did not change the theme does not cross the method channel again.
+  (Color, Brightness)? _appliedChrome;
 
   @override
   void initState() {
@@ -75,18 +76,25 @@ class _ShellVibeAppState extends ConsumerState<ShellVibeApp>
     _syncWindowChrome();
   }
 
+  /// Tints the frame with the selected palette's canvas, so a palette switch
+  /// at the same brightness re-tints it too. Falls back to the same defaults
+  /// [build] draws with while the settings are still loading.
   void _syncWindowChrome() {
-    final mode =
-        ref.read(settingsProvider).value?.themeMode ?? ThemeMode.system;
-    final brightness = switch (mode) {
+    final settings =
+        ref.read(settingsProvider).value ?? const AppSettingsModel();
+    final brightness = switch (settings.themeMode) {
       ThemeMode.dark => Brightness.dark,
       ThemeMode.light => Brightness.light,
       ThemeMode.system =>
         WidgetsBinding.instance.platformDispatcher.platformBrightness,
     };
-    if (brightness == _appliedChromeBrightness) return;
-    _appliedChromeBrightness = brightness;
-    unawaited(syncWindowChromeToTheme(brightness));
+    final palette = AppPaletteDefinition.forPalette(settings.palette);
+    final canvas = brightness == Brightness.dark
+        ? palette.darkTokens.canvas
+        : palette.lightTokens.canvas;
+    if (_appliedChrome == (canvas, brightness)) return;
+    _appliedChrome = (canvas, brightness);
+    unawaited(syncWindowChromeToTheme(canvas: canvas, brightness: brightness));
   }
 
   /// Whether the launch shell has already been opened, so it happens once per
