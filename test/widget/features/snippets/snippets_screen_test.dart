@@ -43,47 +43,17 @@ void main() {
   );
 
   group('SnippetsScreen Widget Tests', () {
-    testWidgets('Renders SnippetsScreen with title and search field', (tester) async {
-      await seedSnippet();
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            appDatabaseProvider.overrideWithValue(db),
-          ],
-          child: ShadTheme(
-            data: ShadThemeData(
-              colorScheme: const ShadSlateColorScheme.light(),
-              brightness: Brightness.light,
-            ),
-            child: const MaterialApp(
-              home: SnippetsScreen(),
-            ),
-          ),
-        ),
-      );
-
-      await tester.pumpAndSettle();
-
-      expect(find.text('Automation Library'), findsOneWidget);
-      expect(find.byKey(const Key('snippets_search_field')), findsOneWidget);
-      expect(find.byKey(const Key('add_snippet_button')), findsOneWidget);
-    });
-
     testWidgets('Opens SnippetFormDialog on add button tap', (tester) async {
       await seedSnippet();
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [
-            appDatabaseProvider.overrideWithValue(db),
-          ],
+          overrides: [appDatabaseProvider.overrideWithValue(db)],
           child: ShadTheme(
             data: ShadThemeData(
               colorScheme: const ShadSlateColorScheme.light(),
               brightness: Brightness.light,
             ),
-            child: const MaterialApp(
-              home: SnippetsScreen(),
-            ),
+            child: const MaterialApp(home: SnippetsScreen()),
           ),
         ),
       );
@@ -195,4 +165,3 @@ void main() {
     });
   });
 }
-

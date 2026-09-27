@@ -2,17 +2,21 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/core/crypto/encryption_engine.dart';
 import 'package:shellvibe/core/crypto/identity_crypto_service.dart';
 
+import '../../../support/fast_crypto.dart';
+
 void main() {
   group('IdentityCryptoService Unit Tests', () {
     late EncryptionEngine engine;
     late IdentityCryptoService cryptoService;
 
     setUp(() {
-      engine = EncryptionEngine();
+      engine = fastEncryptionEngine();
       cryptoService = IdentityCryptoService(engine);
     });
 
-    test('encryptField and decryptField roundtrip for valid plaintext', () async {
+    test(
+      'encryptField and decryptField roundtrip for valid plaintext',
+      () async {
       final salt = engine.generateSalt(16);
       final masterKey = await engine.deriveMasterKey(
         masterPassword: 'VaultPassword123',
@@ -20,14 +24,21 @@ void main() {
       );
 
       const passwordField = 'MySuperSecretPassword';
-      final encrypted = await cryptoService.encryptField(passwordField, masterKey);
+        final encrypted = await cryptoService.encryptField(
+          passwordField,
+          masterKey,
+        );
 
       expect(encrypted, isNotNull);
       expect(encrypted, isNot(equals(passwordField)));
 
-      final decrypted = await cryptoService.decryptField(encrypted, masterKey);
+        final decrypted = await cryptoService.decryptField(
+          encrypted,
+          masterKey,
+        );
       expect(decrypted, equals(passwordField));
-    });
+      },
+    );
 
     test('encryptField returns null for null or empty input', () async {
       final salt = engine.generateSalt(16);
@@ -51,7 +62,9 @@ void main() {
       expect(await cryptoService.decryptField('', masterKey), isNull);
     });
 
-    test('decryptField throws IdentityCryptoException when decryption fails', () async {
+    test(
+      'decryptField throws IdentityCryptoException when decryption fails',
+      () async {
       final salt = engine.generateSalt(16);
       final masterKey = await engine.deriveMasterKey(
         masterPassword: 'VaultPassword123',
@@ -63,6 +76,7 @@ void main() {
         () => cryptoService.decryptField(invalidOrLegacyText, masterKey),
         throwsA(isA<IdentityCryptoException>()),
       );
-    });
+      },
+    );
   });
 }

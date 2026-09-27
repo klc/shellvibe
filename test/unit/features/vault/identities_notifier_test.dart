@@ -58,6 +58,11 @@ void main() {
       expect(state.first.username, equals('ubuntu'));
       expect(state.first.password, isNull);
 
+      // What reaches the disk is ciphertext, never the password itself.
+      final row = await db.identitiesDao.getIdentityById(state.first.id);
+      expect(row!.passwordEncrypted, isNotNull);
+      expect(row.passwordEncrypted, isNot(contains('SecretPassword123')));
+
       final decrypted = await notifier.getDecryptedIdentity(state.first.id);
       expect(decrypted, isNotNull);
       expect(decrypted!.password, equals('SecretPassword123'));

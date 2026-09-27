@@ -4,6 +4,8 @@ import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/core/sync/backup_envelope.dart';
 
+import '../../../support/fast_crypto.dart';
+
 /// The sync key is the reason v4 exists.
 ///
 /// It is random and lives as long as the vault, rather than being derived from
@@ -16,7 +18,7 @@ void main() {
 
   const passphrase = 'envelope v4 passphrase';
 
-  setUp(() => envelope = BackupEnvelope());
+  setUp(() => envelope = BackupEnvelope(crypto: fastEncryptionEngine()));
 
   Future<SecretKey> dek() async => SecretKey(envelope.generateSyncKey());
 

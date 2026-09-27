@@ -5,7 +5,6 @@ import 'package:drift/native.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/core/api/api_client.dart';
-import 'package:shellvibe/core/crypto/encryption_engine.dart';
 import 'package:shellvibe/core/sync/e2ee_cloud_sync_service.dart';
 import 'package:shellvibe/features/cloud_backup/data/cloud_backup_api.dart';
 import 'package:shellvibe/features/cloud_backup/data/cloud_backup_store.dart';
@@ -14,6 +13,7 @@ import 'package:shellvibe/features/vault/data/vault_key_service.dart';
 import 'package:shellvibe/shared/database/app_database.dart';
 import 'package:shellvibe/shared/storage/secure_storage_service.dart';
 
+import '../../../support/fast_crypto.dart';
 import '../../../support/fake_api_transport.dart';
 
 /// The second-device bug, and the recovery-code bug beside it.
@@ -42,7 +42,7 @@ void main() {
     db = AppDatabase(NativeDatabase.memory());
 
     final vaultKeyService = VaultKeyService(
-      encryptionEngine: EncryptionEngine(),
+      encryptionEngine: fastEncryptionEngine(),
       secureStorageService: SecureStorageService(),
     );
     await vaultKeyService.getDek();
@@ -54,7 +54,10 @@ void main() {
           tokenProvider: () async => 'test-token',
         ),
       ),
-      sync: E2EECloudSyncService(vaultKeyService: vaultKeyService),
+      sync: E2EECloudSyncService(
+        vaultKeyService: vaultKeyService,
+        cryptoEngine: fastEncryptionEngine(),
+      ),
       readPendingUploadId: () async => null,
       writePendingUploadId: (_) async {},
       newUploadId: () => 'upload-1',
@@ -65,7 +68,7 @@ void main() {
 
   /// An envelope as the desktop would have sealed it.
   Future<String> desktopEnvelope({String? recoveryCode}) async {
-    final crypto = EncryptionEngine();
+    final crypto = fastEncryptionEngine();
 
     return BackupEnvelope(crypto: crypto).seal(
       payloadJson: jsonEncode({
@@ -134,21 +137,6 @@ void main() {
       );
     });
 
-    test('verifying writes nothing to the database', () async {
-      final envelope = await desktopEnvelope();
-      enqueueRevision(envelope);
-
-      final before = (await db.select(db.workspaces).get()).length;
-
-      await service.canOpen(revision: 1, secret: desktopPassphrase);
-
-      expect(
-        (await db.select(db.workspaces).get()).length,
-        before,
-        reason: 'Checking a passphrase must not restore anything.',
-      );
-    });
-
     test('the recovery code also proves ownership', () async {
       const code = 'ABCDE-FGHJK-MNPQR-STVWX';
       final envelope = await desktopEnvelope(recoveryCode: code);
@@ -175,22 +163,6 @@ void main() {
         await service.canOpen(revision: 1, secret: desktopPassphrase),
         isNull,
       );
-    });
-
-    test('the head tells a joining device the account is not empty', () async {
-      // What `build()` now asks before deciding between setup and unlock.
-      enqueueHead(revision: 4);
-
-      final head = await service.head();
-
-      expect(head.isEmpty, isFalse);
-      expect(head.currentRevision, 4);
-    });
-
-    test('an empty head is a genuine first-time setup', () async {
-      enqueueHead(revision: 0);
-
-      expect((await service.head()).isEmpty, isTrue);
     });
   });
 

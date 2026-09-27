@@ -7,7 +7,7 @@ import 'package:shellvibe/core/network/terminal_mosh_bridge.dart';
 import 'package:shellvibe/features/terminal/domain/models/terminal_tab_session.dart';
 import 'package:xterm3/xterm.dart';
 
-import '../../network/mosh_test_doubles.dart';
+import '../../core/network/mosh_test_doubles.dart';
 import 'package:shellvibe/core/network/coalescing_terminal_writer.dart';
 
 void main() {

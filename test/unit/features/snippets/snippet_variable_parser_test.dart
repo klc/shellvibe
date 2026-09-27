@@ -6,7 +6,8 @@ void main() {
     test('extractVariables returns unique variable names', () {
       const code = 'echo \${INPUT:PORT_FORWARD} and \${PORT} and \${INPUT:PORT}';
       final vars = SnippetVariableParser.extractVariables(code);
-      expect(vars, containsAll(['PORT_FORWARD', 'PORT']));
+      // PORT appears twice, once with the INPUT: prefix and once without.
+      expect(vars, unorderedEquals(['PORT_FORWARD', 'PORT']));
     });
 
     test('substituteVariables replaces longer keys first to prevent substring replacement bugs', () {

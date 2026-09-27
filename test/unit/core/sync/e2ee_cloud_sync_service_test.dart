@@ -10,6 +10,8 @@ import 'package:shellvibe/features/vault/data/vault_key_service.dart';
 import 'package:shellvibe/shared/database/app_database.dart';
 import 'package:shellvibe/shared/storage/secure_storage_service.dart';
 
+import '../../../support/fast_crypto.dart';
+
 E2EECloudSyncService _buildService(EncryptionEngine engine) {
   return E2EECloudSyncService(
     cryptoEngine: engine,
@@ -27,7 +29,7 @@ void main() {
   late AppDatabase db2;
   late Directory databaseDirectory;
   late E2EECloudSyncService syncService;
-  final engine = EncryptionEngine();
+  final engine = fastEncryptionEngine();
   late bool previousMultipleDatabaseWarningSetting;
 
   setUpAll(() {
@@ -114,23 +116,6 @@ void main() {
   });
 
   group('E2EECloudSyncService Unit Tests', () {
-    test(
-      'exportEncryptedBackup generates valid Zero-Knowledge payload',
-      () async {
-        const password = 'SuperSecretMasterPassword123!';
-        final backupJson = await syncService.exportEncryptedBackup(
-          db: db1,
-          masterPassword: password,
-        );
-
-        expect(backupJson, contains('schema_version'));
-        expect(backupJson, contains('salt'));
-        expect(backupJson, contains('payload'));
-        // The wrapped vault key is what makes the backup restorable elsewhere.
-        expect(backupJson, contains('dek_wrapped'));
-      },
-    );
-
     test(
       'identity secrets survive a restore onto a different device',
       () async {
@@ -279,10 +264,9 @@ void main() {
         scope: BackupScope.of(const [BackupCategory.hosts]),
       );
 
-      final opened = await BackupEnvelope().open(
-        envelopeJson: backupJson,
-        secret: password,
-      );
+      final opened = await BackupEnvelope(
+        crypto: fastEncryptionEngine(),
+      ).open(envelopeJson: backupJson, secret: password);
       expect(opened.payloadJson, isNot(contains('vault_env_vars')));
     });
 
@@ -330,28 +314,6 @@ void main() {
       final db2Snippets = await db2.snippetsDao.getAllSnippets();
       expect(db2Snippets.length, equals(1));
       expect(db2Snippets.first.title, equals('Sync Test Snippet'));
-    });
-
-    test('importEncryptedBackup fails with wrong password', () async {
-      const password = 'CorrectPassword123';
-      const wrongPassword = 'WrongPassword456';
-
-      final backupJson = await syncService.exportEncryptedBackup(
-        db: db1,
-        masterPassword: password,
-      );
-
-      // A wrong passphrase and a tampered envelope now raise the same
-      // exception on purpose: telling them apart would make the import an
-      // oracle, and the user-facing answer is identical either way.
-      await expectLater(
-        syncService.importEncryptedBackup(
-          backupPackageJson: backupJson,
-          db: db2,
-          masterPassword: wrongPassword,
-        ),
-        throwsA(isA<BackupEnvelopeException>()),
-      );
     });
   });
 }

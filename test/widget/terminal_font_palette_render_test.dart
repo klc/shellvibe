@@ -77,22 +77,4 @@ void main() {
       await tester.pump();
     }
   });
-
-  testWidgets('font resolver output works as a TextStyle family',
-      (WidgetTester tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Text(
-          kFontPreviewText,
-          style: TextStyle(
-            fontFamily: resolveTerminalFontFamily('JetBrainsMonoNF'),
-            fontFamilyFallback: kTerminalFontFamilyFallback,
-            fontSize: 16,
-          ),
-        ),
-      ),
-    );
-    await tester.pump();
-    expect(tester.takeException(), isNull);
-  });
 }

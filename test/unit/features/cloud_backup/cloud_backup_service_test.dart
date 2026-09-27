@@ -6,7 +6,6 @@ import 'package:drift/native.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/core/api/api_client.dart';
-import 'package:shellvibe/core/crypto/encryption_engine.dart';
 import 'package:shellvibe/core/sync/e2ee_cloud_sync_service.dart';
 import 'package:shellvibe/features/cloud_backup/data/cloud_backup_api.dart';
 import 'package:shellvibe/features/cloud_backup/domain/cloud_backup_service.dart';
@@ -14,6 +13,7 @@ import 'package:shellvibe/features/vault/data/vault_key_service.dart';
 import 'package:shellvibe/shared/database/app_database.dart';
 import 'package:shellvibe/shared/storage/secure_storage_service.dart';
 
+import '../../../support/fast_crypto.dart';
 import '../../../support/contract_fixture.dart';
 import '../../../support/fake_api_transport.dart';
 
@@ -36,7 +36,7 @@ void main() {
     db = AppDatabase(NativeDatabase.memory());
 
     final vaultKeyService = VaultKeyService(
-      encryptionEngine: EncryptionEngine(),
+      encryptionEngine: fastEncryptionEngine(),
       secureStorageService: SecureStorageService(),
     );
     // An unconfigured vault hands out a plaintext DEK, which is what a device
@@ -53,7 +53,10 @@ void main() {
           tokenProvider: () async => 'test-token',
         ),
       ),
-      sync: E2EECloudSyncService(vaultKeyService: vaultKeyService),
+      sync: E2EECloudSyncService(
+        vaultKeyService: vaultKeyService,
+        cryptoEngine: fastEncryptionEngine(),
+      ),
       readPendingUploadId: () async => pendingUploadId,
       writePendingUploadId: (id) async => pendingUploadId = id,
       newUploadId: () => 'upload-${++uploadIdCounter}',
@@ -516,7 +519,20 @@ void main() {
 
   group('restore', () {
     /// Uploads once against a fake server and returns the envelope it sent.
+    ///
+    /// The backup carries a `w1` workspace, so a restore that writes anything
+    /// at all shows up as `w1` in the target.
     Future<String> sealedEnvelope() async {
+      await db
+          .into(db.workspaces)
+          .insert(
+            WorkspacesCompanion.insert(
+              id: 'w1',
+              name: 'Restored Workspace',
+              createdAt: DateTime.now(),
+            ),
+          );
+
       enqueueHead();
       enqueueUploadAccepted();
 
@@ -539,16 +555,6 @@ void main() {
     }
 
     test('round-trips a backup into a second database', () async {
-      await db
-          .into(db.workspaces)
-          .insert(
-            WorkspacesCompanion.insert(
-              id: 'w1',
-              name: 'Restored Workspace',
-              createdAt: DateTime.now(),
-            ),
-          );
-
       final envelope = await sealedEnvelope();
 
       transport.enqueue(

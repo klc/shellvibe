@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -12,13 +11,14 @@ import 'package:shellvibe/core/network/device_link/device_link_server.dart';
 import 'package:shellvibe/core/network/device_link/device_link_session_transport.dart';
 import 'package:shellvibe/core/network/local_pty_manager.dart';
 import 'package:xterm3/xterm.dart';
+
+import '../../../../support/fake_pty_session.dart';
 import 'package:shellvibe/core/network/coalescing_terminal_writer.dart';
-import 'package:shellvibe/core/network/pty_session.dart';
 
 const _timeout = Duration(seconds: 5);
 
 void main() {
-  late FakePty pty;
+  late FakePtySession pty;
   late Terminal terminal;
   late TerminalLocalPtyBridge bridge;
   late DeviceLinkIdentity identity;
@@ -27,7 +27,7 @@ void main() {
   DeviceLinkAttachment? attachment;
 
   setUp(() async {
-    pty = FakePty();
+    pty = FakePtySession();
     terminal = Terminal();
     terminal.resize(80, 24);
     bridge = TerminalLocalPtyBridge(
@@ -149,9 +149,7 @@ void main() {
     timeout: const Timeout(_timeout),
   );
 
-  test(
-    'the same device reattaching takes its session back',
-    () async {
+  test('the same device reattaching takes its session back', () async {
       final first = await _pair(identity, server);
       await first.sendAttach(
         const DeviceLinkAttach(sessionId: 'local-1', cols: 52, rows: 30),
@@ -181,9 +179,7 @@ void main() {
       // retired connection had imposed.
       expect(attachment?.previousColumns, 80);
       expect(attachment?.previousRows, 24);
-    },
-    timeout: const Timeout(_timeout),
-  );
+  }, timeout: const Timeout(_timeout));
 
   test('a shell that exits ends the sharing', () async {
     final client = await _pair(identity, server);
@@ -208,9 +204,7 @@ void main() {
     expect(terminal.viewHeight, 24);
   }, timeout: const Timeout(_timeout));
 
-  test(
-    'detaching still works once the session underneath is gone',
-    () async {
+  test('detaching still works once the session underneath is gone', () async {
       final client = await _pair(identity, server);
       addTearDown(client.close);
       await client.sendAttach(
@@ -230,13 +224,9 @@ void main() {
       expect(attachment, isNull);
       expect(terminal.viewWidth, 80);
       expect(terminal.viewHeight, 24);
-    },
-    timeout: const Timeout(_timeout),
-  );
+  }, timeout: const Timeout(_timeout));
 
-  test(
-    'another live device is not thrown off the session',
-    () async {
+  test('another live device is not thrown off the session', () async {
       final owner = await _pair(identity, server, deviceId: 'phone-1');
       addTearDown(owner.close);
       await owner.sendAttach(
@@ -257,9 +247,7 @@ void main() {
       // The first phone keeps the session, at its own size.
       expect(terminal.viewWidth, 52);
       expect(terminal.viewHeight, 30);
-    },
-    timeout: const Timeout(_timeout),
-  );
+  }, timeout: const Timeout(_timeout));
 
   test(
     'disconnect restores the desktop dimensions and releases ownership',
@@ -463,36 +451,6 @@ Future<DeviceLinkClientConnection> _pair(
   expect(await client.nextControl(timeout: _timeout), isA<DeviceLinkPaired>());
   await client.nextControl(timeout: _timeout);
   return client;
-}
-
-final class FakePty implements PtySession {
-  final _outputController = StreamController<Uint8List>();
-  final writes = <Uint8List>[];
-
-  @override
-  Stream<Uint8List> get output => _outputController.stream;
-
-  @override
-  Future<int> get exitCode => Future.value(0);
-
-  @override
-  void write(Uint8List data) => writes.add(Uint8List.fromList(data));
-
-  @override
-  void resize(int rows, int cols) {}
-
-  @override
-  bool kill([ProcessSignal signal = ProcessSignal.sigterm]) => true;
-
-  @override
-  void acknowledge() {}
-
-  void emitOutput(List<int> bytes) {
-    _outputController.add(Uint8List.fromList(bytes));
-  }
-
-  @override
-  Future<void> dispose({bool kill = true}) => _outputController.close();
 }
 
 final class _OversizedSnapshotTransport implements DeviceLinkSessionTransport {

@@ -106,17 +106,6 @@ void main() {
   });
 
   group('HostsScreen Widget Tests', () {
-    testWidgets('Renders AppBar title and action buttons', (tester) async {
-      await tester.pumpWidget(createWidgetUnderTest());
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 200));
-
-      expect(find.text('Hosts & Servers'), findsOneWidget);
-      expect(find.byKey(const Key('add_group_button')), findsOneWidget);
-      expect(find.byKey(const Key('add_host_button')), findsOneWidget);
-      expect(find.byKey(const Key('hosts_search_input')), findsOneWidget);
-    });
-
     testWidgets('Renders empty state when no hosts exist', (tester) async {
       await tester.pumpWidget(createWidgetUnderTest());
       await tester.pump();

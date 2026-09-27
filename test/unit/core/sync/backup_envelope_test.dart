@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/core/crypto/encryption_engine.dart';
 import 'package:shellvibe/core/sync/backup_envelope.dart';
 
+import '../../../support/fast_crypto.dart';
+
 /// Closes the two verification gates ADR 003 still lists as open: a tampered
 /// envelope and a wrong passphrase. Both must fail closed, and neither may
 /// return anything partial.
@@ -17,7 +19,7 @@ void main() {
   const payload = '{"hosts":[{"id":"h1","hostname":"example.com"}]}';
 
   setUp(() {
-    crypto = EncryptionEngine();
+    crypto = fastEncryptionEngine();
     envelope = BackupEnvelope(crypto: crypto);
     dek = SecretKey(crypto.generateSalt(32));
   });

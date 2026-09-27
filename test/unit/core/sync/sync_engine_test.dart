@@ -1,11 +1,9 @@
 import 'dart:convert';
-import 'dart:math';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shellvibe/core/api/api_exception.dart';
 import 'package:shellvibe/core/crypto/encryption_engine.dart';
 import 'package:shellvibe/core/sync/backup_envelope.dart';
 import 'package:shellvibe/core/sync/backup_scope.dart';
@@ -16,6 +14,8 @@ import 'package:shellvibe/features/cloud_backup/data/sync_operations_api.dart';
 import 'package:shellvibe/features/vault/data/vault_key_service.dart';
 import 'package:shellvibe/shared/database/app_database.dart';
 
+import '../../../support/in_memory_operation_log.dart';
+
 /// Two devices, one log, and the question the whole design turns on: do they
 /// end up holding the same thing?
 ///
@@ -25,11 +25,11 @@ import 'package:shellvibe/shared/database/app_database.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  late _Log log;
+  late InMemoryOperationLog log;
   late SecretKey syncKey;
 
   setUp(() {
-    log = _Log();
+    log = InMemoryOperationLog();
     syncKey = SecretKey(BackupEnvelope().generateSyncKey());
   });
 
@@ -280,7 +280,10 @@ void main() {
       await a.writeIdentity('i1', password: 'hunter2');
       await a.engine.push();
 
-      expect(log.operations.single.encryptedPayload, isNot(contains('hunter2')));
+      expect(
+        log.operations.single.encryptedPayload,
+        isNot(contains('hunter2')),
+      );
     });
 
     test('behind a locked vault nothing is applied or acknowledged', () async {
@@ -434,34 +437,6 @@ void main() {
     });
 
     test(
-      'an operation sealed under another key is skipped, not fatal',
-      () async {
-        // A vault whose sync key was rotated, or a server handing back something
-        // that does not belong to this account.
-        final a = await device('device-a');
-        await a.writeHost('h1');
-        await a.engine.push();
-
-        final other = AppDatabase(NativeDatabase.memory());
-        addTearDown(other.close);
-        final otherJournal = SyncJournal(db: other, deviceId: 'device-c');
-        other.syncJournal = otherJournal;
-
-        final stranger = SyncEngine(
-          db: other,
-          journal: otherJournal,
-          api: log,
-          syncKey: SecretKey(BackupEnvelope().generateSyncKey()),
-        );
-
-        final result = await stranger.pull();
-
-        expect(result.pulled, 0);
-        expect(await other.select(other.hosts).get(), isEmpty);
-      },
-    );
-
-    test(
       'a page that ends inside a clock does not lose the rest of it',
       () async {
         // Two devices, each on its own counter, so both produce a clock 1 and
@@ -498,7 +473,9 @@ void main() {
       },
     );
 
-    test('operations this device cannot open are counted, not hidden', () async {
+    test(
+      'operations this device cannot open are counted, not hidden',
+      () async {
       final a = await device('device-a');
 
       await a.writeHost('h1');
@@ -519,11 +496,15 @@ void main() {
 
       final result = await stranger.pull();
 
-      // The number is the whole point: silence here is a device that syncs
-      // forever and never sees anything.
+        // Skipped rather than fatal -- a rotated key or an operation that does
+        // not belong to this account must not stop the pass -- and counted,
+        // because silence here is a device that syncs forever and never sees
+        // anything.
       expect(result.unreadable, 2);
       expect(result.pulled, 0);
-    });
+        expect(await other.select(other.hosts).get(), isEmpty);
+      },
+    );
 
     test('the server cannot turn an upsert into a delete', () async {
       final a = await device('device-a');
@@ -586,7 +567,10 @@ void main() {
           deviceId: 'device-old',
           logicalClock: 50,
           entityType: await aliases.forType('hosts'),
-          entityId: await aliases.forEntity(entityType: 'hosts', entityId: 'h1'),
+          entityId: await aliases.forEntity(
+            entityType: 'hosts',
+            entityId: 'h1',
+          ),
           operation: 'upsert',
           encryptedPayload: await EncryptionEngine().encrypt(
             plaintext: jsonEncode({'t': 'hosts', 'i': 'h1'}),
@@ -718,87 +702,4 @@ final class _Device {
           createdAt: DateTime.now(),
         ),
       );
-}
-
-/// The operation log, in memory, shared by every device in a test.
-final class _Log implements SyncOperationTransport {
-  final List<SyncOperationDto> operations = [];
-
-  /// When true, every pull answers the way a pruned log does.
-  bool expireCursors = false;
-
-  /// A page size the server imposes whatever the client asked for, which is
-  /// what makes a page boundary land somewhere the client did not choose.
-  int? pageCap;
-
-  /// Answers the way a server that predates positions does: ordered and
-  /// paged by clock, with no `max_seq`.
-  bool answersByClock = false;
-
-  int get _cap => pageCap ?? 1 << 30;
-
-  @override
-  Future<int> push(List<SyncOperationDto> batch) async {
-    operations.addAll(batch);
-
-    return batch.length;
-  }
-
-  @override
-  Future<SyncOperationPage> pull({
-    required int sinceClock,
-    int? sinceSeq,
-    int limit = 100,
-  }) async {
-    if (expireCursors) {
-      throw const ApiException(
-        statusCode: 409,
-        code: ApiErrorCode.syncCursorExpired,
-        message: 'Operations after this cursor have been pruned.',
-      );
-    }
-
-    if (answersByClock) return _pullByClock(sinceClock, limit);
-
-    // A position is the order the log stored them in, which is the order of
-    // this list. Nothing is ever pruned here, so a device that has no
-    // position yet starts from the beginning.
-    final start = sinceSeq ?? 0;
-    final after = [
-      for (var i = start; i < operations.length; i++) (i + 1, operations[i]),
-    ];
-    final page = after.take(limit < _cap ? limit : _cap).toList();
-    final clocks = page.map((entry) => entry.$2.logicalClock);
-
-    return SyncOperationPage(
-      operations: [for (final entry in page) entry.$2],
-      maxClock: page.isEmpty ? sinceClock : clocks.reduce(max),
-      maxSeq: page.isEmpty ? start : page.last.$1,
-      hasMore: after.length > page.length,
-    );
-  }
-
-  SyncOperationPage _pullByClock(int sinceClock, int limit) {
-    // Ordered the way the server orders it, which is what the client's cursor
-    // arithmetic depends on.
-    final ordered = [...operations]
-      ..sort((a, b) {
-        final byClock = a.logicalClock.compareTo(b.logicalClock);
-
-        return byClock != 0 ? byClock : a.id.compareTo(b.id);
-      });
-
-    final after = ordered
-        .where((o) => o.logicalClock > sinceClock)
-        .toList(growable: false);
-    final page = after
-        .take(limit < _cap ? limit : _cap)
-        .toList(growable: false);
-
-    return SyncOperationPage(
-      operations: page,
-      maxClock: page.isEmpty ? sinceClock : page.last.logicalClock,
-      hasMore: after.length > page.length,
-    );
-  }
 }

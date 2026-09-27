@@ -2,12 +2,13 @@ import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:drift/native.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shellvibe/core/crypto/encryption_engine.dart';
 import 'package:shellvibe/core/sync/e2ee_cloud_sync_service.dart';
 import 'package:shellvibe/core/sync/sync_journal.dart';
 import 'package:shellvibe/features/vault/data/vault_key_service.dart';
 import 'package:shellvibe/shared/database/app_database.dart';
 import 'package:shellvibe/shared/storage/secure_storage_service.dart';
+
+import '../../../support/fast_crypto.dart';
 
 /// A snapshot has to say where it sits in the operation log, and a restore has
 /// to believe it.
@@ -33,12 +34,15 @@ void main() {
     target = AppDatabase(NativeDatabase.memory());
 
     final vaultKeyService = VaultKeyService(
-      encryptionEngine: EncryptionEngine(),
+      encryptionEngine: fastEncryptionEngine(),
       secureStorageService: SecureStorageService(),
     );
     await vaultKeyService.getDek();
 
-    sync = E2EECloudSyncService(vaultKeyService: vaultKeyService);
+    sync = E2EECloudSyncService(
+      vaultKeyService: vaultKeyService,
+      cryptoEngine: fastEncryptionEngine(),
+    );
   });
 
   tearDown(() async {
@@ -117,8 +121,10 @@ void main() {
       final journal = SyncJournal(db: target, deviceId: 'target-device');
       target.syncJournal = journal;
       await addHostLabelled(target, 'h1', 'local edit');
-      expect(await journal.pendingFor(entityType: 'hosts', entityId: 'h1'),
-          isNotNull);
+      expect(
+        await journal.pendingFor(entityType: 'hosts', entityId: 'h1'),
+        isNotNull,
+      );
 
       await sync.importEncryptedBackup(
         backupPackageJson: await exportAt(42),
@@ -170,7 +176,8 @@ void main() {
           deviceId: 'source-device',
         );
 
-    test('stays when it is later than the row, though not the snapshot',
+    test(
+      'stays when it is later than the row, though not the snapshot',
         () async {
       // The bug this pins: settled against the snapshot clock, an offline
       // edit to a row nobody else had touched since was dropped everywhere,
@@ -201,7 +208,8 @@ void main() {
       );
       expect(version!.logicalClock, pending!.logicalClock);
       expect(version.deviceId, 'target-device');
-    });
+      },
+    );
 
     test('is dropped when the row changed after it', () async {
       await addHost(source, 'h1');
@@ -497,7 +505,7 @@ Future<String> _withoutHosts(
   String backup,
   String passphrase,
 ) async {
-  final envelope = BackupEnvelope();
+  final envelope = BackupEnvelope(crypto: fastEncryptionEngine());
   final opened = await envelope.open(envelopeJson: backup, secret: passphrase);
   final payload = opened.payloadJson.replaceFirst(
     RegExp(r'"hosts":\[.*?\],'),

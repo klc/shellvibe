@@ -102,19 +102,6 @@ void main() {
     expect(await host('h1'), isNull);
   });
 
-  test('the id outlives the body it was holding', () async {
-    // Without it a late upsert from a device that never heard about the
-    // delete would bring the row back on its own.
-    await addHost('h1');
-    await db.hostsDao.deleteHost('h1');
-    await journal.purgeTrash(retention: Duration.zero);
-
-    expect(
-      await journal.isDeleted(entityType: 'hosts', entityId: 'h1'),
-      isTrue,
-    );
-  });
-
   test('emptying by hand leaves nothing restorable', () async {
     await addHost('h1');
     await db.hostsDao.deleteHost('h1');

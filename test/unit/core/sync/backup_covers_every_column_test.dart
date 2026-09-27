@@ -4,11 +4,12 @@ import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:drift/native.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shellvibe/core/crypto/encryption_engine.dart';
 import 'package:shellvibe/core/sync/e2ee_cloud_sync_service.dart';
 import 'package:shellvibe/features/vault/data/vault_key_service.dart';
 import 'package:shellvibe/shared/database/app_database.dart';
 import 'package:shellvibe/shared/storage/secure_storage_service.dart';
+
+import '../../../support/fast_crypto.dart';
 
 /// A backup has to carry every column, not the ones someone remembered.
 ///
@@ -34,12 +35,15 @@ void main() {
     target = AppDatabase(NativeDatabase.memory());
 
     final vaultKeyService = VaultKeyService(
-      encryptionEngine: EncryptionEngine(),
+      encryptionEngine: fastEncryptionEngine(),
       secureStorageService: SecureStorageService(),
     );
     await vaultKeyService.getDek();
 
-    sync = E2EECloudSyncService(vaultKeyService: vaultKeyService);
+    sync = E2EECloudSyncService(
+      vaultKeyService: vaultKeyService,
+      cryptoEngine: fastEncryptionEngine(),
+    );
   });
 
   tearDown(() async {
@@ -50,7 +54,9 @@ void main() {
   test('every hosts column appears in the exported payload', () async {
     // The guard. A column added to the table and forgotten here fails this
     // test rather than quietly dropping out of everyone's backups.
-    await source.into(source.hosts).insert(
+    await source
+        .into(source.hosts)
+        .insert(
       HostsCompanion.insert(
         id: 'h1',
         workspaceId: 'default',
@@ -66,21 +72,18 @@ void main() {
     );
 
     // Reach the payload the only way a client can: by opening the envelope.
-    final opened = await BackupEnvelope().open(
-      envelopeJson: envelope,
-      secret: passphrase,
-    );
+    final opened = await BackupEnvelope(
+      crypto: fastEncryptionEngine(),
+    ).open(envelopeJson: envelope, secret: passphrase);
     final payload = jsonDecode(opened.payloadJson) as Map<String, dynamic>;
-    final exported = ((payload['hosts'] as List).first as Map)
-        .keys
+    final exported = ((payload['hosts'] as List).first as Map).keys
         .map((k) => k as String)
         .toSet();
 
     final columns = source.hosts.$columns.map((c) => c.name).toSet();
 
     // Drift names columns in snake_case; the payload uses the Dart names.
-    String toSnake(String name) => name
-        .replaceAllMapped(
+    String toSnake(String name) => name.replaceAllMapped(
           RegExp('[A-Z]'),
           (match) => '_${match.group(0)!.toLowerCase()}',
         );
@@ -99,7 +102,9 @@ void main() {
   test('a host with its own username keeps it through a restore', () async {
     // The reported symptom, end to end: the host authenticated as the wrong
     // user because this field never left the source device.
-    await source.into(source.hosts).insert(
+    await source
+        .into(source.hosts)
+        .insert(
       HostsCompanion.insert(
         id: 'h1',
         workspaceId: 'default',
@@ -128,7 +133,9 @@ void main() {
   });
 
   test('the other host settings survive too', () async {
-    await source.into(source.hosts).insert(
+    await source
+        .into(source.hosts)
+        .insert(
       HostsCompanion.insert(
         id: 'h1',
         workspaceId: 'default',
@@ -162,7 +169,8 @@ void main() {
     expect(
       restored.environment,
       'prod',
-      reason: 'The policy engine reads this; a host restored as dev is a '
+      reason:
+          'The policy engine reads this; a host restored as dev is a '
           'safety signal silently downgraded.',
     );
     expect(restored.mcpVisible, isFalse);
@@ -187,7 +195,7 @@ void main() {
       ],
     });
 
-    final crypto = EncryptionEngine();
+    final crypto = fastEncryptionEngine();
     final envelope = await BackupEnvelope(crypto: crypto).seal(
       payloadJson: legacyPayload,
       dek: await VaultKeyService(

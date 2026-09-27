@@ -42,13 +42,20 @@ void main() {
       expect(dataBefore?.text, equals('SecretPassword123'));
     });
 
-    test('cancelTimer cancels active clear timer', () async {
+    test('cancelTimer keeps the clipboard past the scheduled clear', () async {
+      var wasCleared = false;
       await service.copyAndScheduleClear(
         'SecretPassword123',
-        duration: const Duration(seconds: 30),
+        duration: const Duration(milliseconds: 50),
+        onCleared: () => wasCleared = true,
       );
 
       service.cancelTimer();
+      await Future.delayed(const Duration(milliseconds: 200));
+
+      final currentData = await Clipboard.getData(Clipboard.kTextPlain);
+      expect(currentData?.text, equals('SecretPassword123'));
+      expect(wasCleared, isFalse);
     });
 
     test('clears clipboard when timer expires and content matches sensitiveData', () async {

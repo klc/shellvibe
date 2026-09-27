@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/core/mcp/shell/persistent_shell_session.dart';
 import 'package:shellvibe/features/mcp/domain/models/mcp_enums.dart';
@@ -353,18 +354,24 @@ void main() {
   });
 
   group('timeout clamping', () {
-    test('a timeout above 600 seconds is clamped', () async {
-      final channel = FakeShellChannel();
-      final session = await _session(channel);
+    test('a timeout above 600 seconds is cut to 600', () {
+      // An agent asking for five hours gets ten minutes: past that the
+      // command is treated as hung and the recovery path takes over.
+      fakeAsync((async) {
+        final channel = FakeShellChannel();
+        late PersistentShellSession session;
+        _session(channel).then((s) => session = s);
+        async.flushMicrotasks();
 
-      // A clamp is not directly observable, so this asserts the practical
-      // consequence: an absurd timeout is accepted and the command still runs
-      // normally rather than being rejected or waited on forever.
-      final result = await session.run(
-        'echo ok',
-        timeout: const Duration(hours: 5),
-      );
-      expect(result.exitCode, 0);
+        channel.autoRespond = false;
+        session.run('sleep 99999', timeout: const Duration(hours: 5));
+
+        async.elapse(const Duration(seconds: 599));
+        expect(channel.interruptCount, 0, reason: 'still inside the cap');
+
+        async.elapse(const Duration(seconds: 2));
+        expect(channel.interruptCount, greaterThan(0));
+      });
     });
   });
 

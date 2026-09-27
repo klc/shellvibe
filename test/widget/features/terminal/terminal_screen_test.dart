@@ -8,6 +8,8 @@ import 'package:xterm3/xterm.dart';
 import 'package:shellvibe/features/hosts/domain/models/host_model.dart';
 import 'package:shellvibe/features/settings/domain/models/app_settings_model.dart';
 import 'package:shellvibe/features/settings/presentation/notifiers/settings_notifier.dart';
+import 'package:shellvibe/features/terminal/domain/models/terminal_palette.dart';
+import 'package:shellvibe/features/terminal/domain/models/terminal_palette_data.dart';
 import 'package:shellvibe/features/terminal/domain/models/terminal_tab_session.dart';
 import 'package:shellvibe/features/terminal/presentation/screens/terminal_screen.dart';
 
@@ -31,9 +33,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           child: MaterialApp(
-            home: Scaffold(
-              body: TerminalScreen(session: session),
-            ),
+            home: Scaffold(body: TerminalScreen(session: session)),
           ),
         ),
       );
@@ -43,7 +43,9 @@ void main() {
       expect(find.byType(TerminalScreen), findsOneWidget);
     });
 
-    testWidgets('Renders terminal using selected palette settings (Catppuccin, Nord, OLED, Dark)', (tester) async {
+    testWidgets('the terminal follows the chosen terminal palette live', (
+      tester,
+    ) async {
       final terminal = Terminal(maxLines: 100);
       final session = TerminalTabSession(
         id: 'session-2',
@@ -61,28 +63,38 @@ void main() {
         UncontrolledProviderScope(
           container: container,
           child: MaterialApp(
-            home: Scaffold(
-              body: TerminalScreen(session: session),
-            ),
+            home: Scaffold(body: TerminalScreen(session: session)),
           ),
         ),
       );
       await tester.pump();
-      expect(find.byType(TerminalView), findsOneWidget);
 
+      TerminalTheme shownTheme() =>
+          tester.widget<TerminalView>(find.byType(TerminalView)).theme;
+
+      expect(
+        shownTheme(),
+        same(
+          TerminalPaletteData.themeOf(const AppSettingsModel().terminalPalette),
+        ),
+      );
+
+      // Switched while the pane is open: the view has to pick the change up
+      // without being reopened.
       final settingsNotifier = container.read(settingsProvider.notifier);
-
-      await settingsNotifier.setPalette(AppPalette.catppuccin);
-      await tester.pump();
-      expect(find.byType(TerminalView), findsOneWidget);
-
-      await settingsNotifier.setPalette(AppPalette.nord);
-      await tester.pump();
-      expect(find.byType(TerminalView), findsOneWidget);
-
-      await settingsNotifier.setPalette(AppPalette.oled);
-      await tester.pump();
-      expect(find.byType(TerminalView), findsOneWidget);
+      for (final palette in [
+        TerminalPalette.catppuccin,
+        TerminalPalette.nord,
+        TerminalPalette.dracula,
+      ]) {
+        await settingsNotifier.setTerminalPalette(palette);
+        await tester.pump();
+        expect(
+          shownTheme(),
+          same(TerminalPaletteData.themeOf(palette)),
+          reason: '$palette',
+        );
+      }
 
       await tester.pumpAndSettle();
     });
@@ -115,9 +127,7 @@ void main() {
               brightness: Brightness.dark,
             ),
             child: MaterialApp(
-              home: Scaffold(
-                body: TerminalScreen(session: session),
-              ),
+              home: Scaffold(body: TerminalScreen(session: session)),
             ),
           ),
         ),
@@ -170,10 +180,7 @@ void main() {
       expect(find.text('Session ended'), findsOneWidget);
       expect(find.text('Connection lost'), findsNothing);
       expect(find.byIcon(Icons.error_outline), findsNothing);
-      expect(
-        find.byKey(const Key('reconnect_session-exit')),
-        findsOneWidget,
-      );
+      expect(find.byKey(const Key('reconnect_session-exit')), findsOneWidget);
     });
 
     testWidgets('Failed SSH session shows error banner with Reconnect button', (
@@ -205,9 +212,7 @@ void main() {
               brightness: Brightness.dark,
             ),
             child: MaterialApp(
-              home: Scaffold(
-                body: TerminalScreen(session: session),
-              ),
+              home: Scaffold(body: TerminalScreen(session: session)),
             ),
           ),
         ),
@@ -249,9 +254,7 @@ void main() {
               brightness: Brightness.dark,
             ),
             child: MaterialApp(
-              home: Scaffold(
-                body: TerminalScreen(session: session),
-              ),
+              home: Scaffold(body: TerminalScreen(session: session)),
             ),
           ),
         ),
@@ -260,7 +263,10 @@ void main() {
 
       expect(find.text('Connection lost'), findsNothing);
       expect(find.textContaining('Connection Error'), findsNothing);
-      expect(find.byKey(const Key('reconnect_session-connected')), findsNothing);
+      expect(
+        find.byKey(const Key('reconnect_session-connected')),
+        findsNothing,
+      );
     });
   });
 }

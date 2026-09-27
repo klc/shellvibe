@@ -17,10 +17,15 @@ void main() {
       await db.close();
     });
 
-    test('Fingerprint insertion, retrieval, and fingerprint mismatch detection', () async {
+    // Deciding whether a presented key matches is SSHSessionManager's job and
+    // is tested there; this only covers what the DAO stores and replaces.
+    test(
+      'Fingerprint insertion, retrieval, replacement and deletion',
+      () async {
       const hostname = 'ssh.example.com';
       const port = 22;
-      const initialFingerprint = 'SHA256:abc123def456ghi789jkl012mno345pqr678stu901v';
+        const initialFingerprint =
+            'SHA256:abc123def456ghi789jkl012mno345pqr678stu901v';
 
       final initialEntry = KnownHostsCompanion.insert(
         id: 'kh-1',
@@ -41,12 +46,12 @@ void main() {
       expect(foundHost.fingerprintSha256, equals(initialFingerprint));
       expect(foundHost.keyType, equals('ssh-ed25519'));
 
-      // 2. Mismatch detection: incoming connection presents different fingerprint
-      const incomingFingerprint = 'SHA256:DIFFERENT_FINGERPRINT_SUSPECTED_MITM_ATTACK';
-      final isMismatch = foundHost.fingerprintSha256 != incomingFingerprint;
-      expect(isMismatch, isTrue);
+        // A lookup on another port is a different trust entry.
+        expect(await knownHostsDao.findKnownHost(hostname, 2222), isNull);
 
-      // 3. Updating host key after user trusts new key fingerprint
+        // 2. Replacing the host key after the user trusts a new fingerprint
+        const incomingFingerprint =
+            'SHA256:DIFFERENT_FINGERPRINT_SUSPECTED_MITM_ATTACK';
       final updatedEntry = KnownHostsCompanion.insert(
         id: 'kh-1',
         hostname: hostname,
@@ -61,9 +66,10 @@ void main() {
       expect(reFetchedHost, isNotNull);
       expect(reFetchedHost!.fingerprintSha256, equals(incomingFingerprint));
 
-      // 4. Deletion
+        // 3. Deletion
       await knownHostsDao.deleteKnownHost('kh-1');
       expect(await knownHostsDao.findKnownHost(hostname, port), isNull);
-    });
+      },
+    );
   });
 }

@@ -9,13 +9,15 @@ import 'package:shellvibe/core/sync/e2ee_cloud_sync_service.dart';
 import 'package:shellvibe/core/sync/sync_engine.dart';
 import 'package:shellvibe/core/sync/sync_journal.dart';
 import 'package:shellvibe/features/cloud_backup/data/cloud_backup_api.dart';
-import 'package:shellvibe/features/cloud_backup/data/sync_operations_api.dart';
 import 'package:shellvibe/features/cloud_backup/domain/cloud_backup_service.dart';
 import 'package:shellvibe/features/cloud_backup/domain/sync_join_service.dart';
 import 'package:shellvibe/features/cloud_backup/domain/sync_snapshot_service.dart';
 import 'package:shellvibe/features/vault/data/vault_key_service.dart';
 import 'package:shellvibe/shared/database/app_database.dart';
 import 'package:shellvibe/shared/storage/secure_storage_service.dart';
+
+import '../../../support/fast_crypto.dart';
+import '../../../support/in_memory_operation_log.dart';
 
 /// Joining an account that is already syncing, from both directions.
 ///
@@ -30,7 +32,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late _Vault vault;
-  late _Log log;
+  late InMemoryOperationLog log;
   late Uint8List syncKey;
 
   const passphrase = 'a joining passphrase';
@@ -38,7 +40,7 @@ void main() {
   setUp(() async {
     FlutterSecureStorage.setMockInitialValues({});
     vault = _Vault();
-    log = _Log();
+    log = InMemoryOperationLog();
     syncKey = BackupEnvelope().generateSyncKey();
   });
 
@@ -54,12 +56,15 @@ void main() {
     addTearDown(db.close);
 
     final vaultKeyService = VaultKeyService(
-      encryptionEngine: EncryptionEngine(),
+      encryptionEngine: fastEncryptionEngine(),
       secureStorageService: SecureStorageService(),
     );
     await vaultKeyService.getDek();
 
-    final e2ee = E2EECloudSyncService(vaultKeyService: vaultKeyService);
+    final e2ee = E2EECloudSyncService(
+      vaultKeyService: vaultKeyService,
+      cryptoEngine: fastEncryptionEngine(),
+    );
     String? pendingUpload;
     ({int revision, int clock})? mark;
 
@@ -555,52 +560,4 @@ final class _Vault implements VaultTransport {
 
   @override
   Future<void> deleteVault() async => stored.clear();
-}
-
-/// The operation log, in memory.
-final class _Log implements SyncOperationTransport {
-  final List<SyncOperationDto> operations = [];
-
-  bool expireCursors = false;
-  bool failPushes = false;
-
-  @override
-  Future<int> push(List<SyncOperationDto> batch) async {
-    if (failPushes) throw const ApiTransportException('log unreachable');
-    operations.addAll(batch);
-
-    return batch.length;
-  }
-
-  /// Paged by position, the order the log stored them in. Nothing is pruned
-  /// here, so a device without a position starts from the beginning.
-  @override
-  Future<SyncOperationPage> pull({
-    required int sinceClock,
-    int? sinceSeq,
-    int limit = 100,
-  }) async {
-    if (expireCursors) {
-      throw const ApiException(
-        statusCode: 409,
-        code: ApiErrorCode.syncCursorExpired,
-        message: 'Operations after this cursor have been pruned.',
-      );
-    }
-
-    final start = sinceSeq ?? 0;
-    final after = operations.skip(start).toList(growable: false);
-    final page = after.take(limit).toList(growable: false);
-    final maxClock = page.fold(
-      sinceClock,
-      (top, o) => o.logicalClock > top ? o.logicalClock : top,
-    );
-
-    return SyncOperationPage(
-      operations: page,
-      maxClock: maxClock,
-      maxSeq: start + page.length,
-      hasMore: after.length > page.length,
-    );
-  }
 }

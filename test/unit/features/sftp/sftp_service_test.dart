@@ -150,6 +150,26 @@ void main() {
       }
     });
 
+    test('uploadFromFile refuses a local file that does not exist', () async {
+      final tempDir = await Directory.systemTemp.createTemp('sftp_test_');
+      addTearDown(() => tempDir.delete(recursive: true));
+
+      await expectLater(
+        service.uploadFromFile(
+          client,
+          '${tempDir.path}/missing.bin',
+          '/remote/missing.bin',
+        ),
+        throwsA(
+          isA<Exception>().having(
+            (e) => e.toString(),
+            'message',
+            contains('Local file does not exist'),
+          ),
+        ),
+      );
+    });
+
     test('changePermissions passes permissions value to setStat', () async {
       await service.changePermissions(client, '/test.txt', 0644);
       expect(client.lastSetStatPath, equals('/test.txt'));

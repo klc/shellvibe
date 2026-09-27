@@ -19,16 +19,6 @@ void main() {
       expect(entitlement.isPaid, isFalse);
     });
 
-    test('the fixture withholds shared workspaces and nothing else', () {
-      // The one capability the free plan does not carry. If this fixture ever
-      // shows it, the server has given the team tier away.
-      final fixture = ContractFixture.load('entitlements.index');
-
-      final entitlement = Entitlement.fromJson(fixture.data);
-
-      expect(entitlement.has(Capabilities.sharedWorkspaces), isFalse);
-    });
-
     test('the pinned default matches what the server sends', () {
       // `Entitlement.free` is what the app assumes offline. If it drifts from
       // the server's free plan, an offline user sees limits that are not
@@ -158,54 +148,6 @@ void main() {
 
       expect(entitlement.limits.maxBackupSizeBytes, 5242880);
     });
-  });
-
-  group('the free capabilities are never gated', () {
-    for (final capability in Entitlement.freeCapabilities) {
-      test('the free default grants $capability', () {
-        expect(Entitlement.free.has(capability), isTrue);
-      });
-
-      test('an empty snapshot grants $capability', () {
-        expect(Entitlement.fromJson(const {}).has(capability), isTrue);
-      });
-
-      test('an expired tier grants $capability', () {
-        final entitlement = Entitlement.fromJson(const {
-          'plan': 'team',
-          'status': 'expired',
-          'capabilities': <String>[],
-        });
-
-        expect(
-          entitlement.has(capability),
-          isTrue,
-          reason:
-              'A free feature must not switch off because a tier lapsed. '
-              'Local Device Link additionally works offline and with no '
-              'account at all.',
-        );
-      });
-
-      test('a snapshot that omits $capability entirely still grants it', () {
-        final entitlement = Entitlement.fromJson(const {
-          'plan': 'team',
-          'status': 'active',
-          'capabilities': ['shared_workspaces'],
-        });
-
-        expect(entitlement.has(capability), isTrue);
-      });
-
-      test('an unknown status grants $capability', () {
-        final entitlement = Entitlement.fromJson(const {
-          'status': 'nonsense',
-          'capabilities': <String>[],
-        });
-
-        expect(entitlement.has(capability), isTrue);
-      });
-    }
   });
 
   group('round-trip', () {

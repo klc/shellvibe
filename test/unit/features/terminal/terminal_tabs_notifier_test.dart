@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:drift/native.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xterm3/xterm.dart';
 
@@ -121,6 +122,8 @@ void main() {
     test(
       'starts Device Link listener when the vault is unconfigured',
       () async {
+        // The listener keeps its TLS identity in secure storage.
+        FlutterSecureStorage.setMockInitialValues({});
         final now = DateTime.now();
         await database.pairedDevicesDao.upsert(
           PairedDevicesCompanion.insert(
@@ -151,7 +154,10 @@ void main() {
           terminalTabsProvider.notifier,
         );
 
+        await notifier.ensureDeviceLinkServerForPairedDevices();
+
         expect(notifier.deviceLinkVaultAvailable, isTrue);
+        expect(notifier.isDeviceLinkServerRunning, isTrue);
       },
     );
 

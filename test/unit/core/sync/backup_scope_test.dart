@@ -4,11 +4,12 @@ import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:drift/native.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shellvibe/core/crypto/encryption_engine.dart';
 import 'package:shellvibe/core/sync/e2ee_cloud_sync_service.dart';
 import 'package:shellvibe/features/vault/data/vault_key_service.dart';
 import 'package:shellvibe/shared/database/app_database.dart';
 import 'package:shellvibe/shared/storage/secure_storage_service.dart';
+
+import '../../../support/fast_crypto.dart';
 
 /// A backup can now be narrowed to a set of categories.
 ///
@@ -27,10 +28,9 @@ void main() {
   const passphrase = 'scope test passphrase';
 
   Future<Map<String, dynamic>> payloadOf(String envelope) async {
-    final opened = await BackupEnvelope().open(
-      envelopeJson: envelope,
-      secret: passphrase,
-    );
+    final opened = await BackupEnvelope(
+      crypto: fastEncryptionEngine(),
+    ).open(envelopeJson: envelope, secret: passphrase);
     return jsonDecode(opened.payloadJson) as Map<String, dynamic>;
   }
 
@@ -108,12 +108,15 @@ void main() {
     target = AppDatabase(NativeDatabase.memory());
 
     final vaultKeyService = VaultKeyService(
-      encryptionEngine: EncryptionEngine(),
+      encryptionEngine: fastEncryptionEngine(),
       secureStorageService: SecureStorageService(),
     );
     await vaultKeyService.getDek();
 
-    sync = E2EECloudSyncService(vaultKeyService: vaultKeyService);
+    sync = E2EECloudSyncService(
+      vaultKeyService: vaultKeyService,
+      cryptoEngine: fastEncryptionEngine(),
+    );
   });
 
   tearDown(() async {

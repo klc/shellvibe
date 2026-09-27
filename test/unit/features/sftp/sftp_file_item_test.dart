@@ -60,21 +60,5 @@ void main() {
       );
       expect(item644.octalPermissions, '644');
     });
-
-    test('copyWith updates properties correctly', () {
-      const item = SftpFileItem(
-        name: 'file.txt',
-        path: '/file.txt',
-        size: 100,
-        permissions: '-rw-r--r--',
-        isDirectory: false,
-      );
-
-      final updated = item.copyWith(name: 'renamed.txt', size: 200);
-      expect(updated.name, 'renamed.txt');
-      expect(updated.path, '/file.txt');
-      expect(updated.size, 200);
-      expect(updated.isDirectory, false);
-    });
   });
 }

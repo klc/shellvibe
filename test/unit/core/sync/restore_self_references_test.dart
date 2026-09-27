@@ -2,11 +2,12 @@ import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:drift/native.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shellvibe/core/crypto/encryption_engine.dart';
 import 'package:shellvibe/core/sync/e2ee_cloud_sync_service.dart';
 import 'package:shellvibe/features/vault/data/vault_key_service.dart';
 import 'package:shellvibe/shared/database/app_database.dart';
 import 'package:shellvibe/shared/storage/secure_storage_service.dart';
+
+import '../../../support/fast_crypto.dart';
 
 /// Restoring a backup that contains a jump host or a nested host group.
 ///
@@ -37,12 +38,15 @@ void main() {
     target = AppDatabase(NativeDatabase.memory());
 
     final vaultKeyService = VaultKeyService(
-      encryptionEngine: EncryptionEngine(),
+      encryptionEngine: fastEncryptionEngine(),
       secureStorageService: SecureStorageService(),
     );
     await vaultKeyService.getDek();
 
-    sync = E2EECloudSyncService(vaultKeyService: vaultKeyService);
+    sync = E2EECloudSyncService(
+      vaultKeyService: vaultKeyService,
+      cryptoEngine: fastEncryptionEngine(),
+    );
   });
 
   tearDown(() async {
@@ -62,7 +66,9 @@ void main() {
 
     // Inserted first, so it is exported first -- while pointing at a host that
     // is exported after it.
-    await source.into(source.hosts).insert(
+    await source
+        .into(source.hosts)
+        .insert(
       HostsCompanion.insert(
         id: behindId,
         workspaceId: 'default',
@@ -73,7 +79,9 @@ void main() {
       ),
     );
 
-    await source.into(source.hosts).insert(
+    await source
+        .into(source.hosts)
+        .insert(
       HostsCompanion.insert(
         id: bastionId,
         workspaceId: 'default',
@@ -87,7 +95,9 @@ void main() {
         .write(const HostsCompanion(jumpHostId: Value(bastionId)));
 
     // A nested group, same shape.
-    await source.into(source.hostGroups).insert(
+    await source
+        .into(source.hostGroups)
+        .insert(
       HostGroupsCompanion.insert(
         id: 'child-group',
         workspaceId: 'default',
@@ -95,7 +105,9 @@ void main() {
       ),
     );
 
-    await source.into(source.hostGroups).insert(
+    await source
+        .into(source.hostGroups)
+        .insert(
       HostGroupsCompanion.insert(
         id: 'parent-group',
         workspaceId: 'default',
@@ -132,7 +144,8 @@ void main() {
     expect(
       byLabel['mia-master']!.jumpHostId,
       byLabel['bastion']!.id,
-      reason: 'The jump host link has to survive the restore, not just the row.',
+      reason:
+          'The jump host link has to survive the restore, not just the row.',
     );
     expect(byLabel['mia-master']!.port, 22022);
   });

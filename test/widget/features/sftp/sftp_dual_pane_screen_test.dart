@@ -9,7 +9,9 @@ import 'package:window_manager/window_manager.dart';
 
 void main() {
   group('SftpDualPaneScreen Widget Tests', () {
-    testWidgets('renders local workstation and remote sftp panes', (WidgetTester tester) async {
+    testWidgets('the remote pane names its server even while disconnected', (
+      WidgetTester tester,
+    ) async {
       await tester.pumpWidget(
         ProviderScope(
           child: ShadTheme(
@@ -34,7 +36,9 @@ void main() {
       expect(find.text('TEST SERVER (DISCONNECTED)'), findsOneWidget);
     });
 
-    testWidgets('renders segmented tab control on narrow screens (< 600px)', (WidgetTester tester) async {
+    testWidgets('renders segmented tab control on narrow screens (< 600px)', (
+      WidgetTester tester,
+    ) async {
       tester.view.physicalSize = const Size(500, 800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
