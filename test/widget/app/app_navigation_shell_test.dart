@@ -1,12 +1,15 @@
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:shellvibe/app/router/app_router.dart';
 import 'package:shellvibe/app/widgets/app_navigation_shell.dart';
+import 'package:shellvibe/app/widgets/window_chrome_frame.dart';
 import 'package:shellvibe/app/window/window_chrome.dart';
 import 'package:shellvibe/features/hosts/presentation/screens/hosts_screen.dart';
 import 'package:shellvibe/features/settings/presentation/screens/settings_screen.dart';
@@ -428,6 +431,87 @@ void main() {
         findsOneWidget,
       );
       expect(find.byKey(const Key('palette_template_tpl-logs')), findsNothing);
+    });
+
+    // The footer and the highlighted row both promise the keyboard works;
+    // Enter and the arrow keys used to do nothing.
+    testWidgets('Command palette runs the highlighted row from the keyboard', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(createTestWidget());
+      await pumpTabTransition(tester);
+
+      await tester.tap(find.byKey(const Key('command_palette_button')));
+      await tester.pumpAndSettle();
+
+      // No hosts or templates: the modules are the whole list, in rail order.
+      // Two down from Hosts is Vault.
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await pumpTabTransition(tester);
+
+      expect(find.byType(Dialog), findsNothing);
+      expect(find.byType(VaultScreen), findsOneWidget);
+    });
+
+    testWidgets('Command palette keeps a long host label inside its row', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await db.hostsDao.insertHost(
+        HostsCompanion.insert(
+          id: 'host-long',
+          workspaceId: 'default',
+          label: 'production-database-primary-' * 6,
+          hostname: 'db-primary.eu-central-1.internal.example.com',
+          createdAt: DateTime.now(),
+        ),
+      );
+
+      await tester.pumpWidget(createTestWidget());
+      await pumpTabTransition(tester);
+
+      await tester.tap(find.byKey(const Key('command_palette_button')));
+      await tester.pumpAndSettle();
+
+      // A RenderFlex overflow fails the test on its own.
+      expect(find.byKey(const Key('palette_host_host-long')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    // Pushed over the shell, so without the frame its app bar starts under
+    // the macOS traffic lights with nothing to drag the window by.
+    testWidgets('The Device Link pairing route draws the window chrome', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(createTestWidget());
+      await pumpTabTransition(tester);
+
+      final context = tester.element(find.byType(AppNavigationShell));
+      GoRouter.of(context).push('/device-link/pair');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Device Link pairing data is missing.'), findsOneWidget);
+      expect(
+        find.ancestor(
+          of: find.text('Device Link pairing data is missing.'),
+          matching: find.byType(WindowChromeFrame),
+        ),
+        findsOneWidget,
+      );
     });
 
     // Every module at every breakpoint. The initial route alone used to be

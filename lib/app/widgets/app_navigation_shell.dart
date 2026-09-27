@@ -676,8 +676,57 @@ class _CommandPalette extends ConsumerStatefulWidget {
   ConsumerState<_CommandPalette> createState() => _CommandPaletteState();
 }
 
+/// One runnable result in the command palette.
+class _PaletteEntry {
+  final Key? key;
+  final IconData icon;
+  final String label;
+  final String detail;
+  final String trailing;
+  final VoidCallback onRun;
+
+  const _PaletteEntry({
+    this.key,
+    required this.icon,
+    required this.label,
+    required this.detail,
+    this.trailing = '',
+    required this.onRun,
+  });
+}
+
 class _CommandPaletteState extends ConsumerState<_CommandPalette> {
   String query = '';
+
+  /// Position, across every section, of the row Enter runs.
+  int _selected = 0;
+
+  /// One key per result position, so the arrow keys can scroll the selected
+  /// row into view. Indexed by position rather than by entry: a row is found
+  /// by where it sits, and the list is rebuilt on every keystroke anyway.
+  final _rowKeys = <GlobalKey>[];
+
+  GlobalKey _rowKey(int index) {
+    while (_rowKeys.length <= index) {
+      _rowKeys.add(GlobalKey());
+    }
+    return _rowKeys[index];
+  }
+
+  void _moveSelection(int delta, int count) {
+    if (count == 0) return;
+    setState(() => _selected = (_selected + delta).clamp(0, count - 1));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final rowContext = _rowKeys[_selected].currentContext;
+      if (rowContext == null || !rowContext.mounted) return;
+      Scrollable.ensureVisible(
+        rowContext,
+        alignmentPolicy: delta > 0
+            ? ScrollPositionAlignmentPolicy.keepVisibleAtEnd
+            : ScrollPositionAlignmentPolicy.keepVisibleAtStart,
+      );
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -728,10 +777,110 @@ class _CommandPaletteState extends ConsumerState<_CommandPalette> {
         .where((template) => templateMatchesQuery(template, value))
         .toList();
 
-    // Whatever is first is what Enter runs, so the highlight has to be worked
-    // out across the sections rather than per section.
-    final hasBookmarks =
-        bookmarkedHosts.isNotEmpty || bookmarkedTemplates.isNotEmpty;
+    _PaletteEntry hostEntry(
+      HostModel host, {
+      required String keyPrefix,
+      required IconData icon,
+    }) => _PaletteEntry(
+      key: Key('${keyPrefix}_${host.id}'),
+      icon: icon,
+      label: host.label,
+      detail: host.hostname,
+      trailing: host.protocol,
+      onRun: () => widget.onHostSelected(host),
+    );
+    _PaletteEntry templateEntry(
+      TemplateModel template, {
+      required String keyPrefix,
+    }) => _PaletteEntry(
+      key: Key('${keyPrefix}_${template.id}'),
+      icon: LucideIcons.layoutTemplate,
+      label: template.name,
+      detail: templateSummary(template),
+      onRun: () => widget.onTemplateSelected(template),
+    );
+
+    final sections = <(String, List<_PaletteEntry>)>[
+      (
+        'Bookmarks',
+        [
+          for (final host in bookmarkedHosts)
+            hostEntry(
+              host,
+              keyPrefix: 'palette_bookmark',
+              icon: LucideIcons.star,
+            ),
+          for (final template in bookmarkedTemplates)
+            templateEntry(template, keyPrefix: 'palette_bookmark'),
+        ],
+      ),
+      (
+        'Hosts',
+        [
+          for (final host in otherHosts)
+            hostEntry(
+              host,
+              keyPrefix: 'palette_host',
+              icon: LucideIcons.server,
+            ),
+        ],
+      ),
+      (
+        'Templates',
+        [
+          for (final template in otherTemplates)
+            templateEntry(template, keyPrefix: 'palette_template'),
+        ],
+      ),
+      (
+        'Modules',
+        [
+          for (final (index, item) in filtered)
+            _PaletteEntry(
+              icon: item.icon,
+              label: item.label,
+              detail: item.tooltip.split(' (').first,
+              trailing: item.shortcut,
+              onRun: () => widget.onSelected(index),
+            ),
+        ],
+      ),
+    ].where((section) => section.$2.isNotEmpty).toList();
+
+    // The selection runs across the sections rather than within one, so Enter
+    // and the arrow keys see a single list.
+    final entries = [for (final (_, rows) in sections) ...rows];
+    final selected = entries.isEmpty
+        ? -1
+        : _selected.clamp(0, entries.length - 1);
+
+    final results = <Widget>[];
+    var position = 0;
+    for (final (label, rows) in sections) {
+      results.add(
+        ShellVibeSectionLabel(
+          label: label,
+          padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
+        ),
+      );
+      for (final entry in rows) {
+        final index = position++;
+        results.add(
+          KeyedSubtree(
+            key: _rowKey(index),
+            child: _PaletteRow(
+              key: entry.key,
+              icon: entry.icon,
+              label: entry.label,
+              detail: entry.detail,
+              trailing: entry.trailing,
+              highlighted: index == selected,
+              onTap: entry.onRun,
+            ),
+          ),
+        );
+      }
+    }
 
     // Pinned near the top rather than centred: the palette is a jump target,
     // and the eye should land on the query line, not the middle of the screen.
@@ -761,29 +910,54 @@ class _CommandPaletteState extends ConsumerState<_CommandPalette> {
                     Icon(LucideIcons.search, size: 18, color: tokens.brand),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: TextField(
-                        key: const Key('command_palette_search'),
-                        autofocus: true,
-                        cursorColor: tokens.brand,
-                        cursorWidth: 2,
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: tokens.textPrimary,
-                        ),
-                        decoration: InputDecoration(
-                          isDense: true,
-                          filled: false,
-                          border: InputBorder.none,
-                          enabledBorder: InputBorder.none,
-                          focusedBorder: InputBorder.none,
-                          contentPadding: EdgeInsets.zero,
-                          hintText: 'Search hosts, sessions, files and tools…',
-                          hintStyle: TextStyle(
+                      // Bound above the field, which leaves the arrow keys to
+                      // its own caret movement otherwise. A single-line query
+                      // has no line above or below to move to.
+                      child: CallbackShortcuts(
+                        bindings: {
+                          const SingleActivator(
+                            LogicalKeyboardKey.arrowDown,
+                          ): () =>
+                              _moveSelection(1, entries.length),
+                          const SingleActivator(
+                            LogicalKeyboardKey.arrowUp,
+                          ): () =>
+                              _moveSelection(-1, entries.length),
+                        },
+                        child: TextField(
+                          key: const Key('command_palette_search'),
+                          autofocus: true,
+                          cursorColor: tokens.brand,
+                          cursorWidth: 2,
+                          style: TextStyle(
                             fontSize: 16,
-                            color: tokens.textSubtle,
+                            color: tokens.textPrimary,
                           ),
+                          decoration: InputDecoration(
+                            isDense: true,
+                            filled: false,
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            contentPadding: EdgeInsets.zero,
+                            hintText:
+                                'Search hosts, sessions, files and tools…',
+                            hintStyle: TextStyle(
+                              fontSize: 16,
+                              color: tokens.textSubtle,
+                            ),
+                          ),
+                          onChanged: (value) => setState(() {
+                            query = value;
+                            _selected = 0;
+                          }),
+                          // Non-null so Enter with nothing to run keeps the
+                          // focus in the query instead of dropping it.
+                          onEditingComplete: () {},
+                          onSubmitted: (_) {
+                            if (selected >= 0) entries[selected].onRun();
+                          },
                         ),
-                        onChanged: (value) => setState(() => query = value),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -795,103 +969,7 @@ class _CommandPaletteState extends ConsumerState<_CommandPalette> {
                 child: ListView(
                   shrinkWrap: true,
                   padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
-                  children: [
-                    if (hasBookmarks) ...[
-                      const ShellVibeSectionLabel(
-                        label: 'Bookmarks',
-                        padding: EdgeInsets.fromLTRB(10, 8, 10, 6),
-                      ),
-                      for (
-                        var index = 0;
-                        index < bookmarkedHosts.length;
-                        index++
-                      )
-                        _PaletteRow(
-                          key: Key(
-                            'palette_bookmark_${bookmarkedHosts[index].id}',
-                          ),
-                          icon: LucideIcons.star,
-                          label: bookmarkedHosts[index].label,
-                          detail: bookmarkedHosts[index].hostname,
-                          trailing: bookmarkedHosts[index].protocol,
-                          // The first row of the whole list is what Enter runs,
-                          // so it is the only one that carries the brand ring
-                          // and says so.
-                          highlighted: index == 0,
-                          onTap: () =>
-                              widget.onHostSelected(bookmarkedHosts[index]),
-                        ),
-                      for (final template in bookmarkedTemplates)
-                        _PaletteRow(
-                          key: Key('palette_bookmark_${template.id}'),
-                          icon: LucideIcons.layoutTemplate,
-                          label: template.name,
-                          detail: templateSummary(template),
-                          highlighted:
-                              bookmarkedHosts.isEmpty &&
-                              template == bookmarkedTemplates.first,
-                          onTap: () => widget.onTemplateSelected(template),
-                        ),
-                    ],
-                    if (otherHosts.isNotEmpty) ...[
-                      const ShellVibeSectionLabel(
-                        label: 'Hosts',
-                        padding: EdgeInsets.fromLTRB(10, 8, 10, 6),
-                      ),
-                      for (var index = 0; index < otherHosts.length; index++)
-                        _PaletteRow(
-                          key: Key('palette_host_${otherHosts[index].id}'),
-                          icon: LucideIcons.server,
-                          label: otherHosts[index].label,
-                          detail: otherHosts[index].hostname,
-                          trailing: otherHosts[index].protocol,
-                          highlighted: !hasBookmarks && index == 0,
-                          onTap: () => widget.onHostSelected(otherHosts[index]),
-                        ),
-                    ],
-                    if (otherTemplates.isNotEmpty) ...[
-                      const ShellVibeSectionLabel(
-                        label: 'Templates',
-                        padding: EdgeInsets.fromLTRB(10, 8, 10, 6),
-                      ),
-                      for (
-                        var index = 0;
-                        index < otherTemplates.length;
-                        index++
-                      )
-                        _PaletteRow(
-                          key: Key(
-                            'palette_template_${otherTemplates[index].id}',
-                          ),
-                          icon: LucideIcons.layoutTemplate,
-                          label: otherTemplates[index].name,
-                          detail: templateSummary(otherTemplates[index]),
-                          highlighted:
-                              !hasBookmarks && otherHosts.isEmpty && index == 0,
-                          onTap: () =>
-                              widget.onTemplateSelected(otherTemplates[index]),
-                        ),
-                    ],
-                    if (filtered.isNotEmpty) ...[
-                      const ShellVibeSectionLabel(
-                        label: 'Modules',
-                        padding: EdgeInsets.fromLTRB(10, 8, 10, 6),
-                      ),
-                      for (var index = 0; index < filtered.length; index++)
-                        _PaletteRow(
-                          icon: filtered[index].$2.icon,
-                          label: filtered[index].$2.label,
-                          detail: filtered[index].$2.tooltip.split(' (').first,
-                          trailing: filtered[index].$2.shortcut,
-                          highlighted:
-                              !hasBookmarks &&
-                              otherHosts.isEmpty &&
-                              otherTemplates.isEmpty &&
-                              index == 0,
-                          onTap: () => widget.onSelected(filtered[index].$1),
-                        ),
-                    ],
-                  ],
+                  children: results,
                 ),
               ),
               Container(
@@ -918,8 +996,6 @@ class _CommandPaletteState extends ConsumerState<_CommandPalette> {
                       Text('↑↓ move'),
                       SizedBox(width: 18),
                       Text('↵ run'),
-                      SizedBox(width: 18),
-                      Text('⇥ actions'),
                       Spacer(),
                       Text('⌘K'),
                     ],
@@ -987,26 +1063,46 @@ class _PaletteRow extends StatelessWidget {
                 color: highlighted ? tokens.brandBright : tokens.textMuted,
               ),
               const SizedBox(width: 12),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: highlighted
-                      ? tokens.textPrimary
-                      : tokens.textSecondary,
+              // The label keeps its full width up to a cap and the detail gets
+              // whatever is left; a long host name truncates rather than
+              // pushing the row past its edge.
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, constraints) => Row(
+                    children: [
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: constraints.maxWidth * 0.6,
+                        ),
+                        child: Text(
+                          label,
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: highlighted
+                                ? tokens.textPrimary
+                                : tokens.textSecondary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          detail,
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.ellipsis,
+                          style: shellvibeMono(context, size: 11),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
-              Flexible(
-                child: Text(
-                  detail,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: shellvibeMono(context, size: 11),
-                ),
-              ),
-              const Spacer(),
               if (highlighted) ...[
                 Text(
                   'open',
