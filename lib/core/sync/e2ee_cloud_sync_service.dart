@@ -981,7 +981,10 @@ class E2EECloudSyncService {
     if (local.logicalClock != rowClock) {
       return local.logicalClock > rowClock;
     }
-    return localDeviceId.compareTo(rowDeviceId) > 0;
+    // The same clock from this device is this very change: a snapshot taken
+    // here while it waited in the outbox. Dropping it would keep it off every
+    // other device, which only the outbox can still bring it to.
+    return localDeviceId.compareTo(rowDeviceId) >= 0;
   }
 
   /// The version of every row of [types] this device holds, as

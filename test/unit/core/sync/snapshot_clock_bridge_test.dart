@@ -230,6 +230,41 @@ void main() {
       expect(version!.logicalClock, 30);
       expect(version.deviceId, 'source-device');
     });
+
+    test('stays when the snapshot was taken here while it waited', () async {
+      // The row's version in the snapshot is the change itself: same clock,
+      // same device. Settled as a tie it was dropped, and no other device
+      // would ever have received it.
+      final journal = SyncJournal(db: target, deviceId: 'target-device');
+      target.syncJournal = journal;
+      await addHostLabelled(target, 'h1', 'local edit');
+      final clock = (await journal.readState()).lastSeenClock;
+
+      await sync.importEncryptedBackup(
+        backupPackageJson: await sync.exportEncryptedBackup(
+          db: target,
+          masterPassword: passphrase,
+          syncClock: clock,
+        ),
+        db: target,
+        masterPassword: passphrase,
+        snapshotDeviceId: 'target-device',
+      );
+
+      expect((await hostOn(target, 'h1')).label, 'local edit');
+      final pending = await journal.pendingFor(
+        entityType: 'hosts',
+        entityId: 'h1',
+      );
+      expect(pending, isNotNull);
+      expect(pending!.logicalClock, clock);
+      final version = await journal.versionFor(
+        entityType: 'hosts',
+        entityId: 'h1',
+      );
+      expect(version!.logicalClock, clock);
+      expect(version.deviceId, 'target-device');
+    });
   });
 
   test('restored rows stand at the snapshot clock', () async {
