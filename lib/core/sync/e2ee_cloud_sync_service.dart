@@ -227,6 +227,13 @@ class E2EECloudSyncService {
     Uint8List? syncKey,
     int? syncClock,
   }) async {
+    // Read before the rows, not after. A pull that lands while they are being
+    // read leaves the snapshot ahead of this position rather than behind it,
+    // and applying the operations after it a second time changes nothing.
+    final syncSeq = syncClock == null
+        ? null
+        : (await db.syncJournal?.readState())?.pulledThroughSeq;
+
     final workspaces = await db.select(db.workspaces).get();
     final hostGroups = await db.select(db.hostGroups).get();
 
@@ -241,6 +248,9 @@ class E2EECloudSyncService {
       // too far behind restores the snapshot and resumes from here instead of
       // replaying a log that has already been pruned.
       'sync_clock': ?syncClock,
+      // The same place as a position in the server's log, which is what the
+      // cursor pages by. Absent while this device has none yet.
+      'sync_seq': ?syncSeq,
       'workspaces': workspaces.map(SyncRowCodec.workspace).toList(),
       'host_groups': hostGroups.map(SyncRowCodec.hostGroup).toList(),
     };
@@ -890,6 +900,12 @@ class E2EECloudSyncService {
         if (syncClock > state.pulledThroughClock) {
           await journal.acknowledgePull(syncClock);
         }
+
+        // A snapshot that does not carry a position forgets this device's,
+        // and the next pull works one out from the clock above. Keeping it
+        // would be worse when this restore is the way out of an expired
+        // cursor: the position is the thing that expired.
+        await journal.restorePullSeq((data['sync_seq'] as num?)?.toInt());
       }
     });
 

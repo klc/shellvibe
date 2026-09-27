@@ -479,8 +479,22 @@ class SyncState extends Table {
 
   /// Clock the last pull was acknowledged at. Only ever advanced after the
   /// operations it covers have been written.
+  ///
+  /// The cursor of a server that predates [pulledThroughSeq], and the
+  /// starting point when moving to it. A clock is the wrong thing to page by:
+  /// each operation keeps the clock it was recorded with, so one sent late --
+  /// made offline, or held back by a locked vault -- lands below a cursor
+  /// that has already moved past it and is never offered.
   IntColumn get pulledThroughClock =>
       integer().withDefault(const Constant(0))();
+
+  /// Position in the server's log the last pull was acknowledged at.
+  ///
+  /// The server numbers operations in the order they were stored, so a late
+  /// one still lands after the cursor. Null until the first pull that talks in
+  /// positions, which starts from [pulledThroughClock] instead. Advanced under
+  /// the same rule as the clock: never before the rows are written.
+  IntColumn get pulledThroughSeq => integer().nullable()();
 
   /// How far this device has got through joining automatic sync.
   ///

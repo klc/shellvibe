@@ -529,9 +529,9 @@ class SyncNotifier extends _$SyncNotifier {
       _publish((s) => s.copyWith(running: true, clearError: true));
       _heldByVault = false;
 
-      int? pulledThrough;
+      ({int clock, int? seq})? pulledThrough;
       try {
-        pulledThrough = (await engine.journal.readState()).pulledThroughClock;
+        pulledThrough = await _cursorOf(engine);
 
         final result = pullFirst
             ? await _pullThenPush(engine)
@@ -601,14 +601,22 @@ class SyncNotifier extends _$SyncNotifier {
     return _inFlight;
   }
 
+  Future<({int clock, int? seq})> _cursorOf(SyncEngine engine) async {
+    final state = await engine.journal.readState();
+
+    return (clock: state.pulledThroughClock, seq: state.pulledThroughSeq);
+  }
+
   /// Re-reads the lists when a pass that failed had already applied rows.
   ///
   /// The cursor moves only inside the transaction that writes a page, so a
   /// cursor that moved is a page that landed.
-  Future<void> _invalidateIfPulled(SyncEngine engine, int? before) async {
+  Future<void> _invalidateIfPulled(
+    SyncEngine engine,
+    ({int clock, int? seq})? before,
+  ) async {
     try {
-      final after = (await engine.journal.readState()).pulledThroughClock;
-      if (before != null && after == before) return;
+      if (before != null && await _cursorOf(engine) == before) return;
     } on Object {
       // Unknown counts as moved: a needless re-read beats a stale list.
     }

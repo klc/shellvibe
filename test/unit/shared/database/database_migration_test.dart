@@ -89,7 +89,7 @@ void main() {
         final appDb = AppDatabase(NativeDatabase(tempDbFile));
         db = appDb;
 
-        expect(appDb.schemaVersion, equals(13));
+        expect(appDb.schemaVersion, equals(14));
 
         // The v10 tables have to exist after a migration, not only after a
         // fresh create: a device that upgrades and then makes a change would
@@ -476,6 +476,35 @@ void main() {
       );
     });
 
+    test('upgrading to v14 keeps the clock cursor and adds no position', () {
+      // A device already syncing keeps the clock cursor it paged by. Its
+      // first pull after the upgrade asks the server to start positions from
+      // there, which is what a null position means.
+      final rawDb = sqlite3.open(tempDbFile.path);
+      rawDb.execute('''
+        CREATE TABLE IF NOT EXISTS "sync_state" (
+          "id" INTEGER NOT NULL PRIMARY KEY,
+          "last_seen_clock" INTEGER NOT NULL DEFAULT 0,
+          "pulled_through_clock" INTEGER NOT NULL DEFAULT 0,
+          "join_state" TEXT NOT NULL DEFAULT 'none'
+        );
+      ''');
+      rawDb.execute(
+        'INSERT INTO sync_state (id, last_seen_clock, pulled_through_clock, '
+        "join_state) VALUES (1, 42, 40, 'done');",
+      );
+      rawDb.execute('PRAGMA user_version = 13;');
+      rawDb.close();
+
+      final appDb = AppDatabase(NativeDatabase(tempDbFile));
+      db = appDb;
+
+      final row = appDb.select(appDb.syncState).getSingle();
+      expect(row.then((r) => r.pulledThroughSeq), completion(isNull));
+      expect(row.then((r) => r.pulledThroughClock), completion(40));
+      expect(row.then((r) => r.joinState), completion('done'));
+    });
+
     test('upgrading to v13 creates the vault_env_vars table', () async {
       final rawDb = sqlite3.open(tempDbFile.path);
       rawDb.execute('''
@@ -496,7 +525,7 @@ void main() {
       final appDb = AppDatabase(NativeDatabase(tempDbFile));
       db = appDb;
 
-      expect(appDb.schemaVersion, equals(13));
+      expect(appDb.schemaVersion, equals(14));
       expect(await appDb.vaultEnvVarsDao.getByWorkspace('default'), isEmpty);
 
       await appDb.vaultEnvVarsDao.insert(

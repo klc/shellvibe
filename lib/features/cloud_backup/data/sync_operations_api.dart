@@ -59,6 +59,13 @@ final class SyncOperationPage {
   /// Highest clock in this page, or the cursor that was sent when it is empty.
   final int maxClock;
 
+  /// Position of the last operation in this page, or the position that was
+  /// asked for when it is empty.
+  ///
+  /// Null from a server that predates positions and answered by clock; the
+  /// page is then ordered by clock and has to be acknowledged that way.
+  final int? maxSeq;
+
   /// True while the server still has operations past this page.
   ///
   /// Read from the server rather than inferred from the row count: comparing
@@ -70,6 +77,7 @@ final class SyncOperationPage {
     required this.operations,
     required this.maxClock,
     required this.hasMore,
+    this.maxSeq,
   });
 
   bool get isEmpty => operations.isEmpty;
@@ -83,7 +91,14 @@ final class SyncOperationPage {
 abstract interface class SyncOperationTransport {
   Future<int> push(List<SyncOperationDto> operations);
 
-  Future<SyncOperationPage> pull({required int sinceClock, int limit});
+  /// Reads the operations after position [sinceSeq], or -- while this device
+  /// has no position yet -- asks the server to start positions from
+  /// [sinceClock].
+  Future<SyncOperationPage> pull({
+    required int sinceClock,
+    int? sinceSeq,
+    int limit,
+  });
 }
 
 /// The `/sync/operations` half of the v1 API.
@@ -113,18 +128,28 @@ final class SyncOperationsApi implements SyncOperationTransport {
     return response.metaInt('count') ?? operations.length;
   }
 
-  /// Reads operations after [sinceClock].
+  /// Reads operations after position [sinceSeq].
+  ///
+  /// Without one, `cursor=seq` asks the server to work out where positions
+  /// start for a device whose cursor is still [sinceClock]. The clock goes
+  /// along either way: a server that predates positions ignores the rest and
+  /// answers by clock, as it always did.
   ///
   /// Throws `ApiException` with `isSyncCursorExpired` when the log no longer
   /// reaches back this far, which means restoring from the snapshot instead.
   @override
   Future<SyncOperationPage> pull({
     required int sinceClock,
+    int? sinceSeq,
     int limit = defaultLimit,
   }) async {
     final response = await client.get(
       '/sync/operations',
-      query: {'since_clock': '$sinceClock', 'limit': '$limit'},
+      query: {
+        'since_clock': '$sinceClock',
+        if (sinceSeq != null) 'since_seq': '$sinceSeq' else 'cursor': 'seq',
+        'limit': '$limit',
+      },
     );
 
     return SyncOperationPage(
@@ -132,6 +157,7 @@ final class SyncOperationsApi implements SyncOperationTransport {
           .map(SyncOperationDto.fromJson)
           .toList(growable: false),
       maxClock: response.metaInt('max_clock') ?? sinceClock,
+      maxSeq: response.metaInt('max_seq'),
       // Absent on a server that predates the field. Treating that as "no more"
       // is the safe reading: the client stops early and picks the rest up on
       // the next pull, rather than looping forever on a page it cannot end.

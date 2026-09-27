@@ -572,9 +572,12 @@ final class _Log implements SyncOperationTransport {
     return batch.length;
   }
 
+  /// Paged by position, the order the log stored them in. Nothing is pruned
+  /// here, so a device without a position starts from the beginning.
   @override
   Future<SyncOperationPage> pull({
     required int sinceClock,
+    int? sinceSeq,
     int limit = 100,
   }) async {
     if (expireCursors) {
@@ -585,21 +588,18 @@ final class _Log implements SyncOperationTransport {
       );
     }
 
-    final ordered = [...operations]
-      ..sort((a, b) {
-        final byClock = a.logicalClock.compareTo(b.logicalClock);
-
-        return byClock != 0 ? byClock : a.id.compareTo(b.id);
-      });
-
-    final after = ordered
-        .where((o) => o.logicalClock > sinceClock)
-        .toList(growable: false);
+    final start = sinceSeq ?? 0;
+    final after = operations.skip(start).toList(growable: false);
     final page = after.take(limit).toList(growable: false);
+    final maxClock = page.fold(
+      sinceClock,
+      (top, o) => o.logicalClock > top ? o.logicalClock : top,
+    );
 
     return SyncOperationPage(
       operations: page,
-      maxClock: page.isEmpty ? sinceClock : page.last.logicalClock,
+      maxClock: maxClock,
+      maxSeq: start + page.length,
       hasMore: after.length > page.length,
     );
   }

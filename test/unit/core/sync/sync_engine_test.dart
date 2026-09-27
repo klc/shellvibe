@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:drift/drift.dart' show Value;
@@ -300,7 +301,7 @@ void main() {
 
       await expectLater(b.engine.pull(), throwsStateError);
       expect(await b.host('h1'), isNull);
-      expect((await b.journal.readState()).pulledThroughClock, 0);
+      expect((await b.journal.readState()).pulledThroughSeq, isNull);
 
       locked = false;
       await b.engine.pull();
@@ -332,7 +333,7 @@ void main() {
 
       await b.writeIdentity('i1', password: 'hunter2');
       await a.writeHost('h1');
-      await a.engine.push();
+      await a.engine.syncOnce();
 
       await expectLater(
         b.engine.syncOnce(),
@@ -342,9 +343,11 @@ void main() {
       expect(await b.journal.pending(), hasLength(1));
       expect(log.operations.where((o) => o.deviceId == 'device-b'), isEmpty);
 
+      // Sent after a has already pulled past its clock, and it still has to
+      // arrive: that is what paging by position is for.
       locked = false;
       await b.engine.syncOnce();
-      await a.engine.pull();
+      await a.engine.syncOnce();
 
       final stored = (await a.identity('i1'))!.passwordEncrypted!;
       expect(await a.open(stored), 'hunter2');
@@ -360,6 +363,45 @@ void main() {
       await expectLater(a.engine.pull(), throwsA(isA<SyncCursorExpired>()));
     });
 
+    test('an operation sent late still arrives', () async {
+      // b's edit is recorded at clock 1 and sent only after a has pulled
+      // through clock 2. Paged by clock, a would never be offered it.
+      final a = await device('device-a');
+      final b = await device('device-b');
+
+      await b.writeHost('late', label: 'from b');
+      await a.writeHost('h1');
+      await a.writeHost('h2');
+      await a.engine.syncOnce();
+      await b.engine.syncOnce();
+      await a.engine.syncOnce();
+
+      expect((await a.host('late'))!.label, 'from b');
+    });
+
+    test('an empty log still gives a position to start from', () async {
+      final a = await device('device-a');
+
+      await a.engine.pull();
+
+      expect((await a.journal.readState()).pulledThroughSeq, 0);
+    });
+
+    test('a server that pages by clock is still followed by clock', () async {
+      final a = await device('device-a');
+      final b = await device('device-b');
+      log.answersByClock = true;
+
+      await a.writeHost('h1');
+      await a.engine.syncOnce();
+      await b.engine.pull();
+
+      final state = await b.journal.readState();
+      expect(await b.host('h1'), isNotNull);
+      expect(state.pulledThroughClock, greaterThan(0));
+      expect(state.pulledThroughSeq, isNull);
+    });
+
     test('the cursor only moves after the rows are written', () async {
       final a = await device('device-a');
       final b = await device('device-b');
@@ -367,11 +409,11 @@ void main() {
       await a.writeHost('h1');
       await a.engine.syncOnce();
 
-      final before = (await b.journal.readState()).pulledThroughClock;
+      final before = (await b.journal.readState()).pulledThroughSeq;
       await b.engine.pull();
-      final after = (await b.journal.readState()).pulledThroughClock;
+      final after = (await b.journal.readState()).pulledThroughSeq;
 
-      expect(before, 0);
+      expect(before, isNull);
       expect(after, greaterThan(0));
       expect(await b.host('h1'), isNotNull);
     });
@@ -423,6 +465,9 @@ void main() {
         await b.engine.push();
         await c.engine.push();
 
+        // Positions have no ties; this is the clock-paged log of an older
+        // server, and the arithmetic that still has to cope with it.
+        log.answersByClock = true;
         log.pageCap = 3;
 
         final d = await device('device-d');
@@ -671,6 +716,12 @@ final class _Log implements SyncOperationTransport {
   /// what makes a page boundary land somewhere the client did not choose.
   int? pageCap;
 
+  /// Answers the way a server that predates positions does: ordered and
+  /// paged by clock, with no `max_seq`.
+  bool answersByClock = false;
+
+  int get _cap => pageCap ?? 1 << 30;
+
   @override
   Future<int> push(List<SyncOperationDto> batch) async {
     operations.addAll(batch);
@@ -681,6 +732,7 @@ final class _Log implements SyncOperationTransport {
   @override
   Future<SyncOperationPage> pull({
     required int sinceClock,
+    int? sinceSeq,
     int limit = 100,
   }) async {
     if (expireCursors) {
@@ -691,6 +743,27 @@ final class _Log implements SyncOperationTransport {
       );
     }
 
+    if (answersByClock) return _pullByClock(sinceClock, limit);
+
+    // A position is the order the log stored them in, which is the order of
+    // this list. Nothing is ever pruned here, so a device that has no
+    // position yet starts from the beginning.
+    final start = sinceSeq ?? 0;
+    final after = [
+      for (var i = start; i < operations.length; i++) (i + 1, operations[i]),
+    ];
+    final page = after.take(limit < _cap ? limit : _cap).toList();
+    final clocks = page.map((entry) => entry.$2.logicalClock);
+
+    return SyncOperationPage(
+      operations: [for (final entry in page) entry.$2],
+      maxClock: page.isEmpty ? sinceClock : clocks.reduce(max),
+      maxSeq: page.isEmpty ? start : page.last.$1,
+      hasMore: after.length > page.length,
+    );
+  }
+
+  SyncOperationPage _pullByClock(int sinceClock, int limit) {
     // Ordered the way the server orders it, which is what the client's cursor
     // arithmetic depends on.
     final ordered = [...operations]
@@ -704,7 +777,7 @@ final class _Log implements SyncOperationTransport {
         .where((o) => o.logicalClock > sinceClock)
         .toList(growable: false);
     final page = after
-        .take(pageCap == null || pageCap! > limit ? limit : pageCap!)
+        .take(limit < _cap ? limit : _cap)
         .toList(growable: false);
 
     return SyncOperationPage(

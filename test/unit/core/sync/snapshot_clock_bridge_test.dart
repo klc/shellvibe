@@ -341,6 +341,83 @@ void main() {
     );
   });
 
+  group('the position cursor', () {
+    // The server pages its log by position, and a snapshot has to say which
+    // position its rows cover, or a restored device either replays the log
+    // or skips the part the snapshot did not have.
+    Future<SyncJournal> journalOf(AppDatabase db, String id) async {
+      final journal = SyncJournal(db: db, deviceId: id);
+      db.syncJournal = journal;
+
+      return journal;
+    }
+
+    test('restoring adopts the position the snapshot was taken at', () async {
+      await addHost(source, 'h1');
+      final from = await journalOf(source, 'source-device');
+      await from.acknowledgePullSeq(30, maxClock: 42);
+      final to = await journalOf(target, 'target-device');
+
+      await sync.importEncryptedBackup(
+        backupPackageJson: await exportAt(42),
+        db: target,
+        masterPassword: passphrase,
+      );
+
+      expect((await to.readState()).pulledThroughSeq, 30);
+    });
+
+    test('an older snapshot does not move it back', () async {
+      await addHost(source, 'h1');
+      final from = await journalOf(source, 'source-device');
+      await from.acknowledgePullSeq(30, maxClock: 42);
+      final to = await journalOf(target, 'target-device');
+      await to.acknowledgePullSeq(50, maxClock: 60);
+
+      await sync.importEncryptedBackup(
+        backupPackageJson: await exportAt(42),
+        db: target,
+        masterPassword: passphrase,
+      );
+
+      expect((await to.readState()).pulledThroughSeq, 50);
+    });
+
+    test('a snapshot without one makes the device work it out again', () async {
+      // Written by a build that predates positions. When this restore is the
+      // way out of an expired cursor, keeping the position would keep the
+      // thing that expired; the clock cursor is what the server can start
+      // positions from.
+      await addHost(source, 'h1');
+      final to = await journalOf(target, 'target-device');
+      await to.acknowledgePullSeq(50, maxClock: 60);
+
+      await sync.importEncryptedBackup(
+        backupPackageJson: await exportAt(42),
+        db: target,
+        masterPassword: passphrase,
+      );
+
+      expect((await to.readState()).pulledThroughSeq, isNull);
+    });
+
+    test('a backup with no place in the log leaves it alone', () async {
+      await addHost(source, 'h1');
+      final from = await journalOf(source, 'source-device');
+      await from.acknowledgePullSeq(30, maxClock: 42);
+      final to = await journalOf(target, 'target-device');
+      await to.acknowledgePullSeq(50, maxClock: 60);
+
+      await sync.importEncryptedBackup(
+        backupPackageJson: await exportAt(null),
+        db: target,
+        masterPassword: passphrase,
+      );
+
+      expect((await to.readState()).pulledThroughSeq, 50);
+    });
+  });
+
   test('a restore without a journal attached still restores', () async {
     // Sync is off on this device. The rows have to arrive anyway.
     await addHost(source, 'h1');

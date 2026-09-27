@@ -196,6 +196,7 @@ final class SyncEngine {
       try {
         batch = await api.pull(
           sinceClock: state.pulledThroughClock,
+          sinceSeq: state.pulledThroughSeq,
           limit: SyncOperationsApi.defaultLimit,
         );
       } on ApiException catch (e) {
@@ -203,7 +204,15 @@ final class SyncEngine {
         rethrow;
       }
 
-      if (batch.isEmpty) break;
+      if (batch.isEmpty) {
+        // A first answer in positions says where they start even when there
+        // is nothing after it. Kept, so the next pull asks by position.
+        final start = batch.maxSeq;
+        if (start != null && state.pulledThroughSeq == null) {
+          await journal.acknowledgePullSeq(start, maxClock: batch.maxClock);
+        }
+        break;
+      }
 
       final outcome = await _apply(batch, sinceClock: state.pulledThroughClock);
       pulled += outcome.pulled;
@@ -338,8 +347,13 @@ final class SyncEngine {
       // The clock still moves to the top of the page whatever the cursor
       // does. Lamport: this device has *seen* everything the page carried,
       // and the next change it makes has to be ordered after it.
-      await journal.observeClock(batch.maxClock);
-      await journal.acknowledgePull(_cursorFor(batch, sinceClock));
+      final maxSeq = batch.maxSeq;
+      if (maxSeq != null) {
+        await journal.acknowledgePullSeq(maxSeq, maxClock: batch.maxClock);
+      } else {
+        await journal.observeClock(batch.maxClock);
+        await journal.acknowledgePull(_cursorFor(batch, sinceClock));
+      }
     });
 
     return SyncResult(
@@ -350,7 +364,8 @@ final class SyncEngine {
     );
   }
 
-  /// How far to move the cursor after applying [batch].
+  /// How far to move the clock cursor after applying [batch], for a server
+  /// that pages by clock rather than by position.
   ///
   /// Two devices produce the same logical clock all the time -- the clock is
   /// a per-device counter, so both start at 1 -- and the server's cursor is

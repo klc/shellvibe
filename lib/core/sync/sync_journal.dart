@@ -541,6 +541,35 @@ final class SyncJournal {
     );
   }
 
+  /// Marks the log as pulled through position [seq], having seen clocks up
+  /// to [maxClock] on the way.
+  ///
+  /// The same rule as [acknowledgePull]: only after the operations it covers
+  /// are durably written.
+  Future<void> acknowledgePullSeq(int seq, {required int maxClock}) async {
+    await observeClock(maxClock);
+
+    await (db.update(db.syncState)..where((t) => t.id.equals(1))).write(
+      SyncStateCompanion(pulledThroughSeq: Value(seq)),
+    );
+  }
+
+  /// Sets where a restored snapshot leaves the position cursor.
+  ///
+  /// [seq] null forgets it, and the next pull starts again from the clock
+  /// cursor. Otherwise it never moves backwards, for the reason the clock
+  /// does not: an older snapshot restored on purpose must not replay a log
+  /// this device has already applied past.
+  Future<void> restorePullSeq(int? seq) async {
+    final state = await readState();
+    final current = state.pulledThroughSeq;
+    if (seq != null && current != null && seq <= current) return;
+
+    await (db.update(db.syncState)..where((t) => t.id.equals(1))).write(
+      SyncStateCompanion(pulledThroughSeq: Value(seq)),
+    );
+  }
+
   Future<int> _nextClock() async {
     final state = await readState();
     final next = state.lastSeenClock + 1;
