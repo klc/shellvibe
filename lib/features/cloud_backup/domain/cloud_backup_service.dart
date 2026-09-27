@@ -313,7 +313,7 @@ final class CloudBackupService {
       // also where a joining device learns the vault's sync key. It cannot be
       // derived or invented: every device has to hold the same one, and the
       // only place it exists is inside an envelope.
-      return await BackupEnvelope().open(
+      return await sync.envelope.open(
         envelopeJson: ciphertext,
         secret: secret,
         method: unlockWith,

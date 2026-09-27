@@ -209,6 +209,11 @@ class E2EECloudSyncService {
            envelope ??
            BackupEnvelope(crypto: cryptoEngine ?? EncryptionEngine());
 
+  /// The envelope this service seals and opens with, and so the one anything
+  /// else opening its backups has to use. Opening with a fresh one would
+  /// derive keys under different KDF settings than sealed them.
+  BackupEnvelope get envelope => _envelope;
+
   /// Exports an encrypted Zero-Knowledge backup package from [db] using [masterPassword].
   ///
   /// [scope] selects what goes in. Workspaces and host groups are always

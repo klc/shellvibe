@@ -224,7 +224,12 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
       // A device that has been closed longer than the interval is due the
       // moment it opens. There is no background task, so this is the only
       // moment a scheduled backup can happen at all.
-      unawaited(maybeBackUpOnSchedule());
+      //
+      // On the event queue, not here: the schedule reads the frequency from
+      // `state`, which is still loading until this method returns. Called
+      // inline it read "off" and returned, so a cold start never backed up
+      // and the first chance was the timer, a quarter of an hour later.
+      Future(() => unawaited(maybeBackUpOnSchedule()));
 
       return CloudBackupState(
         lastKnownRevision: lastKnownRevision,
@@ -708,12 +713,21 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
     unawaited(maybeBackUpOnSchedule());
   }
 
+  /// The scheduled backup already running, if one is.
+  Future<void>? _scheduledRun;
+
   /// Backs up if one is due and anything has changed.
   ///
-  /// Called when the app opens, when it comes back to the foreground, and on
-  /// a timer while it is open. Safe to call as often as any of those happen:
-  /// everything that would make it a bad idea is checked here.
-  Future<void> maybeBackUpOnSchedule() async {
+  /// Called when the app opens, when it comes back to the foreground, on a
+  /// timer while it is open, and when the frequency changes. Safe to call as
+  /// often as any of those happen: everything that would make it a bad idea
+  /// is checked here, and a call that lands while one is running joins it.
+  /// Two overlapping runs would each seal the vault, and whichever finished
+  /// second read the other's result as its own and left the mark unwritten.
+  Future<void> maybeBackUpOnSchedule() =>
+      _scheduledRun ??= _backUpIfDue().whenComplete(() => _scheduledRun = null);
+
+  Future<void> _backUpIfDue() async {
     final frequency = state.value?.frequency ?? BackupFrequency.off;
     final interval = frequency.interval;
     if (interval == null) return;
