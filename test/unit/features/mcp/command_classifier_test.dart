@@ -88,16 +88,10 @@ void main() {
       );
     });
 
-    test('mysql -e is not interactive, bare mysql is interactive', () {
-      // Discrepancy vs. the plan's expectation: `mysql -e "SELECT 1"` does
-      // NOT come out readonlySafe. `_checkInteractive` correctly skips it
-      // (the -e flag is present), but the segment then falls all the way to
-      // `_checkDatabase`'s `_mysqlExecute` pattern, which matches *any*
-      // `mysql -e/--execute` invocation regardless of whether the SQL is a
-      // read or a write. So a `mysql -e "SELECT 1"` read query is classified
-      // `database`, not `readonlySafe`. Asserted against the implementation
-      // below, not against the plan's "not interactive" phrasing (which is
-      // technically true but incomplete).
+    test('mysql -e is a database command, bare mysql is interactive', () {
+      // `-e` runs a statement and exits, so it is not interactive — but the
+      // classifier does not parse SQL, and the same flag runs a DROP as
+      // readily as a SELECT. Every `-e` is treated as a possible write.
       final executeResult = classifier.classify('mysql -e "SELECT 1"');
       expect(executeResult.category, isNot(RiskCategory.interactive));
       expect(executeResult.category, RiskCategory.database);
@@ -121,21 +115,14 @@ void main() {
       },
     );
 
-    test('journalctl -u is readonlySafe; journalctl --vacuum-time is '
-        'classified per the implementation (destructiveFs, not '
-        'serviceControl)', () {
+    test('journalctl -u reads logs; journalctl --vacuum-time deletes them', () {
       expect(
         classifier.classify('journalctl -u nginx').category,
         RiskCategory.readonlySafe,
       );
 
-      // Discrepancy vs. the plan's "serviceControl-or-destructive" hedge:
-      // `_checkDestructiveFs` (which matches `_journalctlVacuum`) runs
-      // strictly before `_checkServiceControl` never even gets a look in
-      // — `_classifySegment`'s check order is privilege, secretRead,
-      // interactive, destructiveFs, serviceControl, ... — so the
-      // implementation always produces destructiveFs for this command,
-      // never serviceControl.
+      // Vacuuming removes journal files from disk, which is a filesystem
+      // deletion rather than a change to a running service.
       final vacuumResult = classifier.classify('journalctl --vacuum-time=1d');
       expect(vacuumResult.category, RiskCategory.destructiveFs);
     });

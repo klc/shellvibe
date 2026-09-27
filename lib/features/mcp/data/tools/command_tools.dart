@@ -148,6 +148,7 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
       hostId: session.hostId,
       clientId: ctx.clientId,
       hostGroupId: hostRow?.groupId,
+      connectionScopeId: ctx.connectionScopeId,
     );
 
     final decision = await policyEngine.evaluate(
@@ -319,7 +320,7 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
 
       final outputBytes =
           utf8.encode(result.stdout).length + utf8.encode(result.stderr).length;
-      final outputSha256 = _sha256Hex('${result.stdout} ${result.stderr}');
+      final outputSha256 = _sha256Hex('${result.stdout}\u0000${result.stderr}');
 
       await _audit(
         ctx: ctx,

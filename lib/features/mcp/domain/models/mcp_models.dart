@@ -178,6 +178,10 @@ class CommandContext {
   /// does nothing.
   final String? hostGroupId;
 
+  /// The MCP connection the command arrived on. A "this session" approval
+  /// only answers for the connection that recorded it.
+  final String? connectionScopeId;
+
   const CommandContext({
     required this.command,
     required this.cwd,
@@ -186,6 +190,7 @@ class CommandContext {
     required this.hostId,
     required this.clientId,
     this.hostGroupId,
+    this.connectionScopeId,
   });
 }
 

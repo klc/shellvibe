@@ -32,7 +32,7 @@ String riskCategoryLabel(RiskCategory category) => switch (category) {
 /// Why this particular command may not be remembered, when it may not be.
 ///
 /// [CommandApprovalRequest.canRemember] is a plain bool — it says *that* the
-/// remember options are off, not *why*. The two paths that turn it off are
+/// remember options are off, not *why*. The paths that turn it off are
 /// pinned down in docs/mcp_plan.md "Onay hatırlama semantiği" and echoed in
 /// [CommandApprovalRequest]'s own doc comment, so they are reconstructed here
 /// from [CommandApprovalRequest.environment] and [CommandApprovalRequest.category]
@@ -46,6 +46,10 @@ String _cannotRememberReason(CommandApprovalRequest request) {
   if (request.category == RiskCategory.opaqueExec) {
     return "This command cannot be remembered: its effect can't be read "
         'from the command text.';
+  }
+  if (request.category == RiskCategory.secretRead) {
+    return 'This command cannot be remembered: it reads credential '
+        'material.';
   }
   return 'This command cannot be remembered.';
 }

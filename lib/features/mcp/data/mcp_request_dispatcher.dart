@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/mcp/mcp_protocol.dart';
 import '../../../shared/providers/database_providers.dart';
 import '../domain/models/mcp_models.dart';
+import 'repositories/mcp_repository_providers.dart';
 import 'tools/mcp_tool_handler.dart';
 import 'tools/mcp_tool_registry.dart';
 
@@ -39,17 +42,27 @@ class McpRequestDispatcher {
   final Future<({String name, String workspaceId})?> Function(String clientId)
   lookupClient;
 
-  /// Identifies the current MCP connection, so grants and approvals scoped to
-  /// "this session" can be dropped when the agent goes away.
+  /// Called with the scope of a connection that has ended, so what it scoped
+  /// to "this session" can be dropped.
+  final void Function(String connectionScopeId)? onScopeEnded;
+
+  /// Identifies each client's current MCP connection, so approvals scoped to
+  /// "this session" end with it.
   ///
-  /// One value per dispatcher instance: the dispatcher lives as long as the
-  /// server does, and a client that reconnects re-runs `initialize`, which is
-  /// where a fresh scope is minted.
-  String _connectionScopeId = const Uuid().v4();
+  /// Per client: two agents connected at once are two sessions, and one of
+  /// them reconnecting must not end the other's. A client that reconnects
+  /// re-runs `initialize`, which is where its fresh scope is minted.
+  final Map<String, String> _connectionScopes = {};
 
-  String get connectionScopeId => _connectionScopeId;
+  McpRequestDispatcher({
+    required this.registry,
+    required this.lookupClient,
+    this.onScopeEnded,
+  });
 
-  McpRequestDispatcher({required this.registry, required this.lookupClient});
+  /// The scope of [clientId]'s current connection.
+  String connectionScopeFor(String clientId) =>
+      _connectionScopes.putIfAbsent(clientId, const Uuid().v4);
 
   Future<Object?> handle(String clientId, JsonRpcRequest request) async {
     switch (request.method) {
@@ -59,7 +72,9 @@ class McpRequestDispatcher {
       case McpMethod.initialize:
         // A new handshake means a new connection, so anything the previous
         // one scoped to "this session" must not carry over to it.
-        _connectionScopeId = const Uuid().v4();
+        final ended = _connectionScopes[clientId];
+        _connectionScopes[clientId] = const Uuid().v4();
+        if (ended != null) onScopeEnded?.call(ended);
         return McpInitializeResult(serverInfo: _kServerInfo).toJson();
 
       case McpMethod.toolsList:
@@ -116,7 +131,7 @@ class McpRequestDispatcher {
       clientId: clientId,
       clientName: client.name,
       workspaceId: client.workspaceId,
-      connectionScopeId: _connectionScopeId,
+      connectionScopeId: connectionScopeFor(clientId),
     );
 
     try {
@@ -179,6 +194,11 @@ class McpDispatchException implements Exception {
 McpRequestDispatcher mcpRequestDispatcher(Ref ref) {
   final registry = ref.watch(mcpToolRegistryProvider);
   final dao = ref.watch(mcpDaoProvider);
+  final approvals = ref.watch(mcpApprovalRepositoryProvider);
+
+  // A new dispatcher is a new server: no connection from before it is still
+  // open, so nothing scoped to one of them may keep answering.
+  unawaited(approvals.revokeSessionScoped());
 
   return McpRequestDispatcher(
     registry: registry,
@@ -187,5 +207,7 @@ McpRequestDispatcher mcpRequestDispatcher(Ref ref) {
       if (row == null) return null;
       return (name: row.name, workspaceId: row.workspaceId);
     },
+    onScopeEnded: (scope) =>
+        unawaited(approvals.revokeByConnectionScope(scope)),
   );
 }

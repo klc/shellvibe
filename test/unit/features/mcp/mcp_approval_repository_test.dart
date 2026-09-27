@@ -180,7 +180,9 @@ void main() {
     },
   );
 
-  test('ApprovalScope.once stores nothing at all, so it never matches later', () async {
+  test(
+    'ApprovalScope.once stores nothing at all, so it never matches later',
+    () async {
     await repo.remember(
       clientId: 'client-1',
       hostId: 'host-1',
@@ -199,7 +201,8 @@ void main() {
       isFalse,
     );
     expect(await repo.listActive('client-1'), isEmpty);
-  });
+    },
+  );
 
   test('fifteenMinutes matches before its expiry and not after', () async {
     await repo.remember(
@@ -238,22 +241,40 @@ void main() {
     );
   });
 
-  test(
-    'session-scoped rows are removed once their MCP connection drops; '
-    'always-scoped rows survive that cleanup.\n'
-    'NOTE: McpApprovalRepository itself exposes no revokeByConnectionScope '
-    'wrapper (unlike McpGrantRepository, which has one) — this test drives '
-    "the DAO's deleteApprovalsByConnectionScope directly. See the "
-    'discrepancy note in the final report.',
-    () async {
-      await repo.remember(
+  Future<bool> approvedIn(
+    String? connection, {
+    String command = 'session-cmd',
+  }) => repo.hasApproval(
+    clientId: 'client-1',
+    hostId: 'host-1',
+    cwd: '/tmp',
+    command: command,
+    connectionScopeId: connection,
+  );
+
+  group('a "this session" approval', () {
+    setUp(
+      () => repo.remember(
         clientId: 'client-1',
         hostId: 'host-1',
         cwd: '/tmp',
         command: 'session-cmd',
         scope: ApprovalScope.session,
         connectionScopeId: 'conn-1',
+      ),
       );
+
+    test('answers only in the connection that recorded it', () async {
+      // A row that outlived its connection — the app killed before cleanup
+      // ran — must not answer for the next one as if it were "always".
+      expect(await approvedIn('conn-1'), isTrue);
+      expect(await approvedIn('conn-2'), isFalse);
+      expect(await approvedIn(null), isFalse);
+    });
+
+    test(
+      'is dropped when its connection ends, and an "always" one is not',
+      () async {
       await repo.remember(
         clientId: 'client-1',
         hostId: 'host-1',
@@ -262,28 +283,47 @@ void main() {
         scope: ApprovalScope.always,
       );
 
-      await dao.deleteApprovalsByConnectionScope('conn-1');
+        await repo.revokeByConnectionScope('conn-1');
+
+        expect(await approvedIn('conn-1'), isFalse);
+        expect(await approvedIn('conn-2', command: 'always-cmd'), isTrue);
+        expect(await repo.listActive('client-1'), hasLength(1));
+      },
+    );
+
+    test('is dropped when the server starts again', () async {
+      await repo.remember(
+          clientId: 'client-1',
+          hostId: 'host-1',
+          cwd: '/tmp',
+        command: 'always-cmd',
+        scope: ApprovalScope.always,
+      );
+
+      await repo.revokeSessionScoped();
 
       expect(
-        await repo.hasApproval(
+        (await repo.listActive('client-1')).map((a) => a.commandNormalized),
+        ['always-cmd'],
+      );
+    });
+  });
+
+  test('approving the same command again still matches', () async {
+    // Each approval is its own row. Two rows for one command used to make the
+    // lookup throw, which failed the command instead of running it.
+    for (final scope in [ApprovalScope.fifteenMinutes, ApprovalScope.always]) {
+      await repo.remember(
           clientId: 'client-1',
           hostId: 'host-1',
           cwd: '/tmp',
-          command: 'session-cmd',
-        ),
-        isFalse,
-      );
-      expect(
-        await repo.hasApproval(
-          clientId: 'client-1',
-          hostId: 'host-1',
-          cwd: '/tmp',
-          command: 'always-cmd',
-        ),
-        isTrue,
-      );
-    },
+        command: 'ls -la',
+        scope: scope,
   );
+    }
+
+    expect(await approvedIn(null, command: 'ls -la'), isTrue);
+  });
 
   test('revokeAll clears everything', () async {
     await repo.remember(

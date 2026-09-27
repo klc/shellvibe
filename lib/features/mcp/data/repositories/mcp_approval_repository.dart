@@ -53,21 +53,29 @@ class McpApprovalRepository {
   /// same way a remembered one was, then compared for exact equality via its
   /// hash. A row past its [McpApproval.expiresAt] does not match — it is
   /// treated the same as if it had never been remembered.
+  ///
+  /// A "this session" row matches only in the connection that recorded it,
+  /// [connectionScopeId]. Cleanup drops such rows when their connection
+  /// ends, but a row that outlived its connection — the app was killed, say
+  /// — must still not answer for a later one.
   Future<bool> hasApproval({
     required String clientId,
     required String hostId,
     required String cwd,
     required String command,
+    String? connectionScopeId,
     DateTime? now,
   }) async {
     final sha = commandSha256(normalizeCommand(command));
-    final approval = await dao.findApproval(clientId, hostId, cwd, sha);
-    if (approval == null) return false;
+    final approvals = await dao.findApprovals(clientId, hostId, cwd, sha);
     final at = now ?? DateTime.now().toUtc();
-    if (approval.expiresAt != null && !approval.expiresAt!.isAfter(at)) {
-      return false;
-    }
-    return true;
+
+    return approvals.any(
+      (approval) =>
+          (approval.expiresAt == null || approval.expiresAt!.isAfter(at)) &&
+          (approval.connectionScopeId == null ||
+              approval.connectionScopeId == connectionScopeId),
+    );
   }
 
   /// Remembers a command approval for [scope]. No-ops for [ApprovalScope.once].
@@ -134,6 +142,14 @@ class McpApprovalRepository {
       dao.mcpApprovals,
     )..where((t) => t.id.equals(approvalId))).go();
   }
+
+  /// Drops the "this session" approvals of a connection that has ended.
+  Future<void> revokeByConnectionScope(String connectionScopeId) =>
+      dao.deleteApprovalsByConnectionScope(connectionScopeId);
+
+  /// Drops every "this session" approval. Used when the server starts: no
+  /// connection from before it is still open.
+  Future<void> revokeSessionScoped() => dao.deleteSessionApprovals();
 
   /// Drops every remembered approval. Used by the panic button.
   Future<void> revokeAll() => dao.deleteAllApprovals();

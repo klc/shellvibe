@@ -43,7 +43,9 @@ class PolicyEngine {
   ///    match wins outright.
   /// 4. Is there a remembered approval for this exact `(client, host, cwd,
   ///    normalized command)` tuple? If so, allow, flagged
-  ///    [PolicyDecision.fromRememberedApproval].
+  ///    [PolicyDecision.fromRememberedApproval]. Skipped for the categories
+  ///    that are asked about every time ([canRemember]), so a stored row
+  ///    cannot outrank that rule.
   /// 5. Classify the command into a [RiskCategory]. (Implementation note:
   ///    the classification is actually computed once, up front, and reused
   ///    for both step 2 and this step — the command only ever goes through
@@ -108,13 +110,18 @@ class PolicyEngine {
     }
 
     // 4. Remembered approval for this exact (client, host, cwd, command).
-    final remembered = await approvals.hasApproval(
-      clientId: ctx.clientId,
-      hostId: ctx.hostId,
-      cwd: ctx.cwd,
-      command: ctx.command,
-      now: now,
-    );
+    // A category that is asked about every time is never answered by a
+    // stored approval, including one recorded before that rule existed.
+    final remembered =
+        !_alwaysAsks(classification.category) &&
+        await approvals.hasApproval(
+          clientId: ctx.clientId,
+          hostId: ctx.hostId,
+          cwd: ctx.cwd,
+          command: ctx.command,
+          connectionScopeId: ctx.connectionScopeId,
+          now: now,
+        );
     if (remembered) {
       // The override applies here too. An approval is only refused storage
       // while the host is *currently* production (see [canRemember]) — but a
@@ -148,7 +155,7 @@ class PolicyEngine {
   /// remembered at all — independent of which [ApprovalScope] the user
   /// picks in the dialog.
   ///
-  /// These two exceptions are the only thing standing between an "approve
+  /// These exceptions are the only thing standing between an "approve
   /// everything" reflex and production, and they are non-negotiable:
   ///
   /// - A destructive category ([RiskCategory.isDestructive]) on a
@@ -156,15 +163,21 @@ class PolicyEngine {
   /// - [RiskCategory.opaqueExec] must be looked at every single time,
   ///   everywhere, because the classifier could not read what it actually
   ///   runs — remembering it would mean trusting a blank check forever.
+  /// - [RiskCategory.secretRead] must be looked at every single time,
+  ///   everywhere. The matrix never auto-allows it, and a remembered
+  ///   approval would turn one "yes" into an agent that reads the same
+  ///   credentials unasked from then on.
   bool canRemember(RiskCategory category, HostEnvironment environment) {
     if (environment == HostEnvironment.prod && category.isDestructive) {
       return false;
     }
-    if (category == RiskCategory.opaqueExec) {
-      return false;
-    }
-    return true;
+    return !_alwaysAsks(category);
   }
+
+  /// Categories a human is asked about on every call, in every environment.
+  static bool _alwaysAsks(RiskCategory category) =>
+      category == RiskCategory.opaqueExec ||
+      category == RiskCategory.secretRead;
 
   // -------------------------------------------------------------------
   // Step 3 — user policy rules.
@@ -232,16 +245,19 @@ class PolicyEngine {
 
   /// The (category × mode) part of the decision matrix.
   ///
-  /// `unclassified`, `secretRead`, and every category that is not
-  /// [RiskCategory.readonlySafe], [RiskCategory.opaqueExec] or
-  /// [RiskCategory.interactive] (i.e. `destructiveFs`, `privilege`,
-  /// `serviceControl`, `package`, `identityPerm`, `networkFw`, `database`,
-  /// `vcs`, `container`) share one deny/confirm/allow shape across
-  /// readonly/guarded/autonomous — the plan's table collapses all of these
-  /// into a single "yıkıcı kategoriler" (destructive categories) row.
-  /// `readonlySafe` always allows. `opaqueExec` never reaches `allow` from
-  /// this matrix (deny/deny/confirm). `interactive` is handled in step 2 and
-  /// never reaches this switch; the case exists only to keep it exhaustive.
+  /// `unclassified` and every category that is not
+  /// [RiskCategory.readonlySafe], [RiskCategory.opaqueExec],
+  /// [RiskCategory.secretRead] or [RiskCategory.interactive] (i.e.
+  /// `destructiveFs`, `privilege`, `serviceControl`, `package`,
+  /// `identityPerm`, `networkFw`, `database`, `vcs`, `container`) share one
+  /// deny/confirm/allow shape across readonly/guarded/autonomous — the plan's
+  /// table collapses all of these into a single "yıkıcı kategoriler"
+  /// (destructive categories) row. `readonlySafe` always allows.
+  /// `opaqueExec` never reaches `allow` from this matrix (deny/deny/confirm).
+  /// `secretRead` never does either (deny/confirm/confirm): output masking
+  /// only catches the secret shapes it knows, so reading a credential file is
+  /// always a human's call. `interactive` is handled in step 2 and never
+  /// reaches this switch; the case exists only to keep it exhaustive.
   PolicyAction _matrixAction(RiskCategory category, McpAccessMode mode) {
     switch (category) {
       case RiskCategory.readonlySafe:
@@ -252,10 +268,15 @@ class PolicyEngine {
           McpAccessMode.guarded => PolicyAction.deny,
           McpAccessMode.autonomous => PolicyAction.confirm,
         };
+      case RiskCategory.secretRead:
+        return switch (mode) {
+          McpAccessMode.readonly => PolicyAction.deny,
+          McpAccessMode.guarded => PolicyAction.confirm,
+          McpAccessMode.autonomous => PolicyAction.confirm,
+        };
       case RiskCategory.interactive:
         return PolicyAction.rejectInteractive;
       case RiskCategory.unclassified:
-      case RiskCategory.secretRead:
       case RiskCategory.destructiveFs:
       case RiskCategory.privilege:
       case RiskCategory.serviceControl:

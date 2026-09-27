@@ -145,7 +145,11 @@ class McpDao extends DatabaseAccessor<AppDatabase> with _$McpDaoMixin {
 
   // --- Approvals ---
 
-  Future<McpApproval?> findApproval(
+  /// Every approval stored for the exact tuple, in no particular order.
+  ///
+  /// A list, not a single row: approving the same command again after an
+  /// earlier approval expired, or in another connection, stores another row.
+  Future<List<McpApproval>> findApprovals(
     String clientId,
     String hostId,
     String cwd,
@@ -158,7 +162,7 @@ class McpDao extends DatabaseAccessor<AppDatabase> with _$McpDaoMixin {
               t.cwd.equals(cwd) &
               t.commandSha256.equals(commandSha256),
         ))
-        .getSingleOrNull();
+        .get();
   }
 
   Future<int> insertApproval(McpApprovalsCompanion approval) =>
@@ -177,6 +181,13 @@ class McpDao extends DatabaseAccessor<AppDatabase> with _$McpDaoMixin {
     return (delete(
       mcpApprovals,
     )..where((t) => t.connectionScopeId.equals(connectionScopeId))).go();
+  }
+
+  /// Drops every approval scoped to a connection, whichever one it was.
+  Future<int> deleteSessionApprovals() {
+    return (delete(
+      mcpApprovals,
+    )..where((t) => t.connectionScopeId.isNotNull())).go();
   }
 
   /// Drops every remembered approval. Used by the panic button.

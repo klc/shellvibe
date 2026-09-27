@@ -68,6 +68,7 @@ void main() {
     String hostId = 'host-1',
     String clientId = 'client-1',
     String? hostGroupId,
+    String? connectionScopeId,
   }) => CommandContext(
     command: command,
     cwd: cwd,
@@ -76,6 +77,7 @@ void main() {
     hostId: hostId,
     clientId: clientId,
     hostGroupId: hostGroupId,
+    connectionScopeId: connectionScopeId,
   );
 
   Future<void> grant({
@@ -85,9 +87,7 @@ void main() {
   }) => grantRepo.grant(clientId: clientId, hostId: hostId, mode: mode);
 
   group('grant gate', () {
-    test(
-      'no grant throws McpToolException(hostAccessRequired)',
-      () async {
+    test('no grant throws McpToolException(hostAccessRequired)', () async {
         await expectLater(
           engine.evaluate(ctx(), workspaceId: 'default'),
           throwsA(
@@ -98,8 +98,7 @@ void main() {
             ),
           ),
         );
-      },
-    );
+    });
 
     test('an expired grant behaves as no grant', () async {
       final now = DateTime.utc(2026, 1, 1, 12);
@@ -185,10 +184,8 @@ void main() {
       }
     });
 
-    test(
-      'the destructive/generic categories are deny/confirm/allow across '
-      'readonly/guarded/autonomous',
-      () async {
+    test('the destructive/generic categories are deny/confirm/allow across '
+        'readonly/guarded/autonomous', () async {
         const expectByMode = {
           McpAccessMode.readonly: PolicyAction.deny,
           McpAccessMode.guarded: PolicyAction.confirm,
@@ -210,25 +207,6 @@ void main() {
             expect(decision.category, entry.key, reason: entry.value);
           }
         }
-      },
-    );
-
-    test('unclassified is deny/confirm/allow across readonly/guarded/'
-        'autonomous', () async {
-      const expectByMode = {
-        McpAccessMode.readonly: PolicyAction.deny,
-        McpAccessMode.guarded: PolicyAction.confirm,
-        McpAccessMode.autonomous: PolicyAction.allow,
-      };
-      for (final modeEntry in expectByMode.entries) {
-        await grant(mode: modeEntry.key);
-        final decision = await engine.evaluate(
-          ctx(command: 'frobnicate --now', mode: modeEntry.key),
-          workspaceId: 'default',
-        );
-        expect(decision.action, modeEntry.value, reason: '${modeEntry.key}');
-        expect(decision.category, RiskCategory.unclassified);
-      }
     });
 
     test('opaqueExec is deny/deny/confirm across readonly/guarded/'
@@ -250,33 +228,87 @@ void main() {
     });
 
     test(
-      'secretRead is deny/confirm/allow across readonly/guarded/autonomous '
-      '(the implementation collapses it into the same generic row as the '
-      'other non-readonly, non-opaque, non-interactive categories, rather '
-      'than masking per the plan\'s table — this test documents the '
-      'implementation, see the discrepancy note in the final report)',
+      'a "this session" approval only runs a command in its own session',
       () async {
-        const expectByMode = {
-          McpAccessMode.readonly: PolicyAction.deny,
-          McpAccessMode.guarded: PolicyAction.confirm,
-          McpAccessMode.autonomous: PolicyAction.allow,
-        };
-        for (final modeEntry in expectByMode.entries) {
-          await grant(mode: modeEntry.key);
-          final decision = await engine.evaluate(
-            ctx(command: 'cat /home/user/.env', mode: modeEntry.key),
-            workspaceId: 'default',
-          );
-          expect(decision.action, modeEntry.value, reason: '${modeEntry.key}');
-          expect(decision.category, RiskCategory.secretRead);
-        }
+        await grant(mode: McpAccessMode.guarded);
+        await approvalRepo.remember(
+          clientId: 'client-1',
+          hostId: 'host-1',
+          cwd: '/tmp',
+          command: 'rm -rf /tmp/build',
+          scope: ApprovalScope.session,
+          connectionScopeId: 'conn-1',
+        );
+
+        Future<PolicyDecision> evaluateIn(String connection) => engine.evaluate(
+          ctx(command: 'rm -rf /tmp/build', connectionScopeId: connection),
+          workspaceId: 'default',
+        );
+
+        final same = await evaluateIn('conn-1');
+        expect(same.action, PolicyAction.allow);
+        expect(same.fromRememberedApproval, isTrue);
+
+        final later = await evaluateIn('conn-2');
+        expect(later.action, PolicyAction.confirm);
+        expect(later.fromRememberedApproval, isFalse);
       },
     );
 
     test(
-      'interactive is rejectInteractive in every mode, with a batch-mode '
-      'hint',
+      'an approval stored for a credential read does not skip the prompt',
       () async {
+        // Rows like this could be written before secretRead stopped being
+        // rememberable. They must not keep answering for the user.
+        await grant(mode: McpAccessMode.autonomous);
+        await approvalRepo.remember(
+          clientId: 'client-1',
+          hostId: 'host-1',
+          cwd: '/tmp',
+          command: 'cat /home/user/.env',
+          scope: ApprovalScope.always,
+        );
+
+        final decision = await engine.evaluate(
+          ctx(command: 'cat /home/user/.env', mode: McpAccessMode.autonomous),
+          workspaceId: 'default',
+        );
+
+        expect(decision.action, PolicyAction.confirm);
+        expect(decision.fromRememberedApproval, isFalse);
+      },
+    );
+
+    test('secretRead is deny/confirm/confirm across readonly/guarded/'
+        'autonomous — reading credentials is never auto-approved', () async {
+        const expectByMode = {
+          McpAccessMode.readonly: PolicyAction.deny,
+          McpAccessMode.guarded: PolicyAction.confirm,
+        McpAccessMode.autonomous: PolicyAction.confirm,
+        };
+      for (final command in [
+        'cat /home/user/.env',
+        'cat ~/.ssh/id_rsa',
+        'printenv',
+      ]) {
+        for (final modeEntry in expectByMode.entries) {
+          await grant(mode: modeEntry.key);
+          final decision = await engine.evaluate(
+            ctx(command: command, mode: modeEntry.key),
+            workspaceId: 'default',
+          );
+          expect(
+            decision.action,
+            modeEntry.value,
+            reason: '`$command` in ${modeEntry.key}',
+    );
+          expect(decision.category, RiskCategory.secretRead, reason: command);
+        }
+      }
+    });
+
+    test('interactive is rejectInteractive in every mode, with a batch-mode '
+        'hint', () async {
         for (final mode in McpAccessMode.values) {
           await grant(mode: mode);
           final decision = await engine.evaluate(
@@ -291,15 +323,12 @@ void main() {
           expect(decision.category, RiskCategory.interactive);
           expect(decision.hint, isNotNull);
         }
-      },
-    );
+    });
   });
 
   group('production override', () {
-    test(
-      'a destructive category that autonomous mode would allow comes back '
-      'confirm with productionOverride true, on a prod host',
-      () async {
+    test('a destructive category that autonomous mode would allow comes back '
+        'confirm with productionOverride true, on a prod host', () async {
         await grant(mode: McpAccessMode.autonomous);
         final decision = await engine.evaluate(
           ctx(
@@ -312,8 +341,7 @@ void main() {
         expect(decision.action, PolicyAction.confirm);
         expect(decision.productionOverride, isTrue);
         expect(decision.category, RiskCategory.destructiveFs);
-      },
-    );
+    });
 
     test('opaqueExec on prod never comes back allow', () async {
       for (final mode in McpAccessMode.values) {
@@ -330,7 +358,9 @@ void main() {
       }
     });
 
-    test('a deny is never upgraded to something looser by the override', () async {
+    test(
+      'a deny is never upgraded to something looser by the override',
+      () async {
       await grant(mode: McpAccessMode.readonly);
       final decision = await engine.evaluate(
         ctx(
@@ -344,12 +374,11 @@ void main() {
       // The override only ever tightens an `allow`; a `deny` it never even
       // looks at is not "overridden" in the productionOverride-flag sense.
       expect(decision.productionOverride, isFalse);
-    });
+      },
+    );
 
-    test(
-      'a remembered approval on a prod host does NOT auto-allow a '
-      'destructive command — it must come back confirm',
-      () async {
+    test('a remembered approval on a prod host does NOT auto-allow a '
+        'destructive command — it must come back confirm', () async {
         await grant(mode: McpAccessMode.autonomous);
         // The approval is recorded while nothing about environment is
         // considered — PolicyEngine reads ctx.environment at decision time,
@@ -374,8 +403,7 @@ void main() {
         expect(decision.action, PolicyAction.confirm);
         expect(decision.fromRememberedApproval, isTrue);
         expect(decision.productionOverride, isTrue);
-      },
-    );
+    });
 
     test(
       'a user policy rule with action allow on a prod host does NOT '
@@ -447,7 +475,9 @@ void main() {
       expect(decision.action, PolicyAction.deny);
     });
 
-    test('exact match requires the trimmed command to equal the pattern', () async {
+    test(
+      'exact match requires the trimmed command to equal the pattern',
+      () async {
       await grant(mode: McpAccessMode.readonly);
       await dao.insertPolicyRule(
         McpPolicyRulesCompanion.insert(
@@ -474,7 +504,8 @@ void main() {
       );
       // Falls through to the matrix: destructiveFs in readonly mode denies.
       expect(notMatching.action, PolicyAction.deny);
-    });
+      },
+    );
 
     test('prefix match matches a leading prefix only', () async {
       await grant(mode: McpAccessMode.readonly);
@@ -557,9 +588,7 @@ void main() {
       expect(decision.action, PolicyAction.deny);
     });
 
-    test(
-      'a malformed regex matches nothing rather than everything',
-      () async {
+    test('a malformed regex matches nothing rather than everything', () async {
         await grant(mode: McpAccessMode.autonomous);
         await dao.insertPolicyRule(
           McpPolicyRulesCompanion.insert(
@@ -582,8 +611,7 @@ void main() {
         // would deny; instead it must fall through to the matrix, which
         // allows readonlySafe in autonomous mode.
         expect(decision.action, PolicyAction.allow);
-      },
-    );
+    });
 
     group('scope matching', () {
       test('a global rule matches any host', () async {
@@ -652,10 +680,8 @@ void main() {
         expect(onHost2.action, PolicyAction.confirm);
       });
 
-      test(
-        'a group rule matches only when hostGroupId equals its scopeId, and '
-        'never matches a context with no group',
-        () async {
+      test('a group rule matches only when hostGroupId equals its scopeId, and '
+          'never matches a context with no group', () async {
           await grant(mode: McpAccessMode.guarded);
           await dao.insertPolicyRule(
             McpPolicyRulesCompanion.insert(
@@ -696,8 +722,7 @@ void main() {
             workspaceId: 'default',
           );
           expect(matchingGroup.action, PolicyAction.deny);
-        },
-      );
+      });
     });
   });
 
@@ -725,6 +750,18 @@ void main() {
       for (final environment in HostEnvironment.values) {
         expect(
           engine.canRemember(RiskCategory.opaqueExec, environment),
+          isFalse,
+          reason: '$environment',
+        );
+      }
+    });
+
+    test('false for secretRead, in every environment', () {
+      // A remembered approval is an allow for every later call. Remembering
+      // one credential read would hand the agent that file for good.
+      for (final environment in HostEnvironment.values) {
+        expect(
+          engine.canRemember(RiskCategory.secretRead, environment),
           isFalse,
           reason: '$environment',
         );
