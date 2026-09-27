@@ -86,7 +86,7 @@ Release-by-release detail lives in [`CHANGELOG.md`](CHANGELOG.md).
 | Crypto | `cryptography` — AES-256-GCM + Argon2id |
 | Routing | `go_router` (declarative, vault-gated) |
 | Desktop | `window_manager`, `tray_manager`, `hotkey_manager`, `desktop_drop` |
-| UI Kit | `shadcn_ui`, `lucide_icons_flutter`, `google_fonts` |
+| UI Kit | `shadcn_ui`, `lucide_icons_flutter` |
 
 ## 📁 Project Layout
 

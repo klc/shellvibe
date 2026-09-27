@@ -60,11 +60,9 @@ and your HTTP client's user agent, under
 [GitHub's privacy statement](https://docs.github.com/site-policy/privacy-policies/github-privacy-statement).
 ShellVibe never performs this check on its own, on a schedule or at launch.
 
-**Fonts you choose.** ShellVibe ships with its interface and terminal fonts
-bundled, and those need no network. If you pick one of the optional families in
-Settings, it is downloaded once from Google's font CDN (`fonts.googleapis.com`,
-`fonts.gstatic.com`) and cached on disk; Google sees that request. Staying on a
-bundled font — the default in both cases — means no font request is ever made.
+**Fonts.** Every interface and terminal font ShellVibe offers ships inside the
+app. Choosing one in Settings makes no network request, and no font is ever
+downloaded.
 
 **Device Link.** Pairing a phone with a desktop session communicates over your
 local network, directly between the two devices. Nothing leaves your network.

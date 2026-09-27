@@ -69,20 +69,10 @@ void main() {
       expect(hack.familyName, 'Hack Nerd Font Mono');
     });
 
-    test('every bundled and system font declares a family name', () {
-      for (final font in kTerminalFonts) {
-        if (font.source != TerminalFontSource.googleFonts) {
-          expect(font.familyName, isNotNull, reason: font.id);
-        }
-      }
-    });
-
-    test('every google font declares a display name', () {
-      for (final font in kTerminalFonts) {
-        if (font.source == TerminalFontSource.googleFonts) {
-          expect(font.googleFontsName, isNotNull, reason: font.id);
-        }
-      }
+    // PRIVACY.md promises the defaults make no network request. The default
+    // terminal face used to be fetched from the Google Fonts CDN.
+    test('the default font is bundled', () {
+      expect(kTerminalFonts.first.source, TerminalFontSource.bundled);
     });
   });
 
@@ -92,20 +82,17 @@ void main() {
         resolveTerminalFontFamily('JetBrainsMonoNF'),
         'JetBrainsMono Nerd Font Mono',
       );
-      expect(
-        resolveTerminalFontFamily('Hack'),
-        'Hack Nerd Font Mono',
-      );
+      expect(resolveTerminalFontFamily('Hack'), 'Hack Nerd Font Mono');
     });
 
     test('system font resolves to its family name', () {
       expect(resolveTerminalFontFamily('Courier'), 'Courier');
     });
-    // Note: the google_fonts branch (Roboto Mono, JetBrains Mono, …) is
-    // deliberately not unit-tested here: `GoogleFonts.getFont` kicks off an
-    // async CDN font load whose failure surfaces as an unhandled error in the
-    // test zone even when the CDN is blocked. That path is unchanged from the
-    // previous code and is exercised at runtime instead.
+
+    test('bundled Google Fonts ids resolve to their registered family', () {
+      expect(resolveTerminalFontFamily('RobotoMono'), 'Roboto Mono');
+      expect(resolveTerminalFontFamily('JetBrainsMono'), 'JetBrains Mono');
+    });
 
     test('symbols fallback family matches the terminal fallback chain', () {
       expect(kTerminalFontFamilyFallback.first, kSymbolsNerdFontFamily);

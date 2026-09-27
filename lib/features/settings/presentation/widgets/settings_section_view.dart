@@ -401,24 +401,7 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
                     },
                     options: [
                       for (final f in kUiFonts)
-                        ShadOption(
-                          value: f.id,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(f.label),
-                              // The bundled face is the one that survives a
-                              // first launch with no network; the rest are
-                              // fetched once and cached.
-                              if (f.source == UiFontSource.bundled) ...[
-                                const SizedBox(width: 6),
-                                const ShadBadge.secondary(
-                                  child: Text('Offline'),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
+                        ShadOption(value: f.id, child: Text(f.label)),
                     ],
                     onChanged: (font) {
                       if (font != null) {

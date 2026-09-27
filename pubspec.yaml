@@ -111,7 +111,6 @@ dependencies:
   uuid: ^4.6.0
   shadcn_ui: ^0.56.0
   lucide_icons_flutter: ^3.1.15
-  google_fonts: ^8.2.1
   file_selector: ^1.1.0
 
 dev_dependencies:
@@ -154,11 +153,13 @@ flutter:
     - assets/brand/tray.png
     - assets/brand/tray.ico
 
-  # Interface face. Bundled rather than fetched at runtime: the whole shell is
-  # set in it, and a first launch without a network must not fall back to the
-  # platform font. Static instances cut from the variable original and subset to
-  # Latin + Latin Extended-A (Turkish) plus the symbols the UI sets.
-  # License in assets/fonts/ui/OFL.txt.
+  # Every font the app can draw in is bundled; nothing is fetched at runtime, so
+  # a first launch without a network never falls back to the platform font and
+  # choosing a face in Settings makes no request to anyone. Licenses sit next
+  # to the files: assets/fonts/{ui,mono}/licenses/ and nerd/LICENSES.txt.
+  #
+  # Default interface face: static instances cut from the variable original and
+  # subset to Latin + Latin Extended-A (Turkish) plus the symbols the UI sets.
   fonts:
     - family: Inter Tight
       fonts:
@@ -169,6 +170,177 @@ flutter:
         - asset: assets/fonts/ui/InterTight-SemiBold.ttf
           weight: 600
         - asset: assets/fonts/ui/InterTight-Bold.ttf
+          weight: 700
+
+    # Optional interface faces: Google Fonts' static instances, unsubset. A
+    # family must carry every weight the theme sets (400-700); one registered
+    # at a single weight draws every bold label at regular or synthesised
+    # weight. Lato publishes no 500 or 600, so those resolve to its nearest.
+    - family: DM Sans
+      fonts:
+        - asset: assets/fonts/ui/DMSans-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/ui/DMSans-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/ui/DMSans-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/ui/DMSans-Bold.ttf
+          weight: 700
+    - family: IBM Plex Sans
+      fonts:
+        - asset: assets/fonts/ui/IBMPlexSans-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/ui/IBMPlexSans-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/ui/IBMPlexSans-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/ui/IBMPlexSans-Bold.ttf
+          weight: 700
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/ui/Inter-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/ui/Inter-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/ui/Inter-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/ui/Inter-Bold.ttf
+          weight: 700
+    - family: Lato
+      fonts:
+        - asset: assets/fonts/ui/Lato-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/ui/Lato-Bold.ttf
+          weight: 700
+    - family: Manrope
+      fonts:
+        - asset: assets/fonts/ui/Manrope-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/ui/Manrope-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/ui/Manrope-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/ui/Manrope-Bold.ttf
+          weight: 700
+    - family: Nunito Sans
+      fonts:
+        - asset: assets/fonts/ui/NunitoSans-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/ui/NunitoSans-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/ui/NunitoSans-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/ui/NunitoSans-Bold.ttf
+          weight: 700
+    - family: Roboto
+      fonts:
+        - asset: assets/fonts/ui/Roboto-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/ui/Roboto-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/ui/Roboto-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/ui/Roboto-Bold.ttf
+          weight: 700
+    - family: Source Sans 3
+      fonts:
+        - asset: assets/fonts/ui/SourceSans3-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/ui/SourceSans3-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/ui/SourceSans3-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/ui/SourceSans3-Bold.ttf
+          weight: 700
+    - family: Work Sans
+      fonts:
+        - asset: assets/fonts/ui/WorkSans-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/ui/WorkSans-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/ui/WorkSans-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/ui/WorkSans-Bold.ttf
+          weight: 700
+
+    # Terminal faces from Google Fonts: regular and bold, the two weights the
+    # terminal draws. Not subset: a session prints whatever the far side sends.
+    # Inter is shared with the interface list above.
+    - family: Roboto Mono
+      fonts:
+        - asset: assets/fonts/mono/RobotoMono-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/mono/RobotoMono-Bold.ttf
+          weight: 700
+    - family: Anonymous Pro
+      fonts:
+        - asset: assets/fonts/mono/AnonymousPro-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/mono/AnonymousPro-Bold.ttf
+          weight: 700
+    - family: Cascadia Code
+      fonts:
+        - asset: assets/fonts/mono/CascadiaCode-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/mono/CascadiaCode-Bold.ttf
+          weight: 700
+    - family: Fira Code
+      fonts:
+        - asset: assets/fonts/mono/FiraCode-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/mono/FiraCode-Bold.ttf
+          weight: 700
+    - family: Fira Mono
+      fonts:
+        - asset: assets/fonts/mono/FiraMono-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/mono/FiraMono-Bold.ttf
+          weight: 700
+    - family: IBM Plex Mono
+      fonts:
+        - asset: assets/fonts/mono/IBMPlexMono-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/mono/IBMPlexMono-Bold.ttf
+          weight: 700
+    - family: Inconsolata
+      fonts:
+        - asset: assets/fonts/mono/Inconsolata-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/mono/Inconsolata-Bold.ttf
+          weight: 700
+    - family: JetBrains Mono
+      fonts:
+        - asset: assets/fonts/mono/JetBrainsMono-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/mono/JetBrainsMono-Bold.ttf
+          weight: 700
+    - family: Kode Mono
+      fonts:
+        - asset: assets/fonts/mono/KodeMono-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/mono/KodeMono-Bold.ttf
+          weight: 700
+    - family: Share Tech Mono
+      fonts:
+        - asset: assets/fonts/mono/ShareTechMono-Regular.ttf
+          weight: 400
+    - family: Source Code Pro
+      fonts:
+        - asset: assets/fonts/mono/SourceCodePro-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/mono/SourceCodePro-Bold.ttf
+          weight: 700
+    - family: Space Mono
+      fonts:
+        - asset: assets/fonts/mono/SpaceMono-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/mono/SpaceMono-Bold.ttf
+          weight: 700
+    - family: Ubuntu Mono
+      fonts:
+        - asset: assets/fonts/mono/UbuntuMono-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/mono/UbuntuMono-Bold.ttf
           weight: 700
 
     # Terminal Nerd Fonts (Mono variants — every glyph single-cell wide, which

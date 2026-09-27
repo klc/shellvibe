@@ -1,29 +1,13 @@
-import 'package:google_fonts/google_fonts.dart';
-
 import '../../domain/models/terminal_font.dart';
 
 /// Resolves a stored font id (settings.fontFamily) to a family name the
 /// terminal TextStyle can use directly.
 ///
-/// Google Fonts families resolve through the `google_fonts` package (fetched
-/// from the CDN on first use, then cached). Bundled Nerd Fonts and system
-/// fonts are already registered family names.
-String resolveTerminalFontFamily(String fontId) {
-  final font = TerminalFont.of(fontId);
-  switch (font.source) {
-    case TerminalFontSource.googleFonts:
-      try {
-        return GoogleFonts.getFont(font.googleFontsName!).fontFamily ??
-            font.googleFontsName!;
-      } catch (_) {
-        // Unknown family — let Flutter's engine fall back.
-        return font.googleFontsName!;
-      }
-    case TerminalFontSource.bundledNerdFont:
-    case TerminalFontSource.system:
-      return font.familyName!;
-  }
-}
+/// Every non-system face is bundled and registered in pubspec under this
+/// name; a system family the OS lacks falls through to
+/// [kTerminalFontFamilyFallback].
+String resolveTerminalFontFamily(String fontId) =>
+    TerminalFont.of(fontId).familyName;
 
 /// Fallback chain for terminal glyphs the primary font lacks: Nerd Font
 /// symbols first, then the xterm3 default stack (CJK, symbols, emoji, …).
