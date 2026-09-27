@@ -477,11 +477,12 @@ class SyncState extends Table {
   /// Highest clock this device has seen, from its own changes or from a pull.
   IntColumn get lastSeenClock => integer().withDefault(const Constant(0))();
 
-  /// Clock the last pull was acknowledged at. Only ever advanced after the
-  /// operations it covers have been written.
+  /// Highest clock the pulls so far have covered. Only ever advanced after the
+  /// operations it covers have been written, and never backwards.
   ///
-  /// The cursor of a server that predates [pulledThroughSeq], and the
-  /// starting point when moving to it. A clock is the wrong thing to page by:
+  /// Kept moving by position pulls too, because it is still the cursor of a
+  /// server that predates [pulledThroughSeq], and what the server judges a
+  /// device by when it starts positions. A clock is the wrong thing to page by:
   /// each operation keeps the clock it was recorded with, so one sent late --
   /// made offline, or held back by a locked vault -- lands below a cursor
   /// that has already moved past it and is never offered.
@@ -493,7 +494,8 @@ class SyncState extends Table {
   /// The server numbers operations in the order they were stored, so a late
   /// one still lands after the cursor. Null until the first pull that talks in
   /// positions, which starts from [pulledThroughClock] instead. Advanced under
-  /// the same rule as the clock: never before the rows are written.
+  /// the same rule as the clock: never before the rows are written, and never
+  /// backwards.
   IntColumn get pulledThroughSeq => integer().nullable()();
 
   /// How far this device has got through joining automatic sync.

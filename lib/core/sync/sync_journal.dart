@@ -545,12 +545,31 @@ final class SyncJournal {
   /// to [maxClock] on the way.
   ///
   /// The same rule as [acknowledgePull]: only after the operations it covers
-  /// are durably written.
+  /// are durably written. Neither cursor moves backwards: a server that
+  /// answers below a position already acknowledged would otherwise replay the
+  /// log over newer edits.
+  ///
+  /// The clock cursor comes along. Nothing pages by it while a position is
+  /// held, but a restore compares against it and a pull that has lost its
+  /// position is judged by it. Left where the upgrade found it, both would
+  /// reach back past everything pulled since.
   Future<void> acknowledgePullSeq(int seq, {required int maxClock}) async {
     await observeClock(maxClock);
 
+    final state = await readState();
+    final current = state.pulledThroughSeq;
+
     await (db.update(db.syncState)..where((t) => t.id.equals(1))).write(
-      SyncStateCompanion(pulledThroughSeq: Value(seq)),
+      SyncStateCompanion(
+        pulledThroughSeq: Value(
+          current != null && seq < current ? current : seq,
+        ),
+        pulledThroughClock: Value(
+          maxClock > state.pulledThroughClock
+              ? maxClock
+              : state.pulledThroughClock,
+        ),
+      ),
     );
   }
 

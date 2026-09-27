@@ -418,6 +418,21 @@ void main() {
       expect(await b.host('h1'), isNotNull);
     });
 
+    test('a pull by position moves the clock cursor too', () async {
+      final a = await device('device-a');
+      final b = await device('device-b');
+
+      await a.writeHost('h1');
+      await a.writeHost('h2');
+      await a.engine.syncOnce();
+      await b.engine.pull();
+
+      final state = await b.journal.readState();
+      expect(state.pulledThroughSeq, isNotNull);
+      expect(state.pulledThroughClock, state.lastSeenClock);
+      expect(state.pulledThroughClock, greaterThan(0));
+    });
+
     test(
       'an operation sealed under another key is skipped, not fatal',
       () async {

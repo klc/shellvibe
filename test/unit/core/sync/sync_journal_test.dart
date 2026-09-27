@@ -346,6 +346,26 @@ void main() {
       expect(state.pulledThroughClock, 10);
       expect(state.lastSeenClock, 10);
     });
+
+    test('a pull by position keeps the clock cursor moving', () async {
+      // A restore and a pull that lost its position both read the clock
+      // cursor. Frozen where the upgrade left it, they reach back past every
+      // operation pulled since.
+      await journal.acknowledgePull(10);
+      await journal.acknowledgePullSeq(30, maxClock: 42);
+
+      expect((await journal.readState()).pulledThroughClock, 42);
+    });
+
+    test('a pull by position moves neither cursor backwards', () async {
+      await journal.acknowledgePullSeq(50, maxClock: 60);
+      await journal.acknowledgePullSeq(30, maxClock: 42);
+
+      final state = await journal.readState();
+
+      expect(state.pulledThroughSeq, 50);
+      expect(state.pulledThroughClock, 60);
+    });
   });
 
   group('re-keying', () {

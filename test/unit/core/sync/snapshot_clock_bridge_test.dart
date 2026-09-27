@@ -401,6 +401,30 @@ void main() {
       expect((await to.readState()).pulledThroughSeq, isNull);
     });
 
+    test(
+      'an older snapshot does not rewind the clock it falls back to',
+      () async {
+        // A device that pages by position still has to keep its clock cursor
+        // current. Left at its pre-upgrade value, any older snapshot looks
+        // newer than it, and forgetting the position then falls back to a
+        // clock this device has long since pulled past.
+        await addHost(source, 'h1');
+        final to = await journalOf(target, 'target-device');
+        await to.acknowledgePull(10);
+        await to.acknowledgePullSeq(50, maxClock: 60);
+
+        await sync.importEncryptedBackup(
+          backupPackageJson: await exportAt(42),
+          db: target,
+          masterPassword: passphrase,
+        );
+
+        final state = await to.readState();
+        expect(state.pulledThroughClock, 60);
+        expect(state.pulledThroughSeq, isNull);
+      },
+    );
+
     test('a backup with no place in the log leaves it alone', () async {
       await addHost(source, 'h1');
       final from = await journalOf(source, 'source-device');
