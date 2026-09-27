@@ -6,6 +6,8 @@ enum TerminalFontSource {
   bundled,
 
   /// Nerd Font TTF bundled in `assets/fonts/nerd` and registered in pubspec.
+  /// Always the Mono variant: every glyph is single-cell wide, so the grid
+  /// stays aligned inside xterm3, which treats PUA as width 1.
   bundledNerdFont,
 
   /// OS/system font referenced by family name; missing families fall back.
@@ -151,9 +153,6 @@ const kTerminalFonts = <TerminalFont>[
     source: TerminalFontSource.bundled,
     familyName: 'Share Tech Mono',
   ),
-
-  // --- Bundled Nerd Fonts (Mono variant: every glyph single-cell wide, so
-  // grid alignment holds inside xterm3, which treats PUA as width 1) ---
   TerminalFont(
     id: 'SourceCodePro',
     label: 'Source Code Pro',
@@ -166,8 +165,6 @@ const kTerminalFonts = <TerminalFont>[
     source: TerminalFontSource.bundledNerdFont,
     familyName: 'SauceCodePro Nerd Font Mono',
   ),
-
-  // --- System ---
   TerminalFont(
     id: 'SpaceMono',
     label: 'Space Mono',
