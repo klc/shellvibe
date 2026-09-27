@@ -161,6 +161,75 @@ void main() {
       expect(version!.logicalClock, pending!.logicalClock);
       expect(version.deviceId, 'target-device');
     });
+
+    Future<void> recordVersionOnSource(String id, int clock) =>
+        SyncJournal(db: source, deviceId: 'source-device').setVersion(
+          entityType: 'hosts',
+          entityId: id,
+          logicalClock: clock,
+          deviceId: 'source-device',
+        );
+
+    test('stays when it is later than the row, though not the snapshot',
+        () async {
+      // The bug this pins: settled against the snapshot clock, an offline
+      // edit to a row nobody else had touched since was dropped everywhere,
+      // although the log would have kept it.
+      await addHost(source, 'h1');
+      await recordVersionOnSource('h1', 5);
+      final journal = SyncJournal(db: target, deviceId: 'target-device');
+      target.syncJournal = journal;
+      await journal.observeClock(10);
+      await addHostLabelled(target, 'h1', 'local edit');
+
+      await sync.importEncryptedBackup(
+        backupPackageJson: await exportAt(42),
+        db: target,
+        masterPassword: passphrase,
+        snapshotDeviceId: 'source-device',
+      );
+
+      expect((await hostOn(target, 'h1')).label, 'local edit');
+      final pending = await journal.pendingFor(
+        entityType: 'hosts',
+        entityId: 'h1',
+      );
+      expect(pending, isNotNull);
+      final version = await journal.versionFor(
+        entityType: 'hosts',
+        entityId: 'h1',
+      );
+      expect(version!.logicalClock, pending!.logicalClock);
+      expect(version.deviceId, 'target-device');
+    });
+
+    test('is dropped when the row changed after it', () async {
+      await addHost(source, 'h1');
+      await recordVersionOnSource('h1', 30);
+      final journal = SyncJournal(db: target, deviceId: 'target-device');
+      target.syncJournal = journal;
+      await journal.observeClock(10);
+      await addHostLabelled(target, 'h1', 'local edit');
+
+      await sync.importEncryptedBackup(
+        backupPackageJson: await exportAt(42),
+        db: target,
+        masterPassword: passphrase,
+        snapshotDeviceId: 'source-device',
+      );
+
+      expect((await hostOn(target, 'h1')).label, 'h1');
+      expect(
+        await journal.pendingFor(entityType: 'hosts', entityId: 'h1'),
+        isNull,
+      );
+      final version = await journal.versionFor(
+        entityType: 'hosts',
+        entityId: 'h1',
+      );
+      expect(version!.logicalClock, 30);
+      expect(version.deviceId, 'source-device');
+    });
   });
 
   test('restored rows stand at the snapshot clock', () async {

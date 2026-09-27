@@ -305,6 +305,18 @@ class E2EECloudSyncService {
       payloadMap['bookmarks'] = bookmarks.map(SyncRowCodec.bookmark).toList();
     }
 
+    // Where each row stands in the operation log. A restore settles an
+    // unsent change against the row it overwrites rather than against the
+    // snapshot as a whole: most rows were last changed long before the
+    // snapshot was taken, and an offline edit made since is later than them
+    // even when its clock is below the snapshot's.
+    if (syncClock != null) {
+      payloadMap['sync_versions'] = await _rowVersions(
+        db,
+        payloadMap.keys.toSet(),
+      );
+    }
+
     if (scope.contains(BackupCategory.settings) && settings != null) {
       payloadMap['settings'] = settings;
     }
@@ -811,10 +823,15 @@ class E2EECloudSyncService {
       // Stamped inside the same transaction as the rows: a version written
       // for rows that were rolled back would defend data this device does not
       // have.
+      //
+      // Each row at the version the snapshot recorded for it. A snapshot from
+      // a build that did not record them, or a row that never had one, stands
+      // at the snapshot clock.
       final journal = db.syncJournal;
       final syncClock = data['sync_clock'] as int?;
 
       if (journal != null && syncClock != null) {
+        final versions = _readRowVersions(data['sync_versions']);
         for (final type in SyncRowCodec.syncableTypes) {
           final items = data[type];
           if (items is! List) continue;
@@ -824,6 +841,10 @@ class E2EECloudSyncService {
           for (final item in items) {
             final id = item is Map ? item['id'] as String? : null;
             if (id == null || !present.contains(id)) continue;
+
+            final row =
+                versions[type]?[id] ??
+                (clock: syncClock, deviceId: snapshotDeviceId);
 
             // A change of this device's that has not been sent yet -- its
             // category was off, or it was made offline -- was just
@@ -839,8 +860,8 @@ class E2EECloudSyncService {
                 _localChangeWins(
                   local,
                   localDeviceId: journal.deviceId,
-                  snapshotClock: syncClock,
-                  snapshotDeviceId: snapshotDeviceId,
+                  rowClock: row.clock,
+                  rowDeviceId: row.deviceId,
                 )) {
               await _reapplyPending(db, local);
               await journal.setVersion(
@@ -856,8 +877,8 @@ class E2EECloudSyncService {
             await journal.setVersion(
               entityType: type,
               entityId: id,
-              logicalClock: syncClock,
-              deviceId: snapshotDeviceId,
+              logicalClock: row.clock,
+              deviceId: row.deviceId,
             );
           }
         }
@@ -932,19 +953,54 @@ class E2EECloudSyncService {
     return count;
   }
 
-  /// Whether an unsent change of this device's is later than the snapshot
-  /// that overwrote its row, by the same `(clock, deviceId)` order the
+  /// Whether an unsent change of this device's is later than the restored
+  /// row it would replace, by the same `(clock, deviceId)` order the
   /// operation log resolves conflicts with.
   static bool _localChangeWins(
     PendingOperation local, {
     required String localDeviceId,
-    required int snapshotClock,
-    required String snapshotDeviceId,
+    required int rowClock,
+    required String rowDeviceId,
   }) {
-    if (local.logicalClock != snapshotClock) {
-      return local.logicalClock > snapshotClock;
+    if (local.logicalClock != rowClock) {
+      return local.logicalClock > rowClock;
     }
-    return localDeviceId.compareTo(snapshotDeviceId) > 0;
+    return localDeviceId.compareTo(rowDeviceId) > 0;
+  }
+
+  /// The version of every row of [types] this device holds, as
+  /// `{type: {id: [clock, deviceId]}}`.
+  static Future<Map<String, Map<String, List<Object>>>> _rowVersions(
+    AppDatabase db,
+    Set<String> types,
+  ) async {
+    final versions = <String, Map<String, List<Object>>>{};
+    for (final version in await db.select(db.syncEntityVersions).get()) {
+      if (!types.contains(version.entityType)) continue;
+      (versions[version.entityType] ??= {})[version.entityId] = [
+        version.logicalClock,
+        version.deviceId,
+      ];
+    }
+    return versions;
+  }
+
+  /// Reads what [_rowVersions] wrote, skipping anything malformed.
+  static Map<String, Map<String, ({int clock, String deviceId})>>
+  _readRowVersions(Object? raw) {
+    final versions = <String, Map<String, ({int clock, String deviceId})>>{};
+    if (raw is! Map) return versions;
+    for (final MapEntry(key: type, value: rows) in raw.entries) {
+      if (type is! String || rows is! Map) continue;
+      final byId = versions[type] = {};
+      for (final MapEntry(key: id, value: version) in rows.entries) {
+        if (id is! String || version is! List || version.length != 2) continue;
+        final [clock, deviceId] = version;
+        if (clock is! int || deviceId is! String) continue;
+        byId[id] = (clock: clock, deviceId: deviceId);
+      }
+    }
+    return versions;
   }
 
   /// Puts an unsent change back over the row a restore just wrote.
