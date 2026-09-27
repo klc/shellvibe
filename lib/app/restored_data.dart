@@ -1,11 +1,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../features/bookmarks/presentation/notifiers/bookmarks_notifier.dart';
 import '../features/hosts/presentation/notifiers/host_groups_notifier.dart';
 import '../features/hosts/presentation/notifiers/hosts_notifier.dart';
 import '../features/snippets/presentation/notifiers/snippets_notifier.dart';
 import '../features/snippets/presentation/notifiers/runbooks_notifier.dart';
+import '../features/templates/presentation/notifiers/templates_notifier.dart';
 import '../features/tunnels/presentation/providers/tunnels_providers.dart';
 import '../features/vault/presentation/notifiers/identities_notifier.dart';
+import '../features/vault/presentation/notifiers/vault_env_vars_notifier.dart';
 import '../features/workspaces/presentation/notifiers/workspaces_notifier.dart';
 
 /// Re-reads everything a backup restore rewrote underneath the app.
@@ -22,7 +25,7 @@ import '../features/workspaces/presentation/notifiers/workspaces_notifier.dart';
 /// import them.
 ///
 /// Invalidating rather than converting the notifiers to database streams: a
-/// restore is a rare, explicit act, and rebuilding seven providers at that
+/// restore is a rare, explicit act, and rebuilding these providers at that
 /// moment is cheaper in both runtime and review than making every list in the
 /// app reactive to catch one event a user triggers by hand.
 ///
@@ -30,6 +33,8 @@ import '../features/workspaces/presentation/notifiers/workspaces_notifier.dart';
 /// widget a `WidgetRef`; they share no supertype, and the parameter type of
 /// `invalidate` is not part of this Riverpod version's public API. A wrapper
 /// clever enough to take both would be harder to read than the repetition.
+/// A table added to the backup payload or the sync writer needs its notifier
+/// added to both.
 void invalidateRestoredData(Ref ref) {
   // Workspaces first: the lists below are scoped by the selected workspace, so
   // a stale selection would filter freshly restored rows straight back out.
@@ -39,9 +44,12 @@ void invalidateRestoredData(Ref ref) {
   ref.invalidate(hostGroupsProvider);
   ref.invalidate(identitiesProvider);
   ref.invalidate(undecryptableIdentityIdsProvider);
+  ref.invalidate(vaultEnvVarsProvider);
   ref.invalidate(tunnelsProvider);
   ref.invalidate(snippetsProvider);
   ref.invalidate(runbooksProvider);
+  ref.invalidate(templatesProvider);
+  ref.invalidate(bookmarksProvider);
 }
 
 /// [invalidateRestoredData], for a widget.
@@ -52,7 +60,10 @@ void invalidateRestoredDataFor(WidgetRef ref) {
   ref.invalidate(hostGroupsProvider);
   ref.invalidate(identitiesProvider);
   ref.invalidate(undecryptableIdentityIdsProvider);
+  ref.invalidate(vaultEnvVarsProvider);
   ref.invalidate(tunnelsProvider);
   ref.invalidate(snippetsProvider);
   ref.invalidate(runbooksProvider);
+  ref.invalidate(templatesProvider);
+  ref.invalidate(bookmarksProvider);
 }
