@@ -37,6 +37,10 @@ class VaultKeyService {
   SecretKey? _unlockedDek;
   int _lifecycleGeneration = 0;
 
+  /// The unprotected read-or-create in progress, shared by every caller that
+  /// arrives while it runs.
+  Future<SecretKey>? _plainDek;
+
   VaultKeyService({
     required this.encryptionEngine,
     required this.secureStorageService,
@@ -61,6 +65,24 @@ class VaultKeyService {
       return dek;
     }
 
+    // One at a time. Two callers that both read an empty keychain would each
+    // generate a key, and the second save overwrites the first: whatever was
+    // encrypted under it -- an identity saved, one arriving by sync -- can
+    // never be opened again. Cleared once done, so a later call reads the
+    // keychain again rather than a key that may since have been replaced.
+    final running = _plainDek;
+    if (running != null) return running;
+
+    final started = _readOrCreatePlainDek();
+    _plainDek = started;
+    try {
+      return await started;
+    } finally {
+      if (identical(_plainDek, started)) _plainDek = null;
+    }
+  }
+
+  Future<SecretKey> _readOrCreatePlainDek() async {
     final existing = await secureStorageService.getMasterKey();
     if (existing != null) return SecretKey(existing);
 

@@ -68,6 +68,24 @@ void main() {
       expect(second, equals(first));
     });
 
+    test('callers that race on an empty keychain share one DEK', () async {
+      // Sync applying an identity while the user saves another: both read an
+      // empty keychain, and a second generated key would overwrite the first.
+      final service = buildService();
+
+      final keys = await Future.wait([
+        service.getDek(),
+        service.getDek(),
+        service.getDek(),
+      ]);
+      final bytes = [for (final key in keys) await key.extractBytes()];
+      final stored = await SecureStorageService().getMasterKey();
+
+      expect(bytes[1], equals(bytes[0]));
+      expect(bytes[2], equals(bytes[0]));
+      expect(stored, equals(bytes[0]));
+    });
+
     test('setting a master password preserves the existing DEK', () async {
       final service = buildService();
       final before = await (await service.getDek()).extractBytes();
