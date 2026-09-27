@@ -78,6 +78,12 @@ class SocketChannelPipe {
       onError: (Object _) => _onChannelClosed(),
     );
 
+    // A write that fails once the socket's receiving side has ended (the
+    // peer sent FIN, then reset) is reported only here. Unheard, it surfaces
+    // as an unhandled error and the channel stays open until the far side
+    // ends it.
+    socket.done.then((_) {}, onError: (Object _) => close());
+
     if (socketEnded) _onSocketDone();
   }
 
