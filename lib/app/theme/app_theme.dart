@@ -130,6 +130,13 @@ class AppTheme {
       useMaterial3: true,
       brightness: isDark ? Brightness.dark : Brightness.light,
       scaffoldBackgroundColor: scaffoldBg,
+      // Material's own state layers are neutral black or white, which reads as
+      // a grey smear on any tinted palette — most visibly on the selected row
+      // of an open dropdown, which carries focus. Derive them from the palette.
+      hoverColor: tokens.textPrimary.withValues(alpha: 0.05),
+      focusColor: tokens.brand.withValues(alpha: 0.12),
+      highlightColor: tokens.textPrimary.withValues(alpha: 0.06),
+      splashColor: tokens.brand.withValues(alpha: 0.08),
       // Applied to the Material typography before the ramp below is merged
       // over it, so every step inherits the family without repeating it.
       fontFamily: resolveUiFontFamily(settings.uiFontFamily),
@@ -148,6 +155,37 @@ class AppTheme {
         // whichever of ink or paper reads better on it.
         onPrimary: tokens.brandInk,
         onSecondary: legibleInk(accentColor, tokens),
+        // Every other role would come from the seed's tonal ramp: the right
+        // hue family at M3's own lightness, which puts pink sheets and chips
+        // on Gruvbox parchment and a pale snack bar on a night ground. The
+        // Material widgets used with theme defaults — bottom sheets, filter
+        // chips, segmented buttons, switches, sliders, badges, snack bars, the
+        // date picker — all read these, so they are pinned to the tokens.
+        onSurface: tokens.textPrimary,
+        onSurfaceVariant: tokens.textMuted,
+        surfaceContainerLowest: tokens.surfaceLow,
+        surfaceContainerLow: tokens.surfaceRaised,
+        surfaceContainer: tokens.surfaceRaised,
+        surfaceContainerHigh: tokens.surfaceRaised,
+        // Tracks and filled fields: recessed into the panel, not lifted.
+        surfaceContainerHighest: Color.alphaBlend(
+          tokens.textPrimary.withValues(alpha: 0.10),
+          tokens.surface,
+        ),
+        surfaceTint: Colors.transparent,
+        outline: tokens.textSubtle,
+        outlineVariant: tokens.border,
+        secondaryContainer: Color.alphaBlend(
+          tokens.brand.withValues(alpha: 0.16),
+          tokens.surface,
+        ),
+        onSecondaryContainer: tokens.textPrimary,
+        error: tokens.danger,
+        onError: legibleInk(tokens.danger, tokens),
+        errorContainer: tokens.dangerMutedSurface,
+        onErrorContainer: tokens.dangerMutedText,
+        inverseSurface: tokens.textPrimary,
+        onInverseSurface: tokens.canvas,
       ),
       cardTheme: CardThemeData(
         color: cardBg,
@@ -299,8 +337,10 @@ class AppTheme {
             fontWeight: states.contains(WidgetState.selected)
                 ? FontWeight.w600
                 : FontWeight.w500,
+            // Same token as the selected icon above it; a literal here once
+            // left every palette's selected tab label in Nocturne violet.
             color: states.contains(WidgetState.selected)
-                ? const Color(0xFFA8AEFF)
+                ? tokens.brandBright
                 : tokens.textMuted,
           ),
         ),

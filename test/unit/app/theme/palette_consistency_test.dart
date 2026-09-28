@@ -2,7 +2,40 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/app/theme/app_palette_definitions.dart';
 import 'package:shellvibe/app/theme/app_theme.dart';
+import 'package:shellvibe/app/theme/shellvibe_tokens.dart';
 import 'package:shellvibe/features/settings/domain/models/app_settings_model.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
+
+/// Popovers, menus and their state layers must come from the palette, never
+/// from shadcn's Slate or Material's neutral defaults.
+void expectOverlaysFollowTokens(
+  ShadColorScheme shad,
+  ThemeData theme,
+  ShellVibeTokens tokens,
+) {
+  expect(shad.popover, equals(tokens.surfaceRaised));
+  expect(shad.popoverForeground, equals(tokens.textPrimary));
+  expect(shad.input, equals(tokens.border));
+  expect(shad.accentForeground, equals(tokens.textPrimary));
+  expect(theme.popupMenuTheme.color, equals(tokens.surfaceRaised));
+  expect(theme.focusColor, equals(tokens.brand.withValues(alpha: 0.12)));
+  expect(theme.hoverColor, equals(tokens.textPrimary.withValues(alpha: 0.05)));
+
+  // Roles Material widgets read when used with theme defaults.
+  final scheme = theme.colorScheme;
+  expect(scheme.onSurface, equals(tokens.textPrimary));
+  expect(scheme.surfaceContainerLow, equals(tokens.surfaceRaised));
+  expect(scheme.surfaceContainerHigh, equals(tokens.surfaceRaised));
+  expect(scheme.outlineVariant, equals(tokens.border));
+  expect(scheme.error, equals(tokens.danger));
+  expect(scheme.inverseSurface, equals(tokens.textPrimary));
+  expect(scheme.onInverseSurface, equals(tokens.canvas));
+
+  final selectedLabel = theme.navigationBarTheme.labelTextStyle!.resolve({
+    WidgetState.selected,
+  });
+  expect(selectedLabel!.color, equals(tokens.brandBright));
+}
 
 void main() {
   group('AppPaletteDefinition & Palette Consistency Tests', () {
@@ -37,6 +70,7 @@ void main() {
           );
           expect(darkShad.background, equals(darkTokens.canvas));
           expect(darkShad.card, equals(darkTokens.surface));
+          expectOverlaysFollowTokens(darkShad, darkTheme, darkTokens);
 
           // Light verification
           final lightTokens = def.lightTokens;
@@ -63,6 +97,7 @@ void main() {
           );
           expect(lightShad.background, equals(lightTokens.canvas));
           expect(lightShad.card, equals(lightTokens.surface));
+          expectOverlaysFollowTokens(lightShad, lightTheme, lightTokens);
         },
       );
     }
