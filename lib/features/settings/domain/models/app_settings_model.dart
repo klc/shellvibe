@@ -47,7 +47,7 @@ class AppSettingsModel {
   const AppSettingsModel({
     this.themeMode = ThemeMode.dark,
     this.palette = AppPalette.oled,
-    this.terminalPalette = TerminalPalette.oled,
+    this.terminalPalette = TerminalPalette.matchApp,
     this.fontFamily = 'RobotoMono',
     this.uiFontFamily = 'InterTight',
     this.fontSize = 14.0,
@@ -61,6 +61,54 @@ class AppSettingsModel {
     this.activeWorkspaceId = 'default',
     this.keepRunningInTray = true,
   });
+
+  /// The brightness the app is drawn in, for callers with no theme to read it
+  /// from. Widgets should prefer `Theme.of(context).brightness`.
+  Brightness get effectiveBrightness => switch (themeMode) {
+    ThemeMode.dark => Brightness.dark,
+    ThemeMode.light => Brightness.light,
+    ThemeMode.system =>
+      WidgetsBinding.instance.platformDispatcher.platformBrightness,
+  };
+
+  /// The scheme the terminal paints with while the app is drawn in
+  /// [brightness]. [TerminalPalette.matchApp] takes the scheme paired with
+  /// [palette], so the terminal does not sit as a black slab inside a light
+  /// theme; any explicit choice is returned as it is.
+  TerminalPalette resolvedTerminalPalette(Brightness brightness) {
+    if (terminalPalette != TerminalPalette.matchApp) return terminalPalette;
+    final (dark, light) = switch (palette) {
+      AppPalette.dark => (
+        TerminalPalette.nocturne,
+        TerminalPalette.githubLight,
+      ),
+      AppPalette.oled => (TerminalPalette.oled, TerminalPalette.githubLight),
+      AppPalette.teal => (TerminalPalette.dark, TerminalPalette.githubLight),
+      AppPalette.catppuccin => (
+        TerminalPalette.catppuccinMocha,
+        TerminalPalette.catppuccinLatte,
+      ),
+      AppPalette.nord => (TerminalPalette.nord, TerminalPalette.nordLight),
+      AppPalette.dracula => (
+        TerminalPalette.dracula,
+        TerminalPalette.githubLight,
+      ),
+      AppPalette.solarizedDark => (
+        TerminalPalette.solarizedDark,
+        TerminalPalette.solarizedLight,
+      ),
+      AppPalette.tokyoNight => (
+        TerminalPalette.tokyoNight,
+        TerminalPalette.tokyoNightDay,
+      ),
+      AppPalette.gruvbox => (
+        TerminalPalette.gruvboxDark,
+        TerminalPalette.gruvboxLight,
+      ),
+      AppPalette.oneDark => (TerminalPalette.oneDark, TerminalPalette.oneLight),
+    };
+    return brightness == Brightness.dark ? dark : light;
+  }
 
   AppSettingsModel copyWith({
     ThemeMode? themeMode,
@@ -132,7 +180,7 @@ class AppSettingsModel {
       ),
       terminalPalette: TerminalPalette.values.firstWhere(
         (e) => e.name == json['terminalPalette'],
-        orElse: () => TerminalPalette.oled,
+        orElse: () => TerminalPalette.matchApp,
       ),
       fontFamily: (json['fontFamily'] as String?) ?? 'RobotoMono',
       uiFontFamily: (json['uiFontFamily'] as String?) ?? 'InterTight',

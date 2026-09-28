@@ -1,4 +1,6 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shellvibe/features/settings/domain/models/app_settings_model.dart';
 import 'package:shellvibe/features/terminal/domain/models/terminal_font.dart';
 import 'package:shellvibe/features/terminal/domain/models/terminal_palette.dart';
 import 'package:shellvibe/features/terminal/domain/models/terminal_palette_data.dart';
@@ -8,17 +10,24 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('TerminalPalette registry', () {
-    test('covers every enum value exactly once', () {
+    // matchApp names a rule, not colours: it is resolved to one of these
+    // before any lookup, so it has no registry entry of its own.
+    final schemes = TerminalPalette.values.where(
+      (value) => value != TerminalPalette.matchApp,
+    );
+
+    test('covers every scheme exactly once', () {
       final palettes = kTerminalPalettes.map((p) => p.palette).toList();
-      expect(palettes, hasLength(TerminalPalette.values.length));
+      expect(palettes, hasLength(schemes.length));
       expect(palettes.toSet(), hasLength(palettes.length));
-      for (final value in TerminalPalette.values) {
+      for (final value in schemes) {
         expect(palettes, contains(value));
       }
+      expect(palettes, isNot(contains(TerminalPalette.matchApp)));
     });
 
     test('lookup returns the registered entry for every palette', () {
-      for (final value in TerminalPalette.values) {
+      for (final value in schemes) {
         expect(TerminalPaletteData.of(value).palette, value);
       }
     });
@@ -40,6 +49,66 @@ void main() {
         );
         expect(TerminalPaletteData.themeOf(value), isNotNull);
       }
+    });
+
+    test(
+      'matchApp resolves every app palette to a scheme of its brightness',
+      () {
+        for (final palette in AppPalette.values) {
+          final settings = AppSettingsModel(palette: palette);
+          for (final brightness in Brightness.values) {
+            final resolved = settings.resolvedTerminalPalette(brightness);
+            expect(resolved, isNot(TerminalPalette.matchApp));
+            expect(
+              TerminalPaletteData.of(resolved).isLight,
+              brightness == Brightness.light,
+              reason: '${palette.name} ${brightness.name} -> ${resolved.name}',
+            );
+          }
+        }
+      },
+    );
+
+    test('matchApp pairs a palette with its own terminal scheme', () {
+      const gruvbox = AppSettingsModel(palette: AppPalette.gruvbox);
+      expect(
+        gruvbox.resolvedTerminalPalette(Brightness.light),
+        TerminalPalette.gruvboxLight,
+      );
+      expect(
+        gruvbox.resolvedTerminalPalette(Brightness.dark),
+        TerminalPalette.gruvboxDark,
+      );
+    });
+
+    test('an explicit scheme is kept whatever the app theme', () {
+      const settings = AppSettingsModel(
+        palette: AppPalette.gruvbox,
+        terminalPalette: TerminalPalette.oled,
+      );
+      for (final brightness in Brightness.values) {
+        expect(
+          settings.resolvedTerminalPalette(brightness),
+          TerminalPalette.oled,
+        );
+      }
+    });
+
+    test('new and unreadable settings follow the app; stored choices stay', () {
+      expect(
+        const AppSettingsModel().terminalPalette,
+        TerminalPalette.matchApp,
+      );
+      expect(
+        AppSettingsModel.fromJson(const {}).terminalPalette,
+        TerminalPalette.matchApp,
+      );
+      expect(
+        AppSettingsModel.fromJson(const {
+          'terminalPalette': 'oled',
+        }).terminalPalette,
+        TerminalPalette.oled,
+      );
     });
 
     test('appending new enum values does not shift existing names', () {

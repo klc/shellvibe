@@ -72,10 +72,13 @@ void main() {
       TerminalTheme shownTheme() =>
           tester.widget<TerminalView>(find.byType(TerminalView)).theme;
 
+      // The default follows the app theme; the bare MaterialApp here is light.
       expect(
         shownTheme(),
         same(
-          TerminalPaletteData.themeOf(const AppSettingsModel().terminalPalette),
+          TerminalPaletteData.themeOf(
+            const AppSettingsModel().resolvedTerminalPalette(Brightness.light),
+          ),
         ),
       );
 

@@ -8,8 +8,11 @@ import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../../../core/network/ssh_session_manager.dart';
 import '../../../../core/utils/platform_capabilities.dart';
+import '../../../settings/domain/models/app_settings_model.dart';
+import '../../../settings/presentation/notifiers/settings_notifier.dart';
 import '../../../templates/domain/models/template_model.dart';
 import '../../../templates/presentation/widgets/template_picker_sheet.dart';
+import '../../domain/models/terminal_palette_data.dart';
 import '../../domain/models/terminal_tab_session.dart';
 import '../notifiers/terminal_tabs_notifier.dart';
 import 'terminal_pane_helpers.dart';
@@ -120,6 +123,13 @@ class TerminalTabStrip extends ConsumerWidget {
     // Same value the focused pane rings itself with, so the tab's outline and
     // the pane's are one unbroken line.
     final activeTabRing = tokens.brand.withValues(alpha: 0.28);
+    // What the terminal body really paints — its own scheme, not the app
+    // palette's terminalBg — so the active tab has no seam where it meets it.
+    final settings =
+        ref.watch(settingsProvider).value ?? const AppSettingsModel();
+    final terminalBg = TerminalPaletteData.of(
+      settings.resolvedTerminalPalette(Theme.of(context).brightness),
+    ).theme.background;
 
     // Every action except "new tab" is collapsible: on a phone six inline
     // IconButtons eat the whole bar and the tab strip is squeezed to a single
@@ -286,7 +296,7 @@ class TerminalTabStrip extends ConsumerWidget {
                                       end: Alignment.bottomCenter,
                                       colors: [
                                         tokens.surfaceRaised,
-                                        tokens.terminalBg,
+                                        terminalBg,
                                       ],
                                     )
                                   : null,

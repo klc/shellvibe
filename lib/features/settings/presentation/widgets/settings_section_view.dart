@@ -444,6 +444,12 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
           ],
         ];
       case SettingsSection.terminal:
+        // "Match App Theme" has no colours of its own: its swatch, icon and
+        // preview are those of the scheme it resolves to right now.
+        final resolvedTerminal = TerminalPaletteData.of(
+          settings.resolvedTerminalPalette(Theme.of(context).brightness),
+        );
+        final followsApp = settings.terminalPalette == TerminalPalette.matchApp;
         return [
           // --- Section 2: Terminal Customization & Theme ---
           _buildSectionHeader(
@@ -456,12 +462,22 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
                 ListTile(
                   title: const Text('Terminal Color Scheme'),
                   subtitle: Text(
-                    'Current: ${TerminalPaletteData.of(settings.terminalPalette).label}',
+                    followsApp
+                        ? 'Current: ${resolvedTerminal.label}, following the app theme'
+                        : 'Current: ${resolvedTerminal.label}',
                   ),
                   trailing: ShadSelect<TerminalPalette>(
                     key: const Key('settings_terminal_palette_dropdown'),
                     initialValue: settings.terminalPalette,
                     selectedOptionBuilder: (context, value) {
+                      if (value == TerminalPalette.matchApp) {
+                        return _IconLabel(
+                          icon: _brightnessIcon(
+                            isLight: resolvedTerminal.isLight,
+                          ),
+                          label: 'Match App Theme',
+                        );
+                      }
                       final data = TerminalPaletteData.of(value);
                       return _IconLabel(
                         icon: _brightnessIcon(isLight: data.isLight),
@@ -469,6 +485,20 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
                       );
                     },
                     options: [
+                      ShadOption(
+                        value: TerminalPalette.matchApp,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _PaletteSwatch(theme: resolvedTerminal.theme),
+                            const SizedBox(width: 10),
+                            const _IconLabel(
+                              icon: LucideIcons.sunMoon,
+                              label: 'Match App Theme',
+                            ),
+                          ],
+                        ),
+                      ),
                       for (final p in kTerminalPalettes)
                         ShadOption(
                           value: p.palette,
@@ -495,9 +525,7 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
                   child: _TerminalThemePreview(
-                    theme: TerminalPaletteData.themeOf(
-                      settings.terminalPalette,
-                    ),
+                    theme: resolvedTerminal.theme,
                     fontFamily: resolveTerminalFontFamily(settings.fontFamily),
                   ),
                 ),
