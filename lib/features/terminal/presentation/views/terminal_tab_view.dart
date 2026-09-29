@@ -494,6 +494,12 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
           icon: LucideIcons.server,
           label: 'Connect to Host...',
         ),
+        const AdaptiveMenuAction(
+          value: _NewTabAction.runTemplate,
+          itemKey: Key('new_tab_menu_template'),
+          icon: LucideIcons.layoutTemplate,
+          label: 'Run Template...',
+        ),
         AdaptiveMenuAction(
           value: _NewTabAction.deviceLink,
           itemKey: const Key('new_tab_menu_device_link'),
@@ -511,6 +517,8 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
         ref.read(terminalTabsProvider.notifier).openLocalTab();
       case _NewTabAction.connectToHost:
         _showSelectHostModal(this.context, ref);
+      case _NewTabAction.runTemplate:
+        TemplatePickerSheet.show(this.context, onSelect: _runTemplate);
       case _NewTabAction.deviceLink:
         _handleDeviceLinkAction();
     }
@@ -737,4 +745,4 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
 
 /// The rows of the "+" menu, so the choice survives the modal being a dropdown
 /// on one host and a sheet on another.
-enum _NewTabAction { localShell, connectToHost, deviceLink }
+enum _NewTabAction { localShell, connectToHost, runTemplate, deviceLink }
