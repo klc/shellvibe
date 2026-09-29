@@ -78,7 +78,7 @@ class _HostGroupFormDialogState extends ConsumerState<HostGroupFormDialog> {
       if (mounted) {
         ShadToaster.of(context).show(
           ShadToast.destructive(
-            title: const Text('Save Group Error'),
+            title: const Text('Save Tag Error'),
             description: Text('$e'),
           ),
         );
@@ -94,7 +94,7 @@ class _HostGroupFormDialogState extends ConsumerState<HostGroupFormDialog> {
     final isEditing = widget.initialGroup != null;
 
     return ShadDialog(
-      title: Text(isEditing ? 'Edit Folder / Group' : 'Add Folder / Group'),
+      title: Text(isEditing ? 'Edit Tag' : 'Add Tag'),
       actions: adaptiveDialogActions(context, [
         ShellVibeButton.secondary(
           label: 'Cancel',
@@ -121,10 +121,10 @@ class _HostGroupFormDialogState extends ConsumerState<HostGroupFormDialog> {
                 ShadInputFormField(
                   key: const Key('group_name_input'),
                   controller: _nameController,
-                  label: const Text('Group Name'),
-                  placeholder: const Text('e.g. Production Servers, Staging'),
+                  label: const Text('Tag Name'),
+                  placeholder: const Text('e.g. prod, staging, eu-west'),
                   validator: (v) =>
-                      v.trim().isEmpty ? 'Group name is required' : null,
+                      v.trim().isEmpty ? 'Tag name is required' : null,
                 ),
                 const SizedBox(height: 12),
                 groupsAsync.when(
@@ -140,7 +140,7 @@ class _HostGroupFormDialogState extends ConsumerState<HostGroupFormDialog> {
                     return ShadSelectFormField<String?>(
                       key: const Key('group_parent_dropdown'),
                       initialValue: _selectedParentId,
-                      label: const Text('Parent Group (Optional)'),
+                      label: const Text('Parent Tag (Optional)'),
                       selectedOptionBuilder: (context, value) {
                         if (value == null) {
                           return const Text('(Root Level - No Parent)');
@@ -167,7 +167,7 @@ class _HostGroupFormDialogState extends ConsumerState<HostGroupFormDialog> {
                     );
                   },
                   loading: () => const LinearProgressIndicator(),
-                  error: (e, s) => Text('Error loading parent groups: $e'),
+                  error: (e, s) => Text('Error loading tags: $e'),
                 ),
                 const SizedBox(height: 12),
                 ShadInputFormField(

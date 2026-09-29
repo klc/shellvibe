@@ -89,7 +89,7 @@ void main() {
         final appDb = AppDatabase(NativeDatabase(tempDbFile));
         db = appDb;
 
-        expect(appDb.schemaVersion, equals(14));
+        expect(appDb.schemaVersion, equals(15));
 
         // The v10 tables have to exist after a migration, not only after a
         // fresh create: a device that upgrades and then makes a change would
@@ -342,6 +342,17 @@ void main() {
         INSERT INTO hosts (id, workspace_id, label, hostname, port, protocol, created_at)
         VALUES ('host-v8', 'default', 'Legacy Host', '10.0.0.1', 22, 'ssh', 1600000000);
       ''');
+      // A real v8 database has this from the first schema, and the v15
+      // membership table references it, so deleting a host needs it here.
+      rawDb.execute('''
+        CREATE TABLE IF NOT EXISTS "host_groups" (
+          "id" TEXT NOT NULL PRIMARY KEY,
+          "workspace_id" TEXT NOT NULL,
+          "parent_id" TEXT NULL,
+          "name" TEXT NOT NULL,
+          "color_tag" TEXT NULL
+        );
+      ''');
       // A real v8 database has this from the v4 migration, and bookmarks
       // reference it, so the fixture needs it too.
       rawDb.execute('''
@@ -535,7 +546,7 @@ void main() {
       final appDb = AppDatabase(NativeDatabase(tempDbFile));
       db = appDb;
 
-      expect(appDb.schemaVersion, equals(14));
+      expect(appDb.schemaVersion, equals(15));
       expect(await appDb.vaultEnvVarsDao.getByWorkspace('default'), isEmpty);
 
       await appDb.vaultEnvVarsDao.insert(
@@ -555,5 +566,72 @@ void main() {
       await appDb.workspacesDao.deleteWorkspace('default');
       expect(await appDb.vaultEnvVarsDao.getByWorkspace('default'), isEmpty);
     });
+
+    test(
+      'upgrading to v15 turns each single host tag into a membership row',
+      () async {
+        final rawDb = sqlite3.open(tempDbFile.path);
+        rawDb.execute('''
+        CREATE TABLE IF NOT EXISTS "workspaces" (
+          "id" TEXT NOT NULL PRIMARY KEY,
+          "name" TEXT NOT NULL,
+          "color_code" TEXT NULL,
+          "created_at" INTEGER NOT NULL
+        );
+      ''');
+        rawDb.execute('''
+        CREATE TABLE IF NOT EXISTS "host_groups" (
+          "id" TEXT NOT NULL PRIMARY KEY,
+          "workspace_id" TEXT NOT NULL,
+          "parent_id" TEXT NULL,
+          "name" TEXT NOT NULL,
+          "color_tag" TEXT NULL
+        );
+      ''');
+        rawDb.execute(_hostsTableAtV2);
+        rawDb.execute(
+          'INSERT INTO workspaces (id, name, created_at) '
+          "VALUES ('default', 'Default Workspace', 1600000000);",
+        );
+        rawDb.execute(
+          'INSERT INTO host_groups (id, workspace_id, name) '
+          "VALUES ('group-1', 'default', 'prod');",
+        );
+        rawDb.execute(
+          'INSERT INTO hosts (id, workspace_id, group_id, label, hostname, '
+          "created_at) VALUES ('host-tagged', 'default', 'group-1', 'Tagged', "
+          "'10.0.0.1', 1600000000), ('host-plain', 'default', NULL, 'Plain', "
+          "'10.0.0.2', 1600000000);",
+        );
+        rawDb.execute('PRAGMA user_version = 14;');
+        rawDb.close();
+
+        final appDb = AppDatabase(NativeDatabase(tempDbFile));
+        db = appDb;
+
+        expect(appDb.schemaVersion, equals(15));
+
+        // The id is the deterministic one sync uses, so another device that
+        // migrates the same data produces the same row.
+        final members = await appDb
+            .customSelect(
+              'SELECT id, host_id, group_id FROM host_group_members',
+            )
+            .get();
+        expect(members, hasLength(1));
+        expect(
+          members.single.read<String>('id'),
+          equals('host-tagged:group-1'),
+        );
+        expect(members.single.read<String>('host_id'), equals('host-tagged'));
+        expect(members.single.read<String>('group_id'), equals('group-1'));
+
+        // The legacy column is cleared so it cannot disagree with the members.
+        final legacy = await appDb
+            .customSelect('SELECT id FROM hosts WHERE group_id IS NOT NULL')
+            .get();
+        expect(legacy, isEmpty);
+      },
+    );
   });
 }

@@ -202,9 +202,9 @@ class PolicyEngine {
       case 'group':
         // A host outside every group cannot match a group-scoped rule, and a
         // rule with no group id is malformed — both fall through to the
-        // matrix rather than matching on a guess.
-        if (scopeId == null || ctx.hostGroupId == null) return false;
-        return scopeId == ctx.hostGroupId;
+        // matrix rather than matching on a guess. A host with several tags
+        // matches when any one of them is the rule's group.
+        return scopeId != null && ctx.hostGroupIds.contains(scopeId);
       default:
         return false;
     }

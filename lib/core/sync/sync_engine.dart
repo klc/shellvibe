@@ -112,7 +112,7 @@ final class SyncEngine {
 
   /// Tables each category owns, for filtering in both directions.
   static const Map<BackupCategory, List<String>> categoryTables = {
-    BackupCategory.hosts: ['hosts'],
+    BackupCategory.hosts: ['hosts', 'host_group_members'],
     BackupCategory.identities: ['identities', 'vault_env_vars'],
     BackupCategory.snippetsAndRunbooks: [
       'snippets',

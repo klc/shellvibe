@@ -8,6 +8,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../../../core/crypto/encryption_engine.dart';
 import '../../../../shared/database/app_database.dart';
+import '../../../../shared/database/tables.dart' show hostGroupMemberId;
 import '../../../vault/data/repositories/vault_repository.dart';
 import '../../../vault/data/vault_key_service.dart';
 import '../../domain/models/ssh_config_models.dart';
@@ -339,12 +340,15 @@ class SshConfigImportService {
                 identityId: identityId != null
                     ? Value(identityId)
                     : const Value.absent(),
-                groupId: Value(options.groupId),
                 // Cleared here; pass 2 re-writes it when the config has a
                 // ProxyJump.
                 jumpHostId: const Value(null),
               ),
             );
+            // Adds the chosen tag next to whatever the host already carries,
+            // rather than replacing its tags: an import that only knows one
+            // group must not strip tags the user set by hand.
+            await _addToGroup(target.id, options.groupId);
             if (options.importTunnels) {
               // Overwrite replaces the host's forwarding rules rather than
               // stacking duplicates next to the old ones.
@@ -490,7 +494,6 @@ class SshConfigImportService {
       HostsCompanion(
         id: Value(id),
         workspaceId: Value(workspaceId),
-        groupId: Value(groupId),
         identityId: Value(identityId),
         label: Value(label),
         hostname: Value(draft.hostname),
@@ -502,7 +505,31 @@ class SshConfigImportService {
         createdAt: Value(DateTime.now()),
       ),
     );
+    await _addToGroup(id, groupId);
     return id;
+  }
+
+  /// Tags [hostId] with [groupId] (no-op when null or already tagged).
+  ///
+  /// Goes through the journal like every other syncable write, with the same
+  /// deterministic row id the repository and sync use.
+  Future<void> _addToGroup(String hostId, String? groupId) async {
+    if (groupId == null) return;
+    final memberId = hostGroupMemberId(hostId, groupId);
+    await db.recordUpsert(
+      entityType: 'host_group_members',
+      entityId: memberId,
+      write: () => db
+          .into(db.hostGroupMembers)
+          .insert(
+            HostGroupMembersCompanion.insert(
+              id: memberId,
+              hostId: hostId,
+              groupId: groupId,
+            ),
+            mode: InsertMode.insertOrIgnore,
+          ),
+    );
   }
 
   /// Returns [base], or `base (2)`, `base (3)`, … — the first label not in

@@ -26,7 +26,7 @@ class HostsNotifier extends _$HostsNotifier {
   /// after saving has something to connect to.
   Future<HostModel> addHost({
     required String workspaceId,
-    String? groupId,
+    List<String> groupIds = const [],
     String? identityId,
     required String label,
     required String hostname,
@@ -43,7 +43,7 @@ class HostsNotifier extends _$HostsNotifier {
       final repo = ref.read(hostsRepositoryProvider);
       final saved = await repo.saveHost(
         workspaceId: workspaceId,
-        groupId: groupId,
+        groupIds: groupIds,
         identityId: identityId,
         label: label,
         hostname: hostname,
@@ -71,7 +71,7 @@ class HostsNotifier extends _$HostsNotifier {
   Future<void> updateHost({
     required String id,
     required String workspaceId,
-    String? groupId,
+    List<String> groupIds = const [],
     String? identityId,
     required String label,
     required String hostname,
@@ -89,7 +89,7 @@ class HostsNotifier extends _$HostsNotifier {
       await repo.saveHost(
         id: id,
         workspaceId: workspaceId,
-        groupId: groupId,
+        groupIds: groupIds,
         identityId: identityId,
         label: label,
         hostname: hostname,

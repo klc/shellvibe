@@ -1740,6 +1740,10 @@ class $HostsTable extends Hosts with TableInfo<$HostsTable, Host> {
 class Host extends DataClass implements Insertable<Host> {
   final String id;
   final String workspaceId;
+
+  /// Legacy single-tag column. Tags now live in [HostGroupMembers]; this is
+  /// kept only so old backups and old clients that still send it can be read,
+  /// and it is always written as NULL.
   final String? groupId;
   final String? identityId;
   final String label;
@@ -2280,6 +2284,275 @@ class HostsCompanion extends UpdateCompanion<Host> {
           ..write('environment: $environment, ')
           ..write('mcpVisible: $mcpVisible, ')
           ..write('mcpDefaultMode: $mcpDefaultMode, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $HostGroupMembersTable extends HostGroupMembers
+    with TableInfo<$HostGroupMembersTable, HostGroupMember> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $HostGroupMembersTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _hostIdMeta = const VerificationMeta('hostId');
+  @override
+  late final GeneratedColumn<String> hostId = GeneratedColumn<String>(
+    'host_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES hosts (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _groupIdMeta = const VerificationMeta(
+    'groupId',
+  );
+  @override
+  late final GeneratedColumn<String> groupId = GeneratedColumn<String>(
+    'group_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES host_groups (id) ON DELETE CASCADE',
+    ),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, hostId, groupId];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'host_group_members';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<HostGroupMember> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('host_id')) {
+      context.handle(
+        _hostIdMeta,
+        hostId.isAcceptableOrUnknown(data['host_id']!, _hostIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_hostIdMeta);
+    }
+    if (data.containsKey('group_id')) {
+      context.handle(
+        _groupIdMeta,
+        groupId.isAcceptableOrUnknown(data['group_id']!, _groupIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_groupIdMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {hostId, groupId},
+  ];
+  @override
+  HostGroupMember map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return HostGroupMember(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      hostId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}host_id'],
+      )!,
+      groupId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}group_id'],
+      )!,
+    );
+  }
+
+  @override
+  $HostGroupMembersTable createAlias(String alias) {
+    return $HostGroupMembersTable(attachedDatabase, alias);
+  }
+}
+
+class HostGroupMember extends DataClass implements Insertable<HostGroupMember> {
+  final String id;
+  final String hostId;
+  final String groupId;
+  const HostGroupMember({
+    required this.id,
+    required this.hostId,
+    required this.groupId,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['host_id'] = Variable<String>(hostId);
+    map['group_id'] = Variable<String>(groupId);
+    return map;
+  }
+
+  HostGroupMembersCompanion toCompanion(bool nullToAbsent) {
+    return HostGroupMembersCompanion(
+      id: Value(id),
+      hostId: Value(hostId),
+      groupId: Value(groupId),
+    );
+  }
+
+  factory HostGroupMember.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return HostGroupMember(
+      id: serializer.fromJson<String>(json['id']),
+      hostId: serializer.fromJson<String>(json['hostId']),
+      groupId: serializer.fromJson<String>(json['groupId']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'hostId': serializer.toJson<String>(hostId),
+      'groupId': serializer.toJson<String>(groupId),
+    };
+  }
+
+  HostGroupMember copyWith({String? id, String? hostId, String? groupId}) =>
+      HostGroupMember(
+        id: id ?? this.id,
+        hostId: hostId ?? this.hostId,
+        groupId: groupId ?? this.groupId,
+      );
+  HostGroupMember copyWithCompanion(HostGroupMembersCompanion data) {
+    return HostGroupMember(
+      id: data.id.present ? data.id.value : this.id,
+      hostId: data.hostId.present ? data.hostId.value : this.hostId,
+      groupId: data.groupId.present ? data.groupId.value : this.groupId,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('HostGroupMember(')
+          ..write('id: $id, ')
+          ..write('hostId: $hostId, ')
+          ..write('groupId: $groupId')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, hostId, groupId);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is HostGroupMember &&
+          other.id == this.id &&
+          other.hostId == this.hostId &&
+          other.groupId == this.groupId);
+}
+
+class HostGroupMembersCompanion extends UpdateCompanion<HostGroupMember> {
+  final Value<String> id;
+  final Value<String> hostId;
+  final Value<String> groupId;
+  final Value<int> rowid;
+  const HostGroupMembersCompanion({
+    this.id = const Value.absent(),
+    this.hostId = const Value.absent(),
+    this.groupId = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  HostGroupMembersCompanion.insert({
+    required String id,
+    required String hostId,
+    required String groupId,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       hostId = Value(hostId),
+       groupId = Value(groupId);
+  static Insertable<HostGroupMember> custom({
+    Expression<String>? id,
+    Expression<String>? hostId,
+    Expression<String>? groupId,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (hostId != null) 'host_id': hostId,
+      if (groupId != null) 'group_id': groupId,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  HostGroupMembersCompanion copyWith({
+    Value<String>? id,
+    Value<String>? hostId,
+    Value<String>? groupId,
+    Value<int>? rowid,
+  }) {
+    return HostGroupMembersCompanion(
+      id: id ?? this.id,
+      hostId: hostId ?? this.hostId,
+      groupId: groupId ?? this.groupId,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (hostId.present) {
+      map['host_id'] = Variable<String>(hostId.value);
+    }
+    if (groupId.present) {
+      map['group_id'] = Variable<String>(groupId.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('HostGroupMembersCompanion(')
+          ..write('id: $id, ')
+          ..write('hostId: $hostId, ')
+          ..write('groupId: $groupId, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -11440,6 +11713,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $IdentitiesTable identities = $IdentitiesTable(this);
   late final $HostGroupsTable hostGroups = $HostGroupsTable(this);
   late final $HostsTable hosts = $HostsTable(this);
+  late final $HostGroupMembersTable hostGroupMembers = $HostGroupMembersTable(
+    this,
+  );
   late final $KnownHostsTable knownHosts = $KnownHostsTable(this);
   late final $PortForwardRulesTable portForwardRules = $PortForwardRulesTable(
     this,
@@ -11488,6 +11764,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     identities,
     hostGroups,
     hosts,
+    hostGroupMembers,
     knownHosts,
     portForwardRules,
     snippets,
@@ -11558,6 +11835,20 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('hosts', kind: UpdateKind.update)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'hosts',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('host_group_members', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'host_groups',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('host_group_members', kind: UpdateKind.delete)],
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
@@ -13362,6 +13653,26 @@ final class $$HostGroupsTableReferences
       manager.$state.copyWith(prefetchedData: cache),
     );
   }
+
+  static MultiTypedResultKey<$HostGroupMembersTable, List<HostGroupMember>>
+  _hostGroupMembersRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.hostGroupMembers,
+    aliasName: 'host_groups__id__host_group_members__group_id',
+  );
+
+  $$HostGroupMembersTableProcessedTableManager get hostGroupMembersRefs {
+    final manager = $$HostGroupMembersTableTableManager(
+      $_db,
+      $_db.hostGroupMembers,
+    ).filter((f) => f.groupId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _hostGroupMembersRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
 }
 
 class $$HostGroupsTableFilterComposer
@@ -13450,6 +13761,31 @@ class $$HostGroupsTableFilterComposer
           }) => $$HostsTableFilterComposer(
             $db: $db,
             $table: $db.hosts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> hostGroupMembersRefs(
+    Expression<bool> Function($$HostGroupMembersTableFilterComposer f) f,
+  ) {
+    final $$HostGroupMembersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.hostGroupMembers,
+      getReferencedColumn: (t) => t.groupId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$HostGroupMembersTableFilterComposer(
+            $db: $db,
+            $table: $db.hostGroupMembers,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -13619,6 +13955,31 @@ class $$HostGroupsTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> hostGroupMembersRefs<T extends Object>(
+    Expression<T> Function($$HostGroupMembersTableAnnotationComposer a) f,
+  ) {
+    final $$HostGroupMembersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.hostGroupMembers,
+      getReferencedColumn: (t) => t.groupId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$HostGroupMembersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.hostGroupMembers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$HostGroupsTableTableManager
@@ -13638,6 +13999,7 @@ class $$HostGroupsTableTableManager
             bool workspaceId,
             bool parentId,
             bool hostsRefs,
+            bool hostGroupMembersRefs,
           })
         > {
   $$HostGroupsTableTableManager(_$AppDatabase db, $HostGroupsTable table)
@@ -13692,10 +14054,18 @@ class $$HostGroupsTableTableManager
               )
               .toList(),
           prefetchHooksCallback:
-              ({workspaceId = false, parentId = false, hostsRefs = false}) {
+              ({
+                workspaceId = false,
+                parentId = false,
+                hostsRefs = false,
+                hostGroupMembersRefs = false,
+              }) {
                 return PrefetchHooks(
                   db: db,
-                  explicitlyWatchedTables: [if (hostsRefs) db.hosts],
+                  explicitlyWatchedTables: [
+                    if (hostsRefs) db.hosts,
+                    if (hostGroupMembersRefs) db.hostGroupMembers,
+                  ],
                   addJoins:
                       <
                         T extends TableManagerState<
@@ -13766,6 +14136,27 @@ class $$HostGroupsTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (hostGroupMembersRefs)
+                        await $_getPrefetchedData<
+                          HostGroup,
+                          $HostGroupsTable,
+                          HostGroupMember
+                        >(
+                          currentTable: table,
+                          referencedTable: $$HostGroupsTableReferences
+                              ._hostGroupMembersRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$HostGroupsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).hostGroupMembersRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.groupId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -13786,7 +14177,12 @@ typedef $$HostGroupsTableProcessedTableManager =
       $$HostGroupsTableUpdateCompanionBuilder,
       (HostGroup, $$HostGroupsTableReferences),
       HostGroup,
-      PrefetchHooks Function({bool workspaceId, bool parentId, bool hostsRefs})
+      PrefetchHooks Function({
+        bool workspaceId,
+        bool parentId,
+        bool hostsRefs,
+        bool hostGroupMembersRefs,
+      })
     >;
 typedef $$HostsTableCreateCompanionBuilder =
     HostsCompanion Function({
@@ -13900,6 +14296,26 @@ final class $$HostsTableReferences
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<$HostGroupMembersTable, List<HostGroupMember>>
+  _hostGroupMembersRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.hostGroupMembers,
+    aliasName: 'hosts__id__host_group_members__host_id',
+  );
+
+  $$HostGroupMembersTableProcessedTableManager get hostGroupMembersRefs {
+    final manager = $$HostGroupMembersTableTableManager(
+      $_db,
+      $_db.hostGroupMembers,
+    ).filter((f) => f.hostId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _hostGroupMembersRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
     );
   }
 
@@ -14141,6 +14557,31 @@ class $$HostsTableFilterComposer extends Composer<_$AppDatabase, $HostsTable> {
           ),
     );
     return composer;
+  }
+
+  Expression<bool> hostGroupMembersRefs(
+    Expression<bool> Function($$HostGroupMembersTableFilterComposer f) f,
+  ) {
+    final $$HostGroupMembersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.hostGroupMembers,
+      getReferencedColumn: (t) => t.hostId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$HostGroupMembersTableFilterComposer(
+            $db: $db,
+            $table: $db.hostGroupMembers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
   }
 
   Expression<bool> portForwardRulesRefs(
@@ -14561,6 +15002,31 @@ class $$HostsTableAnnotationComposer
     return composer;
   }
 
+  Expression<T> hostGroupMembersRefs<T extends Object>(
+    Expression<T> Function($$HostGroupMembersTableAnnotationComposer a) f,
+  ) {
+    final $$HostGroupMembersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.hostGroupMembers,
+      getReferencedColumn: (t) => t.hostId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$HostGroupMembersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.hostGroupMembers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<T> portForwardRulesRefs<T extends Object>(
     Expression<T> Function($$PortForwardRulesTableAnnotationComposer a) f,
   ) {
@@ -14680,6 +15146,7 @@ class $$HostsTableTableManager
             bool groupId,
             bool identityId,
             bool jumpHostId,
+            bool hostGroupMembersRefs,
             bool portForwardRulesRefs,
             bool mcpHostGrantsRefs,
             bool mcpApprovalsRefs,
@@ -14791,6 +15258,7 @@ class $$HostsTableTableManager
                 groupId = false,
                 identityId = false,
                 jumpHostId = false,
+                hostGroupMembersRefs = false,
                 portForwardRulesRefs = false,
                 mcpHostGrantsRefs = false,
                 mcpApprovalsRefs = false,
@@ -14799,6 +15267,7 @@ class $$HostsTableTableManager
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [
+                    if (hostGroupMembersRefs) db.hostGroupMembers,
                     if (portForwardRulesRefs) db.portForwardRules,
                     if (mcpHostGrantsRefs) db.mcpHostGrants,
                     if (mcpApprovalsRefs) db.mcpApprovals,
@@ -14877,6 +15346,27 @@ class $$HostsTableTableManager
                       },
                   getPrefetchedDataCallback: (items) async {
                     return [
+                      if (hostGroupMembersRefs)
+                        await $_getPrefetchedData<
+                          Host,
+                          $HostsTable,
+                          HostGroupMember
+                        >(
+                          currentTable: table,
+                          referencedTable: $$HostsTableReferences
+                              ._hostGroupMembersRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$HostsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).hostGroupMembersRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.hostId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                       if (portForwardRulesRefs)
                         await $_getPrefetchedData<
                           Host,
@@ -14982,11 +15472,388 @@ typedef $$HostsTableProcessedTableManager =
         bool groupId,
         bool identityId,
         bool jumpHostId,
+        bool hostGroupMembersRefs,
         bool portForwardRulesRefs,
         bool mcpHostGrantsRefs,
         bool mcpApprovalsRefs,
         bool bookmarksRefs,
       })
+    >;
+typedef $$HostGroupMembersTableCreateCompanionBuilder =
+    HostGroupMembersCompanion Function({
+      required String id,
+      required String hostId,
+      required String groupId,
+      Value<int> rowid,
+    });
+typedef $$HostGroupMembersTableUpdateCompanionBuilder =
+    HostGroupMembersCompanion Function({
+      Value<String> id,
+      Value<String> hostId,
+      Value<String> groupId,
+      Value<int> rowid,
+    });
+
+final class $$HostGroupMembersTableReferences
+    extends
+        BaseReferences<_$AppDatabase, $HostGroupMembersTable, HostGroupMember> {
+  $$HostGroupMembersTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $HostsTable _hostIdTable(_$AppDatabase db) =>
+      db.hosts.createAlias('host_group_members__host_id__hosts__id');
+
+  $$HostsTableProcessedTableManager get hostId {
+    final $_column = $_itemColumn<String>('host_id')!;
+
+    final manager = $$HostsTableTableManager(
+      $_db,
+      $_db.hosts,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_hostIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $HostGroupsTable _groupIdTable(_$AppDatabase db) => db.hostGroups
+      .createAlias('host_group_members__group_id__host_groups__id');
+
+  $$HostGroupsTableProcessedTableManager get groupId {
+    final $_column = $_itemColumn<String>('group_id')!;
+
+    final manager = $$HostGroupsTableTableManager(
+      $_db,
+      $_db.hostGroups,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_groupIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$HostGroupMembersTableFilterComposer
+    extends Composer<_$AppDatabase, $HostGroupMembersTable> {
+  $$HostGroupMembersTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$HostsTableFilterComposer get hostId {
+    final $$HostsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.hostId,
+      referencedTable: $db.hosts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$HostsTableFilterComposer(
+            $db: $db,
+            $table: $db.hosts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$HostGroupsTableFilterComposer get groupId {
+    final $$HostGroupsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.groupId,
+      referencedTable: $db.hostGroups,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$HostGroupsTableFilterComposer(
+            $db: $db,
+            $table: $db.hostGroups,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$HostGroupMembersTableOrderingComposer
+    extends Composer<_$AppDatabase, $HostGroupMembersTable> {
+  $$HostGroupMembersTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$HostsTableOrderingComposer get hostId {
+    final $$HostsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.hostId,
+      referencedTable: $db.hosts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$HostsTableOrderingComposer(
+            $db: $db,
+            $table: $db.hosts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$HostGroupsTableOrderingComposer get groupId {
+    final $$HostGroupsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.groupId,
+      referencedTable: $db.hostGroups,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$HostGroupsTableOrderingComposer(
+            $db: $db,
+            $table: $db.hostGroups,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$HostGroupMembersTableAnnotationComposer
+    extends Composer<_$AppDatabase, $HostGroupMembersTable> {
+  $$HostGroupMembersTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  $$HostsTableAnnotationComposer get hostId {
+    final $$HostsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.hostId,
+      referencedTable: $db.hosts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$HostsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.hosts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$HostGroupsTableAnnotationComposer get groupId {
+    final $$HostGroupsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.groupId,
+      referencedTable: $db.hostGroups,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$HostGroupsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.hostGroups,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$HostGroupMembersTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $HostGroupMembersTable,
+          HostGroupMember,
+          $$HostGroupMembersTableFilterComposer,
+          $$HostGroupMembersTableOrderingComposer,
+          $$HostGroupMembersTableAnnotationComposer,
+          $$HostGroupMembersTableCreateCompanionBuilder,
+          $$HostGroupMembersTableUpdateCompanionBuilder,
+          (HostGroupMember, $$HostGroupMembersTableReferences),
+          HostGroupMember,
+          PrefetchHooks Function({bool hostId, bool groupId})
+        > {
+  $$HostGroupMembersTableTableManager(
+    _$AppDatabase db,
+    $HostGroupMembersTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$HostGroupMembersTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$HostGroupMembersTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$HostGroupMembersTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> hostId = const Value.absent(),
+                Value<String> groupId = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => HostGroupMembersCompanion(
+                id: id,
+                hostId: hostId,
+                groupId: groupId,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String hostId,
+                required String groupId,
+                Value<int> rowid = const Value.absent(),
+              }) => HostGroupMembersCompanion.insert(
+                id: id,
+                hostId: hostId,
+                groupId: groupId,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$HostGroupMembersTable, HostGroupMember>(table),
+                  $$HostGroupMembersTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({hostId = false, groupId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (hostId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.hostId,
+                                referencedTable:
+                                    $$HostGroupMembersTableReferences
+                                        ._hostIdTable(db),
+                                referencedColumn:
+                                    $$HostGroupMembersTableReferences
+                                        ._hostIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+                    if (groupId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.groupId,
+                                referencedTable:
+                                    $$HostGroupMembersTableReferences
+                                        ._groupIdTable(db),
+                                referencedColumn:
+                                    $$HostGroupMembersTableReferences
+                                        ._groupIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$HostGroupMembersTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $HostGroupMembersTable,
+      HostGroupMember,
+      $$HostGroupMembersTableFilterComposer,
+      $$HostGroupMembersTableOrderingComposer,
+      $$HostGroupMembersTableAnnotationComposer,
+      $$HostGroupMembersTableCreateCompanionBuilder,
+      $$HostGroupMembersTableUpdateCompanionBuilder,
+      (HostGroupMember, $$HostGroupMembersTableReferences),
+      HostGroupMember,
+      PrefetchHooks Function({bool hostId, bool groupId})
     >;
 typedef $$KnownHostsTableCreateCompanionBuilder =
     KnownHostsCompanion Function({
@@ -21962,6 +22829,8 @@ class $AppDatabaseManager {
       $$HostGroupsTableTableManager(_db, _db.hostGroups);
   $$HostsTableTableManager get hosts =>
       $$HostsTableTableManager(_db, _db.hosts);
+  $$HostGroupMembersTableTableManager get hostGroupMembers =>
+      $$HostGroupMembersTableTableManager(_db, _db.hostGroupMembers);
   $$KnownHostsTableTableManager get knownHosts =>
       $$KnownHostsTableTableManager(_db, _db.knownHosts);
   $$PortForwardRulesTableTableManager get portForwardRules =>

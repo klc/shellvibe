@@ -24,6 +24,7 @@ final class SyncRowCodec {
     'vault_env_vars',
     'host_groups',
     'hosts',
+    'host_group_members',
     'port_forward_rules',
     'snippets',
     'runbooks',
@@ -90,6 +91,9 @@ final class SyncRowCodec {
   static Map<String, dynamic> host(Host h) => {
     'id': h.id,
     'workspaceId': h.workspaceId,
+    // Legacy single-tag column, always null now. Still sent so an old client
+    // that reads it does not fail on a missing key; tags travel as
+    // `host_group_members` rows.
     'groupId': h.groupId,
     'identityId': h.identityId,
     'label': h.label,
@@ -105,6 +109,12 @@ final class SyncRowCodec {
     'mcpVisible': h.mcpVisible,
     'mcpDefaultMode': h.mcpDefaultMode,
     'createdAt': h.createdAt.toIso8601String(),
+  };
+
+  static Map<String, dynamic> hostGroupMember(HostGroupMember m) => {
+    'id': m.id,
+    'hostId': m.hostId,
+    'groupId': m.groupId,
   };
 
   static Map<String, dynamic> knownHost(KnownHost k) => {
@@ -231,6 +241,12 @@ final class SyncRowCodec {
           db.hosts,
         )..where((t) => t.id.equals(entityId))).getSingleOrNull(),
         host,
+      ),
+      'host_group_members' => one(
+        () => (db.select(
+          db.hostGroupMembers,
+        )..where((t) => t.id.equals(entityId))).getSingleOrNull(),
+        hostGroupMember,
       ),
       'port_forward_rules' => one(
         () => (db.select(

@@ -43,9 +43,10 @@ class HostDetailPanel extends StatelessWidget {
     final jumpHost = hosts
         .where((candidate) => candidate.id == host.jumpHostId)
         .firstOrNull;
-    final group = groups
-        .where((candidate) => candidate.id == host.groupId)
-        .firstOrNull;
+    final tagNames = [
+      for (final candidate in groups)
+        if (host.groupIds.contains(candidate.id)) candidate.name,
+    ]..sort();
 
     final address =
         '${host.username != null && host.username!.isNotEmpty ? '${host.username}@' : ''}'
@@ -147,7 +148,10 @@ class HostDetailPanel extends StatelessWidget {
         ShellVibeDetailRow(label: 'protocol', value: host.protocol),
         ShellVibeDetailRow(label: 'port', value: '${host.port}'),
         ShellVibeDetailRow(label: 'user', value: host.username ?? '—'),
-        ShellVibeDetailRow(label: 'group', value: group?.name ?? '—'),
+        ShellVibeDetailRow(
+          label: 'tags',
+          value: tagNames.isEmpty ? '—' : tagNames.join(', '),
+        ),
         ShellVibeDetailRow(label: 'jump host', value: jumpHost?.label ?? '—'),
         ShellVibeDetailRow(
           label: 'identity',

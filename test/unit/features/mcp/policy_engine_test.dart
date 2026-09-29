@@ -67,7 +67,7 @@ void main() {
     HostEnvironment environment = HostEnvironment.dev,
     String hostId = 'host-1',
     String clientId = 'client-1',
-    String? hostGroupId,
+    Set<String> hostGroupIds = const {},
     String? connectionScopeId,
   }) => CommandContext(
     command: command,
@@ -76,7 +76,7 @@ void main() {
     environment: environment,
     hostId: hostId,
     clientId: clientId,
-    hostGroupId: hostGroupId,
+    hostGroupIds: hostGroupIds,
     connectionScopeId: connectionScopeId,
   );
 
@@ -680,8 +680,8 @@ void main() {
         expect(onHost2.action, PolicyAction.confirm);
       });
 
-      test('a group rule matches only when hostGroupId equals its scopeId, and '
-          'never matches a context with no group', () async {
+      test('a group rule matches only when any of hostGroupIds equals its scopeId, '
+          'and never matches a context with no group', () async {
           await grant(mode: McpAccessMode.guarded);
           await dao.insertPolicyRule(
             McpPolicyRulesCompanion.insert(
@@ -707,7 +707,7 @@ void main() {
             ctx(
               command: 'rm -rf /tmp/build',
               mode: McpAccessMode.guarded,
-              hostGroupId: 'group-2',
+              hostGroupIds: {'group-2'},
             ),
             workspaceId: 'default',
           );
@@ -717,11 +717,22 @@ void main() {
             ctx(
               command: 'rm -rf /tmp/build',
               mode: McpAccessMode.guarded,
-              hostGroupId: 'group-1',
+              hostGroupIds: {'group-1'},
             ),
             workspaceId: 'default',
           );
           expect(matchingGroup.action, PolicyAction.deny);
+
+          // Several tags: the rule matches when any one of them is its group.
+          final oneOfSeveral = await engine.evaluate(
+            ctx(
+              command: 'rm -rf /tmp/build',
+              mode: McpAccessMode.guarded,
+              hostGroupIds: {'group-2', 'group-1'},
+            ),
+            workspaceId: 'default',
+          );
+          expect(oneOfSeveral.action, PolicyAction.deny);
       });
     });
   });

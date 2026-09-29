@@ -28,6 +28,7 @@ part 'app_database.g.dart';
     Identities,
     HostGroups,
     Hosts,
+    HostGroupMembers,
     KnownHosts,
     PortForwardRules,
     Snippets,
@@ -110,7 +111,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 14;
+  int get schemaVersion => 15;
 
   @override
   MigrationStrategy get migration {
@@ -208,6 +209,30 @@ class AppDatabase extends _$AppDatabase {
           // starts from the clock cursor and the server answers with a
           // position. Only above 10, for the same reason as `joinState`.
           await m.addColumn(syncState, syncState.pulledThroughSeq);
+        }
+        if (from < 15) {
+          // A host can carry several tags now. Every existing single tag
+          // becomes a membership row, with the same deterministic id
+          // (`hostId:groupId`) that sync uses, so two devices upgrading the
+          // same data produce identical rows instead of duplicates.
+          await m.createTable(hostGroupMembers);
+          // Only when `hosts` is there: very old databases predate it, and
+          // there is then nothing to convert.
+          final hostsTable = await customSelect(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+            variables: [Variable.withString(hosts.actualTableName)],
+          ).get();
+          if (hostsTable.isNotEmpty) {
+            await customStatement(
+              'INSERT OR IGNORE INTO host_group_members '
+              '(id, host_id, group_id) '
+              "SELECT id || ':' || group_id, id, group_id FROM hosts "
+              'WHERE group_id IS NOT NULL',
+            );
+            // The legacy column is no longer the source of truth; clearing it
+            // stops it from disagreeing with the membership rows.
+            await customStatement('UPDATE hosts SET group_id = NULL');
+          }
         }
       },
     );

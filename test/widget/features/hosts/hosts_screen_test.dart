@@ -111,7 +111,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
 
-      expect(find.text('No hosts or groups configured.'), findsOneWidget);
+      expect(find.text('No hosts or tags configured.'), findsOneWidget);
     });
 
     testWidgets('Renders an empty group so it can still be managed', (
@@ -131,7 +131,7 @@ void main() {
 
       expect(find.text('Empty Group'), findsOneWidget);
       expect(find.byKey(const ValueKey('group_empty-group')), findsOneWidget);
-      expect(find.text('No hosts or groups configured.'), findsNothing);
+      expect(find.text('No hosts or tags configured.'), findsNothing);
     });
 
     testWidgets(
@@ -235,7 +235,6 @@ void main() {
         HostsCompanion.insert(
           id: 'host-a',
           workspaceId: 'default',
-          groupId: const Value('group-a'),
           label: 'Alpha Server',
           hostname: 'alpha.example.com',
           createdAt: DateTime.now(),
@@ -245,12 +244,24 @@ void main() {
         HostsCompanion.insert(
           id: 'host-b',
           workspaceId: 'default',
-          groupId: const Value('group-b'),
           label: 'Beta Server',
           hostname: 'beta.example.com',
           createdAt: DateTime.now(),
         ),
       );
+      // Carries both tags, so it belongs to either filter.
+      await db.hostsDao.insertHost(
+        HostsCompanion.insert(
+          id: 'host-g',
+          workspaceId: 'default',
+          label: 'Gamma Server',
+          hostname: 'gamma.example.com',
+          createdAt: DateTime.now(),
+        ),
+      );
+      await db.hostsDao.setHostGroups('host-a', ['group-a']);
+      await db.hostsDao.setHostGroups('host-b', ['group-b']);
+      await db.hostsDao.setHostGroups('host-g', ['group-a', 'group-b']);
 
       await tester.pumpWidget(createWidgetUnderTest());
       await tester.pump();
@@ -260,11 +271,13 @@ void main() {
       await tester.tap(find.byKey(const Key('group_group-a')));
       await tester.pumpAndSettle();
       expect(find.text('Alpha Server'), findsOneWidget);
+      expect(find.text('Gamma Server'), findsOneWidget);
       expect(find.text('Beta Server'), findsNothing);
 
       await tester.tap(find.byKey(const Key('group_group-b')));
       await tester.pumpAndSettle();
       expect(find.text('Beta Server'), findsOneWidget);
+      expect(find.text('Gamma Server'), findsOneWidget);
       expect(find.text('Alpha Server'), findsNothing);
 
       // A search inside a scoped group narrows further rather than escaping it.
@@ -545,6 +558,58 @@ void main() {
       expect(find.byIcon(LucideIcons.star), findsWidgets);
     });
 
+    testWidgets('A tag can be edited and deleted from its menu', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(2400, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await db.hostsDao.insertHostGroup(
+        HostGroupsCompanion.insert(
+          id: 'tag-prod',
+          workspaceId: 'default',
+          name: 'prod',
+        ),
+      );
+      await seedHost('host-1', 'Production', '10.0.0.5');
+      await db.hostsDao.setHostGroups('host-1', ['tag-prod']);
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      // Edit opens the tag form filled in with the tag being edited.
+      await tester.tap(find.byKey(const Key('tag_menu_tag-prod')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('tag_menu_edit')));
+      await tester.pumpAndSettle();
+      expect(find.text('Edit Tag'), findsOneWidget);
+      final nameField = tester.widget<EditableText>(
+        find.descendant(
+          of: find.byKey(const Key('group_name_input')),
+          matching: find.byType(EditableText),
+        ),
+      );
+      expect(nameField.controller.text, 'prod');
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      // Delete asks first, then takes the tag off without taking the host.
+      await tester.tap(find.byKey(const Key('tag_menu_tag-prod')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('tag_menu_delete')));
+      await tester.pumpAndSettle();
+      expect(find.text('Delete Tag'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('tag_delete_confirm')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('group_tag-prod')), findsNothing);
+      expect(await db.hostsDao.getAllHostGroups(), isEmpty);
+      expect(await db.hostsDao.getMembershipsForHost('host-1'), isEmpty);
+      expect(find.text('Production'), findsOneWidget);
+    });
+
     testWidgets('Opens HostGroupFormDialog when add_group_button is tapped', (
       tester,
     ) async {
@@ -556,7 +621,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
 
-      expect(find.text('Add Folder / Group'), findsOneWidget);
+      expect(find.text('Add Tag'), findsOneWidget);
       expect(find.byKey(const Key('group_name_input')), findsOneWidget);
     });
 

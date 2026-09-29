@@ -34,7 +34,7 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
   late FocusNode _hostnameFocusNode;
 
   late String _protocol;
-  String? _selectedGroupId;
+  Set<String> _selectedGroupIds = {};
   String? _selectedIdentityId;
   String? _selectedJumpHostId;
   bool _isLoading = false;
@@ -66,7 +66,7 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
 
     final proto = init?.protocol;
     _protocol = (proto == 'local' || proto == 'mosh') ? proto! : 'ssh';
-    _selectedGroupId = init?.groupId;
+    _selectedGroupIds = {...?init?.groupIds};
     _selectedIdentityId = init?.identityId;
     _selectedJumpHostId = init?.jumpHostId;
   }
@@ -148,7 +148,7 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
         await notifier.updateHost(
           id: widget.initialHost!.id,
           workspaceId: widget.initialHost!.workspaceId,
-          groupId: _selectedGroupId,
+          groupIds: _selectedGroupIds.toList(),
           identityId: _selectedIdentityId,
           label: _labelController.text.trim(),
           hostname: _hostnameController.text.trim(),
@@ -166,7 +166,7 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
         saved = await notifier.addHost(
           workspaceId:
               widget.workspaceId ?? ref.read(activeWorkspaceIdProvider),
-          groupId: _selectedGroupId,
+          groupIds: _selectedGroupIds.toList(),
           identityId: _selectedIdentityId,
           label: _labelController.text.trim(),
           hostname: _hostnameController.text.trim(),
@@ -517,42 +517,50 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                   title: 'Routing & Organization',
                 ),
                 const SizedBox(height: 12),
-                // Group Selection
+                // Tag selection: a host can carry any number of tags.
                 groupsAsync.when(
-                  data: (groups) => ShadSelectFormField<String?>(
+                  data: (groups) => ShadSelectMultipleFormField<String>(
                     key: const Key('host_group_dropdown'),
-                    initialValue: _selectedGroupId,
-                    label: const Text('Group / Folder'),
-                    selectedOptionBuilder: (context, value) {
-                      if (value == null) {
-                        return const Text('(None - Ungrouped)');
+                    initialValue: _selectedGroupIds,
+                    label: const Text('Tags'),
+                    placeholder: const Text('(None - Untagged)'),
+                    // Stay open so several tags can be ticked in one go.
+                    closeOnSelect: false,
+                    selectedOptionsBuilder: (context, values) {
+                      if (values.isEmpty) {
+                        return const Text('(None - Untagged)');
                       }
-                      final g = groups
-                          .where((item) => item.id == value)
-                          .firstOrNull;
-                      return Text(g?.name ?? value);
+                      final names = values.map(
+                        (id) =>
+                            groups
+                                .where((item) => item.id == id)
+                                .firstOrNull
+                                ?.name ??
+                            id,
+                      );
+                      return Text(
+                        names.join(', '),
+                        overflow: TextOverflow.ellipsis,
+                      );
                     },
                     options: [
-                      const ShadOption<String?>(
-                        value: null,
-                        child: Text('(None - Ungrouped)'),
-                      ),
-                      ...groups.map(
-                        (g) => ShadOption<String?>(
+                      for (final g in groups)
+                        ShadOption<String>(
+                          key: Key('host_tag_option_${g.id}'),
                           value: g.id,
                           child: Text(g.name),
                         ),
-                      ),
                     ],
-                    onChanged: (val) => setState(() => _selectedGroupId = val),
+                    onChanged: (val) =>
+                        setState(() => _selectedGroupIds = {...?val}),
                   ),
                   loading: () => const _SelectStatus(
                     icon: LucideIcons.loaderCircle,
-                    text: 'Loading groups…',
+                    text: 'Loading tags…',
                   ),
                   error: (e, s) => const _SelectStatus(
                     icon: LucideIcons.triangleAlert,
-                    text: 'Failed to load groups',
+                    text: 'Failed to load tags',
                   ),
                 ),
                 const SizedBox(height: 12),
