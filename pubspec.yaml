@@ -118,6 +118,7 @@ dependencies:
   # OS notifications on macOS, Windows and Linux, the same API the mobile
   # builds can take up later.
   flutter_local_notifications: ^22.3.1
+  flutter_foreground_task: ^11.0.3
 
 dev_dependencies:
   integration_test:
