@@ -12,6 +12,7 @@ import '../../features/snippets/presentation/screens/snippets_screen.dart';
 import '../../features/terminal/presentation/views/terminal_tab_view.dart';
 import '../../features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import '../../features/tunnels/presentation/screens/tunnels_screen.dart';
+import '../../features/tunnels/presentation/tunnel_availability.dart';
 import '../../features/vault/presentation/dialogs/vault_unlock_dialog.dart';
 import '../../features/vault/presentation/notifiers/vault_notifier.dart';
 import '../../features/vault/presentation/screens/vault_screen.dart';
@@ -157,6 +158,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: '/tunnels',
+                // A restored route or a link must not reach what the UI hides
+                // on an iPhone. The branch stays, so the indexes do not move.
+                redirect: (context, state) =>
+                    tunnelsSupportedHere() ? null : '/settings',
                 builder: (context, state) => const TunnelsScreen(),
               ),
             ],

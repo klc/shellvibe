@@ -6,6 +6,7 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../../../core/constants/app_constants.dart';
+import '../../../tunnels/presentation/tunnel_availability.dart';
 import '../../domain/models/settings_section.dart';
 import '../widgets/settings_section_view.dart';
 
@@ -228,13 +229,16 @@ class SettingsScreen extends StatelessWidget {
     return [
       ShellVibeSectionLabel(label: 'Tools'),
       _buildIndexCard(context, [
-        for (final entry in const [
-          (
-            '/tunnels',
-            'Tunnels',
-            LucideIcons.network,
-            'Local and remote port forwards.',
-          ),
+        for (final entry in [
+          // Not offered on an iPhone: the socket dies with the app, so a
+          // forward there is over before the browser that needs it opens.
+          if (tunnelsSupportedFor(context))
+            (
+              '/tunnels',
+              'Tunnels',
+              LucideIcons.network,
+              'Local and remote port forwards.',
+            ),
           (
             '/snippets',
             'Snippets & Runbooks',

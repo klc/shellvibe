@@ -13,6 +13,7 @@ import '../../../hosts/domain/services/host_launcher.dart';
 import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
 import '../../domain/models/tunnel_rule_model.dart';
 import '../providers/tunnels_providers.dart';
+import '../tunnel_availability.dart';
 import '../widgets/tunnel_form_dialog.dart';
 
 class TunnelsScreen extends ConsumerStatefulWidget {
@@ -142,6 +143,29 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
                     ),
                   ],
                 ),
+                if (tunnelsNeedForegroundHintFor(context) &&
+                    !ref.watch(tunnelForegroundHintDismissedProvider))
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+                    child: ShellVibeInfoNote(
+                      key: const Key('tunnels_foreground_hint'),
+                      icon: LucideIcons.layoutPanelLeft,
+                      message:
+                          'Keep ShellVibe on screen (Split View or Stage '
+                          'Manager) — tunnels stop when the app goes to the '
+                          'background.',
+                      trailing: ShellVibeIconButton(
+                        buttonKey: const Key('tunnels_foreground_hint_dismiss'),
+                        icon: LucideIcons.x,
+                        tooltip: 'Dismiss',
+                        onPressed: () => ref
+                            .read(
+                              tunnelForegroundHintDismissedProvider.notifier,
+                            )
+                            .dismiss(),
+                      ),
+                    ),
+                  ),
                 if (state.isLoading)
                   const Expanded(
                     child: Center(child: CircularProgressIndicator()),
