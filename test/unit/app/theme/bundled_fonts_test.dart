@@ -9,7 +9,10 @@ import 'package:shellvibe/features/terminal/domain/models/terminal_font.dart';
 
 /// Family name → the weights pubspec registers for it, with the asset paths.
 Map<String, Map<int, String>> _registeredFonts() {
-  final pubspec = File('pubspec.yaml').readAsStringSync();
+  // A Windows checkout can carry CRLF line endings.
+  final pubspec = File(
+    'pubspec.yaml',
+  ).readAsStringSync().replaceAll('\r\n', '\n');
   final section = pubspec.substring(pubspec.indexOf('\n  fonts:\n'));
   final fonts = <String, Map<int, String>>{};
   Map<int, String>? current;
