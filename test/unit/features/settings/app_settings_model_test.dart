@@ -17,6 +17,26 @@ void main() {
       expect(AppSettingsModel.fromJson(legacy).keepRunningInTray, isTrue);
     });
 
+    test('desktopNotifications round-trips and defaults on when absent', () {
+      expect(const AppSettingsModel().desktopNotifications, isTrue);
+
+      final off = const AppSettingsModel().copyWith(
+        desktopNotifications: false,
+      );
+      expect(
+        AppSettingsModel.fromJson(off.toJson()).desktopNotifications,
+        isFalse,
+      );
+      // Settings saved (or backed up) before the option existed keep
+      // notifications on, and leave the neighbouring option alone.
+      final legacy = off.toJson()..remove('desktopNotifications');
+      final restored = AppSettingsModel.fromJson(legacy);
+      expect(restored.desktopNotifications, isTrue);
+      expect(restored.keepRunningInTray, isTrue);
+      // A copy that does not mention it keeps it.
+      expect(off.copyWith(fontSize: 16).desktopNotifications, isFalse);
+    });
+
     test('toJson and fromJson serialization cycle', () {
       const settings = AppSettingsModel(
         themeMode: ThemeMode.light,

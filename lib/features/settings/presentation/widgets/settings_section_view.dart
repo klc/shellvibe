@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:xterm3/xterm.dart';
 
+import '../../../../app/notifications/notification_providers.dart';
 import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/theme/ui_font.dart';
 import '../../../../app/widgets/adaptive_modal.dart';
@@ -33,6 +34,7 @@ import '../notifiers/settings_notifier.dart';
 import 'about_settings_section.dart';
 import 'backup_scope_picker.dart';
 import 'known_hosts_settings_section.dart';
+import 'launch_at_login_tile.dart';
 
 /// The controls of a single [SettingsSection], with nothing around them.
 ///
@@ -420,23 +422,49 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
             ShadCard(
               child: Material(
                 color: Colors.transparent,
-                child: SwitchListTile(
-                  key: const Key('settings_keep_running_in_tray_switch'),
-                  title: Text(
-                    defaultTargetPlatform == TargetPlatform.macOS
-                        ? 'Show in the Menu Bar'
-                        : 'Keep Running in the System Tray',
-                  ),
-                  subtitle: Text(
-                    defaultTargetPlatform == TargetPlatform.macOS
-                        ? 'A menu bar icon shows active tunnels and sessions '
-                              'and brings the window back.'
-                        : 'Closing the window hides it to the tray, so '
-                              'tunnels and sessions keep running. Quit from '
-                              'the tray menu.',
-                  ),
-                  value: settings.keepRunningInTray,
-                  onChanged: (val) => notifier.setKeepRunningInTray(val),
+                child: Column(
+                  children: [
+                    SwitchListTile(
+                      key: const Key('settings_keep_running_in_tray_switch'),
+                      title: Text(
+                        defaultTargetPlatform == TargetPlatform.macOS
+                            ? 'Show in the Menu Bar'
+                            : 'Keep Running in the System Tray',
+                      ),
+                      subtitle: Text(
+                        defaultTargetPlatform == TargetPlatform.macOS
+                            ? 'A menu bar icon shows active tunnels and '
+                                  'sessions and brings the window back.'
+                            : 'Closing the window hides it to the tray, so '
+                                  'tunnels and sessions keep running. Quit '
+                                  'from the tray menu.',
+                      ),
+                      value: settings.keepRunningInTray,
+                      onChanged: (val) => notifier.setKeepRunningInTray(val),
+                    ),
+                    LaunchAtLoginTile(trayEnabled: settings.keepRunningInTray),
+                    SwitchListTile(
+                      key: const Key('settings_desktop_notifications_switch'),
+                      title: const Text('Desktop Notifications'),
+                      subtitle: const Text(
+                        'Notify when a session drops, a tunnel stops or a '
+                        'terminal asks for attention while the window is '
+                        'hidden or in the background.',
+                      ),
+                      value: settings.desktopNotifications,
+                      onChanged: (val) {
+                        notifier.setDesktopNotifications(val);
+                        // macOS asks for permission the first time it is
+                        // needed, which is now if it is being turned on.
+                        if (val) {
+                          ref
+                              .read(notificationPresenterProvider)
+                              .ensurePermission()
+                              .ignore();
+                        }
+                      },
+                    ),
+                  ],
                 ),
               ),
             ),

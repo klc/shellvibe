@@ -9,10 +9,14 @@ import 'package:path_provider/path_provider.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'package:shellvibe/app/app.dart';
+import 'package:shellvibe/app/window/launch_at_login.dart';
 import 'package:shellvibe/app/window/single_instance.dart';
+import 'package:shellvibe/app/window/start_hidden.dart';
 import 'package:shellvibe/app/window/window_chrome.dart';
 import 'package:shellvibe/core/diagnostics/crash_log.dart';
 import 'package:shellvibe/core/perf/perf_overlay.dart';
+import 'package:shellvibe/features/settings/data/repositories/settings_repository.dart';
+import 'package:shellvibe/shared/storage/secure_storage_service.dart';
 
 /// Where crashes go. `debugPrint` alone is a no-op in release builds (stdout
 /// isn't attached), so without this a release crash leaves zero trace. Opened
@@ -64,7 +68,27 @@ String _fnv1a(String value) {
   return hash.toRadixString(16);
 }
 
-void main() async {
+/// Whether this launch is a login item that should leave the window hidden.
+///
+/// Reads the tray setting itself: the app's providers are not up yet.
+Future<bool> _resolveStartHidden(List<String> args) async {
+  if (!(Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+    return false;
+  }
+  return resolveStartHidden(
+    args: args,
+    isMacOS: Platform.isMacOS,
+    macOsLaunchedAtLogin: MacOsLaunchAtLogin.wasLaunchedAtLogin,
+    readTrayEnabled: () async {
+      final settings = await SettingsRepository(
+        SecureStorageService(),
+      ).loadSettings();
+      return settings.keepRunningInTray;
+    },
+  );
+}
+
+void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Setup global Flutter framework error handling
@@ -88,6 +112,9 @@ void main() async {
     if (!await _claimSingleInstance()) exit(0);
   }
 
+  // A launch at login starts with only the tray icon, if there is a tray.
+  final startHidden = !kIsWeb && await _resolveStartHidden(args);
+
   // Desktop window manager initialization
   if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
     try {
@@ -104,8 +131,12 @@ void main() async {
         // have no height left for a file list and the terminal loses its tab
         // strip. A floor is kinder than a layout that technically renders.
         await windowManager.setMinimumSize(kMinimumWindowSize);
-        await windowManager.maximize();
-        await windowManager.show();
+        if (startHidden) {
+          await hideHostWindowAtLaunch();
+        } else {
+          await windowManager.maximize();
+          await windowManager.show();
+        }
       });
     } catch (e) {
       debugPrint('[WindowManager Init Warning] $e');
@@ -115,4 +146,19 @@ void main() async {
   // Compiles to a bare `runApp(ProviderScope(...))` unless the build passed
   // --dart-define=SHELLVIBE_PERF=true; see [kPerfInstrumentationEnabled].
   runApp(PerfOverlayHost.maybeWrap(const ProviderScope(child: ShellVibeApp())));
+
+  if (startHidden) {
+    // The Windows and Linux runners show the window when the first frame is
+    // in; see [keepHostWindowHiddenAtLaunch]. The delayed attempt covers a
+    // runner that shows it a beat after the frame callback.
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => unawaited(keepHostWindowHiddenAtLaunch()),
+    );
+    unawaited(
+      Future<void>.delayed(
+        const Duration(milliseconds: 400),
+        keepHostWindowHiddenAtLaunch,
+      ),
+    );
+  }
 }

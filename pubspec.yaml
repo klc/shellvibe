@@ -115,6 +115,9 @@ dependencies:
   lucide_icons_flutter: ^3.1.15
   file_selector: ^1.1.0
   quick_actions: ^1.1.1
+  # OS notifications on macOS, Windows and Linux, the same API the mobile
+  # builds can take up later.
+  flutter_local_notifications: ^22.3.1
 
 dev_dependencies:
   integration_test:
@@ -157,6 +160,13 @@ flutter:
     - assets/brand/tray_macos.png
     - assets/brand/tray.png
     - assets/brand/tray.ico
+    # The tray's "tunnel active" and "error" variants, see tool/gen_tray_icons.py.
+    - assets/brand/tray_macos_tunnel.png
+    - assets/brand/tray_macos_error.png
+    - assets/brand/tray_tunnel.png
+    - assets/brand/tray_error.png
+    - assets/brand/tray_tunnel.ico
+    - assets/brand/tray_error.ico
 
   # Every font the app can draw in is bundled; nothing is fetched at runtime, so
   # a first launch without a network never falls back to the platform font and

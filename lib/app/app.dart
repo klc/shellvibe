@@ -15,6 +15,7 @@ import '../features/cloud_backup/presentation/notifiers/cloud_backup_notifier.da
 import '../features/cloud_backup/presentation/notifiers/sync_notifier.dart';
 import '../features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import '../features/vault/presentation/notifiers/vault_notifier.dart';
+import 'notifications/desktop_notification_host.dart';
 import 'quick_actions/quick_actions_host.dart';
 import 'router/app_router.dart';
 import 'theme/app_palette_definitions.dart';
@@ -329,7 +330,7 @@ class _ShellVibeAppState extends ConsumerState<ShellVibeApp>
         final host = McpApprovalHost(child: child ?? const SizedBox.shrink());
         return isMobilePlatform
             ? QuickActionsHost(child: host)
-            : DesktopTrayHost(child: host);
+            : DesktopTrayHost(child: DesktopNotificationHost(child: host));
       },
     );
   }

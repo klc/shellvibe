@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
@@ -23,8 +22,10 @@ import '../../features/terminal/presentation/notifiers/terminal_tabs_notifier.da
 import '../../features/tunnels/presentation/providers/tunnels_providers.dart';
 import '../../features/vault/domain/models/identity_model.dart';
 import '../../features/vault/presentation/notifiers/vault_notifier.dart';
-import '../router/app_router.dart';
+import '../notifications/notification_providers.dart';
 import 'desktop_tray_menu.dart';
+import 'host_navigation.dart';
+import 'tray_icon_state.dart';
 import 'window_chrome.dart';
 
 /// Overrides whether the window close is intercepted, so tests cover the
@@ -46,6 +47,11 @@ bool? debugTrayInterceptsCloseOverride;
 /// handled without opening it: sessions can be brought forward, tunnels
 /// stopped or started, and a favorite host or a template opened. See
 /// [buildTrayMenu] for the layout.
+///
+/// The icon says the most important thing without being opened: a badge while
+/// a tunnel is up, a different one after something failed while nobody was
+/// looking (see [TrayIconState]). The error clears when the window is back in
+/// front.
 class DesktopTrayHost extends ConsumerStatefulWidget {
   const DesktopTrayHost({super.key, required this.child});
 
@@ -64,6 +70,11 @@ class _DesktopTrayHostState extends ConsumerState<DesktopTrayHost>
   /// Serialises tray updates: a settings change and a count change arriving
   /// together must not interleave `setIcon` with `destroy`.
   Future<void> _pending = Future.value();
+
+  /// The icon variant on screen. Compared, not re-set, on every update: a
+  /// tunnel's transfer speed changes a provider every second, and only a change
+  /// of *state* is worth a call to the plugin.
+  TrayIconState? _shownIcon;
 
   /// What the menu on screen was built from. A provider that changes without
   /// changing this (a tunnel's transfer speed, every second) costs no menu
@@ -123,55 +134,59 @@ class _DesktopTrayHostState extends ConsumerState<DesktopTrayHost>
         await trayManager.destroy();
         _trayShown = false;
         _lastMenuData = null;
+        _shownIcon = null;
       }
       return;
     }
 
-    if (!_trayShown) {
+    // Read once for the whole update, so the icon and the menu agree.
+    final data = _readMenuData();
+    final iconState = deriveTrayIconState(
+      activeTunnelCount: data.locked
+          ? data.activeTunnelCount
+          : data.activeTunnels.length,
+      attention: ref.read(trayAttentionProvider),
+    );
+
+    if (!_trayShown || iconState != _shownIcon) {
       try {
-        if (Platform.isMacOS) {
-          await trayManager.setIcon(
-            'assets/brand/tray_macos.png',
-            isTemplate: true,
-          );
-        } else {
-          await trayManager.setIcon(
-            Platform.isWindows
-                ? 'assets/brand/tray.ico'
-                : 'assets/brand/tray.png',
-          );
+        await trayManager.setIcon(
+          trayIconAsset(
+            iconState,
+            isMacOS: Platform.isMacOS,
+            isWindows: Platform.isWindows,
+          ),
+          // The menu bar tints a template from its alpha, so it may not carry
+          // colour; the variants differ in shape instead.
+          isTemplate: Platform.isMacOS,
+        );
+        if (!_trayShown && !Platform.isLinux) {
+          await trayManager.setToolTip('ShellVibe');
         }
-        if (!Platform.isLinux) await trayManager.setToolTip('ShellVibe');
       } catch (_) {
         // A desktop without a tray host (a bare Linux window manager) still
         // runs the app, but has no icon to hide behind, so closing the window
         // has to go on quitting it.
-        if (_interceptsClose) await windowManager.setPreventClose(false);
+        if (!_trayShown && _interceptsClose) {
+          await windowManager.setPreventClose(false);
+        }
         rethrow;
       }
       _trayShown = true;
+      _shownIcon = iconState;
     }
     // Only once the icon is up: intercepting the close earlier hides the
     // window with nothing on screen to show it again.
     if (_interceptsClose) await windowManager.setPreventClose(true);
     // Recorded before the await: a change that lands while the plugin is busy
     // must compare against what is being shown, not what was shown before.
-    final data = _readMenuData();
     _lastMenuData = data;
     await trayManager.setContextMenu(buildTrayMenu(data));
   }
 
-  /// Whether the vault is locked, locking, or not yet known to be unlocked.
-  ///
-  /// Fails closed: an unlock attempt puts the provider in loading, and an
-  /// error leaves it with no value, and neither is a state to show host names
-  /// or open sessions in. An unconfigured vault has nothing to lock.
-  bool get _vaultLocked {
-    final vault = ref.read(vaultProvider).value;
-    return vault == null ||
-        vault.status == VaultStatus.locked ||
-        vault.isLocking;
-  }
+  /// See [isVaultLockedOrUnknown]: a menu, like a notification, is on screen
+  /// for anyone at the machine, so it fails closed the same way.
+  bool get _vaultLocked => isVaultLockedOrUnknown(ref);
 
   TrayMenuData _readMenuData() {
     final hosts = ref.read(hostsProvider).value ?? const <HostModel>[];
@@ -320,6 +335,20 @@ class _DesktopTrayHostState extends ConsumerState<DesktopTrayHost>
     }
   }
 
+  /// The window is back in front of the user, who now sees whatever the error
+  /// icon was pointing at.
+  @override
+  void onWindowFocus() => _clearAttention();
+
+  @override
+  void onWindowRestore() => _clearAttention();
+
+  void _clearAttention() {
+    if (ref.read(trayAttentionProvider)) {
+      ref.read(trayAttentionProvider.notifier).clear();
+    }
+  }
+
   @override
   void onTrayIconMouseDown() {
     // A click on a Windows tray icon means "open"; a macOS menu bar item
@@ -381,14 +410,8 @@ class _DesktopTrayHostState extends ConsumerState<DesktopTrayHost>
 
   /// The root navigator's context, which is what dialogs, toasts and the
   /// router are reachable from.
-  ///
-  /// Not this widget's own: it is mounted through `ShadApp.router`'s `builder`,
-  /// which wraps the Navigator rather than living under it, so neither
-  /// `Navigator.of` nor `GoRouter.of` finds anything from here.
-  BuildContext? get _navigatorContext {
-    final context = rootNavigatorKey.currentContext;
-    return context != null && context.mounted ? context : null;
-  }
+  /// Not this widget's own, see [hostNavigatorContext].
+  BuildContext? get _navigatorContext => hostNavigatorContext;
 
   HostLauncher? _launcher() {
     final context = _navigatorContext;
@@ -400,16 +423,10 @@ class _DesktopTrayHostState extends ConsumerState<DesktopTrayHost>
     if (context != null) ShadToaster.of(context).show(toast);
   }
 
-  void _goToTerminal() {
-    final context = _navigatorContext;
-    if (context != null) GoRouter.maybeOf(context)?.go('/terminal');
-  }
+  void _goToTerminal() => goToHostRoute('/terminal');
 
-  Future<void> _focusTab(String tabId) async {
-    await showHostWindow();
-    ref.read(terminalTabsProvider.notifier).setActiveTab(tabId);
-    _goToTerminal();
-  }
+  /// The path a notification click takes too, so the two cannot disagree.
+  Future<void> _focusTab(String tabId) => focusTerminalTab(ref, tabId);
 
   /// Stops through the notifier, as the Tunnels screen does, so the pooled SSH
   /// connection a forward opened for itself is released with it.
@@ -539,6 +556,9 @@ class _DesktopTrayHostState extends ConsumerState<DesktopTrayHost>
     ref.listen(bookmarksProvider, (_, _) => _syncMenu());
     // Lock and unlock swap the whole menu.
     ref.listen(vaultProvider, (_, _) => _syncMenu());
+    // The error icon is raised and cleared through this. The menu is unchanged
+    // by it, so it goes straight to the serialised update.
+    ref.listen(trayAttentionProvider, (_, _) => _sync());
     return widget.child;
   }
 }

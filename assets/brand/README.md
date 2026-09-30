@@ -15,9 +15,11 @@ everything else.
 | `icon_android_foreground.png` | The glyph alone inside the adaptive-icon safe zone, composited over the background colour.      |
 | `tray_macos.png`              | The glyph alone in black, 36px: a macOS menu bar template image, tinted by the system.          |
 | `tray.png`, `tray.ico`        | The plate at 64px (and 16–64px in the `.ico`) for the Linux and Windows system trays.           |
+| `tray_tunnel.*`, `tray_error.*`, `tray_macos_tunnel.png`, `tray_macos_error.png` | The tray icons with a badge: a forward is up, or something failed out of sight. Cut from the files above by `tool/gen_tray_icons.py`; macOS takes a dot and a triangle because a template image cannot carry colour. |
 
 The tray icons are cut from `icon.png` by hand, not by `flutter_launcher_icons`;
-redo them when the master changes. Regenerate the platform icons after
+redo them when the master changes, then run `python3 tool/gen_tray_icons.py` to
+cut the badged variants from them. Regenerate the platform icons after
 changing any of these:
 
 ```bash
