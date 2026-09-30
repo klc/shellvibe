@@ -15,6 +15,7 @@ import '../features/cloud_backup/presentation/notifiers/cloud_backup_notifier.da
 import '../features/cloud_backup/presentation/notifiers/sync_notifier.dart';
 import '../features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import '../features/vault/presentation/notifiers/vault_notifier.dart';
+import 'foreground_service/foreground_service_host.dart';
 import 'notifications/desktop_notification_host.dart';
 import 'quick_actions/quick_actions_host.dart';
 import 'router/app_router.dart';
@@ -329,11 +330,16 @@ class _ShellVibeAppState extends ConsumerState<ShellVibeApp>
       builder: (context, child) {
         final host = McpApprovalHost(child: child ?? const SizedBox.shrink());
         return isMobilePlatform
-            ? QuickActionsHost(child: host)
+            ? QuickActionsHost(child: _withForegroundService(host))
             : DesktopTrayHost(child: DesktopNotificationHost(child: host));
       },
     );
   }
 }
+
+/// Keeps sessions and tunnels running behind the app on Android, the one
+/// mobile platform with a foreground service to do it with.
+Widget _withForegroundService(Widget child) =>
+    supportsForegroundService ? ForegroundServiceHost(child: child) : child;
 
 /// Backwards compatibility alias
