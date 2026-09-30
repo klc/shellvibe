@@ -12,6 +12,8 @@
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>ShellVibe uses the camera to scan a Device Link pairing QR code.</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
