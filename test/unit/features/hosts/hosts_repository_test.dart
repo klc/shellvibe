@@ -1,7 +1,9 @@
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shellvibe/core/sync/sync_journal.dart';
 import 'package:shellvibe/features/hosts/data/repositories/hosts_repository.dart';
 import 'package:shellvibe/shared/database/app_database.dart';
+import 'package:shellvibe/shared/database/tables.dart' show hostGroupMemberId;
 
 void main() {
   group('HostsRepository', () {
@@ -41,7 +43,7 @@ void main() {
         );
         final host = await repository.saveHost(
           workspaceId: 'workspace-1',
-          groupId: group.id,
+          groupIds: [group.id],
           identityId: 'identity-1',
           label: 'Server',
           hostname: 'example.com',
@@ -59,13 +61,101 @@ void main() {
 
         final updated = await repository.getHostById(host.id);
         expect(updated, isNotNull);
-        expect(updated!.groupId, isNull);
+        expect(updated!.groupIds, isEmpty);
         expect(updated.identityId, isNull);
         expect(updated.username, isNull);
         expect(updated.colorTag, isNull);
         expect(updated.jumpHostId, isNull);
       },
     );
+
+    test(
+      'a host carries several tags and removing one drops only its row',
+      () async {
+        final prod = await repository.saveHostGroup(
+          workspaceId: 'workspace-1',
+          name: 'prod',
+        );
+        final db = await repository.saveHostGroup(
+          workspaceId: 'workspace-1',
+          name: 'db',
+        );
+        final host = await repository.saveHost(
+          workspaceId: 'workspace-1',
+          groupIds: [prod.id, db.id],
+          label: 'Server',
+          hostname: 'example.com',
+        );
+
+        final stored = await repository.getHostById(host.id);
+        expect(stored!.groupIds, unorderedEquals([prod.id, db.id]));
+        final listed = await repository.getHostsByWorkspace('workspace-1');
+        expect(listed.single.groupIds, unorderedEquals([prod.id, db.id]));
+
+        // The row id is the deterministic one every device derives.
+        final members = await database.hostsDao.getAllMemberships();
+        expect(
+          members.map((m) => m.id),
+          unorderedEquals([
+            hostGroupMemberId(host.id, prod.id),
+            hostGroupMemberId(host.id, db.id),
+          ]),
+        );
+
+        await repository.saveHost(
+          id: host.id,
+          workspaceId: host.workspaceId,
+          groupIds: [prod.id],
+          label: 'Server',
+          hostname: 'example.com',
+        );
+
+        final remaining = await database.hostsDao.getAllMemberships();
+        expect(remaining.map((m) => m.groupId), equals([prod.id]));
+        expect((await repository.getHostById(host.id))!.groupIds, [prod.id]);
+      },
+    );
+
+    test('deleting a tag removes its memberships but keeps the host', () async {
+      final group = await repository.saveHostGroup(
+        workspaceId: 'workspace-1',
+        name: 'prod',
+      );
+      final host = await repository.saveHost(
+        workspaceId: 'workspace-1',
+        groupIds: [group.id],
+        label: 'Server',
+        hostname: 'example.com',
+      );
+
+      await repository.deleteHostGroup(group.id);
+
+      expect(await database.hostsDao.getAllMemberships(), isEmpty);
+      final stored = await repository.getHostById(host.id);
+      expect(stored, isNotNull);
+      expect(stored!.groupIds, isEmpty);
+    });
+
+    test('membership writes reach the sync journal', () async {
+      database.syncJournal = SyncJournal(db: database, deviceId: 'device-a');
+      final group = await repository.saveHostGroup(
+        workspaceId: 'workspace-1',
+        name: 'prod',
+      );
+      final host = await repository.saveHost(
+        workspaceId: 'workspace-1',
+        groupIds: [group.id],
+        label: 'Server',
+        hostname: 'example.com',
+      );
+
+      final pending = await database.select(database.pendingOperations).get();
+      expect(
+        pending.where((o) => o.entityType == 'host_group_members'),
+        isNotEmpty,
+        reason: 'the membership for ${host.id} was never journaled',
+      );
+    });
 
     test('round-trips the Mosh settings and clears them on edit', () async {
       final host = await repository.saveHost(

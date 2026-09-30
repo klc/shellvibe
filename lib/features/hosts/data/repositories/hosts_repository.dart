@@ -16,7 +16,7 @@ class HostsRepository {
   Future<HostModel> saveHost({
     String? id,
     required String workspaceId,
-    String? groupId,
+    List<String> groupIds = const [],
     String? identityId,
     required String label,
     required String hostname,
@@ -34,9 +34,10 @@ class HostsRepository {
     final companion = HostsCompanion(
       id: Value(hostId),
       workspaceId: Value(workspaceId),
+      // `Hosts.groupId` is the legacy single-tag column: tags live in
+      // `host_group_members` now, so it is never written.
       // A present null is required on edits so cleared optional fields are
       // written as NULL instead of leaving the previous value untouched.
-      groupId: Value<String?>(groupId),
       identityId: Value<String?>(identityId),
       label: Value(label),
       hostname: Value(hostname),
@@ -51,19 +52,23 @@ class HostsRepository {
       createdAt: id == null ? Value(now) : const Value.absent(),
     );
 
-    if (id == null) {
-      await hostsDao.insertHost(companion);
-    } else {
-      final updated = await hostsDao.updateHostById(hostId, companion);
-      if (updated != 1) {
-        throw StateError('Host not found: $hostId');
+    // One transaction so a host is never visible with half its tags.
+    await hostsDao.transaction(() async {
+      if (id == null) {
+        await hostsDao.insertHost(companion);
+      } else {
+        final updated = await hostsDao.updateHostById(hostId, companion);
+        if (updated != 1) {
+          throw StateError('Host not found: $hostId');
+        }
       }
-    }
+      await hostsDao.setHostGroups(hostId, groupIds);
+    });
 
     return HostModel(
       id: hostId,
       workspaceId: workspaceId,
-      groupId: groupId,
+      groupIds: _sorted(groupIds),
       identityId: identityId,
       label: label,
       hostname: hostname,
@@ -80,52 +85,19 @@ class HostsRepository {
 
   Future<List<HostModel>> getAllHosts() async {
     final rows = await hostsDao.getAllHosts();
-    return rows
-        .map(
-          (row) => HostModel(
-            id: row.id,
-            workspaceId: row.workspaceId,
-            groupId: row.groupId,
-            identityId: row.identityId,
-            label: row.label,
-            hostname: row.hostname,
-            username: row.username,
-            port: row.port,
-            protocol: row.protocol,
-            moshServerPath: row.moshServerPath,
-            moshPortRange: row.moshPortRange,
-            colorTag: row.colorTag,
-            jumpHostId: row.jumpHostId,
-            createdAt: row.createdAt,
-          ),
-        )
-        .toList();
+    return _mapHosts(rows);
   }
 
   Future<List<HostModel>> getHostsByWorkspace(String workspaceId) async {
     final rows = await hostsDao.getHostsByWorkspace(workspaceId);
-    return rows.map(_mapHost).toList();
+    return _mapHosts(rows);
   }
 
   Future<HostModel?> getHostById(String id) async {
     final row = await hostsDao.getHostById(id);
     if (row == null) return null;
-    return HostModel(
-      id: row.id,
-      workspaceId: row.workspaceId,
-      groupId: row.groupId,
-      identityId: row.identityId,
-      label: row.label,
-      hostname: row.hostname,
-      username: row.username,
-      port: row.port,
-      protocol: row.protocol,
-      moshServerPath: row.moshServerPath,
-      moshPortRange: row.moshPortRange,
-      colorTag: row.colorTag,
-      jumpHostId: row.jumpHostId,
-      createdAt: row.createdAt,
-    );
+    final members = await hostsDao.getMembershipsForHost(id);
+    return _mapHost(row, members.map((m) => m.groupId));
   }
 
   Future<void> deleteHost(String id) async {
@@ -232,11 +204,23 @@ class HostsRepository {
     return hostsDao.watchAllHostGroups();
   }
 
-  HostModel _mapHost(Host row) {
+  /// Maps [rows] with their tags, reading every membership once instead of
+  /// once per host.
+  Future<List<HostModel>> _mapHosts(List<Host> rows) async {
+    final byHost = <String, List<String>>{};
+    for (final member in await hostsDao.getAllMemberships()) {
+      byHost.putIfAbsent(member.hostId, () => []).add(member.groupId);
+    }
+    return rows
+        .map((row) => _mapHost(row, byHost[row.id] ?? const []))
+        .toList();
+  }
+
+  HostModel _mapHost(Host row, Iterable<String> groupIds) {
     return HostModel(
       id: row.id,
       workspaceId: row.workspaceId,
-      groupId: row.groupId,
+      groupIds: _sorted(groupIds),
       identityId: row.identityId,
       label: row.label,
       hostname: row.hostname,
@@ -250,6 +234,11 @@ class HostsRepository {
       createdAt: row.createdAt,
     );
   }
+
+  /// Sorted and de-duplicated so equal tag sets compare equal regardless of
+  /// the order the database or the caller produced them in.
+  static List<String> _sorted(Iterable<String> groupIds) =>
+      groupIds.toSet().toList()..sort();
 
   HostGroupModel _mapGroup(HostGroup row) {
     return HostGroupModel(

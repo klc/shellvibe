@@ -678,7 +678,12 @@ final class SyncJournal {
       ('templates', 'workspace_id'),
       ('bookmarks', 'workspace_id'),
     ],
-    'hosts': [('port_forward_rules', 'host_id'), ('bookmarks', 'host_id')],
+    'hosts': [
+      ('host_group_members', 'host_id'),
+      ('port_forward_rules', 'host_id'),
+      ('bookmarks', 'host_id'),
+    ],
+    'host_groups': [('host_group_members', 'group_id')],
     'runbooks': [('runbook_steps', 'runbook_id')],
     'templates': [
       ('template_panes', 'template_id'),
@@ -691,7 +696,7 @@ final class SyncJournal {
   /// Mirrors `ON DELETE SET NULL`. These rows survive with a column cleared,
   /// so they are ordinary changes and go out as upserts.
   static const Map<String, List<(String, String)>> setNulls = {
-    'host_groups': [('host_groups', 'parent_id'), ('hosts', 'group_id')],
+    'host_groups': [('host_groups', 'parent_id')],
     'identities': [('hosts', 'identity_id')],
     'hosts': [('hosts', 'jump_host_id')],
   };

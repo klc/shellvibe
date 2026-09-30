@@ -75,6 +75,9 @@ class HostGroupsNotifier extends _$HostGroupsNotifier {
     try {
       final repo = ref.read(hostsRepositoryProvider);
       await repo.deleteHostGroup(id);
+      // The database dropped this tag from every host that carried it; the
+      // cached host list still names it.
+      ref.invalidate(hostsProvider);
       state = AsyncData(
         await repo.getHostGroupsByWorkspace(
           ref.read(activeWorkspaceIdProvider),
@@ -82,6 +85,9 @@ class HostGroupsNotifier extends _$HostGroupsNotifier {
       );
     } catch (_) {
       state = previousState;
+      // Rethrow so the screen can say the tag is still there, instead of the
+      // delete looking like it worked until the list next reloads.
+      rethrow;
     }
   }
 }

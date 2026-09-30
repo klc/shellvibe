@@ -74,10 +74,17 @@ class _HostRowState extends State<HostRow> {
     final address =
         '${host.username != null && host.username!.isNotEmpty ? '${host.username}@' : ''}'
         '${host.hostname}:${host.port}';
-    final groupName = groups
-        .where((group) => group.id == host.groupId)
-        .firstOrNull
-        ?.name;
+    // A host can carry several tags but the row has one chip slot: the first
+    // tag by name, with a count for the rest (same shape as snippet tags).
+    final tagNames = [
+      for (final group in groups)
+        if (host.groupIds.contains(group.id)) group.name,
+    ]..sort();
+    final groupName = tagNames.isEmpty
+        ? null
+        : (tagNames.length == 1
+              ? tagNames.first
+              : '${tagNames.first} +${tagNames.length - 1}');
     final monoStyle = shellvibeMono(
       context,
       color: selected ? tokens.textSecondary : tokens.textMuted,

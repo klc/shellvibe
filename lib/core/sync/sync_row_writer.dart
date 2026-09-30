@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import '../../shared/database/app_database.dart';
+import '../../shared/database/tables.dart' show hostGroupMemberId;
 
 /// What a write had to do to fit the row it was given.
 final class RowWriteResult {
@@ -157,17 +158,12 @@ final class SyncRowWriter {
         final keepIdentity = await exists(db.identities, identityId);
         if (identityId != null && !keepIdentity) cleared.add('identity');
 
-        final groupId = str('groupId');
-        final keepGroup = await exists(db.hostGroups, groupId);
-        if (groupId != null && !keepGroup) cleared.add('group');
-
         await db
             .into(db.hosts)
             .insertOnConflictUpdate(
               HostsCompanion.insert(
                 id: id(),
                 workspaceId: row['workspaceId'] as String,
-                groupId: Value(keepGroup ? groupId : null),
                 identityId: Value(keepIdentity ? identityId : null),
                 label: row['label'] as String,
                 hostname: row['hostname'] as String,
@@ -187,7 +183,50 @@ final class SyncRowWriter {
               ),
             );
 
+        // Tags live in `host_group_members` now, so the legacy column is
+        // never written. A row from an old backup or an old client still
+        // carries its one tag there, though: turn it into the membership row
+        // with the deterministic id, insert-or-ignore so a membership that
+        // already arrived is not clobbered.
+        final legacyGroupId = str('groupId');
+        if (legacyGroupId != null &&
+            await exists(db.hostGroups, legacyGroupId)) {
+          final hostId = id();
+          await db
+              .into(db.hostGroupMembers)
+              .insert(
+                HostGroupMembersCompanion.insert(
+                  id: hostGroupMemberId(hostId, legacyGroupId),
+                  hostId: hostId,
+                  groupId: legacyGroupId,
+                ),
+                mode: InsertMode.insertOrIgnore,
+              );
+        }
+
         return RowWriteResult.ok(clearedReferences: cleared);
+
+      case 'host_group_members':
+        // Both ends are NOT NULL foreign keys, so a membership missing either
+        // one is a row that cannot exist.
+        if (!await exists(db.hosts, str('hostId'))) {
+          return const RowWriteResult.skipped('host');
+        }
+        if (!await exists(db.hostGroups, str('groupId'))) {
+          return const RowWriteResult.skipped('group');
+        }
+
+        await db
+            .into(db.hostGroupMembers)
+            .insertOnConflictUpdate(
+              HostGroupMembersCompanion.insert(
+                id: id(),
+                hostId: row['hostId'] as String,
+                groupId: row['groupId'] as String,
+              ),
+            );
+
+        return const RowWriteResult.ok();
 
       case 'port_forward_rules':
         // `host_id` is NOT NULL, so a rule without its host is a row that
@@ -429,6 +468,7 @@ final class SyncRowWriter {
     'vault_env_vars' => db.vaultEnvVars,
     'host_groups' => db.hostGroups,
     'hosts' => db.hosts,
+    'host_group_members' => db.hostGroupMembers,
     'port_forward_rules' => db.portForwardRules,
     'snippets' => db.snippets,
     'runbooks' => db.runbooks,

@@ -5,6 +5,7 @@ import 'package:drift/drift.dart';
 
 import '../../features/vault/data/vault_key_service.dart';
 import '../../shared/database/app_database.dart';
+import '../../shared/database/tables.dart' show hostGroupMemberId;
 import '../crypto/encryption_engine.dart';
 import 'backup_envelope.dart';
 import 'backup_scope.dart';
@@ -103,6 +104,9 @@ class BackupRepairReport {
   /// Template panes dropped because their template is missing.
   final int skippedTemplatePanes;
 
+  /// Tag assignments dropped because their host or their tag is missing.
+  final int skippedHostTags;
+
   /// Bookmarks dropped because neither their host nor their template exists.
   final int skippedBookmarks;
 
@@ -116,6 +120,7 @@ class BackupRepairReport {
     this.skippedPortForwards = 0,
     this.skippedRunbookSteps = 0,
     this.skippedTemplatePanes = 0,
+    this.skippedHostTags = 0,
     this.skippedBookmarks = 0,
     this.skippedForMissingWorkspace = 0,
   });
@@ -127,6 +132,7 @@ class BackupRepairReport {
       skippedPortForwards == 0 &&
       skippedRunbookSteps == 0 &&
       skippedTemplatePanes == 0 &&
+      skippedHostTags == 0 &&
       skippedBookmarks == 0 &&
       skippedForMissingWorkspace == 0;
 
@@ -143,6 +149,7 @@ class BackupRepairReport {
       skippedPortForwards +
       skippedRunbookSteps +
       skippedTemplatePanes +
+      skippedHostTags +
       skippedBookmarks +
       skippedForMissingWorkspace;
 
@@ -162,6 +169,8 @@ class BackupRepairReport {
       '$skippedRunbookSteps runbook step skipped: its runbook is not here.',
     if (skippedTemplatePanes > 0)
       '$skippedTemplatePanes template pane skipped: its template is not here.',
+    if (skippedHostTags > 0)
+      '$skippedHostTags host tag skipped: its host or its tag is not here.',
     if (skippedBookmarks > 0)
       '$skippedBookmarks bookmark skipped: neither its host nor its layout is '
           'here.',
@@ -178,6 +187,7 @@ class _RepairCounters {
   int skippedPortForwards = 0;
   int skippedRunbookSteps = 0;
   int skippedTemplatePanes = 0;
+  int skippedHostTags = 0;
   int skippedBookmarks = 0;
   int skippedForMissingWorkspace = 0;
 
@@ -188,6 +198,7 @@ class _RepairCounters {
     skippedPortForwards: skippedPortForwards,
     skippedRunbookSteps: skippedRunbookSteps,
     skippedTemplatePanes: skippedTemplatePanes,
+    skippedHostTags: skippedHostTags,
     skippedBookmarks: skippedBookmarks,
     skippedForMissingWorkspace: skippedForMissingWorkspace,
   );
@@ -277,6 +288,10 @@ class E2EECloudSyncService {
       // operation. `backup_covers_every_column_test` reads the payload and
       // fails if a column is added to the table without being encoded.
       payloadMap['hosts'] = hosts.map(SyncRowCodec.host).toList();
+      final hostGroupMembers = await db.select(db.hostGroupMembers).get();
+      payloadMap['host_group_members'] = hostGroupMembers
+          .map(SyncRowCodec.hostGroupMember)
+          .toList();
     }
 
     if (scope.contains(BackupCategory.knownHosts)) {
@@ -526,8 +541,8 @@ class E2EECloudSyncService {
 
       // 4. Hosts
       //
-      // `identity_id` and `group_id` are nullable with `ON DELETE SET NULL`,
-      // so a host whose identity was left out of the backup is written without
+      // `identity_id` is nullable with `ON DELETE SET NULL`, so a host whose
+      // identity was left out of the backup is written without
       // one rather than dropped. The schema already sanctions that state; a
       // host that cannot be reached is still better than a restore that stops.
       if (data['hosts'] is List) {
@@ -544,16 +559,12 @@ class E2EECloudSyncService {
             repairs.hostsWithoutIdentity++;
           }
 
-          final groupId = item['groupId'] as String?;
-          final keepGroup = groupId != null && groupIds.contains(groupId);
-
           await db
               .into(db.hosts)
               .insertOnConflictUpdate(
                 HostsCompanion.insert(
                   id: item['id'] as String,
                   workspaceId: item['workspaceId'] as String,
-                  groupId: Value(keepGroup ? groupId : null),
                   identityId: Value(keepIdentity ? identityId : null),
                   label: item['label'] as String,
                   hostname: item['hostname'] as String,
@@ -577,6 +588,49 @@ class E2EECloudSyncService {
         }
       }
       final hostIds = await idsOf('hosts');
+
+      // 4b. Host tags
+      //
+      // Both ends are NOT NULL foreign keys, so an assignment whose host or
+      // tag did not make it is skipped. A snapshot written before hosts could
+      // carry several tags has no `host_group_members` key and gives each host
+      // one tag in `groupId`: convert that into the membership row with the
+      // same deterministic id every other device derives.
+      if (data['host_group_members'] is List) {
+        for (final item in data['host_group_members'] as List) {
+          if (!hostIds.contains(item['hostId']) ||
+              !groupIds.contains(item['groupId'])) {
+            repairs.skippedHostTags++;
+            continue;
+          }
+          await db
+              .into(db.hostGroupMembers)
+              .insertOnConflictUpdate(
+                HostGroupMembersCompanion.insert(
+                  id: item['id'] as String,
+                  hostId: item['hostId'] as String,
+                  groupId: item['groupId'] as String,
+                ),
+              );
+        }
+      } else if (data['hosts'] is List) {
+        for (final item in data['hosts'] as List) {
+          final hostId = item['id'] as String;
+          final groupId = item['groupId'] as String?;
+          if (groupId == null || !groupIds.contains(groupId)) continue;
+          if (!hostIds.contains(hostId)) continue;
+          await db
+              .into(db.hostGroupMembers)
+              .insert(
+                HostGroupMembersCompanion.insert(
+                  id: hostGroupMemberId(hostId, groupId),
+                  hostId: hostId,
+                  groupId: groupId,
+                ),
+                mode: InsertMode.insertOrIgnore,
+              );
+        }
+      }
 
       // 5. Known Hosts
       //

@@ -50,6 +50,10 @@ class Hosts extends Table {
   TextColumn get id => text()();
   TextColumn get workspaceId =>
       text().references(Workspaces, #id, onDelete: KeyAction.cascade)();
+
+  /// Legacy single-tag column. Tags now live in [HostGroupMembers]; this is
+  /// kept only so old backups and old clients that still send it can be read,
+  /// and it is always written as NULL.
   TextColumn get groupId => text().nullable().references(
     HostGroups,
     #id,
@@ -89,6 +93,35 @@ class Hosts extends Table {
 
   @override
   Set<Column> get primaryKey => {id};
+}
+
+/// The deterministic id of the membership row for [hostId] and [groupId].
+///
+/// Every writer (repository, migration, sync, SSH config import) must use this
+/// so the same pair is always the same row.
+String hostGroupMemberId(String hostId, String groupId) => '$hostId:$groupId';
+
+/// Host <-> tag membership (a host can carry any number of tags).
+///
+/// The row id is deterministic ([hostGroupMemberId]) rather than a random
+/// uuid: two devices that migrate or re-tag the same host produce the same
+/// row, so sync converges on one row instead of duplicating it. [hostId] and
+/// [groupId] both cascade, so deleting a host or a tag removes only the
+/// membership, never the other side.
+class HostGroupMembers extends Table {
+  TextColumn get id => text()();
+  TextColumn get hostId =>
+      text().references(Hosts, #id, onDelete: KeyAction.cascade)();
+  TextColumn get groupId =>
+      text().references(HostGroups, #id, onDelete: KeyAction.cascade)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+    {hostId, groupId},
+  ];
 }
 
 /// 5. Known Hosts Table (SSH Host Key Verification & Fingerprints)

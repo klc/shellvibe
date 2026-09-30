@@ -34,17 +34,29 @@ class AppPaletteDefinition {
     final def = forPalette(palette);
     final tokens = isDark ? def.darkTokens : def.lightTokens;
 
+    // Every role a shadcn widget paints is pinned here. A role left out falls
+    // back to Slate's own value — white popovers and cool grey hovers on a
+    // warm palette, navy-black ones on a dark one.
     if (isDark) {
       return ShadSlateColorScheme.dark(
         background: tokens.canvas,
         foreground: tokens.textPrimary,
         card: tokens.surface,
         cardForeground: tokens.textPrimary,
+        popover: tokens.surfaceRaised,
+        popoverForeground: tokens.textPrimary,
         primary: tokens.brand,
         primaryForeground: tokens.brandInk,
+        secondary: tokens.surfaceLow,
+        secondaryForeground: tokens.textPrimary,
         muted: tokens.surfaceLow,
         mutedForeground: tokens.textMuted,
+        accent: tokens.textPrimary.withValues(alpha: 0.06),
+        accentForeground: tokens.textPrimary,
         border: tokens.border,
+        input: tokens.border,
+        ring: tokens.brand.withValues(alpha: 0.4),
+        selection: tokens.brand.withValues(alpha: 0.3),
         destructive: tokens.danger,
       );
     } else {
@@ -53,11 +65,20 @@ class AppPaletteDefinition {
         foreground: tokens.textPrimary,
         card: tokens.surface,
         cardForeground: tokens.textPrimary,
+        popover: tokens.surfaceRaised,
+        popoverForeground: tokens.textPrimary,
         primary: tokens.brand,
         primaryForeground: tokens.brandInk,
+        secondary: tokens.surfaceLow,
+        secondaryForeground: tokens.textPrimary,
         muted: tokens.surfaceLow,
         mutedForeground: tokens.textMuted,
+        accent: tokens.textPrimary.withValues(alpha: 0.06),
+        accentForeground: tokens.textPrimary,
         border: tokens.border,
+        input: tokens.border,
+        ring: tokens.brand.withValues(alpha: 0.4),
+        selection: tokens.brand.withValues(alpha: 0.3),
         destructive: tokens.danger,
       );
     }
@@ -79,6 +100,7 @@ class AppPaletteDefinition {
         canvasGlow: const Color(0xFF0D1611),
         surface: const Color(0xFF080A0D),
         surfaceLow: const Color(0xFF000000),
+        terminalBg: const Color(0xFF000000),
         surfaceRaised: const Color(0xFF11161C),
         railBg: const Color(0xFF050709),
         terminalChrome: const Color(0xFF080A0D),
@@ -90,8 +112,28 @@ class AppPaletteDefinition {
         brandGradientBottom: const Color(0xFF00B359),
         info: const Color(0xFF18FFFF),
         border: const Color(0xFF1F1F1F),
+        // Neutral greys with the surfaces' faint cool cast. The text ramp used
+        // to be inherited from Nocturne, whose lavender greys read as a tint
+        // on true black next to an emerald accent.
+        textPrimary: const Color(0xFFE9ECEF),
+        textSecondary: const Color(0xFFCDD2D6),
+        textMuted: const Color(0xFF8D959C),
+        textSubtle: const Color(0xFF646C73),
       ),
+      // Daylight OLED is the same neutral family inverted, rather than
+      // Nocturne's blue-grey daylight with a green accent dropped in.
       lightTokens: ShellVibeTokens.light.copyWith(
+        canvas: const Color(0xFFF3F4F5),
+        surfaceLow: const Color(0xFFF7F8F8),
+        terminalBg: const Color(0xFFF3F4F5),
+        terminalChrome: const Color(0xFFE7E9EB),
+        border: const Color(0x14000000),
+        textPrimary: const Color(0xFF121517),
+        textSecondary: const Color(0xFF2F3437),
+        textMuted: const Color(0xFF5E666C),
+        textSubtle: const Color(0xFF858D93),
+        shadowColor: const Color(0x14000000),
+        shadowColorStrong: const Color(0x24000000),
         brand: const Color(0xFF007A3F),
         brandBright: const Color(0xFF006434),
         brandSoft: const Color(0xFF00B359),
@@ -176,6 +218,7 @@ class AppPaletteDefinition {
         canvasGlow: const Color(0xFF313244),
         surface: const Color(0xFF181825),
         surfaceLow: const Color(0xFF11111B),
+        terminalBg: const Color(0xFF11111B),
         surfaceRaised: const Color(0xFF24273A),
         railBg: const Color(0xFF181825),
         terminalChrome: const Color(0xFF181825),
@@ -231,6 +274,7 @@ class AppPaletteDefinition {
         canvasGlow: const Color(0xFF434C5E),
         surface: const Color(0xFF3B4252),
         surfaceLow: const Color(0xFF242933),
+        terminalBg: const Color(0xFF242933),
         surfaceRaised: const Color(0xFF434C5E),
         railBg: const Color(0xFF2E3440),
         terminalChrome: const Color(0xFF3B4252),
@@ -242,7 +286,9 @@ class AppPaletteDefinition {
         brandGradientBottom: const Color(0xFF81A1C1),
         textPrimary: const Color(0xFFECEFF4),
         textSecondary: const Color(0xFFE5E9F0),
-        textMuted: const Color(0xFFD8DEE9),
+        // Snow Storm's darkest step (#D8DEE9) sat a hair below the primary
+        // text, so idle labels read as loudly as selected ones.
+        textMuted: const Color(0xFFBCC4D1),
         textSubtle: const Color(0xFF8793AB),
         border: const Color(0xFF4C566A),
         info: const Color(0xFF5E81AC),
@@ -267,7 +313,9 @@ class AppPaletteDefinition {
         brandGradientBottom: const Color(0xFF4C566A),
         textPrimary: const Color(0xFF2E3440),
         textSecondary: const Color(0xFF3B4252),
-        textMuted: const Color(0xFF434C5E),
+        // Polar Night's lightest step was nearly the primary text; this keeps
+        // the Nord hue a clear rank lower.
+        textMuted: const Color(0xFF545E73),
         textSubtle: const Color(0xFF737F99),
         border: const Color(0xFFD8DEE9),
         info: const Color(0xFF88C0D0),
@@ -286,6 +334,7 @@ class AppPaletteDefinition {
         canvasGlow: const Color(0xFF44475A),
         surface: const Color(0xFF343746),
         surfaceLow: const Color(0xFF21222C),
+        terminalBg: const Color(0xFF21222C),
         surfaceRaised: const Color(0xFF44475A),
         railBg: const Color(0xFF282A36),
         terminalChrome: const Color(0xFF343746),
@@ -297,7 +346,9 @@ class AppPaletteDefinition {
         brandGradientBottom: const Color(0xFF9A6BD8),
         textPrimary: const Color(0xFFF8F8F2),
         textSecondary: const Color(0xFFE2E2DC),
-        textMuted: const Color(0xFFA3A3A3),
+        // Lifted from #A3A3A3, which fell to 3.6:1 on Current Line (#44475A),
+        // the ground of every menu and dialog.
+        textMuted: const Color(0xFFBCBCC4),
         textSubtle: const Color(0xFF7684B2),
         border: const Color(0xFF44475A),
         info: const Color(0xFF8BE9FD),
@@ -322,7 +373,9 @@ class AppPaletteDefinition {
         brandGradientBottom: const Color(0xFF6236B8),
         textPrimary: const Color(0xFF282A36),
         textSecondary: const Color(0xFF44475A),
-        textMuted: const Color(0xFF6272A4),
+        // Dracula's comment hue, one step deeper: #6272A4 fell to 4.2:1 on
+        // the raised ground menus and dialogs use.
+        textMuted: const Color(0xFF56659A),
         textSubtle: const Color(0xFF8F8F8F),
         border: const Color(0xFFD8D8D2),
         info: const Color(0xFF01A0E4),
@@ -341,7 +394,12 @@ class AppPaletteDefinition {
         canvasGlow: const Color(0xFF073642),
         surface: const Color(0xFF073642),
         surfaceLow: const Color(0xFF001F27),
-        surfaceRaised: const Color(0xFF586E75),
+        terminalBg: const Color(0xFF001F27),
+        // base02, the same step as the panel top. base01 (#586E75) was used
+        // here and put body text on menus and dialogs at 2:1; Solarized's
+        // text ramp leaves no lighter ground that still clears 4.5:1, so
+        // overlays separate by their hairline and shadow instead.
+        surfaceRaised: const Color(0xFF073642),
         railBg: const Color(0xFF002B36),
         terminalChrome: const Color(0xFF073642),
         brand: const Color(0xFF2AA198),
@@ -362,10 +420,12 @@ class AppPaletteDefinition {
       ),
       lightTokens: ShellVibeTokens.light.copyWith(
         canvas: const Color(0xFFFDF6E3),
-        canvasGlow: const Color(0xFFFFFFFF),
+        canvasGlow: const Color(0xFFFDF6E3),
         surface: const Color(0xFFEEE8D5),
         surfaceLow: const Color(0xFFE4DCBA),
-        surfaceRaised: const Color(0xFFFFFFFF),
+        // base3, Solarized's lightest step — white is not in the palette and
+        // read as a cold patch on its cream panels.
+        surfaceRaised: const Color(0xFFFDF6E3),
         railBg: const Color(0xFFEEE8D5),
         terminalBg: const Color(0xFFFDF6E3),
         terminalChrome: const Color(0xFFEEE8D5),
@@ -396,7 +456,10 @@ class AppPaletteDefinition {
         canvasGlow: const Color(0xFF24283B),
         surface: const Color(0xFF24283B),
         surfaceLow: const Color(0xFF16161E),
-        surfaceRaised: const Color(0xFF414868),
+        terminalBg: const Color(0xFF16161E),
+        // bg_highlight. Terminal Black (#414868) was used here and put the
+        // secondary and muted text of every menu and dialog below 4.5:1.
+        surfaceRaised: const Color(0xFF292E42),
         railBg: const Color(0xFF1A1B26),
         terminalChrome: const Color(0xFF24283B),
         brand: const Color(0xFF7AA2F7),
@@ -451,7 +514,10 @@ class AppPaletteDefinition {
         canvasGlow: const Color(0xFF3C3836),
         surface: const Color(0xFF3C3836),
         surfaceLow: const Color(0xFF1D2021),
-        surfaceRaised: const Color(0xFF504945),
+        terminalBg: const Color(0xFF1D2021),
+        // Midway between bg1 and bg2. bg2 (#504945) put the muted text of
+        // menus and dialogs at 4.0:1.
+        surfaceRaised: const Color(0xFF45403D),
         railBg: const Color(0xFF282828),
         terminalChrome: const Color(0xFF3C3836),
         brand: const Color(0xFFFE8019),
@@ -472,10 +538,13 @@ class AppPaletteDefinition {
       ),
       lightTokens: ShellVibeTokens.light.copyWith(
         canvas: const Color(0xFFFBF1C7),
-        canvasGlow: const Color(0xFFFFFFFF),
+        canvasGlow: const Color(0xFFF9F5D7),
         surface: const Color(0xFFEBDBB2),
         surfaceLow: const Color(0xFFD5C4A1),
-        surfaceRaised: const Color(0xFFFFFFFF),
+        // Gruvbox's own lightest ground (bg0_h), not white: overlays, the
+        // workspace switcher and the rail avatar all paint this, and pure
+        // white sat on the parchment panels as a foreign cold patch.
+        surfaceRaised: const Color(0xFFF9F5D7),
         railBg: const Color(0xFFEBDBB2),
         terminalBg: const Color(0xFFFBF1C7),
         terminalChrome: const Color(0xFFEBDBB2),
@@ -506,7 +575,10 @@ class AppPaletteDefinition {
         canvasGlow: const Color(0xFF282C34),
         surface: const Color(0xFF282C34),
         surfaceLow: const Color(0xFF1B1D23),
-        surfaceRaised: const Color(0xFF3E4451),
+        terminalBg: const Color(0xFF1B1D23),
+        // The cursor-line tone. The selection tone (#3E4451) was used here and
+        // put every overlay's secondary text below 4:1.
+        surfaceRaised: const Color(0xFF2C313A),
         railBg: const Color(0xFF21252B),
         terminalChrome: const Color(0xFF282C34),
         brand: const Color(0xFF61AFEF),

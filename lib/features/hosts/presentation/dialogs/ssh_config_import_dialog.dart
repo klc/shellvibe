@@ -15,7 +15,7 @@ import '../providers/ssh_config_import_provider.dart';
 /// Preview-and-confirm dialog for importing an OpenSSH `~/.ssh/config` file.
 ///
 /// Resolves the file through [SshConfigImportService.previewConfig], lets the
-/// user pick hosts, target group, conflict policy and which extras to import
+/// user pick hosts, a tag to add, conflict policy and which extras to import
 /// (private keys, port forwards, missing jump hosts), then runs the import
 /// and pops with the [SshConfigImportResult].
 class SshConfigImportDialog extends ConsumerStatefulWidget {
@@ -252,13 +252,19 @@ class _SshConfigImportDialogState extends ConsumerState<SshConfigImportDialog> {
                           data: (groups) => ShadSelectFormField<String?>(
                             key: const Key('import_group_dropdown'),
                             initialValue: _selectedGroupId,
-                            label: const Text('Target Group'),
-                            selectedOptionBuilder: (context, value) =>
-                                Text(value ?? '(None - Ungrouped)'),
+                            label: const Text('Tag'),
+                            // The value is the tag's id; show its name.
+                            selectedOptionBuilder: (context, value) => Text(
+                              groups
+                                      .where((g) => g.id == value)
+                                      .firstOrNull
+                                      ?.name ??
+                                  '(None - Untagged)',
+                            ),
                             options: [
                               const ShadOption<String?>(
                                 value: null,
-                                child: Text('(None - Ungrouped)'),
+                                child: Text('(None - Untagged)'),
                               ),
                               ...groups.map(
                                 (g) => ShadOption<String?>(
@@ -271,7 +277,7 @@ class _SshConfigImportDialogState extends ConsumerState<SshConfigImportDialog> {
                                 setState(() => _selectedGroupId = val),
                           ),
                           loading: () => const LinearProgressIndicator(),
-                          error: (e, s) => const Text('Failed to load groups'),
+                          error: (e, s) => const Text('Failed to load tags'),
                         ),
                         const SizedBox(height: 12),
                         ShadSelectFormField<SshConfigConflictPolicy>(

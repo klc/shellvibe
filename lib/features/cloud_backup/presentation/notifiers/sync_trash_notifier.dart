@@ -40,6 +40,7 @@ final class TrashedRow {
     'identities' => 'Identity',
     'vault_env_vars' => 'Environment variable',
     'host_groups' => 'Group',
+    'host_group_members' => 'Tag assignment',
     'workspaces' => 'Workspace',
     'port_forward_rules' => 'Port forward',
     'snippets' => 'Snippet',

@@ -92,12 +92,16 @@ class HostFilterChip extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
 
+  /// Opens the chip's own actions (a tag's edit / delete), when it has any.
+  final VoidCallback? onLongPress;
+
   const HostFilterChip({
     super.key,
     this.chipKey,
     required this.label,
     required this.selected,
     required this.onTap,
+    this.onLongPress,
   });
 
   @override
@@ -108,6 +112,7 @@ class HostFilterChip extends StatelessWidget {
       child: InkWell(
         key: chipKey,
         onTap: onTap,
+        onLongPress: onLongPress,
         borderRadius: BorderRadius.circular(8),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -147,6 +152,11 @@ class HostCompactFilterBar extends StatelessWidget {
   final ValueChanged<HostFilter> onSelectFilter;
   final ValueChanged<String> onSelectGroup;
 
+  /// Edit / delete for a tag chip, opened by a long press. The context is the
+  /// chip's, so the menu anchors to it.
+  final void Function(BuildContext chipContext, HostGroupModel group)?
+  onGroupActions;
+
   const HostCompactFilterBar({
     super.key,
     required this.groups,
@@ -156,6 +166,7 @@ class HostCompactFilterBar extends StatelessWidget {
     required this.onSearchChanged,
     required this.onSelectFilter,
     required this.onSelectGroup,
+    this.onGroupActions,
   });
 
   @override
@@ -200,11 +211,16 @@ class HostCompactFilterBar extends StatelessWidget {
                   onTap: () => onSelectFilter(HostFilter.favorites),
                 ),
                 for (final group in groups)
-                  HostFilterChip(
-                    chipKey: Key('group_${group.id}'),
-                    label: group.name,
-                    selected: selectedGroupId == group.id,
-                    onTap: () => onSelectGroup(group.id),
+                  Builder(
+                    builder: (chipContext) => HostFilterChip(
+                      chipKey: Key('group_${group.id}'),
+                      label: group.name,
+                      selected: selectedGroupId == group.id,
+                      onTap: () => onSelectGroup(group.id),
+                      onLongPress: onGroupActions == null
+                          ? null
+                          : () => onGroupActions!(chipContext, group),
+                    ),
                   ),
               ],
             ),

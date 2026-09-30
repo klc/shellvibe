@@ -508,7 +508,9 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
     final session = widget.session;
     final settingsAsync = ref.watch(settingsProvider);
     final settings = settingsAsync.value ?? const AppSettingsModel();
-    final theme = TerminalPaletteData.themeOf(settings.terminalPalette);
+    final theme = TerminalPaletteData.of(
+      settings.resolvedTerminalPalette(Theme.of(context).brightness),
+    ).theme;
 
     final shouldShowExtraKeys =
         widget.showExtraKeys ??

@@ -85,6 +85,19 @@ void main() {
             tokens.surface,
             _kDecorativeMinimum,
           );
+          // Menus, dialogs, dropdowns and sheets all paint surfaceRaised.
+          expectRatio(
+            '$where textPrimary on surfaceRaised',
+            tokens.textPrimary,
+            tokens.surfaceRaised,
+            _kBodyMinimum,
+          );
+          expectRatio(
+            '$where textMuted on surfaceRaised',
+            tokens.textMuted,
+            tokens.surfaceRaised,
+            _kBodyMinimum,
+          );
         });
 
         test('${palette.name} $mode keeps its brand legible', () {

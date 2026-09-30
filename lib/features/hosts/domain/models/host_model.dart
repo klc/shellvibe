@@ -1,8 +1,12 @@
+import 'package:flutter/foundation.dart';
+
 /// Domain model representing a server host configuration.
 class HostModel {
   final String id;
   final String workspaceId;
-  final String? groupId;
+
+  /// Ids of every tag (host group) this host carries, sorted.
+  final List<String> groupIds;
   final String? identityId;
   final String label;
   final String hostname;
@@ -25,7 +29,7 @@ class HostModel {
   const HostModel({
     required this.id,
     required this.workspaceId,
-    this.groupId,
+    this.groupIds = const [],
     this.identityId,
     required this.label,
     required this.hostname,
@@ -42,7 +46,7 @@ class HostModel {
   HostModel copyWith({
     String? id,
     String? workspaceId,
-    String? groupId,
+    List<String>? groupIds,
     String? identityId,
     String? label,
     String? hostname,
@@ -58,7 +62,7 @@ class HostModel {
     return HostModel(
       id: id ?? this.id,
       workspaceId: workspaceId ?? this.workspaceId,
-      groupId: groupId ?? this.groupId,
+      groupIds: groupIds ?? this.groupIds,
       identityId: identityId ?? this.identityId,
       label: label ?? this.label,
       hostname: hostname ?? this.hostname,
@@ -80,7 +84,7 @@ class HostModel {
           runtimeType == other.runtimeType &&
           id == other.id &&
           workspaceId == other.workspaceId &&
-          groupId == other.groupId &&
+          listEquals(groupIds, other.groupIds) &&
           identityId == other.identityId &&
           label == other.label &&
           hostname == other.hostname &&
@@ -97,7 +101,7 @@ class HostModel {
   int get hashCode =>
       id.hashCode ^
       workspaceId.hashCode ^
-      groupId.hashCode ^
+      Object.hashAll(groupIds) ^
       identityId.hashCode ^
       label.hashCode ^
       hostname.hashCode ^

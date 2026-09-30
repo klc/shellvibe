@@ -140,6 +140,8 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
         ? HostEnvironment.prod
         : HostEnvironment.fromName(hostRow.environment);
 
+    final memberships = await hostsDao.getMembershipsForHost(session.hostId);
+
     final commandContext = CommandContext(
       command: command,
       cwd: session.shell.cwd,
@@ -147,7 +149,7 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
       environment: environment,
       hostId: session.hostId,
       clientId: ctx.clientId,
-      hostGroupId: hostRow?.groupId,
+      hostGroupIds: memberships.map((m) => m.groupId).toSet(),
       connectionScopeId: ctx.connectionScopeId,
     );
 

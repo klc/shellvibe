@@ -7,6 +7,34 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- A "Match App Theme" terminal color scheme that follows the app palette and
+  light or dark mode to its terminal counterpart (Gruvbox, Nord, Solarized,
+  Tokyo Night, One Dark, Catppuccin), so a light app theme no longer keeps a
+  black terminal. New installs start on it; a scheme you already chose is
+  kept.
+
+### Changed
+
+- OLED's text uses neutral greys instead of the default theme's blue-violet
+  ones, and its light mode has neutral surfaces of its own.
+
+### Fixed
+
+- Menus, dropdowns, dialogs, bottom sheets, chips, switches, snack bars and
+  the date picker took colours from outside the chosen palette: white menus
+  and a grey selected row on Gruvbox and Solarized Light, pink sheets and
+  chips, a pale snack bar on dark palettes, and white or navy select
+  popovers. They now come from the palette.
+- The selected tab label on the phone bar was violet in every palette.
+- Menu and dialog text was hard to read in Solarized Dark (2:1), and their
+  secondary text was below 4.5:1 in Dracula, Tokyo Night, One Dark and
+  Gruvbox Dark. Nord's idle labels were as bright as the selected one.
+- The active terminal tab and the pane around the terminal were painted in
+  the app palette's colour rather than the terminal's own, leaving a seam
+  where the tab meets the pane.
+
 ## [1.6.0] - 2026-09-27
 
 ### Changed

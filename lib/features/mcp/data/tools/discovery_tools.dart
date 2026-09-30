@@ -17,7 +17,7 @@ import 'mcp_tool_handler.dart';
 /// `docs/mcp_plan.md` Faz 3) and is out of scope for this change (it is not
 /// one of this file's owned files). Every discovery tool below still goes
 /// through [HostsRepository] first for the fields it already has (label,
-/// hostname, port, group, jump host); this helper only fills the gap, by id,
+/// hostname, port, groups, jump host); this helper only fills the gap, by id,
 /// straight from the DAO both `HostsRepository` and `HostsDao` share.
 Future<Host?> _hostRow(HostsDao hostsDao, String hostId) =>
     hostsDao.getHostById(hostId);
@@ -39,7 +39,7 @@ McpAccessMode _defaultModeOf(Host? row) => row == null
 /// learn it can never obtain a hostname/port/credential to connect with
 /// directly, only an opaque [Host.id] to hand to other tools. `tags[]` from
 /// the plan's original draft is intentionally absent — `Hosts` has no tags
-/// column, so `group` (resolved from `groupId`) is exposed instead.
+/// column, so `groups` (the names of the host's group tags) is exposed instead.
 class ListHostsTool with McpArgReaders implements McpToolHandler {
   final HostsRepository hostsRepository;
   final HostsDao hostsDao;
@@ -93,7 +93,7 @@ class ListHostsTool with McpArgReaders implements McpToolHandler {
       if (!_isMcpVisible(row)) continue;
 
       final mode = await grantRepository.effectiveMode(ctx.clientId, host.id);
-      final groupName = await _groupNameOf(host.groupId);
+      final groupNames = await _groupNames(hostsRepository, host.groupIds);
 
       result.add({
         'id': host.id,
@@ -101,7 +101,7 @@ class ListHostsTool with McpArgReaders implements McpToolHandler {
         'hostname': host.hostname,
         'port': host.port,
         'environment': _environmentOf(row).name,
-        'group': groupName,
+        'groups': groupNames,
         'access': mode == null ? 'none' : 'granted',
         'mode': mode?.name,
       });
@@ -121,12 +121,20 @@ class ListHostsTool with McpArgReaders implements McpToolHandler {
       'hosts': result,
     };
   }
+}
 
-  Future<String?> _groupNameOf(String? groupId) async {
-    if (groupId == null) return null;
-    final group = await hostsRepository.getHostGroupById(groupId);
-    return group?.name;
+/// Names of the groups behind [groupIds], sorted so the output is stable.
+/// A group that vanished since the host was read is left out.
+Future<List<String>> _groupNames(
+  HostsRepository hostsRepository,
+  List<String> groupIds,
+) async {
+  final names = <String>[];
+  for (final id in groupIds) {
+    final group = await hostsRepository.getHostGroupById(id);
+    if (group != null) names.add(group.name);
   }
+  return names..sort();
 }
 
 /// `describe_host` — detail on one host the agent already knows the id of
@@ -187,9 +195,7 @@ class DescribeHostTool with McpArgReaders implements McpToolHandler {
       );
     }
 
-    final groupName = host.groupId == null
-        ? null
-        : (await hostsRepository.getHostGroupById(host.groupId!))?.name;
+    final groupNames = await _groupNames(hostsRepository, host.groupIds);
     final jumpLabel = host.jumpHostId == null
         ? null
         : (await hostsRepository.getHostById(host.jumpHostId!))?.label;
@@ -202,7 +208,7 @@ class DescribeHostTool with McpArgReaders implements McpToolHandler {
       'port': host.port,
       'environment': _environmentOf(row).name,
       'protocol': host.protocol,
-      'group': groupName,
+      'groups': groupNames,
       'jumpHost': jumpLabel,
       'access': mode == null ? 'none' : 'granted',
       'mode': mode?.name,

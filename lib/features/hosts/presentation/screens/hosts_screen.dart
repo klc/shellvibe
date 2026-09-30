@@ -36,6 +36,7 @@ import '../widgets/host_detail_panel.dart';
 import '../widgets/host_list_filter.dart';
 import '../widgets/host_list_header.dart';
 import '../widgets/host_row.dart';
+import '../widgets/host_tag_nav_item.dart';
 import '../widgets/template_nav_item.dart';
 
 class HostsScreen extends ConsumerStatefulWidget {
@@ -191,23 +192,25 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
         ShellVibeNavItem(
           itemKey: const Key('hosts_filter_ungrouped'),
           icon: LucideIcons.inbox,
-          label: 'Ungrouped',
-          count: hosts.where((host) => host.groupId == null).length,
+          label: 'Untagged',
+          count: hosts.where((host) => host.groupIds.isEmpty).length,
           selected: _selectedGroupId == null && _filter == HostFilter.ungrouped,
           onTap: () => _selectFilter(HostFilter.ungrouped),
         ),
         if (groups.isNotEmpty) const ShellVibeSectionLabel(label: 'Tags'),
         for (final group in groups)
-          ShellVibeNavItem(
-            itemKey: Key('group_${group.id}'),
-            icon: LucideIcons.hash,
-            label: group.name,
-            count: hosts.where((host) => host.groupId == group.id).length,
+          HostTagNavItem(
+            tag: group,
+            count: hosts
+                .where((host) => host.groupIds.contains(group.id))
+                .length,
             selected: _selectedGroupId == group.id,
-            onTap: () => setState(() {
+            onSelect: () => setState(() {
               _selectedGroupId = group.id;
               _filter = HostFilter.all;
             }),
+            onEdit: () => _openGroupForm(context, initialGroup: group),
+            onDelete: () => _deleteGroup(context, group, hosts),
           ),
         // Saved terminal layouts. Unlike the entries above these are actions,
         // not filters: tapping one opens its tabs and panes in the terminal.
@@ -250,8 +253,8 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
     final actions = <Widget>[
       ShellVibeButton.secondary(
         buttonKey: const Key('add_group_button'),
-        icon: LucideIcons.folderPlus,
-        label: 'Add group',
+        icon: LucideIcons.tag,
+        label: 'Add tag',
         onPressed: () => _openGroupForm(context),
       ),
       ShellVibeButton.secondary(
@@ -308,6 +311,11 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
               _selectedGroupId = groupId;
               _filter = HostFilter.all;
             }),
+            onGroupActions: (chipContext, group) => _showTagActions(
+              chipContext,
+              group,
+              hostsAsync.value ?? const [],
+            ),
           ),
         Expanded(
           child: hostsAsync.when(
@@ -453,9 +461,9 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
   Widget _buildFirstRunEmptyState(BuildContext context) {
     return ShellVibeEmptyState(
       icon: LucideIcons.server,
-      title: 'No hosts or groups configured.',
+      title: 'No hosts or tags configured.',
       description:
-          'Add your first server to connect in one click. You can organize infrastructure into groups at any time.',
+          'Add your first server to connect in one click. You can organize infrastructure with tags at any time.',
       // Each label is `Flexible` rather than a bare `Text`: shadcn lays a
       // button out as a shrink-wrapped Row, so on a 320px screen — or at a
       // large system text scale — an unbounded label overflows its own button.
@@ -466,8 +474,8 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
           onPressed: () => _openHostForm(context),
         ),
         ShellVibeButton.secondary(
-          label: 'Create group',
-          icon: LucideIcons.folderPlus,
+          label: 'Create tag',
+          icon: LucideIcons.tag,
           onPressed: () => _openGroupForm(context),
         ),
         ShellVibeButton.secondary(
@@ -643,7 +651,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
       HostFilter.all => 'All',
       HostFilter.connected => 'Connected',
       HostFilter.favorites => 'Favorites',
-      HostFilter.ungrouped => 'Ungrouped',
+      HostFilter.ungrouped => 'Untagged',
     };
   }
 
@@ -662,7 +670,9 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
   /// Hosts in the selected group/filter, before the search query is applied.
   List<HostModel> _scopedHosts(List<HostModel> hosts) {
     if (_selectedGroupId != null) {
-      return hosts.where((host) => host.groupId == _selectedGroupId).toList();
+      return hosts
+          .where((host) => host.groupIds.contains(_selectedGroupId))
+          .toList();
     }
     return switch (_filter) {
       HostFilter.all => hosts,
@@ -671,7 +681,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
       HostFilter.favorites =>
         hosts.where((host) => _favoriteHostIds().contains(host.id)).toList(),
       HostFilter.ungrouped =>
-        hosts.where((host) => host.groupId == null).toList(),
+        hosts.where((host) => host.groupIds.isEmpty).toList(),
     };
   }
 
@@ -857,6 +867,93 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
         workspaceId: ref.read(activeWorkspaceIdProvider),
       ),
     );
+  }
+
+  /// Edit / delete for a tag, as a menu under [context]'s widget — the
+  /// long-pressed filter chip on the compact layout, which has no column to
+  /// carry [HostTagNavItem]'s own menu.
+  Future<void> _showTagActions(
+    BuildContext context,
+    HostGroupModel tag,
+    List<HostModel> hosts,
+  ) async {
+    final action = await showAdaptiveActionMenu<String>(
+      context: context,
+      actions: const [
+        AdaptiveMenuAction(
+          value: 'edit',
+          itemKey: Key('tag_menu_edit'),
+          icon: LucideIcons.pencil,
+          label: 'Edit tag',
+        ),
+        AdaptiveMenuAction(
+          value: 'delete',
+          itemKey: Key('tag_menu_delete'),
+          icon: LucideIcons.trash2,
+          label: 'Delete tag',
+        ),
+      ],
+    );
+    if (action == null || !mounted) return;
+    switch (action) {
+      case 'edit':
+        _openGroupForm(this.context, initialGroup: tag);
+      case 'delete':
+        await _deleteGroup(this.context, tag, hosts);
+    }
+  }
+
+  /// Deletes [tag] after asking. Only the tag goes: every host that carried
+  /// it stays, with the tag taken off.
+  Future<void> _deleteGroup(
+    BuildContext context,
+    HostGroupModel tag,
+    List<HostModel> hosts,
+  ) async {
+    final tagged = hosts.where((host) => host.groupIds.contains(tag.id)).length;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => ShadDialog.alert(
+        title: const Text('Delete Tag'),
+        description: Text(
+          tagged == 0
+              ? 'Delete the tag "${tag.name}"?'
+              : 'Delete the tag "${tag.name}"? It is removed from $tagged '
+                    '${tagged == 1 ? 'host' : 'hosts'}; the hosts themselves '
+                    'are kept.',
+        ),
+        actions: adaptiveDialogActions(context, [
+          ShellVibeButton.secondary(
+            label: 'Cancel',
+            onPressed: () => Navigator.of(ctx).pop(false),
+          ),
+          ShellVibeButton.danger(
+            buttonKey: const Key('tag_delete_confirm'),
+            label: 'Delete',
+            onPressed: () => Navigator.of(ctx).pop(true),
+          ),
+        ]),
+        actionsAxis: adaptiveDialogActionsAxis(context),
+      ),
+    );
+    if (confirm != true) return;
+
+    // A filter on a tag that no longer exists would show an empty list with
+    // no way to tell why.
+    if (_selectedGroupId == tag.id) {
+      setState(() => _selectedGroupId = null);
+    }
+    try {
+      await ref.read(hostGroupsProvider.notifier).deleteGroup(tag.id);
+    } catch (e) {
+      if (!mounted) return;
+      ShadToaster.of(this.context).show(
+        ShadToast.destructive(
+          title: const Text('Could not delete tag'),
+          description: Text('$e'),
+        ),
+      );
+    }
   }
 
   Future<void> _deleteHost(BuildContext context, HostModel host) async {

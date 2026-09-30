@@ -5,6 +5,9 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/widgets/adaptive_modal.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
+import '../../../settings/domain/models/app_settings_model.dart';
+import '../../../settings/presentation/notifiers/settings_notifier.dart';
+import '../../domain/models/terminal_palette_data.dart';
 import '../../domain/models/terminal_tab_session.dart';
 import '../notifiers/terminal_tabs_notifier.dart';
 import '../screens/terminal_screen.dart';
@@ -35,6 +38,13 @@ Widget buildTerminalSessionTree(
   bool squareTopLeft = false,
 }) {
   final children = allTabs.where((t) => t.splitParentId == session.id).toList();
+  // The pane is filled with the terminal's own background, so the strips it
+  // shows around the body (banner, extra keys, rounded corners) match it.
+  final settings =
+      ref.watch(settingsProvider).value ?? const AppSettingsModel();
+  final terminalBg = TerminalPaletteData.of(
+    settings.resolvedTerminalPalette(Theme.of(context).brightness),
+  ).theme.background;
 
   Widget buildSinglePane(TerminalTabSession paneSession) {
     // Key by pane id: reusing the element across session switches would leave
@@ -123,7 +133,7 @@ Widget buildTerminalSessionTree(
     final paneBox = Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: tokens.terminalBg,
+        color: terminalBg,
         borderRadius: paneRadius,
         boxShadow: tokens.shadowPanel,
       ),

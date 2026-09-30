@@ -42,4 +42,9 @@ enum TerminalPalette {
   monokaiProLight,
   flexokiLight,
   xcodeLight,
+
+  /// Not a scheme of its own: follows the app palette and brightness to the
+  /// scheme paired with them. Resolve it through
+  /// `AppSettingsModel.resolvedTerminalPalette` before looking up colours.
+  matchApp,
 }

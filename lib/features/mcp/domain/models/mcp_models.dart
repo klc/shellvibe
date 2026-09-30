@@ -170,13 +170,14 @@ class CommandContext {
   final String hostId;
   final String clientId;
 
-  /// The host's group, when it belongs to one.
+  /// Every group (tag) the host belongs to; empty when it has none.
   ///
   /// Carried here so a `group`-scoped policy rule can be evaluated at all.
   /// Without it such a rule silently never matches, which is worse than not
   /// offering group scoping: the user writes a rule, sees it saved, and it
-  /// does nothing.
-  final String? hostGroupId;
+  /// does nothing. A host can carry several tags, so a group rule matches when
+  /// any one of them is the rule's group.
+  final Set<String> hostGroupIds;
 
   /// The MCP connection the command arrived on. A "this session" approval
   /// only answers for the connection that recorded it.
@@ -189,7 +190,7 @@ class CommandContext {
     required this.environment,
     required this.hostId,
     required this.clientId,
-    this.hostGroupId,
+    this.hostGroupIds = const {},
     this.connectionScopeId,
   });
 }

@@ -275,7 +275,9 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
   Future<Map<String, String>> _localShellEnvironment(Terminal terminal) async {
     final settings =
         ref.read(settingsProvider).value ?? const AppSettingsModel();
-    final isLight = TerminalPaletteData.of(settings.terminalPalette).isLight;
+    final isLight = TerminalPaletteData.of(
+      settings.resolvedTerminalPalette(settings.effectiveBrightness),
+    ).isLight;
     final builtins = {'TERM_THEME': isLight ? 'light' : 'dark'};
 
     final VaultEnvShellResolution resolved;

@@ -4,7 +4,9 @@ import '../tables.dart';
 
 part 'hosts_dao.g.dart';
 
-@DriftAccessor(tables: [Hosts, Identities, HostGroups, Workspaces])
+@DriftAccessor(
+  tables: [Hosts, Identities, HostGroups, HostGroupMembers, Workspaces],
+)
 class HostsDao extends DatabaseAccessor<AppDatabase> with _$HostsDaoMixin {
   HostsDao(super.db);
 
@@ -123,6 +125,59 @@ class HostsDao extends DatabaseAccessor<AppDatabase> with _$HostsDaoMixin {
       }
 
       return changed;
+    });
+  }
+
+  // --- Host tag memberships ---
+
+  Future<List<HostGroupMember>> getAllMemberships() =>
+      select(hostGroupMembers).get();
+
+  Future<List<HostGroupMember>> getMembershipsForHost(String hostId) {
+    return (select(
+      hostGroupMembers,
+    )..where((tbl) => tbl.hostId.equals(hostId))).get();
+  }
+
+  /// Makes [groupIds] the complete set of tags for [hostId]: deletes the
+  /// memberships that are no longer wanted and inserts the new ones, leaving
+  /// the rest untouched.
+  ///
+  /// Row by row rather than delete-all-and-reinsert: the sync log is keyed by
+  /// row, so rewriting an unchanged membership would send a needless
+  /// delete/upsert pair to every other device.
+  Future<void> setHostGroups(String hostId, Iterable<String> groupIds) {
+    return transaction(() async {
+      final wanted = groupIds.toSet();
+      final existing = await getMembershipsForHost(hostId);
+      final existingGroups = existing.map((m) => m.groupId).toSet();
+
+      for (final member in existing) {
+        if (wanted.contains(member.groupId)) continue;
+        await db.recordDelete(
+          entityType: 'host_group_members',
+          entityId: member.id,
+          write: () => (delete(
+            hostGroupMembers,
+          )..where((tbl) => tbl.id.equals(member.id))).go(),
+        );
+      }
+
+      for (final groupId in wanted.difference(existingGroups)) {
+        final id = hostGroupMemberId(hostId, groupId);
+        await db.recordUpsert(
+          entityType: 'host_group_members',
+          entityId: id,
+          write: () => into(hostGroupMembers).insert(
+            HostGroupMembersCompanion.insert(
+              id: id,
+              hostId: hostId,
+              groupId: groupId,
+            ),
+            mode: InsertMode.insertOrIgnore,
+          ),
+        );
+      }
     });
   }
 
