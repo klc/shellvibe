@@ -16,6 +16,7 @@ import '../../features/templates/domain/models/template_model.dart';
 import '../../features/templates/presentation/notifiers/templates_notifier.dart';
 import '../../features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import '../../features/tunnels/presentation/providers/tunnels_providers.dart';
+import '../../features/tunnels/presentation/tunnel_availability.dart';
 import '../../shared/providers/workspace_provider.dart';
 import '../theme/shellvibe_tokens.dart';
 import '../window/window_chrome.dart';
@@ -168,21 +169,26 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
   Widget build(BuildContext context) {
     final isDesktop = _usesRailLayout(context);
     final tokens = ShellVibeTokens.resolve(context);
+    final tunnelsSupported = tunnelsSupportedFor(context);
 
     return CallbackShortcuts(
       bindings: {
-        for (var index = 0; index < appNavigationItems.length; index++) ...{
-          SingleActivator(
-            LogicalKeyboardKey.findKeyByKeyId(0x00000031 + index)!,
-            meta: true,
-          ): () =>
-              _onTabSelected(index),
-          SingleActivator(
-            LogicalKeyboardKey.findKeyByKeyId(0x00000031 + index)!,
-            control: true,
-          ): () =>
-              _onTabSelected(index),
-        },
+        for (var index = 0; index < appNavigationItems.length; index++)
+          // An iPhone has no Tunnels (see tunnelsSupportedOnThisDevice), and a
+          // hardware keyboard must not reach what the UI does not offer.
+          if (tunnelsSupported ||
+              appNavigationItems[index].path != '/tunnels') ...{
+            SingleActivator(
+              LogicalKeyboardKey.findKeyByKeyId(0x00000031 + index)!,
+              meta: true,
+            ): () =>
+                _onTabSelected(index),
+            SingleActivator(
+              LogicalKeyboardKey.findKeyByKeyId(0x00000031 + index)!,
+              control: true,
+            ): () =>
+                _onTabSelected(index),
+          },
         const SingleActivator(LogicalKeyboardKey.keyK, meta: true):
             _showCommandPalette,
         const SingleActivator(LogicalKeyboardKey.keyK, control: true):
@@ -271,6 +277,7 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
         ref.watch(activeTunnelsStreamProvider).value ?? const [];
     final settings = ref.watch(settingsProvider).value;
     final vaultAutoLockOn = (settings?.autoLockTimerSeconds ?? 0) > 0;
+    final tunnelsSupported = tunnelsSupportedFor(context);
 
     return ShellVibePanel(
       width: tokens.railWidth,
@@ -307,7 +314,9 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
               child: Column(
                 children: [
                   for (final path in kRailLayout)
-                    if (path == null)
+                    if (path == '/tunnels' && !tunnelsSupported)
+                      const SizedBox.shrink()
+                    else if (path == null)
                       _RailSeparator(color: tokens.border)
                     else
                       _buildRailModuleButton(
@@ -732,8 +741,10 @@ class _CommandPaletteState extends ConsumerState<_CommandPalette> {
   Widget build(BuildContext context) {
     final tokens = ShellVibeTokens.resolve(context);
     final value = query.toLowerCase();
+    final tunnelsSupported = tunnelsSupportedFor(context);
     final filtered = appNavigationItems.indexed.where((entry) {
       final item = entry.$2;
+      if (item.path == '/tunnels' && !tunnelsSupported) return false;
       return item.label.toLowerCase().contains(value) ||
           item.tooltip.toLowerCase().contains(value);
     }).toList();

@@ -4,6 +4,7 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
+import '../../../tunnels/presentation/tunnel_availability.dart';
 import '../../domain/models/host_group_model.dart';
 import '../../domain/models/host_model.dart';
 import 'host_list_filter.dart';
@@ -123,14 +124,17 @@ class HostDetailPanel extends StatelessWidget {
               ),
               const SizedBox(width: 8),
             ],
-            Expanded(
-              child: ShellVibeButton.secondary(
-                label: 'Tunnel',
-                expand: true,
-                onPressed: () => GoRouter.maybeOf(context)?.go('/tunnels'),
+            // Not offered on an iPhone, where a forward dies with the app.
+            if (tunnelsSupportedFor(context)) ...[
+              Expanded(
+                child: ShellVibeButton.secondary(
+                  label: 'Tunnel',
+                  expand: true,
+                  onPressed: () => GoRouter.maybeOf(context)?.go('/tunnels'),
+                ),
               ),
-            ),
-            const SizedBox(width: 8),
+              const SizedBox(width: 8),
+            ],
             Expanded(
               child: ShellVibeButton.secondary(
                 label: 'Edit',

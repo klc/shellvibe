@@ -18,3 +18,8 @@ bool get isMobilePlatform {
 
 /// Local PTY sessions are intentionally exposed only on desktop platforms.
 bool get supportsLocalShell => !isMobilePlatform;
+
+/// The platform the app runs on, honouring the same test override as
+/// [isMobilePlatform] so the two can never disagree about it.
+TargetPlatform get runtimeTargetPlatform =>
+    debugPlatformCapabilitiesOverride ?? defaultTargetPlatform;

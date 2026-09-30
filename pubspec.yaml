@@ -114,6 +114,7 @@ dependencies:
   shadcn_ui: ^0.56.0
   lucide_icons_flutter: ^3.1.15
   file_selector: ^1.1.0
+  quick_actions: ^1.1.1
 
 dev_dependencies:
   integration_test:

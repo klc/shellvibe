@@ -15,6 +15,7 @@ import '../features/cloud_backup/presentation/notifiers/cloud_backup_notifier.da
 import '../features/cloud_backup/presentation/notifiers/sync_notifier.dart';
 import '../features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import '../features/vault/presentation/notifiers/vault_notifier.dart';
+import 'quick_actions/quick_actions_host.dart';
 import 'router/app_router.dart';
 import 'theme/app_palette_definitions.dart';
 import 'theme/app_theme.dart';
@@ -322,10 +323,13 @@ class _ShellVibeAppState extends ConsumerState<ShellVibeApp>
       // happened to navigate would silently time out into a refusal.
       //
       // The tray lives here too: it outlasts every route, and on a desktop it
-      // is what keeps the app running once the window is gone.
+      // is what keeps the app running once the window is gone. A phone has no
+      // tray; its counterpart is the app-icon shortcut menu.
       builder: (context, child) {
         final host = McpApprovalHost(child: child ?? const SizedBox.shrink());
-        return isMobilePlatform ? host : DesktopTrayHost(child: host);
+        return isMobilePlatform
+            ? QuickActionsHost(child: host)
+            : DesktopTrayHost(child: host);
       },
     );
   }
