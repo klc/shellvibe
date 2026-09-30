@@ -63,11 +63,56 @@ Future<void> closeHostWindow() async {
   await windowManager.close();
 }
 
+/// Set while the window is being held hidden since launch, cleared by the first
+/// [showHostWindow].
+bool _hiddenAtLaunch = false;
+
+/// Whether the maximise a normal launch does before showing was skipped, and is
+/// owed to the first show.
+bool _maximizeOnFirstShow = false;
+
+/// Starts with the window hidden, for a launch at login: only the tray icon is
+/// up until the user asks for the window.
+///
+/// Skips the maximise a normal launch does first (maximising a hidden window
+/// can show it on Windows) and owes it to the first [showHostWindow], so the
+/// window still opens the way every other launch does.
+Future<void> hideHostWindowAtLaunch() async {
+  if (_host == null) return;
+  _hiddenAtLaunch = true;
+  _maximizeOnFirstShow = true;
+  try {
+    await windowManager.hide();
+  } catch (e) {
+    debugPrint('[WindowChrome Warning] $e');
+  }
+}
+
+/// Hides the window again if it is still being held hidden since launch.
+///
+/// The Windows and Linux runners show the window themselves when the first
+/// frame lands, which is after [hideHostWindowAtLaunch] has run, so the hide
+/// has to be repeated once that frame is in. A no-op once the user has shown
+/// the window.
+Future<void> keepHostWindowHiddenAtLaunch() async {
+  if (!_hiddenAtLaunch) return;
+  try {
+    await windowManager.hide();
+  } catch (e) {
+    debugPrint('[WindowChrome Warning] $e');
+  }
+}
+
 /// Brings the host window back: shown if hidden to the tray, restored if
 /// minimised, and focused.
 Future<void> showHostWindow() async {
   if (_host == null) return;
   try {
+    _hiddenAtLaunch = false;
+    if (_maximizeOnFirstShow) {
+      _maximizeOnFirstShow = false;
+      await windowManager.maximize();
+    }
     if (await windowManager.isMinimized()) await windowManager.restore();
     await windowManager.show();
     await windowManager.focus();

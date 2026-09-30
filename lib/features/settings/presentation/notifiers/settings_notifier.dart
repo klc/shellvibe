@@ -168,6 +168,11 @@ class SettingsNotifier extends _$SettingsNotifier {
     await updateSettings(current.copyWith(keepRunningInTray: enabled));
   }
 
+  Future<void> setDesktopNotifications(bool enabled) async {
+    final current = _base;
+    await updateSettings(current.copyWith(desktopNotifications: enabled));
+  }
+
   Future<void> setDrawBoldTextWithBrightColors(bool enabled) async {
     final current = _base;
     await updateSettings(

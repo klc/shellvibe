@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shellvibe/app/notifications/notification_providers.dart';
 import 'package:shellvibe/app/router/app_router.dart';
 import 'package:shellvibe/app/window/desktop_tray.dart';
 import 'package:shellvibe/core/network/local_pty_manager.dart';
@@ -282,6 +283,100 @@ void main() {
     );
 
     await unpump(tester, container);
+  });
+
+  group('the icon', () {
+    List<String> iconPaths() => [
+      for (final call in trayCalls.where((c) => c.method == 'setIcon'))
+        (call.arguments as Map)['iconPath'] as String,
+    ];
+
+    Future<void> startForward(
+      ProviderContainer container,
+      String ruleId,
+      String hostId,
+    ) => container
+        .read(tunnelEngineProvider)
+        .startRemoteForward(
+          ruleId: ruleId,
+          hostId: hostId,
+          sshClient: _FakeSshClient(),
+          remotePort: 9000 + ruleId.length,
+          localHost: '127.0.0.1',
+          localPort: 8000,
+        );
+
+    testWidgets('starts plain, and marks a running tunnel', (tester) async {
+      final container = await pumpTray(tester);
+      expect(iconPaths(), hasLength(1));
+      expect(iconPaths().single, isNot(contains('_tunnel')));
+      expect(iconPaths().single, isNot(contains('_error')));
+
+      await startForward(container, 'r1', 'h');
+      await settle(tester);
+
+      expect(iconPaths(), hasLength(2));
+      expect(iconPaths().last, contains('_tunnel'));
+
+      await unpump(tester, container);
+    });
+
+    testWidgets('is not set again for a change that keeps its state', (
+      tester,
+    ) async {
+      final container = await pumpTray(tester);
+      await startForward(container, 'r1', 'h');
+      await settle(tester);
+      final sets = iconPaths().length;
+
+      // A second forward changes the menu, not the icon; a tunnel's transfer
+      // ticks land here too.
+      await startForward(container, 'r22', 'h');
+      await settle(tester);
+
+      expect(iconPaths(), hasLength(sets));
+
+      await unpump(tester, container);
+    });
+
+    testWidgets('shows an error until the window is back in front', (
+      tester,
+    ) async {
+      final container = await pumpTray(tester);
+      await startForward(container, 'r1', 'h');
+      await settle(tester);
+
+      container.read(trayAttentionProvider.notifier).raise();
+      await settle(tester);
+      expect(iconPaths().last, contains('_error'));
+
+      // Focus returning is what clears it; the tunnel is still up, so the
+      // icon falls back to that state rather than to plain.
+      final host = tester.state(find.byType(DesktopTrayHost)) as WindowListener;
+      host.onWindowFocus();
+      await settle(tester);
+      expect(container.read(trayAttentionProvider), isFalse);
+      expect(iconPaths().last, contains('_tunnel'));
+
+      await unpump(tester, container);
+    });
+
+    testWidgets('an error needs no tunnel, and a restore clears it too', (
+      tester,
+    ) async {
+      final container = await pumpTray(tester);
+      container.read(trayAttentionProvider.notifier).raise();
+      await settle(tester);
+      expect(iconPaths().last, contains('_error'));
+
+      final host = tester.state(find.byType(DesktopTrayHost)) as WindowListener;
+      host.onWindowRestore();
+      await settle(tester);
+      expect(iconPaths().last, isNot(contains('_error')));
+      expect(iconPaths().last, isNot(contains('_tunnel')));
+
+      await unpump(tester, container);
+    });
   });
 
   group('the menu', () {

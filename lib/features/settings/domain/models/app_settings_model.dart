@@ -44,6 +44,14 @@ class AppSettingsModel {
   /// window quits on Windows and Linux, as it did before.
   final bool keepRunningInTray;
 
+  /// Desktop only. An OS notification when something the user would otherwise
+  /// miss happens while the window is hidden, minimised or unfocused (or in a
+  /// tab they are not looking at): a session drops, a forward stops with an
+  /// error, a terminal rings the bell or asks for attention (OSC 9 / 777).
+  /// While the vault is locked the text is generic, so nothing that names a
+  /// host reaches the notification centre.
+  final bool desktopNotifications;
+
   const AppSettingsModel({
     this.themeMode = ThemeMode.dark,
     this.palette = AppPalette.oled,
@@ -60,6 +68,7 @@ class AppSettingsModel {
     this.clipboardAutoClearSeconds = 30,
     this.activeWorkspaceId = 'default',
     this.keepRunningInTray = true,
+    this.desktopNotifications = true,
   });
 
   /// The brightness the app is drawn in, for callers with no theme to read it
@@ -126,6 +135,7 @@ class AppSettingsModel {
     int? clipboardAutoClearSeconds,
     String? activeWorkspaceId,
     bool? keepRunningInTray,
+    bool? desktopNotifications,
   }) {
     return AppSettingsModel(
       themeMode: themeMode ?? this.themeMode,
@@ -145,6 +155,7 @@ class AppSettingsModel {
           clipboardAutoClearSeconds ?? this.clipboardAutoClearSeconds,
       activeWorkspaceId: activeWorkspaceId ?? this.activeWorkspaceId,
       keepRunningInTray: keepRunningInTray ?? this.keepRunningInTray,
+      desktopNotifications: desktopNotifications ?? this.desktopNotifications,
     );
   }
 
@@ -164,6 +175,7 @@ class AppSettingsModel {
     'clipboardAutoClearSeconds': clipboardAutoClearSeconds,
     'activeWorkspaceId': activeWorkspaceId,
     'keepRunningInTray': keepRunningInTray,
+    'desktopNotifications': desktopNotifications,
   };
 
   factory AppSettingsModel.fromJson(Map<String, dynamic> json) {
@@ -202,6 +214,7 @@ class AppSettingsModel {
           (json['clipboardAutoClearSeconds'] as int?) ?? 30,
       activeWorkspaceId: (json['activeWorkspaceId'] as String?) ?? 'default',
       keepRunningInTray: (json['keepRunningInTray'] as bool?) ?? true,
+      desktopNotifications: (json['desktopNotifications'] as bool?) ?? true,
     );
   }
 }
