@@ -81,7 +81,11 @@ jobs:
       matrix:
         include:
           - name: Linux x64
-            os: ubuntu-latest
+            # The oldest supported runner, on purpose: the bundle and every
+            # plugin library inherit the build host's glibc as their floor, and
+            # an ubuntu-latest build refuses to start on Debian 12 or Ubuntu
+            # 22.04 with "GLIBC_2.38 not found".
+            os: ubuntu-22.04
             target: linux
             artifact: shellvibe-linux-x64
           - name: macOS
@@ -109,6 +113,7 @@ jobs:
           sudo apt-get install -y \
             clang \
             cmake \
+            imagemagick \
             libayatana-appindicator3-dev \
             libgtk-3-dev \
             libkeybinder-3.0-dev \
@@ -116,6 +121,21 @@ jobs:
             libsecret-1-dev \
             ninja-build \
             pkg-config
+
+      - name: Install nfpm
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          NFPM_VERSION: 2.47.0
+          NFPM_SHA256: 0660ca602b2d2d2ae4781a06c692b3eeb9d437ffea05b831d76e41f4a3188783
+        run: |
+          set -euo pipefail
+          archive="nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz"
+          curl -fsSL -o "$RUNNER_TEMP/$archive" \
+            "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/$archive"
+          echo "$NFPM_SHA256  $RUNNER_TEMP/$archive" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" nfpm
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -139,6 +159,7 @@ jobs:
           mkdir -p dist
           tar -C build/linux/x64/release -czf "dist/ShellVibe-${SHELLVIBE_VERSION}-linux-x64.tar.gz" bundle
           tool/packaging/linux_appimage.sh "$SHELLVIBE_VERSION"
+          tool/packaging/linux_packages.sh "$SHELLVIBE_VERSION"
 
       - name: Import the Developer ID certificate
         if: matrix.target == 'macos' && env.APPLE_CERTIFICATE_P12 != ''
@@ -239,6 +260,69 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  linux-packages:
+    name: Install on ${{ matrix.image }}
+    # A package that builds is not a package that installs: a misnamed
+    # dependency only fails on the distribution that names it differently, and a
+    # glibc floor set too high only fails on the older ones. Each package goes
+    # onto a clean image through its own package manager, so dependencies are
+    # resolved the way a user's would be, then has to link, run and uninstall.
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - ubuntu:22.04
+          - ubuntu:24.04
+          - debian:12
+          - debian:13
+          - fedora:latest
+          - archlinux:latest
+    steps:
+      - name: Collect the Linux artifacts
+        uses: actions/download-artifact@v7
+        with:
+          name: shellvibe-linux-x64
+          path: dist
+
+      - name: Install, check and remove
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v apt-get >/dev/null; then
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update
+            apt-get install -y desktop-file-utils ./dist/*.deb
+            desktop-file-validate /usr/share/applications/dev.shellvibe.app.desktop
+            remove='apt-get remove -y shellvibe'
+          elif command -v dnf >/dev/null; then
+            dnf install -y ./dist/*.rpm
+            remove='dnf remove -y shellvibe'
+          else
+            pacman -Syu --noconfirm
+            pacman -U --noconfirm ./dist/*.pkg.tar.zst
+            remove='pacman -R --noconfirm shellvibe'
+          fi
+
+          # ldd reports both a missing library and a glibc that is too old as
+          # "not found"; either one means the app would not start here.
+          missing="$(ldd /opt/shellvibe/shellvibe /opt/shellvibe/lib/*.so 2>&1 | grep 'not found' || true)"
+          if [[ -n "$missing" ]]; then
+            echo "$missing" >&2
+            exit 1
+          fi
+          # Exits cleanly when stdin closes, which also proves it starts.
+          shellvibe-mcp < /dev/null
+
+          $remove
+          if [[ -e /opt/shellvibe || -e /usr/bin/shellvibe ]]; then
+            echo 'Removal left files behind.' >&2
+            exit 1
+          fi
+
   quality:
     name: Release quality gate
     needs: metadata
@@ -280,6 +364,7 @@ jobs:
       - metadata
       - quality
       - build
+      - linux-packages
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

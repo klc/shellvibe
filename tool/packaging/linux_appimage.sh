@@ -39,7 +39,7 @@ Exec=shellvibe
 Icon=shellvibe
 Categories=Development;System;TerminalEmulator;
 Terminal=false
-StartupWMClass=shellvibe
+StartupWMClass=dev.shellvibe.app
 DESKTOP
 cp "$appdir/usr/share/applications/shellvibe.desktop" "$appdir/shellvibe.desktop"
 
