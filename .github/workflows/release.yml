@@ -262,11 +262,12 @@ jobs:
 
   linux-packages:
     name: Install on ${{ matrix.image }}
-    # A package that builds is not a package that installs: a misnamed
-    # dependency only fails on the distribution that names it differently, and a
-    # glibc floor set too high only fails on the older ones. Each package goes
-    # onto a clean image through its own package manager, so dependencies are
-    # resolved the way a user's would be, then has to link, run and uninstall.
+    # A package that builds is not a package that installs, and one that
+    # installs is not one that starts: a misnamed dependency only fails on the
+    # distribution that names it differently, a glibc floor set too high only on
+    # the older ones, and a library the engine dlopens only at launch. Each
+    # package goes onto a clean image through its own package manager, then has
+    # to start under Xvfb and uninstall cleanly.
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -282,46 +283,20 @@ jobs:
           - fedora:latest
           - archlinux:latest
     steps:
+      - name: Check out the test script
+        uses: actions/checkout@v6
+        with:
+          sparse-checkout: tool/packaging/linux
+
       - name: Collect the Linux artifacts
         uses: actions/download-artifact@v7
         with:
           name: shellvibe-linux-x64
           path: dist
 
-      - name: Install, check and remove
+      - name: Install, launch and remove
         shell: bash
-        run: |
-          set -euo pipefail
-          if command -v apt-get >/dev/null; then
-            export DEBIAN_FRONTEND=noninteractive
-            apt-get update
-            apt-get install -y desktop-file-utils ./dist/*.deb
-            desktop-file-validate /usr/share/applications/dev.shellvibe.app.desktop
-            remove='apt-get remove -y shellvibe'
-          elif command -v dnf >/dev/null; then
-            dnf install -y ./dist/*.rpm
-            remove='dnf remove -y shellvibe'
-          else
-            pacman -Syu --noconfirm
-            pacman -U --noconfirm ./dist/*.pkg.tar.zst
-            remove='pacman -R --noconfirm shellvibe'
-          fi
-
-          # ldd reports both a missing library and a glibc that is too old as
-          # "not found"; either one means the app would not start here.
-          missing="$(ldd /opt/shellvibe/shellvibe /opt/shellvibe/lib/*.so 2>&1 | grep 'not found' || true)"
-          if [[ -n "$missing" ]]; then
-            echo "$missing" >&2
-            exit 1
-          fi
-          # Exits cleanly when stdin closes, which also proves it starts.
-          shellvibe-mcp < /dev/null
-
-          $remove
-          if [[ -e /opt/shellvibe || -e /usr/bin/shellvibe ]]; then
-            echo 'Removal left files behind.' >&2
-            exit 1
-          fi
+        run: bash tool/packaging/linux/test_package.sh dist
 
   quality:
     name: Release quality gate

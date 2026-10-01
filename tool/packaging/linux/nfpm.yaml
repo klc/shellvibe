@@ -6,10 +6,12 @@
 # Runtime dependencies are the system libraries the Flutter bundle links against
 # but does not carry: GTK 3 (Flutter's Linux embedder and most plugins),
 # Ayatana AppIndicator (tray_manager), keybinder 3 (hotkey_manager) and
-# libsecret (flutter_secure_storage). Each distribution names them differently,
-# hence the overrides. The package-test job in release.yml installs every
-# package on a clean image and fails on any unresolved library, so a wrong name
-# here shows up before a release does.
+# libsecret (flutter_secure_storage). EGL and GLES are on the list although no
+# binary links them: the engine dlopens both at start and aborts with
+# "Couldn't open libEGL.so.1" when they are absent, which ldd never shows.
+# Each distribution names them differently, hence the overrides. The
+# linux-packages job in release.yml installs every package on a clean image and
+# launches the app, so a wrong or missing name shows up before a release does.
 
 name: shellvibe
 arch: amd64
@@ -54,18 +56,31 @@ overrides:
       - libayatana-appindicator3-1
       - libkeybinder-3.0-0
       - libsecret-1-0
+      - libegl1
+      - libgles2
+    # libsecret needs a Secret Service provider to store anything; every
+    # desktop ships one, a minimal install may not.
+    recommends:
+      - gnome-keyring | org.freedesktop.secrets
   rpm:
     depends:
       - gtk3
       - libayatana-appindicator-gtk3
       - keybinder3
       - libsecret
+      - libEGL.so.1()(64bit)
+      - libGLESv2.so.2()(64bit)
   archlinux:
     depends:
       - gtk3
       - libayatana-appindicator
+      # The tray plugin is built on Ubuntu, whose pkg-config links these
+      # directly; Arch's libayatana-appindicator no longer pulls them in.
+      - libayatana-indicator
+      - ayatana-ido
       - libkeybinder3
       - libsecret
+      - libglvnd
 
 rpm:
   summary: Terminal, SSH and SFTP client
