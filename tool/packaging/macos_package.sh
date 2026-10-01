@@ -15,6 +15,8 @@
 #   APPLE_API_KEY_ID         App Store Connect API key id      \
 #   APPLE_API_ISSUER_ID      App Store Connect issuer id        } notarizes
 #   APPLE_API_KEY_PATH       Path to the .p8 private key file  /  when all set
+#   APPLE_NOTARY_PROFILE     notarytool keychain profile; replaces the three
+#                            API key variables for local builds
 #
 # Usage:
 #   tool/packaging/macos_package.sh <version> [app-path] [out-dir]
@@ -54,9 +56,19 @@ else
   # `flutter build`, and an unsigned executable inside a signed bundle is
   # blocked by Gatekeeper with no visible error, which reads to the user as
   # the AI Access feature being broken.
+  #
+  # The bridge is a `dart compile exe` binary, whose runtime maps its AOT
+  # snapshot into executable memory that carries no code signature. Under the
+  # hardened runtime the kernel kills it on start (SIGKILL, nothing logged to
+  # the caller) unless it holds allow-unsigned-executable-memory. allow-jit is
+  # not enough. Only the bridge gets it; the app itself runs without.
   while IFS= read -r -d '' nested; do
+    extra=()
+    if [[ "$(basename "$nested")" == 'shellvibe-mcp' ]]; then
+      extra=(--entitlements tool/packaging/shellvibe-mcp.entitlements)
+    fi
     codesign --force --timestamp --options runtime \
-      --sign "$identity" "$nested"
+      ${extra[@]+"${extra[@]}"} --sign "$identity" "$nested"
   done < <(
     find "$app/Contents" \
       \( -name '*.dylib' -o -name '*.framework' -o -perm -u+x -type f \) \
@@ -68,6 +80,52 @@ else
     --sign "$identity" "$app"
 
   codesign --verify --deep --strict --verbose=2 "$app"
+fi
+
+notarize=''
+notary_auth=()
+if [[ -n "$identity" ]]; then
+  if [[ -n "${APPLE_NOTARY_PROFILE:-}" ]]; then
+    notarize=1
+    notary_auth=(--keychain-profile "$APPLE_NOTARY_PROFILE")
+  elif [[ -n "${APPLE_API_KEY_ID:-}" && -n "${APPLE_API_ISSUER_ID:-}" && -n "${APPLE_API_KEY_PATH:-}" ]]; then
+    notarize=1
+    notary_auth=(--key "$APPLE_API_KEY_PATH" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER_ID")
+  fi
+fi
+
+# Submits a file, waits for Apple, and fails loudly on anything but Accepted.
+# notarytool's own exit status does not say whether the submission was
+# accepted, and the reason a submission is rejected lives only in its log, so
+# that log is printed here rather than left for someone to fetch by hand.
+notarize_file() {
+  local file="$1" result id status
+  echo "==> Notarizing $(basename "$file") (this waits for Apple)"
+  result="$(xcrun notarytool submit "$file" "${notary_auth[@]}" --wait --output-format json)"
+  id="$(plutil -extract id raw -o - - <<<"$result")"
+  status="$(plutil -extract status raw -o - - <<<"$result")"
+  echo "    submission $id: $status"
+  if [[ "$status" != 'Accepted' ]]; then
+    xcrun notarytool log "$id" "${notary_auth[@]}" >&2 || true
+    return 1
+  fi
+}
+
+if [[ -n "$notarize" ]]; then
+  # The app is notarized and stapled on its own before anything is built from
+  # it. Notarizing only the DMG registers the app with Apple too, but leaves no
+  # ticket inside the bundle, so the ZIP — and any copy dragged out of the DMG
+  # — needs a network round trip on first launch, and a user who is offline
+  # gets the same refusal an unsigned app does.
+  app_zip="$(mktemp -d)/ShellVibe.zip"
+  ditto -c -k --sequesterRsrc --keepParent "$app" "$app_zip"
+  notarize_file "$app_zip"
+  rm -rf "$(dirname "$app_zip")"
+  xcrun stapler staple "$app"
+  xcrun stapler validate "$app"
+  spctl --assess --type execute -vv "$app"
+elif [[ -n "$identity" ]]; then
+  echo '==> Notarization credentials incomplete; skipping.'
 fi
 
 dmg="$out/ShellVibe-${version}-macos${suffix}.dmg"
@@ -89,26 +147,19 @@ if [[ -n "$identity" ]]; then
   codesign --force --timestamp --sign "$identity" "$dmg"
 fi
 
-if [[ -n "$identity" && -n "${APPLE_API_KEY_ID:-}" && -n "${APPLE_API_ISSUER_ID:-}" && -n "${APPLE_API_KEY_PATH:-}" ]]; then
-  echo '==> Notarizing (this waits for Apple)'
-  xcrun notarytool submit "$dmg" \
-    --key "$APPLE_API_KEY_PATH" \
-    --key-id "$APPLE_API_KEY_ID" \
-    --issuer "$APPLE_API_ISSUER_ID" \
-    --wait
-
+if [[ -n "$notarize" ]]; then
+  notarize_file "$dmg"
   # Stapling is what lets a first launch succeed offline. Without it Gatekeeper
-  # has to reach Apple to learn the app is notarized, and a user on a plane sees
-  # the same dialog an unsigned app gets.
+  # has to reach Apple to learn the image is notarized, and a user on a plane
+  # sees the same dialog an unsigned app gets.
   xcrun stapler staple "$dmg"
   xcrun stapler validate "$dmg"
 
   echo '==> Gatekeeper assessment'
   spctl --assess --type open --context context:primary-signature -vv "$dmg"
-else
-  echo '==> Notarization credentials incomplete; skipping.'
 fi
 
+# Built from the stapled app, so it carries its own ticket.
 echo "==> Building $zip"
 rm -f "$zip"
 ditto -c -k --sequesterRsrc --keepParent "$app" "$zip"
