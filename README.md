@@ -109,14 +109,12 @@ Builds for macOS, Windows and Linux are attached to each
 to check them against. The macOS build requires **macOS 12 (Monterey) or
 newer**; Windows and Linux carry no version floor beyond a current desktop.
 
-**They are not code-signed yet**, so your operating system will warn you that it
-cannot tell who built them. The warning is accurate — verify the checksums
-first. To get past it:
-
-- **macOS** — open it once and let it be blocked, then **System Settings →
-  Privacy & Security → Open Anyway**. macOS 15 removed the Control-click
-  shortcut, so this is the only route, and it repeats after every update.
-- **Windows** — "Windows protected your PC" → **More info** → **Run anyway**.
+- **macOS** — open the DMG and drag ShellVibe to Applications. The app is
+  signed with a Developer ID and notarized by Apple, so it opens without a
+  warning.
+- **Windows** — the installer is **not code-signed yet**, so SmartScreen says
+  "Windows protected your PC". Verify the checksum first, then **More info** →
+  **Run anyway**.
 - **Linux** — `chmod +x` the AppImage and run it. Nothing else needed. Or
   install the native package, which adds ShellVibe to the app menu and pulls in
   its dependencies:
@@ -124,9 +122,9 @@ first. To get past it:
   - Fedora / RHEL: `sudo dnf install ./shellvibe-*.x86_64.rpm`
   - Arch: `sudo pacman -U shellvibe-*-x86_64.pkg.tar.zst`
 
-If disabling malware protection for an SSH client is not a trade you want to
-make, build it yourself with the steps below. That is a reasonable position and
-the source is right here.
+If running an unsigned Windows installer is not a trade you want to make, build
+it yourself with the steps below. That is a reasonable position and the source
+is right here.
 
 ## 🚀 Getting Started
 
@@ -184,9 +182,10 @@ Every push and pull request is scanned for secrets over the full history, then
 analysed and tested on Linux, macOS and Windows.
 
 A `vX.Y.Z` tag builds and packages all three desktop platforms — a signed and
-notarized DMG, a signed Windows installer, an AppImage — and opens a draft
-GitHub Release carrying every artifact and a `SHA256SUMS` file. Publishing is a
-person pressing a button, never a side effect of pushing a tag. Builds made
+notarized DMG, a signed Windows installer, an AppImage and `.deb`, `.rpm` and
+Arch packages — and opens a draft GitHub Release carrying every artifact and a
+`SHA256SUMS` file. Publishing is a person pressing a button, never a side effect
+of pushing a tag. Builds made
 without signing credentials are marked `unsigned` in the file name and say so
 in the release notes.
 

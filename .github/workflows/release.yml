@@ -369,13 +369,17 @@ jobs:
           echo '--- SHA256SUMS ---'
           cat SHA256SUMS
 
-          # Whether this release is signed decides what the notes have to warn
-          # about, and the packagers already said so in the file names.
-          if ls *unsigned* >/dev/null 2>&1; then
-            echo 'signed=false' >> "$GITHUB_OUTPUT"
-          else
-            echo 'signed=true' >> "$GITHUB_OUTPUT"
-          fi
+          # Whether each platform is signed decides what the notes have to
+          # warn about, and the packagers already said so in the file names.
+          # Per platform, because a signed macOS build next to an unsigned
+          # Windows one must not send Mac users through "Open Anyway".
+          for platform in macos windows; do
+            if ls *"$platform"*unsigned* >/dev/null 2>&1; then
+              echo "${platform}_signed=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "${platform}_signed=true" >> "$GITHUB_OUTPUT"
+            fi
+          done
 
       - name: Extract the changelog section
         id: notes
@@ -413,12 +417,15 @@ jobs:
             echo '```'
           } >> release-notes.md
 
-          if [[ '${{ steps.checksums.outputs.signed }}' == 'false' ]]; then
+          if [[ '${{ steps.checksums.outputs.macos_signed }}' == 'false' ]]; then
             # Kept as a file rather than inlined here: telling someone a build
             # is unsigned without telling them how to open it leaves them at a
             # malware warning with nowhere to go, so the text is long enough to
             # deserve reviewing on its own.
-            cat .github/release-notes-unsigned.md >> release-notes.md
+            cat .github/release-notes-unsigned-macos.md >> release-notes.md
+          fi
+          if [[ '${{ steps.checksums.outputs.windows_signed }}' == 'false' ]]; then
+            cat .github/release-notes-unsigned-windows.md >> release-notes.md
           fi
 
       - name: Publish

@@ -7,8 +7,34 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-10-01
+
 ### Added
 
+- The macOS build is signed with a Developer ID and notarized by Apple, so it
+  opens like any other Mac app: no "Open Anyway" trip through Privacy &
+  Security, before or after an update. The ticket is stapled into both the
+  DMG and the app inside the ZIP, so the first launch works offline too.
+- Native Linux packages alongside the AppImage: `.deb` for Debian and Ubuntu,
+  `.rpm` for Fedora and RHEL, and `.pkg.tar.zst` for Arch. They put ShellVibe
+  in the app menu, pull in the libraries it needs and uninstall cleanly. Each
+  one is installed and launched on Ubuntu 22.04 and 24.04, Debian 12 and 13,
+  Fedora and Arch before a release is published.
+- The tray menu manages the app instead of counting it: open sessions (click
+  to focus the tab), active tunnels with Stop, saved tunnels with Start
+  without opening the window, and Favorites and Templates to connect from
+  there. While the vault is locked it shows counts only.
+- Desktop notifications when a session drops, a tunnel fails to start, or a
+  terminal rings the bell or sends OSC 9 / OSC 777 while you are not looking
+  at it. Clicking one opens the related tab. Settings → Window → Desktop
+  notifications.
+- The tray icon shows whether a tunnel is active or something failed while
+  the window was away.
+- Launch at login, per device, with only the tray icon when the tray is
+  enabled.
+- A host can carry several tags, and tags can be added or removed from the
+  host form and the host row.
+- "Run Template..." in the new-tab menu, next to "Connect to Host...".
 - A "Match App Theme" terminal color scheme that follows the app palette and
   light or dark mode to its terminal counterpart (Gruvbox, Nord, Solarized,
   Tokyo Night, One Dark, Catppuccin), so a light app theme no longer keeps a
@@ -17,6 +43,13 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- macOS: because the app is now signed by a different identity than 1.6.0
+  and earlier, the first launch after updating may ask once to allow
+  ShellVibe to use its saved keychain items. Choose **Always Allow**.
+- AI Access: `list_hosts` and `describe_host` return `groups` (a sorted list
+  of tag names) instead of `group`, and a group-scoped policy rule matches a
+  host when any of its tags is that group. Clients that read `group` need
+  updating.
 - OLED's text uses neutral greys instead of the default theme's blue-violet
   ones, and its light mode has neutral surfaces of its own.
 
@@ -34,6 +67,12 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 - The active terminal tab and the pane around the terminal were painted in
   the app palette's colour rather than the terminal's own, leaving a seam
   where the tab meets the pane.
+- Dragging a selection while the terminal scrolled moved its start along with
+  the view, so text longer than one screen could not be selected.
+- Shift+keypad Enter inserted a stray private-use character in some CLIs
+  instead of starting a new line.
+- SSH config import showed the selected tag's id instead of its name, and
+  replaced a host's tags instead of adding to them.
 
 ## [1.6.0] - 2026-09-27
 
@@ -471,7 +510,8 @@ entry describes what ShellVibe is rather than what changed.
 - iOS and Android are not released. The code builds for them and they are not
   part of this release.
 
-[Unreleased]: https://github.com/klc/shellvibe/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/klc/shellvibe/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/klc/shellvibe/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/klc/shellvibe/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/klc/shellvibe/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/klc/shellvibe/compare/v1.3.0...v1.4.0
