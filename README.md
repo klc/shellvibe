@@ -117,7 +117,12 @@ first. To get past it:
   Privacy & Security → Open Anyway**. macOS 15 removed the Control-click
   shortcut, so this is the only route, and it repeats after every update.
 - **Windows** — "Windows protected your PC" → **More info** → **Run anyway**.
-- **Linux** — `chmod +x` the AppImage and run it. Nothing else needed.
+- **Linux** — `chmod +x` the AppImage and run it. Nothing else needed. Or
+  install the native package, which adds ShellVibe to the app menu and pulls in
+  its dependencies:
+  - Debian / Ubuntu: `sudo apt install ./shellvibe_*_amd64.deb`
+  - Fedora / RHEL: `sudo dnf install ./shellvibe-*.x86_64.rpm`
+  - Arch: `sudo pacman -U shellvibe-*-x86_64.pkg.tar.zst`
 
 If disabling malware protection for an SSH client is not a trade you want to
 make, build it yourself with the steps below. That is a reasonable position and
