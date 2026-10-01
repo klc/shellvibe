@@ -14,7 +14,10 @@
 
 set -euo pipefail
 
-dist="${1:?usage: test_package.sh <dist-dir>}"
+# Absolute, because apt reads a relative `dist/x.deb` as package "dist" at
+# release "x.deb" and only treats the argument as a file when it starts with
+# / or ./.
+dist="$(cd "${1:?usage: test_package.sh <dist-dir>}" && pwd)"
 # The X server, xauth and a session bus are test scaffolding, not something
 # the package may depend on, so they are installed alongside it here.
 if command -v apt-get >/dev/null; then
