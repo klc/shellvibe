@@ -135,7 +135,10 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: flutter build appbundle --release --no-pub
+        # No --no-pub: `pub get` writes the plugin registrant for debug, with
+        # dev dependencies (integration_test) in it, and only a build that
+        # runs pub itself rewrites it for release without them.
+        run: flutter build appbundle --release
 
       - name: Confirm the bundle carries the upload key
         shell: bash
@@ -255,7 +258,8 @@ jobs:
           # only writes the build configuration and xcodebuild does the rest.
           # The Dart compile still happens inside the archive, in Flutter's
           # own build phase.
-          flutter build ios --release --config-only --no-pub
+          # No --no-pub, for the same plugin registrant reason as Android.
+          flutter build ios --release --config-only
           xcodebuild \
             -workspace ios/Runner.xcworkspace \
             -scheme Runner \
