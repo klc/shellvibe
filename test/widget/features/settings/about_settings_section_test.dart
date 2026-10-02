@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'package:shellvibe/core/constants/app_constants.dart';
+import 'package:shellvibe/core/utils/platform_capabilities.dart';
 import 'package:shellvibe/features/settings/domain/services/update_check_service.dart';
 import 'package:shellvibe/features/settings/presentation/widgets/about_settings_section.dart';
 
@@ -84,6 +85,25 @@ void main() {
         find.textContaining(AppConstants.appVersion),
         findsAtLeastNWidgets(1),
       );
+    });
+
+    testWidgets('leaves updates to the store on phones and tablets', (
+      tester,
+    ) async {
+      for (final platform in [TargetPlatform.iOS, TargetPlatform.android]) {
+        debugPlatformCapabilitiesOverride = platform;
+        addTearDown(() => debugPlatformCapabilitiesOverride = null);
+
+        await pumpSection(tester);
+
+        expect(
+          find.byKey(const Key('about_check_for_updates')),
+          findsNothing,
+          reason:
+              'A store build pointing at GitHub Releases is rejected by '
+              'review on $platform.',
+        );
+      }
     });
 
     testWidgets('checks nothing until the button is pressed', (tester) async {
