@@ -8,6 +8,7 @@ import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/diagnostics/crash_log.dart';
+import '../../../../core/utils/platform_capabilities.dart';
 import '../../domain/services/update_check_service.dart';
 import '../dialogs/problem_report_dialog.dart';
 
@@ -106,35 +107,39 @@ class _AboutSettingsSectionState extends ConsumerState<AboutSettingsSection> {
             ],
           ),
         ),
-        const SizedBox(height: 12),
-        ShadCard(
-          child: _cardBody(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ListTile(
-                leading: Icon(LucideIcons.download, color: tokens.brand),
-                title: const Text('Updates'),
-                subtitle: Text(
-                  'Checked only when you ask. Nothing is sent about this '
-                  'installation.',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(color: tokens.textMuted),
+        // Store builds update through the store. Pointing a phone at GitHub
+        // Releases instead is a review rejection on both App Store and Play.
+        if (!isMobilePlatform) ...[
+          const SizedBox(height: 12),
+          ShadCard(
+            child: _cardBody(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ListTile(
+                  leading: Icon(LucideIcons.download, color: tokens.brand),
+                  title: const Text('Updates'),
+                  subtitle: Text(
+                    'Checked only when you ask. Nothing is sent about this '
+                    'installation.',
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: tokens.textMuted),
+                  ),
+                  trailing: ShellVibeButton(
+                    key: const Key('about_check_for_updates'),
+                    label: 'Check for updates',
+                    onPressed: _checkForUpdates,
+                    busy: _checking,
+                  ),
                 ),
-                trailing: ShellVibeButton(
-                  key: const Key('about_check_for_updates'),
-                  label: 'Check for updates',
-                  onPressed: _checkForUpdates,
-                  busy: _checking,
-                ),
-              ),
-              if (_result != null) ...[
-                const Divider(),
-                _buildUpdateResult(context, tokens, _result!),
+                if (_result != null) ...[
+                  const Divider(),
+                  _buildUpdateResult(context, tokens, _result!),
+                ],
               ],
-            ],
+            ),
           ),
-        ),
+        ],
         const SizedBox(height: 12),
         ShadCard(
           child: _cardBody(

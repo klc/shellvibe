@@ -246,6 +246,28 @@ void main() {
         reason: 'The plan row stays; only the numbers are in doubt.',
       );
     });
+
+    testWidgets('offers account deletion through the web panel', (
+      tester,
+    ) async {
+      await pumpSignedIn(
+        tester,
+        billing: const EntitlementState(
+          entitlement: Entitlement.free,
+          source: EntitlementSource.server,
+        ),
+      );
+
+      expect(
+        find.byKey(const Key('account_delete_button')),
+        findsOneWidget,
+        reason:
+            'App Store 5.1.1(v) and Play require deletion to be reachable '
+            'from inside an app that can create an account.',
+      );
+      expect(find.textContaining('web panel'), findsOneWidget);
+      expect(kAccountDeletionUrl, 'https://shellvibe.dev/panel/danger');
+    });
   });
 }
 

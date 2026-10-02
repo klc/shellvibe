@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
@@ -10,7 +11,15 @@ import '../../../billing/presentation/notifiers/entitlement_notifier.dart';
 import '../../domain/account_session.dart';
 import '../notifiers/account_notifier.dart';
 
-/// Account surface in Settings: sign in, plan, devices, sign out.
+/// Where an account is deleted: the web panel's danger zone, which re-asks for
+/// the password and refuses while the account still owns a team.
+///
+/// App Store (5.1.1(v)) and Play both require that deletion can be started from
+/// inside the app; a direct link to the web flow satisfies both, and Play's
+/// Data safety form takes this same URL.
+const String kAccountDeletionUrl = 'https://shellvibe.dev/panel/danger';
+
+/// Account surface in Settings: sign in, plan, devices, sign out, deletion.
 ///
 /// Signing in is optional everywhere in this widget. The copy says what an
 /// account is *for* rather than asking for one, because everything the app
@@ -231,6 +240,20 @@ class _AccountSettingsSectionState
               ),
             ],
           ),
+          const Divider(height: 20),
+          Text(
+            'Deleting the account removes the cloud backup, sync data and '
+            'devices from the server. It is done in the web panel, which asks '
+            'for your password again. Hosts and keys on this device stay.',
+            style: TextStyle(fontSize: 12, color: tokens.textMuted),
+          ),
+          const SizedBox(height: 8),
+          ShellVibeButton.quiet(
+            buttonKey: const Key('account_delete_button'),
+            label: 'Delete Account…',
+            icon: LucideIcons.userX,
+            onPressed: _openAccountDeletion,
+          ),
         ],
       ),
     );
@@ -321,6 +344,22 @@ class _AccountSettingsSectionState
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _openAccountDeletion() async {
+    final opened = await launchUrl(
+      Uri.parse(kAccountDeletionUrl),
+      mode: LaunchMode.externalApplication,
+    );
+    if (opened || !mounted) return;
+    ShadToaster.of(context).show(
+      const ShadToast(
+        description: Text(
+          'No browser could be opened. Visit $kAccountDeletionUrl to delete '
+          'the account.',
+        ),
+      ),
+    );
   }
 
   Future<void> _showDevices(BuildContext context) async {
