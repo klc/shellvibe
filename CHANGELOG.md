@@ -7,6 +7,17 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Settings → Account → Delete Account… opens the web panel's danger zone,
+  where the account is deleted after the password is asked for again. Hosts
+  and keys on the device are not touched.
+
+### Changed
+
+- On iOS and Android, About no longer offers "Check for updates": those
+  builds update through the App Store and Google Play.
+
 ## [1.7.0] - 2026-10-01
 
 ### Added
