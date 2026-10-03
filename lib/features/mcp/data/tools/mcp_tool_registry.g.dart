@@ -71,4 +71,4 @@ final class McpToolRegistryProvider
   }
 }
 
-String _$mcpToolRegistryHash() => r'a5b20603013903ad6da66cafa32cbf5a10671261';
+String _$mcpToolRegistryHash() => r'd23bb14e47882f069c0e898101ed4e4bbb81f8ed';
