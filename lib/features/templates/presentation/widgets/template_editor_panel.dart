@@ -13,6 +13,7 @@ import '../../../terminal/domain/models/terminal_tab_session.dart';
 import '../../domain/models/template_model.dart';
 import '../../domain/models/template_pane_model.dart';
 import '../../domain/services/template_editing.dart';
+import '../../../snippets/presentation/notifiers/runbooks_notifier.dart';
 import '../notifiers/templates_notifier.dart';
 
 /// Shows what a saved layout opens, and lets it be changed without running it.
@@ -87,6 +88,8 @@ class _TemplateEditorPanelState extends ConsumerState<TemplateEditorPanel> {
             panes: _draft.panes,
             activePaneId: _draft.activePaneId,
             createdAt: _draft.createdAt,
+            onOpenRunbookId: _draft.onOpenRunbookId,
+            onOpenConfirm: _draft.onOpenConfirm,
           ),
         );
     if (mounted) Navigator.of(context).pop();
@@ -161,6 +164,12 @@ class _TemplateEditorPanelState extends ConsumerState<TemplateEditorPanel> {
     final hostsById = {for (final host in hosts) host.id: host};
     final roots = _draft.orderedRoots;
     final desktop = usesDesktopModals(context);
+    final runbooks = ref.watch(runbooksProvider).value ?? const [];
+    // A draft that names a runbook that is gone shows as "none" rather than
+    // as a dropdown value with no item.
+    final onOpenId = runbooks.any((r) => r.id == _draft.onOpenRunbookId)
+        ? _draft.onOpenRunbookId
+        : null;
 
     final body = Column(
       mainAxisSize: MainAxisSize.min,
@@ -197,6 +206,45 @@ class _TemplateEditorPanelState extends ConsumerState<TemplateEditorPanel> {
                   labelText: 'Description (optional)',
                 ),
               ),
+              const ShellVibeSectionLabel(
+                label: 'On open',
+                padding: EdgeInsets.fromLTRB(0, 14, 0, 4),
+              ),
+              DropdownButton<String?>(
+                key: const Key('template_editor_on_open_runbook'),
+                isExpanded: true,
+                isDense: true,
+                value: onOpenId,
+                items: [
+                  const DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text('Run no runbook'),
+                  ),
+                  for (final runbook in runbooks)
+                    DropdownMenuItem<String?>(
+                      value: runbook.id,
+                      child: Text(
+                        'Run "${runbook.title}" on its hosts',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                ],
+                onChanged: (id) => _edit(
+                  (draft) => id == null
+                      ? draft.copyWith(clearOnOpenRunbook: true)
+                      : draft.copyWith(onOpenRunbookId: id),
+                ),
+              ),
+              if (onOpenId != null)
+                SwitchListTile(
+                  key: const Key('template_editor_on_open_confirm'),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Ask before running'),
+                  value: _draft.onOpenConfirm,
+                  onChanged: (on) =>
+                      _edit((draft) => draft.copyWith(onOpenConfirm: on)),
+                ),
             ],
           ),
         ),

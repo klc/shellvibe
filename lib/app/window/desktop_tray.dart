@@ -27,6 +27,7 @@ import 'desktop_tray_menu.dart';
 import 'host_navigation.dart';
 import 'tray_icon_state.dart';
 import 'window_chrome.dart';
+import '../../features/templates/presentation/template_launch.dart';
 
 /// Overrides whether the window close is intercepted, so tests cover the
 /// Windows and Linux path on any host.
@@ -528,6 +529,12 @@ class _DesktopTrayHostState extends ConsumerState<DesktopTrayHost>
           onHostKeyPrompt: launcher.promptHostKey,
         );
     _goToTerminal();
+    if (result.openedPanes > 0) {
+      final context = _navigatorContext;
+      if (context != null && context.mounted) {
+        unawaited(runTemplateOnOpen(context, ref, template));
+      }
+    }
     if (!result.isComplete) {
       _toast(
         ShadToast.destructive(

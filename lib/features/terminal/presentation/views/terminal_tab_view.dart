@@ -31,6 +31,7 @@ import '../widgets/terminal_empty_state.dart';
 import '../widgets/terminal_pane_helpers.dart';
 import '../widgets/terminal_session_tree.dart';
 import '../widgets/terminal_tab_strip.dart';
+import '../../../templates/presentation/template_launch.dart';
 
 /// Whether this platform writes shortcuts with ⌘ rather than Ctrl+Shift.
 bool get _isApplePlatform =>
@@ -668,6 +669,9 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
           onHostKeyPrompt: _promptHostKey,
         );
     if (!mounted) return;
+    if (result.openedPanes > 0) {
+      unawaited(runTemplateOnOpen(context, ref, template));
+    }
 
     if (result.isComplete) {
       ShadToaster.of(context).show(
