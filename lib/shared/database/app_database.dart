@@ -248,7 +248,10 @@ class AppDatabase extends _$AppDatabase {
           await m.createTable(runbookRuns);
           await m.createTable(runbookRunHosts);
           await m.createTable(runbookRunSteps);
-          if (await _needsColumn(runbooks.actualTableName, 'default_host_ids')) {
+          if (await _needsColumn(
+            runbooks.actualTableName,
+            'default_host_ids',
+          )) {
             await m.addColumn(runbooks, runbooks.defaultHostIds);
           }
           if (await _needsColumn(runbookSteps.actualTableName, 'on_failure')) {
@@ -308,6 +311,9 @@ class AppDatabase extends _$AppDatabase {
           if (await _needsColumn(runbookRuns.actualTableName, 'snippet_id')) {
             await m.addColumn(runbookRuns, runbookRuns.snippetId);
           }
+          if (await _needsColumn(runbookRunSteps.actualTableName, 'kind')) {
+            await m.addColumn(runbookRunSteps, runbookRunSteps.kind);
+          }
         }
       },
     );
@@ -360,10 +366,7 @@ class AppDatabase extends _$AppDatabase {
         var output = step.read<String>('output');
         var error = step.read<String?>('error');
         for (final secret in secrets) {
-          command = command.replaceAll(
-            secret.value,
-            '\${INPUT:${secret.key}}',
-          );
+          command = command.replaceAll(secret.value, '\${INPUT:${secret.key}}');
           output = output.replaceAll(secret.value, '[redacted]');
           error = error?.replaceAll(secret.value, '[redacted]');
         }
@@ -390,7 +393,8 @@ class AppDatabase extends _$AppDatabase {
   /// v16 `addColumn` is both possible and needed.
   Future<bool> _needsColumn(String table, String column) async {
     final info = await customSelect('PRAGMA table_info("$table")').get();
-    return info.isNotEmpty && !info.any((r) => r.read<String>('name') == column);
+    return info.isNotEmpty &&
+        !info.any((r) => r.read<String>('name') == column);
   }
 
   /// Rewrites identities stored with the removed `'agent'` auth type to

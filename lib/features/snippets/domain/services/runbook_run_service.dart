@@ -12,6 +12,9 @@ import 'runbook_executor.dart';
 enum RunStepStatus {
   pending,
   running,
+
+  /// An approval step that a person has yet to continue.
+  waiting,
   success,
   failed,
   cancelled,
@@ -89,8 +92,13 @@ class HostRunResult {
 class RunHandle {
   final Future<List<HostRunResult>> result;
   final Future<void> Function() _cancel;
+  final void Function(String stepId) _approve;
 
-  RunHandle(this.result, this._cancel);
+  RunHandle(this.result, this._cancel, this._approve);
+
+  /// Continues approval step [stepId] for the whole run: every host waiting at
+  /// it is released, and hosts that reach it later pass straight through.
+  void approve(String stepId) => _approve(stepId);
 
   /// Interrupts and closes every open session and marks unfinished steps
   /// cancelled. [result] still completes (with cancelled hosts); it never
@@ -109,8 +117,15 @@ class RunbookRunService {
   final RemoteCommandSessionFactory sessionFactory;
   final RunbookExecutor _executor;
 
-  RunbookRunService({required this.sessionFactory, RunbookExecutor? executor})
-    : _executor = executor ?? const RunbookExecutor();
+  /// A snippet's current code by id, or null when it is gone. Snippet steps
+  /// ask at run time, so an edit to the snippet applies to the next run.
+  final Future<String?> Function(String snippetId)? lookupSnippet;
+
+  RunbookRunService({
+    required this.sessionFactory,
+    RunbookExecutor? executor,
+    this.lookupSnippet,
+  }) : _executor = executor ?? const RunbookExecutor();
 
   /// A snippet as the one-step runbook it is, so snippets and runbooks share
   /// one engine instead of two that disagree about exit codes.
@@ -161,6 +176,11 @@ class RunbookRunService {
       ..sort((a, b) => a.stepOrder.compareTo(b.stepOrder));
     final cancelSignal = Completer<void>();
     final openSessions = <RemoteCommandSession>{};
+    // One decision per approval step for the whole run: the first Continue
+    // releases every host waiting at it and pre-approves it for the rest.
+    final approvals = <String, Completer<void>>{};
+    Completer<void> approvalFor(String stepId) =>
+        approvals.putIfAbsent(stepId, Completer<void>.new);
     var cancelled = false;
     var rollingStopped = false;
 
@@ -239,10 +259,24 @@ class RunbookRunService {
           variableValues: variableValues,
           isCancelled: () => cancelled,
           cancelSignal: cancelSignal.future,
+          resolveSnippet: lookupSnippet,
+          awaitApproval: (step) async {
+            // Already approved for the run: no wait, and no flicker of a
+            // banner for a host that never stops.
+            if (!approvalFor(step.id).isCompleted) {
+              emit(StepStatusEvent(host.id, step.id, RunStepStatus.waiting));
+            }
+            final approved = await Future.any<bool>([
+              approvalFor(step.id).future.then((_) => true),
+              cancelSignal.future.then((_) => false),
+            ]);
+            return approved;
+          },
           onStepFinished: (result) => emit(StepFinishedEvent(host.id, result)),
           onProgress: (step, status) {
             final mapped = switch (status) {
               'running' => RunStepStatus.running,
+              'waiting' => RunStepStatus.waiting,
               'success' => RunStepStatus.success,
               'cancelled' => RunStepStatus.cancelled,
               _ => RunStepStatus.failed,
@@ -302,7 +336,12 @@ class RunbookRunService {
       }
     }
 
-    return RunHandle(runAll(), cancel);
+    void approve(String stepId) {
+      final gate = approvalFor(stepId);
+      if (!gate.isCompleted) gate.complete();
+    }
+
+    return RunHandle(runAll(), cancel, approve);
   }
 
   static String _describe(Object error) => switch (error) {

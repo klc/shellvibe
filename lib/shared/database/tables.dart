@@ -304,6 +304,10 @@ class RunbookRunSteps extends Table {
   TextColumn get stepId => text()();
   IntColumn get stepOrder => integer()();
 
+  /// `command`, `snippet` or `approval`, so a stored approval still reads as
+  /// one. Local only, like the rest.
+  TextColumn get kind => text().withDefault(const Constant('command'))();
+
   /// The command as sent, after `${INPUT:...}` substitution.
   TextColumn get command => text()();
   TextColumn get status => text()();

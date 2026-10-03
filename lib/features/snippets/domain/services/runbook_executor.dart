@@ -106,6 +106,12 @@ class RunbookExecutor {
   ///
   /// A failing step ends the run unless its [RunbookStepModel.onFailure] is
   /// `continue`; either way the run's overall result is then a failure.
+  ///
+  /// [resolveSnippet] gives a snippet step the snippet's current code, or null
+  /// when it no longer exists, which fails the step with a clear message.
+  /// [awaitApproval] holds an approval step until a person continues it: true
+  /// to go on, false when the run is stopped instead. Without one an approval
+  /// step fails, rather than being waved through.
   Future<RunbookExecutionResult> executeRunbook(
     RunbookModel runbook,
     Future<(String output, int exitCode)> Function(
@@ -118,6 +124,8 @@ class RunbookExecutor {
     void Function(RunbookStepResult result)? onStepFinished,
     bool Function()? isCancelled,
     Future<void>? cancelSignal,
+    Future<String?> Function(String snippetId)? resolveSnippet,
+    Future<bool> Function(RunbookStepModel step)? awaitApproval,
   }) async {
     final results = <RunbookStepResult>[];
     RunbookStepModel? firstFailure;
@@ -146,26 +154,71 @@ class RunbookExecutor {
       if (cancelled()) return cancelledFrom(i);
       onProgress?.call(step, 'running');
 
-      // Substitute variables in command
-      final commandToRun = SnippetVariableParser.substituteVariables(
-        step.command,
-        variableValues,
-      );
-
       final stopwatch = Stopwatch()..start();
       final attempts = <StepAttempt>[];
-      final maxAttempts =
-          1 + step.retries.clamp(0, RunbookStepModel.maxRetries);
-      for (var attempt = 1; attempt <= maxAttempts; attempt++) {
-        final outcome = await _attempt(step, commandToRun, commandRunner);
+      var commandToRun = step.command;
+
+      if (step.kind == StepKind.approval) {
+        // The gate, not a command: held until someone continues the run. The
+        // gate reports `waiting` itself, since only it knows whether anyone
+        // will actually have to wait.
+        final approved = awaitApproval == null
+            ? null
+            : await awaitApproval(step);
         if (cancelled()) return cancelledFrom(i);
-        attempts.add(outcome);
-        if (outcome.success || attempt == maxAttempts) break;
-        await Future.any<void>([
-          Future<void>.delayed(retryDelay),
-          ?cancelSignal,
-        ]);
-        if (cancelled()) return cancelledFrom(i);
+        attempts.add(
+          StepAttempt(
+            success: approved == true,
+            output: '',
+            errorMessage: approved == true
+                ? null
+                : (awaitApproval == null
+                      ? 'Nobody is set up to approve this step.'
+                      : 'Not approved.'),
+          ),
+        );
+      } else {
+        // The snippet as it is now, not as it was when the step was saved.
+        var code = step.command;
+        String? missing;
+        if (step.kind == StepKind.snippet) {
+          final id = step.snippetId;
+          final resolved = id == null || resolveSnippet == null
+              ? null
+              : await resolveSnippet(id);
+          if (resolved == null) {
+            missing =
+                'The snippet this step runs was deleted. Pick another '
+                'snippet for it.';
+          } else {
+            code = resolved;
+          }
+        }
+        // Substitute variables in command
+        commandToRun = SnippetVariableParser.substituteVariables(
+          code,
+          variableValues,
+        );
+
+        if (missing != null) {
+          attempts.add(
+            StepAttempt(success: false, output: '', errorMessage: missing),
+          );
+        } else {
+          final maxAttempts =
+              1 + step.retries.clamp(0, RunbookStepModel.maxRetries);
+          for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+            final outcome = await _attempt(step, commandToRun, commandRunner);
+            if (cancelled()) return cancelledFrom(i);
+            attempts.add(outcome);
+            if (outcome.success || attempt == maxAttempts) break;
+            await Future.any<void>([
+              Future<void>.delayed(retryDelay),
+              ?cancelSignal,
+            ]);
+            if (cancelled()) return cancelledFrom(i);
+          }
+        }
       }
 
       final last = attempts.last;

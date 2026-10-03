@@ -113,6 +113,7 @@ class RunHistoryRepository {
             runHostId: hostRowId,
             stepId: step.id,
             stepOrder: step.stepOrder,
+            kind: Value(step.kind.name),
             // The template, never the substituted command: an `${INPUT:...}`
             // value is exactly what must not reach this unencrypted file.
             command: step.command,
@@ -268,6 +269,7 @@ class RunHistoryRepository {
             runbookId: row.runbookId ?? 'history:${row.id}',
             stepOrder: s.stepOrder,
             command: s.command,
+            kind: StepKind.parse(s.kind),
           ),
       ],
     );

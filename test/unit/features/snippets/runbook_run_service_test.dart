@@ -401,5 +401,185 @@ void main() {
         ),
       );
     });
+
+    group('step kinds', () {
+      RunbookModel mixed() => RunbookModel(
+        id: 'rb',
+        workspaceId: 'w',
+        title: 'rb',
+        createdAt: DateTime(2026),
+        steps: const [
+          RunbookStepModel(
+            id: 's0',
+            runbookId: 'rb',
+            stepOrder: 1,
+            command: 'before',
+          ),
+          RunbookStepModel(
+            id: 's1',
+            runbookId: 'rb',
+            stepOrder: 2,
+            command: 'Check the dashboards',
+            kind: StepKind.approval,
+          ),
+          RunbookStepModel(
+            id: 's2',
+            runbookId: 'rb',
+            stepOrder: 3,
+            command: 'after',
+          ),
+        ],
+      );
+
+      Future<void> settle() =>
+          Future<void>.delayed(const Duration(milliseconds: 30));
+
+      test('one Continue releases every host waiting at the step', () async {
+        final factory = FakeFactory();
+        final events = <RunEvent>[];
+        final run = RunbookRunService(
+          sessionFactory: factory,
+        ).start(mixed(), [host('h1'), host('h2')], onEvent: events.add);
+        await settle();
+
+        // Both are held at the gate, having run only what came before it.
+        for (final id in ['h1', 'h2']) {
+          expect(factory.sessions[id]!.ran, ['before']);
+        }
+        final waiting = events
+            .whereType<StepStatusEvent>()
+            .where((e) => e.status == RunStepStatus.waiting)
+            .map((e) => e.hostId);
+        expect(waiting.toSet(), {'h1', 'h2'});
+
+        run.approve('s1');
+        final results = await run.result.timeout(const Duration(seconds: 2));
+        expect(
+          results.map((r) => r.status),
+          everyElement(RunHostStatus.succeeded),
+        );
+        for (final id in ['h1', 'h2']) {
+          expect(factory.sessions[id]!.ran, ['before', 'after']);
+        }
+      });
+
+      test(
+        'an approved step is pre-approved for hosts that reach it later',
+        () async {
+          final factory = FakeFactory();
+          final events = <RunEvent>[];
+          final run = RunbookRunService(sessionFactory: factory).start(
+            mixed(),
+            [host('h1'), host('h2')],
+            strategy: const RunStrategy.rolling(),
+            onEvent: events.add,
+          );
+          await settle();
+          // Rolling: only the first host has got that far.
+          expect(factory.sessions.keys, ['h1']);
+          run.approve('s1');
+          final results = await run.result.timeout(const Duration(seconds: 2));
+
+          expect(
+            results.map((r) => r.status),
+            everyElement(RunHostStatus.succeeded),
+          );
+          final waitingHosts = events
+              .whereType<StepStatusEvent>()
+              .where((e) => e.status == RunStepStatus.waiting)
+              .map((e) => e.hostId);
+          // The second host never waits: the step was already approved.
+          expect(waitingHosts.toSet(), {'h1'});
+        },
+      );
+
+      test('stopping while waiting cancels without hanging', () async {
+        final factory = FakeFactory();
+        final events = <RunEvent>[];
+        final run = RunbookRunService(
+          sessionFactory: factory,
+        ).start(mixed(), [host('h1'), host('h2')], onEvent: events.add);
+        await settle();
+        await run.cancel();
+        final results = await run.result.timeout(const Duration(seconds: 2));
+        expect(
+          results.map((r) => r.status),
+          everyElement(RunHostStatus.cancelled),
+        );
+        for (final s in factory.sessions.values) {
+          expect(s.ran, ['before']);
+          expect(s.closes, greaterThanOrEqualTo(1));
+        }
+        final last = {
+          for (final e in events.whereType<StepStatusEvent>())
+            '${e.hostId}/${e.stepId}': e.status,
+        };
+        expect(last['h1/s1'], RunStepStatus.cancelled);
+        expect(last['h1/s2'], RunStepStatus.cancelled);
+      });
+
+      test('a snippet step reads the snippet when the run happens', () async {
+        final factory = FakeFactory();
+        var code = 'echo one';
+        final book = RunbookModel(
+          id: 'rb',
+          workspaceId: 'w',
+          title: 'rb',
+          createdAt: DateTime(2026),
+          steps: const [
+            RunbookStepModel(
+              id: 's',
+              runbookId: 'rb',
+              stepOrder: 1,
+              command: '# snippet: Greet',
+              kind: StepKind.snippet,
+              snippetId: 'sn',
+            ),
+          ],
+        );
+        final service = RunbookRunService(
+          sessionFactory: factory,
+          lookupSnippet: (id) async => id == 'sn' ? code : null,
+        );
+        await service.start(book, [host('h1')]).result;
+        code = 'echo two';
+        await service.start(book, [host('h2')]).result;
+        expect(factory.sessions['h1']!.ran, ['echo one']);
+        expect(factory.sessions['h2']!.ran, ['echo two']);
+      });
+
+      test(
+        'a snippet that is gone fails that host with a clear message',
+        () async {
+          final factory = FakeFactory();
+          final book = RunbookModel(
+            id: 'rb',
+            workspaceId: 'w',
+            title: 'rb',
+            createdAt: DateTime(2026),
+            steps: const [
+              RunbookStepModel(
+                id: 's',
+                runbookId: 'rb',
+                stepOrder: 1,
+                command: '# snippet: Gone',
+                kind: StepKind.snippet,
+                snippetId: 'gone',
+              ),
+            ],
+          );
+          final results = await RunbookRunService(
+            sessionFactory: factory,
+            lookupSnippet: (id) async => null,
+          ).start(book, [host('h1')]).result;
+          expect(results.single.status, RunHostStatus.failed);
+          expect(
+            results.single.execution!.stepResults.single.errorMessage,
+            contains('deleted'),
+          );
+          expect(factory.sessions['h1']!.ran, isEmpty);
+        },
+      );
+    });
   });
 }

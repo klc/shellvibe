@@ -47,7 +47,8 @@ class VariableDeclaration {
   });
 
   /// What the prompt calls it.
-  String get displayLabel => (label?.trim().isNotEmpty ?? false) ? label! : name;
+  String get displayLabel =>
+      (label?.trim().isNotEmpty ?? false) ? label! : name;
 
   VariableDeclaration copyWith({
     VariableType? type,
@@ -94,8 +95,8 @@ class VariableDeclaration {
       defaultValue: type == VariableType.secret
           ? null
           : json['defaultValue'] as String?,
-      options: (json['options'] as List?)?.whereType<String>().toList() ??
-          const [],
+      options:
+          (json['options'] as List?)?.whereType<String>().toList() ?? const [],
       required: json['required'] as bool? ?? true,
     );
   }

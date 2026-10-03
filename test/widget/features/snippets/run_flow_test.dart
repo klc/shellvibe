@@ -748,4 +748,95 @@ void main() {
       expect(factory.openedHosts, ['h1']);
     });
   });
+
+  group('Approval steps', () {
+    Future<void> seedGated() async {
+      await seedRunbook(commands: ['echo a']);
+      await db.runbooksDao.replaceSteps('rb', [
+        RunbookStepsCompanion.insert(
+          id: 'rs1',
+          runbookId: 'rb',
+          stepOrder: 1,
+          command: 'echo a',
+        ),
+        RunbookStepsCompanion.insert(
+          id: 'rs2',
+          runbookId: 'rb',
+          stepOrder: 2,
+          command: 'Check the dashboards',
+          kind: const Value('approval'),
+        ),
+        RunbookStepsCompanion.insert(
+          id: 'rs3',
+          runbookId: 'rb',
+          stepOrder: 3,
+          command: 'echo b',
+        ),
+      ]);
+    }
+
+    Future<void> start(WidgetTester tester) async {
+      await tester.tap(find.byKey(const Key('runbook_execute_rb')));
+      await tester.pumpAndSettle();
+      for (final id in ['h1', 'h2']) {
+        await tester.tap(find.byKey(Key('run_target_host_$id')));
+        await tester.pump();
+      }
+      await tester.tap(find.byKey(const Key('run_target_confirm')));
+      // The run is parked at the gate, with a spinner and a ticking clock on
+      // screen, so it never settles: step the frames by hand.
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+    }
+
+    testWidgets(
+      'the run view shows the gate and Continue releases every host',
+      (tester) async {
+        await seedGated();
+        final factory = _FakeFactory();
+        await pumpScreen(tester, factory);
+        await start(tester);
+
+        // The run view is open while the run waits at the gate.
+        expect(find.byKey(const Key('run_result_dialog')), findsOneWidget);
+        expect(
+          find.text('Waiting for approval: Check the dashboards'),
+          findsOneWidget,
+        );
+        expect(factory.ran, ['echo a', 'echo a']);
+        // Its own kind of column, with its own icon.
+        expect(
+          find.byKey(const Key('run_header_approval_rs2')),
+          findsOneWidget,
+        );
+        expect(
+          find.bySemanticsLabel('web-1, step 2: waiting for approval'),
+          findsOneWidget,
+        );
+
+        await tester.tap(find.byKey(const Key('run_approve_rs2')));
+        await tester.pumpAndSettle();
+
+        expect(factory.ran, ['echo a', 'echo a', 'echo b', 'echo b']);
+        expect(find.text('2 succeeded'), findsOneWidget);
+        expect(find.textContaining('Waiting for approval'), findsNothing);
+      },
+    );
+
+    testWidgets('Stop at the gate cancels the run', (tester) async {
+      await seedGated();
+      final factory = _FakeFactory();
+      await pumpScreen(tester, factory);
+      await start(tester);
+
+      await tester.tap(find.byKey(const Key('run_approval_stop_rs2')));
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+
+      expect(factory.ran, ['echo a', 'echo a']);
+      expect(find.text('2 cancelled'), findsOneWidget);
+    });
+  });
 }

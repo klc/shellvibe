@@ -35,6 +35,7 @@ const double _kRowHeight = 52;
   ShellVibeTokens tokens,
 ) => switch (status) {
   RunStepStatus.running => (LucideIcons.hourglass, tokens.warning),
+  RunStepStatus.waiting => (LucideIcons.hand, tokens.warning),
   RunStepStatus.success => (LucideIcons.circleCheck, tokens.success),
   RunStepStatus.failed => (LucideIcons.circleX, tokens.danger),
   RunStepStatus.cancelled => (LucideIcons.ban, tokens.textMuted),
@@ -44,6 +45,7 @@ const double _kRowHeight = 52;
 
 String runStepStatusLabel(RunStepStatus? status) => switch (status) {
   RunStepStatus.running => 'running',
+  RunStepStatus.waiting => 'waiting for approval',
   RunStepStatus.success => 'succeeded',
   RunStepStatus.failed => 'failed',
   RunStepStatus.cancelled => 'cancelled',
@@ -133,6 +135,7 @@ class LiveRunView extends ConsumerWidget {
             ),
       onRunAgain: () =>
           unawaited(rerunOnHosts(context, ref, run.runbook, allIds, run)),
+      onApprove: ref.read(runbookRunProvider.notifier).approve,
     );
   }
 }
@@ -217,6 +220,9 @@ class RunView extends StatelessWidget {
   final VoidCallback? onRerunFailed;
   final VoidCallback? onRunAgain;
 
+  /// Continues an approval step for the whole run.
+  final void Function(String stepId)? onApprove;
+
   /// Label for [onRunAgain]; history says which hosts it will use.
   final String runAgainLabel;
 
@@ -226,6 +232,7 @@ class RunView extends StatelessWidget {
     this.onStop,
     this.onRerunFailed,
     this.onRunAgain,
+    this.onApprove,
     this.runAgainLabel = 'Run again',
   });
 
@@ -290,6 +297,22 @@ class RunView extends StatelessWidget {
                   style: TextStyle(color: tokens.danger, fontSize: 12),
                 ),
               ],
+              // An approval step a host is waiting at: one Continue releases
+              // every host held there, and approves it for any that arrive
+              // later.
+              for (final step in steps)
+                if (step.kind == StepKind.approval &&
+                    run.hosts.any(
+                      (h) => h.steps[step.id] == RunStepStatus.waiting,
+                    ))
+                  _ApprovalBanner(
+                    step: step,
+                    tokens: tokens,
+                    onContinue: onApprove == null
+                        ? null
+                        : () => onApprove!(step.id),
+                    onStop: run.cancelling ? null : onStop,
+                  ),
               const SizedBox(height: 8),
               if (useMatrix)
                 _RunMatrix(run: run, steps: steps, tokens: tokens)
@@ -322,6 +345,74 @@ class RunView extends StatelessWidget {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+/// "Waiting for approval", with Continue and Stop.
+class _ApprovalBanner extends StatelessWidget {
+  final RunbookStepModel step;
+  final ShellVibeTokens tokens;
+  final VoidCallback? onContinue;
+  final VoidCallback? onStop;
+
+  const _ApprovalBanner({
+    required this.step,
+    required this.tokens,
+    required this.onContinue,
+    required this.onStop,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: Key('run_approval_${step.id}'),
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: tokens.warning.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(tokens.radiusSmall),
+        border: Border.all(color: tokens.warning.withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(LucideIcons.hand, size: 14, color: tokens.warning),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Waiting for approval: ${step.command}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ShellVibeButton(
+                key: Key('run_approve_${step.id}'),
+                label: 'Continue',
+                icon: LucideIcons.play,
+                onPressed: onContinue,
+              ),
+              ShellVibeButton.secondary(
+                key: Key('run_approval_stop_${step.id}'),
+                label: 'Stop',
+                icon: LucideIcons.square,
+                onPressed: onStop,
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -440,16 +531,28 @@ class _RunMatrix extends StatelessWidget {
                           SizedBox(
                             width: _kCellWidth,
                             child: Tooltip(
-                              message: step.command,
+                              message: step.kind == StepKind.approval
+                                  ? 'Approval: ${step.command}'
+                                  : step.command,
                               child: Center(
-                                child: Text(
-                                  '${step.stepOrder}',
-                                  style: TextStyle(
-                                    color: tokens.textMuted,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
+                                // An approval is its own kind of column.
+                                child: step.kind == StepKind.approval
+                                    ? Icon(
+                                        LucideIcons.userCheck,
+                                        key: Key(
+                                          'run_header_approval_${step.id}',
+                                        ),
+                                        size: 14,
+                                        color: tokens.warning,
+                                      )
+                                    : Text(
+                                        '${step.stepOrder}',
+                                        style: TextStyle(
+                                          color: tokens.textMuted,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
                               ),
                             ),
                           ),

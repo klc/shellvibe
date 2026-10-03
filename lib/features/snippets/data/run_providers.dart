@@ -4,6 +4,7 @@ import '../../../shared/providers/database_providers.dart';
 import '../../mcp/data/mcp_providers.dart';
 import '../domain/services/remote_command_session.dart';
 import '../domain/services/runbook_run_service.dart';
+import '../presentation/notifiers/snippets_notifier.dart';
 import 'repositories/run_history_repository.dart';
 import 'services/ssh_remote_command_session_factory.dart';
 
@@ -23,6 +24,10 @@ RemoteCommandSessionFactory remoteCommandSessionFactory(Ref ref) {
 RunbookRunService runbookRunService(Ref ref) {
   return RunbookRunService(
     sessionFactory: ref.watch(remoteCommandSessionFactoryProvider),
+    lookupSnippet: (id) async {
+      final all = await ref.read(snippetsRepositoryProvider).getAllSnippets();
+      return all.where((s) => s.id == id).firstOrNull?.code;
+    },
   );
 }
 

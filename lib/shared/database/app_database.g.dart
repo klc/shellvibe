@@ -13562,6 +13562,16 @@ class $RunbookRunStepsTable extends RunbookRunSteps
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+    'kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('command'),
+  );
   static const VerificationMeta _commandMeta = const VerificationMeta(
     'command',
   );
@@ -13656,6 +13666,7 @@ class $RunbookRunStepsTable extends RunbookRunSteps
     runHostId,
     stepId,
     stepOrder,
+    kind,
     command,
     status,
     exitCode,
@@ -13705,6 +13716,12 @@ class $RunbookRunStepsTable extends RunbookRunSteps
       );
     } else if (isInserting) {
       context.missing(_stepOrderMeta);
+    }
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
+      );
     }
     if (data.containsKey('command')) {
       context.handle(
@@ -13786,6 +13803,10 @@ class $RunbookRunStepsTable extends RunbookRunSteps
         DriftSqlType.int,
         data['${effectivePrefix}step_order'],
       )!,
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}kind'],
+      )!,
       command: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}command'],
@@ -13833,6 +13854,10 @@ class RunbookRunStep extends DataClass implements Insertable<RunbookRunStep> {
   final String stepId;
   final int stepOrder;
 
+  /// `command`, `snippet` or `approval`, so a stored approval still reads as
+  /// one. Local only, like the rest.
+  final String kind;
+
   /// The command as sent, after `${INPUT:...}` substitution.
   final String command;
   final String status;
@@ -13849,6 +13874,7 @@ class RunbookRunStep extends DataClass implements Insertable<RunbookRunStep> {
     required this.runHostId,
     required this.stepId,
     required this.stepOrder,
+    required this.kind,
     required this.command,
     required this.status,
     this.exitCode,
@@ -13865,6 +13891,7 @@ class RunbookRunStep extends DataClass implements Insertable<RunbookRunStep> {
     map['run_host_id'] = Variable<String>(runHostId);
     map['step_id'] = Variable<String>(stepId);
     map['step_order'] = Variable<int>(stepOrder);
+    map['kind'] = Variable<String>(kind);
     map['command'] = Variable<String>(command);
     map['status'] = Variable<String>(status);
     if (!nullToAbsent || exitCode != null) {
@@ -13888,6 +13915,7 @@ class RunbookRunStep extends DataClass implements Insertable<RunbookRunStep> {
       runHostId: Value(runHostId),
       stepId: Value(stepId),
       stepOrder: Value(stepOrder),
+      kind: Value(kind),
       command: Value(command),
       status: Value(status),
       exitCode: exitCode == null && nullToAbsent
@@ -13915,6 +13943,7 @@ class RunbookRunStep extends DataClass implements Insertable<RunbookRunStep> {
       runHostId: serializer.fromJson<String>(json['runHostId']),
       stepId: serializer.fromJson<String>(json['stepId']),
       stepOrder: serializer.fromJson<int>(json['stepOrder']),
+      kind: serializer.fromJson<String>(json['kind']),
       command: serializer.fromJson<String>(json['command']),
       status: serializer.fromJson<String>(json['status']),
       exitCode: serializer.fromJson<int?>(json['exitCode']),
@@ -13933,6 +13962,7 @@ class RunbookRunStep extends DataClass implements Insertable<RunbookRunStep> {
       'runHostId': serializer.toJson<String>(runHostId),
       'stepId': serializer.toJson<String>(stepId),
       'stepOrder': serializer.toJson<int>(stepOrder),
+      'kind': serializer.toJson<String>(kind),
       'command': serializer.toJson<String>(command),
       'status': serializer.toJson<String>(status),
       'exitCode': serializer.toJson<int?>(exitCode),
@@ -13949,6 +13979,7 @@ class RunbookRunStep extends DataClass implements Insertable<RunbookRunStep> {
     String? runHostId,
     String? stepId,
     int? stepOrder,
+    String? kind,
     String? command,
     String? status,
     Value<int?> exitCode = const Value.absent(),
@@ -13962,6 +13993,7 @@ class RunbookRunStep extends DataClass implements Insertable<RunbookRunStep> {
     runHostId: runHostId ?? this.runHostId,
     stepId: stepId ?? this.stepId,
     stepOrder: stepOrder ?? this.stepOrder,
+    kind: kind ?? this.kind,
     command: command ?? this.command,
     status: status ?? this.status,
     exitCode: exitCode.present ? exitCode.value : this.exitCode,
@@ -13977,6 +14009,7 @@ class RunbookRunStep extends DataClass implements Insertable<RunbookRunStep> {
       runHostId: data.runHostId.present ? data.runHostId.value : this.runHostId,
       stepId: data.stepId.present ? data.stepId.value : this.stepId,
       stepOrder: data.stepOrder.present ? data.stepOrder.value : this.stepOrder,
+      kind: data.kind.present ? data.kind.value : this.kind,
       command: data.command.present ? data.command.value : this.command,
       status: data.status.present ? data.status.value : this.status,
       exitCode: data.exitCode.present ? data.exitCode.value : this.exitCode,
@@ -13999,6 +14032,7 @@ class RunbookRunStep extends DataClass implements Insertable<RunbookRunStep> {
           ..write('runHostId: $runHostId, ')
           ..write('stepId: $stepId, ')
           ..write('stepOrder: $stepOrder, ')
+          ..write('kind: $kind, ')
           ..write('command: $command, ')
           ..write('status: $status, ')
           ..write('exitCode: $exitCode, ')
@@ -14017,6 +14051,7 @@ class RunbookRunStep extends DataClass implements Insertable<RunbookRunStep> {
     runHostId,
     stepId,
     stepOrder,
+    kind,
     command,
     status,
     exitCode,
@@ -14034,6 +14069,7 @@ class RunbookRunStep extends DataClass implements Insertable<RunbookRunStep> {
           other.runHostId == this.runHostId &&
           other.stepId == this.stepId &&
           other.stepOrder == this.stepOrder &&
+          other.kind == this.kind &&
           other.command == this.command &&
           other.status == this.status &&
           other.exitCode == this.exitCode &&
@@ -14049,6 +14085,7 @@ class RunbookRunStepsCompanion extends UpdateCompanion<RunbookRunStep> {
   final Value<String> runHostId;
   final Value<String> stepId;
   final Value<int> stepOrder;
+  final Value<String> kind;
   final Value<String> command;
   final Value<String> status;
   final Value<int?> exitCode;
@@ -14063,6 +14100,7 @@ class RunbookRunStepsCompanion extends UpdateCompanion<RunbookRunStep> {
     this.runHostId = const Value.absent(),
     this.stepId = const Value.absent(),
     this.stepOrder = const Value.absent(),
+    this.kind = const Value.absent(),
     this.command = const Value.absent(),
     this.status = const Value.absent(),
     this.exitCode = const Value.absent(),
@@ -14078,6 +14116,7 @@ class RunbookRunStepsCompanion extends UpdateCompanion<RunbookRunStep> {
     required String runHostId,
     required String stepId,
     required int stepOrder,
+    this.kind = const Value.absent(),
     required String command,
     required String status,
     this.exitCode = const Value.absent(),
@@ -14098,6 +14137,7 @@ class RunbookRunStepsCompanion extends UpdateCompanion<RunbookRunStep> {
     Expression<String>? runHostId,
     Expression<String>? stepId,
     Expression<int>? stepOrder,
+    Expression<String>? kind,
     Expression<String>? command,
     Expression<String>? status,
     Expression<int>? exitCode,
@@ -14113,6 +14153,7 @@ class RunbookRunStepsCompanion extends UpdateCompanion<RunbookRunStep> {
       if (runHostId != null) 'run_host_id': runHostId,
       if (stepId != null) 'step_id': stepId,
       if (stepOrder != null) 'step_order': stepOrder,
+      if (kind != null) 'kind': kind,
       if (command != null) 'command': command,
       if (status != null) 'status': status,
       if (exitCode != null) 'exit_code': exitCode,
@@ -14130,6 +14171,7 @@ class RunbookRunStepsCompanion extends UpdateCompanion<RunbookRunStep> {
     Value<String>? runHostId,
     Value<String>? stepId,
     Value<int>? stepOrder,
+    Value<String>? kind,
     Value<String>? command,
     Value<String>? status,
     Value<int?>? exitCode,
@@ -14145,6 +14187,7 @@ class RunbookRunStepsCompanion extends UpdateCompanion<RunbookRunStep> {
       runHostId: runHostId ?? this.runHostId,
       stepId: stepId ?? this.stepId,
       stepOrder: stepOrder ?? this.stepOrder,
+      kind: kind ?? this.kind,
       command: command ?? this.command,
       status: status ?? this.status,
       exitCode: exitCode ?? this.exitCode,
@@ -14171,6 +14214,9 @@ class RunbookRunStepsCompanion extends UpdateCompanion<RunbookRunStep> {
     }
     if (stepOrder.present) {
       map['step_order'] = Variable<int>(stepOrder.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
     }
     if (command.present) {
       map['command'] = Variable<String>(command.value);
@@ -14209,6 +14255,7 @@ class RunbookRunStepsCompanion extends UpdateCompanion<RunbookRunStep> {
           ..write('runHostId: $runHostId, ')
           ..write('stepId: $stepId, ')
           ..write('stepOrder: $stepOrder, ')
+          ..write('kind: $kind, ')
           ..write('command: $command, ')
           ..write('status: $status, ')
           ..write('exitCode: $exitCode, ')
@@ -27460,6 +27507,7 @@ typedef $$RunbookRunStepsTableCreateCompanionBuilder =
       required String runHostId,
       required String stepId,
       required int stepOrder,
+      Value<String> kind,
       required String command,
       required String status,
       Value<int?> exitCode,
@@ -27476,6 +27524,7 @@ typedef $$RunbookRunStepsTableUpdateCompanionBuilder =
       Value<String> runHostId,
       Value<String> stepId,
       Value<int> stepOrder,
+      Value<String> kind,
       Value<String> command,
       Value<String> status,
       Value<int?> exitCode,
@@ -27536,6 +27585,11 @@ class $$RunbookRunStepsTableFilterComposer
 
   ColumnFilters<int> get stepOrder => $composableBuilder(
     column: $table.stepOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get kind => $composableBuilder(
+    column: $table.kind,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -27627,6 +27681,11 @@ class $$RunbookRunStepsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get command => $composableBuilder(
     column: $table.command,
     builder: (column) => ColumnOrderings(column),
@@ -27708,6 +27767,9 @@ class $$RunbookRunStepsTableAnnotationComposer
 
   GeneratedColumn<int> get stepOrder =>
       $composableBuilder(column: $table.stepOrder, builder: (column) => column);
+
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
 
   GeneratedColumn<String> get command =>
       $composableBuilder(column: $table.command, builder: (column) => column);
@@ -27795,6 +27857,7 @@ class $$RunbookRunStepsTableTableManager
                 Value<String> runHostId = const Value.absent(),
                 Value<String> stepId = const Value.absent(),
                 Value<int> stepOrder = const Value.absent(),
+                Value<String> kind = const Value.absent(),
                 Value<String> command = const Value.absent(),
                 Value<String> status = const Value.absent(),
                 Value<int?> exitCode = const Value.absent(),
@@ -27809,6 +27872,7 @@ class $$RunbookRunStepsTableTableManager
                 runHostId: runHostId,
                 stepId: stepId,
                 stepOrder: stepOrder,
+                kind: kind,
                 command: command,
                 status: status,
                 exitCode: exitCode,
@@ -27825,6 +27889,7 @@ class $$RunbookRunStepsTableTableManager
                 required String runHostId,
                 required String stepId,
                 required int stepOrder,
+                Value<String> kind = const Value.absent(),
                 required String command,
                 required String status,
                 Value<int?> exitCode = const Value.absent(),
@@ -27839,6 +27904,7 @@ class $$RunbookRunStepsTableTableManager
                 runHostId: runHostId,
                 stepId: stepId,
                 stepOrder: stepOrder,
+                kind: kind,
                 command: command,
                 status: status,
                 exitCode: exitCode,

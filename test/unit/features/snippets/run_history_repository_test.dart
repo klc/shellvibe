@@ -292,6 +292,48 @@ void main() {
     expect(latest.keys, ['rb']);
     expect(latest['rb']!.id, newest);
   });
+
+  test('an approval step is stored as one: approved or stopped', () async {
+    const gate = RunbookStepModel(
+      id: 'g',
+      runbookId: 'rb',
+      stepOrder: 2,
+      command: 'Check the dashboards',
+      kind: StepKind.approval,
+    );
+    final book = runbook().copyWith(steps: [step1, gate]);
+    ActiveRun run(RunStepStatus gateStatus) => ActiveRun(
+      runbook: book,
+      running: false,
+      startedAt: DateTime(2026),
+      finishedAt: DateTime(2026),
+      hosts: [
+        HostRunState(
+          hostId: 'h1',
+          label: 'web-1',
+          status: gateStatus == RunStepStatus.success
+              ? RunHostStatus.succeeded
+              : RunHostStatus.cancelled,
+          steps: {'s1': RunStepStatus.success, 'g': gateStatus},
+          results: {'s1': result(step1)},
+        ),
+      ],
+    );
+
+    final approved = (await repo.load(
+      await repo.save(run(RunStepStatus.success)),
+    ))!;
+    final stopped = (await repo.load(
+      await repo.save(run(RunStepStatus.cancelled)),
+    ))!;
+    for (final stored in [approved, stopped]) {
+      final loaded = stored.run.runbook.steps.firstWhere((s) => s.id == 'g');
+      expect(loaded.kind, StepKind.approval);
+      expect(loaded.command, 'Check the dashboards');
+    }
+    expect(approved.run.hosts.single.steps['g'], RunStepStatus.success);
+    expect(stopped.run.hosts.single.steps['g'], RunStepStatus.cancelled);
+  });
 }
 
 /// A minimal runbook row, for the "deleted later" case.

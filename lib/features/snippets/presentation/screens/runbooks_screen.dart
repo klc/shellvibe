@@ -352,15 +352,19 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
 
     // Selecting the running runbook keeps its progress on screen.
     setState(() => _selectedRunbookId = runbook.id);
-    await ref
-        .read(runbookRunProvider.notifier)
-        .start(
-          runbook,
-          hosts,
-          variableValues: variableValues,
-          strategy: selection.strategy,
-        );
-    if (!mounted) return;
+    // The run view opens at once rather than when the run ends: a run can
+    // stop at an approval step, and the person who has to continue it needs to
+    // see that while it is waiting.
+    unawaited(
+      ref
+          .read(runbookRunProvider.notifier)
+          .start(
+            runbook,
+            hosts,
+            variableValues: variableValues,
+            strategy: selection.strategy,
+          ),
+    );
     await RunResultDialog.show(context);
   }
 }
@@ -736,10 +740,31 @@ class _RunbookStepTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  step.command,
-                  style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-                ),
+                if (step.kind == StepKind.approval)
+                  Row(
+                    children: [
+                      Icon(
+                        LucideIcons.userCheck,
+                        size: 13,
+                        color: tokens.warning,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Approval: ${step.command}',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  )
+                else
+                  Text(
+                    step.command,
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 12,
+                    ),
+                  ),
                 if (step.expectedOutputPattern != null) ...[
                   const SizedBox(height: 4),
                   ShellVibeStatusChip(
