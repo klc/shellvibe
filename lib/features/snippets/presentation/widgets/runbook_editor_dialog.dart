@@ -46,6 +46,7 @@ class _RunbookEditorDialogState extends ConsumerState<RunbookEditorDialog> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _titleController;
   late TextEditingController _descriptionController;
+  late TextEditingController _tagsController;
   final List<RunbookStepModel> _steps = [];
   List<VariableDeclaration> _declarations = const [];
 
@@ -79,6 +80,9 @@ class _RunbookEditorDialogState extends ConsumerState<RunbookEditorDialog> {
     _descriptionController = TextEditingController(
       text: widget.runbook?.description ?? '',
     );
+    _tagsController = TextEditingController(
+      text: widget.runbook?.tags.join(', ') ?? '',
+    );
     if (widget.runbook != null) {
       _steps.addAll(widget.runbook!.steps);
       _declarations = widget.runbook!.variables;
@@ -89,6 +93,7 @@ class _RunbookEditorDialogState extends ConsumerState<RunbookEditorDialog> {
   void dispose() {
     _titleController.dispose();
     _descriptionController.dispose();
+    _tagsController.dispose();
     super.dispose();
   }
 
@@ -209,7 +214,10 @@ class _RunbookEditorDialogState extends ConsumerState<RunbookEditorDialog> {
       createdAt: widget.runbook?.createdAt ?? DateTime.now(),
       // Not edited here: the target sheet owns the default hosts.
       defaultHostIds: widget.runbook?.defaultHostIds ?? const [],
-      tags: widget.runbook?.tags ?? const [],
+      tags: [
+        for (final tag in _tagsController.text.split(','))
+          if (tag.trim().isNotEmpty) tag.trim(),
+      ],
       // Only for placeholders still in a step.
       variables: VariablesEditor.declarationsToSave(
         _usedVariableNames(),
@@ -273,6 +281,13 @@ class _RunbookEditorDialogState extends ConsumerState<RunbookEditorDialog> {
                     key: const Key('runbook_desc_field'),
                     controller: _descriptionController,
                     label: const Text('Description (optional)'),
+                  ),
+                  const SizedBox(height: 12),
+                  ShadInputFormField(
+                    key: const Key('runbook_tags_field'),
+                    controller: _tagsController,
+                    label: const Text('Tags (comma separated)'),
+                    placeholder: const Text('ops, release, production'),
                   ),
                   const SizedBox(height: 16),
                   ShellVibeFormSectionHeader(

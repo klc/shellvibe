@@ -52,6 +52,9 @@ class RunbooksScreen extends ConsumerStatefulWidget {
   /// Lower-cased query owned by the shell's search field.
   final String searchQuery;
 
+  /// The tag the shell is filtering to, or null for every runbook.
+  final String? selectedTag;
+
   /// True when the viewport is too narrow for the context column.
   final bool compact;
 
@@ -63,6 +66,7 @@ class RunbooksScreen extends ConsumerStatefulWidget {
     this.workspaceId,
     this.header = const SizedBox.shrink(),
     this.searchQuery = '',
+    this.selectedTag,
     this.compact = true,
     this.showDetailDrawer = false,
   });
@@ -195,9 +199,16 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
   }
 
   List<RunbookModel> _visibleRunbooks(List<RunbookModel> runbooks) {
-    if (widget.searchQuery.isEmpty) return runbooks;
-    return runbooks.where((runbook) {
+    final tag = widget.selectedTag;
+    final tagged = tag == null
+        ? runbooks
+        : runbooks.where((r) => r.tags.contains(tag)).toList();
+    if (widget.searchQuery.isEmpty) return tagged;
+    return tagged.where((runbook) {
       return runbook.title.toLowerCase().contains(widget.searchQuery) ||
+          runbook.tags.any(
+            (t) => t.toLowerCase().contains(widget.searchQuery),
+          ) ||
           (runbook.description ?? '').toLowerCase().contains(
             widget.searchQuery,
           ) ||
@@ -662,6 +673,17 @@ class _RunbookDetailPanel extends ConsumerWidget {
             ),
           ],
         ),
+        if (runbook.tags.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 4,
+            runSpacing: 4,
+            children: [
+              for (final tag in runbook.tags)
+                ShellVibeStatusChip(label: '#$tag'),
+            ],
+          ),
+        ],
         const SizedBox(height: 6),
         ShellVibeStatusChip(
           label: isExecuting ? 'running' : 'idle',

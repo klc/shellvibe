@@ -10,6 +10,7 @@ import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../../../shared/providers/workspace_provider.dart';
 import '../../../settings/presentation/notifiers/settings_notifier.dart';
 import '../../../terminal/presentation/notifiers/terminal_tabs_notifier.dart';
+import '../../domain/models/runbook_model.dart';
 import '../../domain/models/snippet_model.dart';
 import '../../domain/services/runbook_run_service.dart';
 import '../../domain/services/snippet_variable_parser.dart';
@@ -105,7 +106,8 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
   Widget _buildContextColumn(BuildContext context) {
     final snippets =
         ref.watch(snippetsProvider).value ?? const <SnippetModel>[];
-    final runbookCount = ref.watch(runbooksProvider).value?.length ?? 0;
+    final runbooks =
+        ref.watch(runbooksProvider).value ?? const <RunbookModel>[];
 
     return ShellVibeContextColumn(
       head: _SectionSwitcher(section: _section, onChanged: _selectSection),
@@ -132,14 +134,24 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
             ),
         ],
         AutomationSection.runbooks => [
-          const ShellVibeSectionLabel(label: 'Library'),
+          const ShellVibeSectionLabel(label: 'Tags'),
           ShellVibeNavItem(
             itemKey: const Key('runbooks_filter_all'),
             icon: LucideIcons.listChecks,
             label: 'All runbooks',
-            count: runbookCount,
-            selected: true,
+            count: runbooks.length,
+            selected: _selectedTag == null,
+            onTap: () => setState(() => _selectedTag = null),
           ),
+          for (final tag in _tagsOf(runbooks.map((r) => r.tags)))
+            ShellVibeNavItem(
+              itemKey: Key('runbooks_filter_$tag'),
+              icon: LucideIcons.hash,
+              label: tag,
+              count: runbooks.where((r) => r.tags.contains(tag)).length,
+              selected: _selectedTag == tag,
+              onTap: () => setState(() => _selectedTag = tag),
+            ),
         ],
       },
     );
@@ -254,6 +266,7 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
         workspaceId: _workspaceId,
         header: header,
         searchQuery: _searchQuery,
+        selectedTag: _selectedTag,
         compact: !showContextColumn,
         showDetailDrawer: showDetailDrawer,
       ),
@@ -267,7 +280,14 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
     final tokens = ShellVibeTokens.resolve(context);
     final tags = _section == AutomationSection.snippets
         ? _allTags(snippets)
-        : const <String>[];
+        : _tagsOf(
+            (ref.watch(runbooksProvider).value ?? const <RunbookModel>[]).map(
+              (r) => r.tags,
+            ),
+          );
+    final chipPrefix = _section == AutomationSection.snippets
+        ? 'snippets'
+        : 'runbooks';
 
     return Container(
       padding: EdgeInsets.fromLTRB(
@@ -307,7 +327,7 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
                   ),
                   for (final tag in tags)
                     _FilterChip(
-                      chipKey: Key('snippets_chip_$tag'),
+                      chipKey: Key('${chipPrefix}_chip_$tag'),
                       label: '#$tag',
                       selected: _selectedTag == tag,
                       onTap: () => setState(() => _selectedTag = tag),
@@ -471,13 +491,13 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
 
   // ── data helpers ────────────────────────────────────────────────────────
 
-  List<String> _allTags(List<SnippetModel> snippets) {
-    final tags = <String>{};
-    for (final snippet in snippets) {
-      tags.addAll(snippet.tags);
-    }
-    final sorted = tags.toList()..sort();
-    return sorted;
+  List<String> _allTags(List<SnippetModel> snippets) =>
+      _tagsOf(snippets.map((s) => s.tags));
+
+  /// The distinct tags across [tagLists], sorted.
+  List<String> _tagsOf(Iterable<List<String>> tagLists) {
+    final tags = <String>{for (final list in tagLists) ...list};
+    return tags.toList()..sort();
   }
 
   List<SnippetModel> _visibleSnippets(List<SnippetModel> snippets) {
