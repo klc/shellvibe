@@ -1,3 +1,5 @@
+import 'package:uuid/uuid.dart';
+
 import '../services/runbook_executor.dart';
 import '../services/runbook_run_service.dart';
 import 'run_strategy.dart';
@@ -52,10 +54,21 @@ class HostRunState {
   );
 }
 
+/// Who started a run when it was not the person at the keyboard: an MCP agent.
+class RunTrigger {
+  final String clientId;
+  final String clientName;
+
+  const RunTrigger({required this.clientId, required this.clientName});
+}
+
 /// A run on screen: a runbook (or a snippet wrapped as one) across its hosts.
 /// Also the shape a stored run is read back into, so the live view and the
 /// history view are one widget over one model.
 class ActiveRun {
+  /// Names the run to whoever asks about it later: it is also the id of its
+  /// history row, so a settled run is found by the same handle.
+  final String id;
   final RunbookModel runbook;
 
   /// True while any host may still change; false once the run has settled.
@@ -74,7 +87,11 @@ class ActiveRun {
   /// Set for a run read back from history; there is nothing to stop or retry.
   final bool fromHistory;
 
-  const ActiveRun({
+  /// The MCP client that started this run, or null for one started in the UI.
+  final RunTrigger? triggeredBy;
+
+  ActiveRun({
+    String? id,
     required this.runbook,
     required this.running,
     this.cancelling = false,
@@ -84,7 +101,8 @@ class ActiveRun {
     required this.startedAt,
     this.finishedAt,
     this.fromHistory = false,
-  });
+    this.triggeredBy,
+  }) : id = id ?? const Uuid().v4();
 
   int _count(RunHostStatus status) =>
       hosts.where((h) => h.status == status).length;
@@ -119,6 +137,8 @@ class ActiveRun {
     List<HostRunState>? hosts,
     DateTime? finishedAt,
   }) => ActiveRun(
+    id: id,
+    triggeredBy: triggeredBy,
     runbook: runbook,
     running: running ?? this.running,
     cancelling: cancelling ?? this.cancelling,

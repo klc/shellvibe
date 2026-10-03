@@ -80,7 +80,7 @@ void main() {
 
       final appDb = AppDatabase(NativeDatabase(dbFile));
       db = appDb;
-      expect(appDb.schemaVersion, 18);
+      expect(appDb.schemaVersion, 19);
 
       final snippet = (await appDb.select(appDb.snippets).get()).single;
       expect(snippet.variables, isNull);
@@ -379,4 +379,40 @@ void main() {
       expect(back.firstWhere((s) => s.id == 's2').snippetId, 'sn');
     });
   });
+
+  test(
+    'v18 to v19 adds the MCP trigger columns, null on existing runs',
+    () async {
+      final dir = Directory.systemTemp.createTempSync('v19_migration');
+      final file = File('${dir.path}/v18.db');
+      final raw = sqlite3.open(file.path);
+      raw.execute('''
+      CREATE TABLE "workspaces" (
+        "id" TEXT NOT NULL PRIMARY KEY, "name" TEXT NOT NULL,
+        "color_code" TEXT NULL, "created_at" INTEGER NOT NULL);
+      CREATE TABLE "runbook_runs" (
+        "id" TEXT NOT NULL PRIMARY KEY, "workspace_id" TEXT NOT NULL,
+        "runbook_id" TEXT NULL, "snippet_id" TEXT NULL,
+        "kind" TEXT NOT NULL, "title" TEXT NOT NULL,
+        "strategy" TEXT NOT NULL, "started_at" INTEGER NOT NULL,
+        "finished_at" INTEGER NOT NULL, "status" TEXT NOT NULL,
+        "variable_values" TEXT NOT NULL DEFAULT '[]');
+      INSERT INTO workspaces VALUES ('default', 'Default', NULL, 1);
+      INSERT INTO runbook_runs (id, workspace_id, kind, title, strategy,
+        started_at, finished_at, status)
+        VALUES ('r', 'default', 'runbook', 'T', 'rolling', 1, 2, 'succeeded');
+      PRAGMA user_version = 18;
+    ''');
+      raw.close();
+
+      final appDb = AppDatabase(NativeDatabase(file));
+      addTearDown(() async {
+        await appDb.close();
+        dir.deleteSync(recursive: true);
+      });
+      final run = (await appDb.select(appDb.runbookRuns).get()).single;
+      expect(run.triggeredByClientId, isNull);
+      expect(run.triggeredByClientName, isNull);
+    },
+  );
 }

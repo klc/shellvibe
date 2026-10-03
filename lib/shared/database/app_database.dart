@@ -116,7 +116,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 18;
+  int get schemaVersion => 19;
 
   @override
   MigrationStrategy get migration {
@@ -313,6 +313,16 @@ class AppDatabase extends _$AppDatabase {
           }
           if (await _needsColumn(runbookRunSteps.actualTableName, 'kind')) {
             await m.addColumn(runbookRunSteps, runbookRunSteps.kind);
+          }
+        }
+        if (from < 19) {
+          // Runs an MCP agent started remember which one. Local history only.
+          if (await _needsColumn(
+            runbookRuns.actualTableName,
+            'triggered_by_client_id',
+          )) {
+            await m.addColumn(runbookRuns, runbookRuns.triggeredByClientId);
+            await m.addColumn(runbookRuns, runbookRuns.triggeredByClientName);
           }
         }
       },

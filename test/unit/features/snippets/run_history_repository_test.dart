@@ -334,6 +334,36 @@ void main() {
     expect(approved.run.hosts.single.steps['g'], RunStepStatus.success);
     expect(stopped.run.hosts.single.steps['g'], RunStepStatus.cancelled);
   });
+
+  test(
+    'the run id is the history key, and an MCP trigger is remembered',
+    () async {
+      const trigger = RunTrigger(clientId: 'c1', clientName: 'Claude Code');
+      final mcpRun = ActiveRun(
+        id: 'fixed-id',
+        triggeredBy: trigger,
+        runbook: runbook(),
+        running: false,
+        startedAt: DateTime(2026),
+        finishedAt: DateTime(2026),
+        hosts: const [],
+      );
+      final id = await repo.save(mcpRun);
+      expect(id, 'fixed-id');
+
+      final stored = (await repo.load('fixed-id'))!;
+      expect(stored.run.id, 'fixed-id');
+      expect(stored.run.triggeredBy!.clientId, 'c1');
+      expect(stored.run.triggeredBy!.clientName, 'Claude Code');
+      expect(stored.summary.triggeredByName, 'Claude Code');
+      expect(stored.summary.triggeredByClientId, 'c1');
+
+      // A run started in the app has none.
+      final local = (await repo.load(await repo.save(run())))!;
+      expect(local.run.triggeredBy, isNull);
+      expect(local.summary.triggeredByName, isNull);
+    },
+  );
 }
 
 /// A minimal runbook row, for the "deleted later" case.

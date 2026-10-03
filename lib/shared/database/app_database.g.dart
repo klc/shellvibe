@@ -12424,6 +12424,28 @@ class $RunbookRunsTable extends RunbookRuns
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _triggeredByClientIdMeta =
+      const VerificationMeta('triggeredByClientId');
+  @override
+  late final GeneratedColumn<String> triggeredByClientId =
+      GeneratedColumn<String>(
+        'triggered_by_client_id',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _triggeredByClientNameMeta =
+      const VerificationMeta('triggeredByClientName');
+  @override
+  late final GeneratedColumn<String> triggeredByClientName =
+      GeneratedColumn<String>(
+        'triggered_by_client_name',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _snippetIdMeta = const VerificationMeta(
     'snippetId',
   );
@@ -12504,6 +12526,8 @@ class $RunbookRunsTable extends RunbookRuns
     workspaceId,
     runbookId,
     kind,
+    triggeredByClientId,
+    triggeredByClientName,
     snippetId,
     title,
     strategy,
@@ -12553,6 +12577,24 @@ class $RunbookRunsTable extends RunbookRuns
       );
     } else if (isInserting) {
       context.missing(_kindMeta);
+    }
+    if (data.containsKey('triggered_by_client_id')) {
+      context.handle(
+        _triggeredByClientIdMeta,
+        triggeredByClientId.isAcceptableOrUnknown(
+          data['triggered_by_client_id']!,
+          _triggeredByClientIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('triggered_by_client_name')) {
+      context.handle(
+        _triggeredByClientNameMeta,
+        triggeredByClientName.isAcceptableOrUnknown(
+          data['triggered_by_client_name']!,
+          _triggeredByClientNameMeta,
+        ),
+      );
     }
     if (data.containsKey('snippet_id')) {
       context.handle(
@@ -12634,6 +12676,14 @@ class $RunbookRunsTable extends RunbookRuns
         DriftSqlType.string,
         data['${effectivePrefix}kind'],
       )!,
+      triggeredByClientId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}triggered_by_client_id'],
+      ),
+      triggeredByClientName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}triggered_by_client_name'],
+      ),
       snippetId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}snippet_id'],
@@ -12682,6 +12732,13 @@ class RunbookRun extends DataClass implements Insertable<RunbookRun> {
   /// `runbook` or `snippet`.
   final String kind;
 
+  /// The MCP client that started this run, when one did: its id (to scope what
+  /// a client can read back) and its name as it was then, so the history still
+  /// says "via Claude Code" after the client is revoked. Null for runs started
+  /// in the app. Local only, like the rest of the table.
+  final String? triggeredByClientId;
+  final String? triggeredByClientName;
+
   /// The snippet a snippet run was of, so a snippet can list its own runs. Null
   /// for a runbook run and for rows from before v18. Plain text: the snippet
   /// may be deleted later.
@@ -12706,6 +12763,8 @@ class RunbookRun extends DataClass implements Insertable<RunbookRun> {
     required this.workspaceId,
     this.runbookId,
     required this.kind,
+    this.triggeredByClientId,
+    this.triggeredByClientName,
     this.snippetId,
     required this.title,
     required this.strategy,
@@ -12723,6 +12782,12 @@ class RunbookRun extends DataClass implements Insertable<RunbookRun> {
       map['runbook_id'] = Variable<String>(runbookId);
     }
     map['kind'] = Variable<String>(kind);
+    if (!nullToAbsent || triggeredByClientId != null) {
+      map['triggered_by_client_id'] = Variable<String>(triggeredByClientId);
+    }
+    if (!nullToAbsent || triggeredByClientName != null) {
+      map['triggered_by_client_name'] = Variable<String>(triggeredByClientName);
+    }
     if (!nullToAbsent || snippetId != null) {
       map['snippet_id'] = Variable<String>(snippetId);
     }
@@ -12743,6 +12808,12 @@ class RunbookRun extends DataClass implements Insertable<RunbookRun> {
           ? const Value.absent()
           : Value(runbookId),
       kind: Value(kind),
+      triggeredByClientId: triggeredByClientId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(triggeredByClientId),
+      triggeredByClientName: triggeredByClientName == null && nullToAbsent
+          ? const Value.absent()
+          : Value(triggeredByClientName),
       snippetId: snippetId == null && nullToAbsent
           ? const Value.absent()
           : Value(snippetId),
@@ -12765,6 +12836,12 @@ class RunbookRun extends DataClass implements Insertable<RunbookRun> {
       workspaceId: serializer.fromJson<String>(json['workspaceId']),
       runbookId: serializer.fromJson<String?>(json['runbookId']),
       kind: serializer.fromJson<String>(json['kind']),
+      triggeredByClientId: serializer.fromJson<String?>(
+        json['triggeredByClientId'],
+      ),
+      triggeredByClientName: serializer.fromJson<String?>(
+        json['triggeredByClientName'],
+      ),
       snippetId: serializer.fromJson<String?>(json['snippetId']),
       title: serializer.fromJson<String>(json['title']),
       strategy: serializer.fromJson<String>(json['strategy']),
@@ -12782,6 +12859,10 @@ class RunbookRun extends DataClass implements Insertable<RunbookRun> {
       'workspaceId': serializer.toJson<String>(workspaceId),
       'runbookId': serializer.toJson<String?>(runbookId),
       'kind': serializer.toJson<String>(kind),
+      'triggeredByClientId': serializer.toJson<String?>(triggeredByClientId),
+      'triggeredByClientName': serializer.toJson<String?>(
+        triggeredByClientName,
+      ),
       'snippetId': serializer.toJson<String?>(snippetId),
       'title': serializer.toJson<String>(title),
       'strategy': serializer.toJson<String>(strategy),
@@ -12797,6 +12878,8 @@ class RunbookRun extends DataClass implements Insertable<RunbookRun> {
     String? workspaceId,
     Value<String?> runbookId = const Value.absent(),
     String? kind,
+    Value<String?> triggeredByClientId = const Value.absent(),
+    Value<String?> triggeredByClientName = const Value.absent(),
     Value<String?> snippetId = const Value.absent(),
     String? title,
     String? strategy,
@@ -12809,6 +12892,12 @@ class RunbookRun extends DataClass implements Insertable<RunbookRun> {
     workspaceId: workspaceId ?? this.workspaceId,
     runbookId: runbookId.present ? runbookId.value : this.runbookId,
     kind: kind ?? this.kind,
+    triggeredByClientId: triggeredByClientId.present
+        ? triggeredByClientId.value
+        : this.triggeredByClientId,
+    triggeredByClientName: triggeredByClientName.present
+        ? triggeredByClientName.value
+        : this.triggeredByClientName,
     snippetId: snippetId.present ? snippetId.value : this.snippetId,
     title: title ?? this.title,
     strategy: strategy ?? this.strategy,
@@ -12825,6 +12914,12 @@ class RunbookRun extends DataClass implements Insertable<RunbookRun> {
           : this.workspaceId,
       runbookId: data.runbookId.present ? data.runbookId.value : this.runbookId,
       kind: data.kind.present ? data.kind.value : this.kind,
+      triggeredByClientId: data.triggeredByClientId.present
+          ? data.triggeredByClientId.value
+          : this.triggeredByClientId,
+      triggeredByClientName: data.triggeredByClientName.present
+          ? data.triggeredByClientName.value
+          : this.triggeredByClientName,
       snippetId: data.snippetId.present ? data.snippetId.value : this.snippetId,
       title: data.title.present ? data.title.value : this.title,
       strategy: data.strategy.present ? data.strategy.value : this.strategy,
@@ -12846,6 +12941,8 @@ class RunbookRun extends DataClass implements Insertable<RunbookRun> {
           ..write('workspaceId: $workspaceId, ')
           ..write('runbookId: $runbookId, ')
           ..write('kind: $kind, ')
+          ..write('triggeredByClientId: $triggeredByClientId, ')
+          ..write('triggeredByClientName: $triggeredByClientName, ')
           ..write('snippetId: $snippetId, ')
           ..write('title: $title, ')
           ..write('strategy: $strategy, ')
@@ -12863,6 +12960,8 @@ class RunbookRun extends DataClass implements Insertable<RunbookRun> {
     workspaceId,
     runbookId,
     kind,
+    triggeredByClientId,
+    triggeredByClientName,
     snippetId,
     title,
     strategy,
@@ -12879,6 +12978,8 @@ class RunbookRun extends DataClass implements Insertable<RunbookRun> {
           other.workspaceId == this.workspaceId &&
           other.runbookId == this.runbookId &&
           other.kind == this.kind &&
+          other.triggeredByClientId == this.triggeredByClientId &&
+          other.triggeredByClientName == this.triggeredByClientName &&
           other.snippetId == this.snippetId &&
           other.title == this.title &&
           other.strategy == this.strategy &&
@@ -12893,6 +12994,8 @@ class RunbookRunsCompanion extends UpdateCompanion<RunbookRun> {
   final Value<String> workspaceId;
   final Value<String?> runbookId;
   final Value<String> kind;
+  final Value<String?> triggeredByClientId;
+  final Value<String?> triggeredByClientName;
   final Value<String?> snippetId;
   final Value<String> title;
   final Value<String> strategy;
@@ -12906,6 +13009,8 @@ class RunbookRunsCompanion extends UpdateCompanion<RunbookRun> {
     this.workspaceId = const Value.absent(),
     this.runbookId = const Value.absent(),
     this.kind = const Value.absent(),
+    this.triggeredByClientId = const Value.absent(),
+    this.triggeredByClientName = const Value.absent(),
     this.snippetId = const Value.absent(),
     this.title = const Value.absent(),
     this.strategy = const Value.absent(),
@@ -12920,6 +13025,8 @@ class RunbookRunsCompanion extends UpdateCompanion<RunbookRun> {
     required String workspaceId,
     this.runbookId = const Value.absent(),
     required String kind,
+    this.triggeredByClientId = const Value.absent(),
+    this.triggeredByClientName = const Value.absent(),
     this.snippetId = const Value.absent(),
     required String title,
     required String strategy,
@@ -12941,6 +13048,8 @@ class RunbookRunsCompanion extends UpdateCompanion<RunbookRun> {
     Expression<String>? workspaceId,
     Expression<String>? runbookId,
     Expression<String>? kind,
+    Expression<String>? triggeredByClientId,
+    Expression<String>? triggeredByClientName,
     Expression<String>? snippetId,
     Expression<String>? title,
     Expression<String>? strategy,
@@ -12955,6 +13064,10 @@ class RunbookRunsCompanion extends UpdateCompanion<RunbookRun> {
       if (workspaceId != null) 'workspace_id': workspaceId,
       if (runbookId != null) 'runbook_id': runbookId,
       if (kind != null) 'kind': kind,
+      if (triggeredByClientId != null)
+        'triggered_by_client_id': triggeredByClientId,
+      if (triggeredByClientName != null)
+        'triggered_by_client_name': triggeredByClientName,
       if (snippetId != null) 'snippet_id': snippetId,
       if (title != null) 'title': title,
       if (strategy != null) 'strategy': strategy,
@@ -12971,6 +13084,8 @@ class RunbookRunsCompanion extends UpdateCompanion<RunbookRun> {
     Value<String>? workspaceId,
     Value<String?>? runbookId,
     Value<String>? kind,
+    Value<String?>? triggeredByClientId,
+    Value<String?>? triggeredByClientName,
     Value<String?>? snippetId,
     Value<String>? title,
     Value<String>? strategy,
@@ -12985,6 +13100,9 @@ class RunbookRunsCompanion extends UpdateCompanion<RunbookRun> {
       workspaceId: workspaceId ?? this.workspaceId,
       runbookId: runbookId ?? this.runbookId,
       kind: kind ?? this.kind,
+      triggeredByClientId: triggeredByClientId ?? this.triggeredByClientId,
+      triggeredByClientName:
+          triggeredByClientName ?? this.triggeredByClientName,
       snippetId: snippetId ?? this.snippetId,
       title: title ?? this.title,
       strategy: strategy ?? this.strategy,
@@ -13010,6 +13128,16 @@ class RunbookRunsCompanion extends UpdateCompanion<RunbookRun> {
     }
     if (kind.present) {
       map['kind'] = Variable<String>(kind.value);
+    }
+    if (triggeredByClientId.present) {
+      map['triggered_by_client_id'] = Variable<String>(
+        triggeredByClientId.value,
+      );
+    }
+    if (triggeredByClientName.present) {
+      map['triggered_by_client_name'] = Variable<String>(
+        triggeredByClientName.value,
+      );
     }
     if (snippetId.present) {
       map['snippet_id'] = Variable<String>(snippetId.value);
@@ -13045,6 +13173,8 @@ class RunbookRunsCompanion extends UpdateCompanion<RunbookRun> {
           ..write('workspaceId: $workspaceId, ')
           ..write('runbookId: $runbookId, ')
           ..write('kind: $kind, ')
+          ..write('triggeredByClientId: $triggeredByClientId, ')
+          ..write('triggeredByClientName: $triggeredByClientName, ')
           ..write('snippetId: $snippetId, ')
           ..write('title: $title, ')
           ..write('strategy: $strategy, ')
@@ -26516,6 +26646,8 @@ typedef $$RunbookRunsTableCreateCompanionBuilder =
       required String workspaceId,
       Value<String?> runbookId,
       required String kind,
+      Value<String?> triggeredByClientId,
+      Value<String?> triggeredByClientName,
       Value<String?> snippetId,
       required String title,
       required String strategy,
@@ -26531,6 +26663,8 @@ typedef $$RunbookRunsTableUpdateCompanionBuilder =
       Value<String> workspaceId,
       Value<String?> runbookId,
       Value<String> kind,
+      Value<String?> triggeredByClientId,
+      Value<String?> triggeredByClientName,
       Value<String?> snippetId,
       Value<String> title,
       Value<String> strategy,
@@ -26604,6 +26738,16 @@ class $$RunbookRunsTableFilterComposer
 
   ColumnFilters<String> get kind => $composableBuilder(
     column: $table.kind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get triggeredByClientId => $composableBuilder(
+    column: $table.triggeredByClientId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get triggeredByClientName => $composableBuilder(
+    column: $table.triggeredByClientName,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -26715,6 +26859,16 @@ class $$RunbookRunsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get triggeredByClientId => $composableBuilder(
+    column: $table.triggeredByClientId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get triggeredByClientName => $composableBuilder(
+    column: $table.triggeredByClientName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get snippetId => $composableBuilder(
     column: $table.snippetId,
     builder: (column) => ColumnOrderings(column),
@@ -26791,6 +26945,16 @@ class $$RunbookRunsTableAnnotationComposer
 
   GeneratedColumn<String> get kind =>
       $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<String> get triggeredByClientId => $composableBuilder(
+    column: $table.triggeredByClientId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get triggeredByClientName => $composableBuilder(
+    column: $table.triggeredByClientName,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get snippetId =>
       $composableBuilder(column: $table.snippetId, builder: (column) => column);
@@ -26898,6 +27062,8 @@ class $$RunbookRunsTableTableManager
                 Value<String> workspaceId = const Value.absent(),
                 Value<String?> runbookId = const Value.absent(),
                 Value<String> kind = const Value.absent(),
+                Value<String?> triggeredByClientId = const Value.absent(),
+                Value<String?> triggeredByClientName = const Value.absent(),
                 Value<String?> snippetId = const Value.absent(),
                 Value<String> title = const Value.absent(),
                 Value<String> strategy = const Value.absent(),
@@ -26911,6 +27077,8 @@ class $$RunbookRunsTableTableManager
                 workspaceId: workspaceId,
                 runbookId: runbookId,
                 kind: kind,
+                triggeredByClientId: triggeredByClientId,
+                triggeredByClientName: triggeredByClientName,
                 snippetId: snippetId,
                 title: title,
                 strategy: strategy,
@@ -26926,6 +27094,8 @@ class $$RunbookRunsTableTableManager
                 required String workspaceId,
                 Value<String?> runbookId = const Value.absent(),
                 required String kind,
+                Value<String?> triggeredByClientId = const Value.absent(),
+                Value<String?> triggeredByClientName = const Value.absent(),
                 Value<String?> snippetId = const Value.absent(),
                 required String title,
                 required String strategy,
@@ -26939,6 +27109,8 @@ class $$RunbookRunsTableTableManager
                 workspaceId: workspaceId,
                 runbookId: runbookId,
                 kind: kind,
+                triggeredByClientId: triggeredByClientId,
+                triggeredByClientName: triggeredByClientName,
                 snippetId: snippetId,
                 title: title,
                 strategy: strategy,

@@ -78,7 +78,7 @@ final class RunbookRunNotifierProvider
 }
 
 String _$runbookRunNotifierHash() =>
-    r'31ce033f26a47b10519a0f4cfb7ae3ee08907614';
+    r'90a1f909c50c682ee4f0dd4233c32f7ac1cb65c3';
 
 /// Holds the run the Automation library is showing, so progress and Stop
 /// outlive the widget that started it.

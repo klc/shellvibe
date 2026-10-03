@@ -46,9 +46,13 @@ class RunbookRunNotifier extends _$RunbookRunNotifier {
     List<HostModel> hosts, {
     Map<String, String> variableValues = const {},
     RunStrategy strategy = RunStrategy.defaultParallel,
+    RunTrigger? triggeredBy,
+    String? runId,
   }) async {
     if (isRunning) return;
     state = ActiveRun(
+      id: runId,
+      triggeredBy: triggeredBy,
       runbook: runbook,
       running: true,
       strategy: strategy,

@@ -89,7 +89,7 @@ void main() {
         final appDb = AppDatabase(NativeDatabase(tempDbFile));
         db = appDb;
 
-        expect(appDb.schemaVersion, equals(18));
+        expect(appDb.schemaVersion, equals(19));
 
         // The v10 tables have to exist after a migration, not only after a
         // fresh create: a device that upgrades and then makes a change would
@@ -546,7 +546,7 @@ void main() {
       final appDb = AppDatabase(NativeDatabase(tempDbFile));
       db = appDb;
 
-      expect(appDb.schemaVersion, equals(18));
+      expect(appDb.schemaVersion, equals(19));
       expect(await appDb.vaultEnvVarsDao.getByWorkspace('default'), isEmpty);
 
       await appDb.vaultEnvVarsDao.insert(
@@ -609,7 +609,7 @@ void main() {
         final appDb = AppDatabase(NativeDatabase(tempDbFile));
         db = appDb;
 
-        expect(appDb.schemaVersion, equals(18));
+        expect(appDb.schemaVersion, equals(19));
 
         // The id is the deterministic one sync uses, so another device that
         // migrates the same data produces the same row.

@@ -257,6 +257,13 @@ class RunbookRuns extends Table {
   /// `runbook` or `snippet`.
   TextColumn get kind => text()();
 
+  /// The MCP client that started this run, when one did: its id (to scope what
+  /// a client can read back) and its name as it was then, so the history still
+  /// says "via Claude Code" after the client is revoked. Null for runs started
+  /// in the app. Local only, like the rest of the table.
+  TextColumn get triggeredByClientId => text().nullable()();
+  TextColumn get triggeredByClientName => text().nullable()();
+
   /// The snippet a snippet run was of, so a snippet can list its own runs. Null
   /// for a runbook run and for rows from before v18. Plain text: the snippet
   /// may be deleted later.

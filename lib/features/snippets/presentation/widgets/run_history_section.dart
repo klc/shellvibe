@@ -108,7 +108,8 @@ class _HistoryList extends ConsumerWidget {
                         ),
                         Text(
                           '${relativeTime(run.startedAt, DateTime.now())} · '
-                          '${run.strategy.label}',
+                          '${run.strategy.label}'
+                          '${run.triggeredByName == null ? '' : ' · via ${run.triggeredByName}'}',
                           style: TextStyle(
                             fontSize: 11,
                             color: tokens.textMuted,

@@ -19,6 +19,10 @@ class RunHistorySummary {
 
   /// Set for a snippet run: which snippet it was of.
   final String? snippetId;
+
+  /// The MCP client that started the run, if one did.
+  final String? triggeredByClientId;
+  final String? triggeredByName;
   final String kind;
   final String title;
   final RunStrategy strategy;
@@ -34,6 +38,8 @@ class RunHistorySummary {
     required this.id,
     required this.runbookId,
     required this.snippetId,
+    this.triggeredByClientId,
+    this.triggeredByName,
     required this.kind,
     required this.title,
     required this.strategy,
@@ -85,7 +91,8 @@ class RunHistoryRepository {
 
   /// Stores a settled [run]. Prunes to the retention limits as it inserts.
   Future<String> save(ActiveRun run) async {
-    final runId = _uuid.v4();
+    // The run's own id: the handle an MCP client was given is the history key.
+    final runId = run.id;
     final isSnippet = RunbookRunService.isSnippetRunbook(run.runbook);
     final steps = List<RunbookStepModel>.from(run.runbook.steps)
       ..sort((a, b) => a.stepOrder.compareTo(b.stepOrder));
@@ -157,6 +164,8 @@ class RunHistoryRepository {
         startedAt: run.startedAt,
         finishedAt: run.finishedAt ?? DateTime.now(),
         status: run.outcome,
+        triggeredByClientId: Value(run.triggeredBy?.clientId),
+        triggeredByClientName: Value(run.triggeredBy?.clientName),
         variableValues: Value(
           jsonEncode(run.variableValues.keys.toList()..sort()),
         ),
@@ -231,6 +240,8 @@ class RunHistoryRepository {
         id: row.id,
         runbookId: row.runbookId,
         snippetId: row.snippetId,
+        triggeredByClientId: row.triggeredByClientId,
+        triggeredByName: row.triggeredByClientName,
         kind: row.kind,
         title: row.title,
         strategy: RunStrategy.parse(row.strategy),
@@ -316,6 +327,13 @@ class RunHistoryRepository {
       summary: _summary(row, hostRows),
       hostIds: [for (final h in hostRows) h.hostId],
       run: ActiveRun(
+        id: row.id,
+        triggeredBy: row.triggeredByClientId == null
+            ? null
+            : RunTrigger(
+                clientId: row.triggeredByClientId!,
+                clientName: row.triggeredByClientName ?? 'an AI agent',
+              ),
         runbook: runbook,
         running: false,
         hosts: hosts,
