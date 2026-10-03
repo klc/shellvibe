@@ -188,19 +188,25 @@ jobs:
     env:
       APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
       IOS_DISTRIBUTION_P12: ${{ secrets.IOS_DISTRIBUTION_P12 }}
+      IOS_PROVISIONING_PROFILE: ${{ secrets.IOS_PROVISIONING_PROFILE }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
 
-      - name: Require the App Store Connect key
+      - name: Require the signing material
         shell: bash
         run: |
-          # The key signs in to the developer account for automatic signing
-          # and authenticates the upload; without it there is nothing to run.
-          if [[ -z "$APPLE_API_KEY" ]]; then
-            echo 'APPLE_API_KEY is not set; see docs/RELEASING.md.' >&2
-            exit 1
-          fi
+          # The export signs manually with the distribution certificate and
+          # the App Store profile; the key authenticates the upload. Without
+          # any one of them there is nothing to run.
+          missing=0
+          for name in APPLE_API_KEY IOS_DISTRIBUTION_P12 IOS_PROVISIONING_PROFILE; do
+            if [[ -z "${!name}" ]]; then
+              echo "$name is not set; see docs/RELEASING.md." >&2
+              missing=1
+            fi
+          done
+          exit "$missing"
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -214,9 +220,6 @@ jobs:
         run: flutter pub get
 
       - name: Import the Apple Distribution certificate
-        # Optional. With an Admin key Xcode can use a cloud-managed distribution
-        # certificate instead; with a narrower key it needs this one.
-        if: env.IOS_DISTRIBUTION_P12 != ''
         shell: bash
         env:
           IOS_DISTRIBUTION_P12_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_P12_PASSWORD }}
@@ -238,6 +241,37 @@ jobs:
 
           security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain"
           security list-keychain -d user -s "$keychain" $(security list-keychain -d user | tr -d '"')
+
+      - name: Install the App Store provisioning profile
+        shell: bash
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          profile="$RUNNER_TEMP/appstore.mobileprovision"
+          decoded="$RUNNER_TEMP/appstore.plist"
+          echo "$IOS_PROVISIONING_PROFILE" | base64 --decode > "$profile"
+          security cms -D -i "$profile" > "$decoded"
+
+          # Catch a profile made for another app or team here, with a readable
+          # message, instead of as "No profiles found" at the end of the export.
+          app_id="$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$decoded")"
+          if [[ "$app_id" != "$APPLE_TEAM_ID.dev.shellvibe.app" ]]; then
+            echo "IOS_PROVISIONING_PROFILE is for $app_id, not $APPLE_TEAM_ID.dev.shellvibe.app." >&2
+            exit 1
+          fi
+
+          uuid="$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$decoded")"
+          # Xcode 16 and later read profiles from UserData; older ones from
+          # MobileDevice. Both, so a runner image change does not matter.
+          for dir in \
+            "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles" \
+            "$HOME/Library/MobileDevice/Provisioning Profiles"; do
+            mkdir -p "$dir"
+            cp "$profile" "$dir/$uuid.mobileprovision"
+          done
+          rm -f "$profile" "$decoded"
+          echo "IOS_PROFILE_UUID=$uuid" >> "$GITHUB_ENV"
 
       - name: Write the App Store Connect key
         shell: bash
@@ -264,8 +298,8 @@ jobs:
           # signing would otherwise sign the archive for development, which
           # needs a registered device and a development certificate this job
           # does not have; the export only needs the distribution certificate
-          # and creates the App Store profile itself. Runner has no
-          # entitlements file, so nothing is lost by signing late.
+          # and the App Store profile. Runner has no entitlements file, so
+          # nothing is lost by signing late.
           flutter build ios --release --config-only
           xcodebuild \
             -workspace ios/Runner.xcworkspace \
@@ -293,6 +327,11 @@ jobs:
           options="$RUNNER_TEMP/ExportOptions.plist"
           cp ios/ExportOptions.plist "$options"
           /usr/libexec/PlistBuddy -c "Set :teamID $APPLE_TEAM_ID" "$options"
+          # Manual signing with the installed profile. Automatic signing would
+          # make Xcode fetch the profile through the API key, which falls back
+          # to a cloud-managed certificate and needs an Admin key.
+          /usr/libexec/PlistBuddy \
+            -c "Set :provisioningProfiles:dev.shellvibe.app $IOS_PROFILE_UUID" "$options"
           # `upload` sends the build straight to App Store Connect from the
           # export; `export` leaves an .ipa behind for a rehearsal.
           if [[ "$UPLOAD" == 'true' ]]; then
@@ -312,6 +351,8 @@ jobs:
         shell: bash
         run: |
           rm -f "$RUNNER_TEMP/asc.p8"
+          rm -f "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles/$IOS_PROFILE_UUID.mobileprovision" \
+            "$HOME/Library/MobileDevice/Provisioning Profiles/$IOS_PROFILE_UUID.mobileprovision"
           security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
 
       - name: Keep the build
