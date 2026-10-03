@@ -699,6 +699,11 @@ final class SyncJournal {
     'host_groups': [('host_groups', 'parent_id')],
     'identities': [('hosts', 'identity_id')],
     'hosts': [('hosts', 'jump_host_id')],
+    'snippets': [
+      ('hosts', 'startup_snippet_id'),
+      ('template_panes', 'startup_snippet_id'),
+    ],
+    'runbooks': [('templates', 'on_open_runbook_id')],
   };
 
   /// Everything a delete of [entityType]/[entityId] takes with it, including

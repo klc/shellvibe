@@ -37,6 +37,7 @@ class HostsNotifier extends _$HostsNotifier {
     String? moshPortRange,
     String? colorTag,
     String? jumpHostId,
+    String? startupSnippetId,
   }) async {
     final previousState = state;
     try {
@@ -54,6 +55,7 @@ class HostsNotifier extends _$HostsNotifier {
         moshPortRange: moshPortRange,
         colorTag: colorTag,
         jumpHostId: jumpHostId,
+        startupSnippetId: startupSnippetId,
       );
       final items = await repo.getHostsByWorkspace(
         ref.read(activeWorkspaceIdProvider),
@@ -82,6 +84,7 @@ class HostsNotifier extends _$HostsNotifier {
     String? moshPortRange,
     String? colorTag,
     String? jumpHostId,
+    String? startupSnippetId,
   }) async {
     final previousState = state;
     try {
@@ -100,6 +103,7 @@ class HostsNotifier extends _$HostsNotifier {
         moshPortRange: moshPortRange,
         colorTag: colorTag,
         jumpHostId: jumpHostId,
+        startupSnippetId: startupSnippetId,
       );
       final items = await repo.getHostsByWorkspace(
         ref.read(activeWorkspaceIdProvider),

@@ -1286,6 +1286,362 @@ class HostGroupsCompanion extends UpdateCompanion<HostGroup> {
   }
 }
 
+class $SnippetsTable extends Snippets with TableInfo<$SnippetsTable, Snippet> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SnippetsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _workspaceIdMeta = const VerificationMeta(
+    'workspaceId',
+  );
+  @override
+  late final GeneratedColumn<String> workspaceId = GeneratedColumn<String>(
+    'workspace_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES workspaces (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _titleMeta = const VerificationMeta('title');
+  @override
+  late final GeneratedColumn<String> title = GeneratedColumn<String>(
+    'title',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _codeMeta = const VerificationMeta('code');
+  @override
+  late final GeneratedColumn<String> code = GeneratedColumn<String>(
+    'code',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _tagsMeta = const VerificationMeta('tags');
+  @override
+  late final GeneratedColumn<String> tags = GeneratedColumn<String>(
+    'tags',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, workspaceId, title, code, tags];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'snippets';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<Snippet> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('workspace_id')) {
+      context.handle(
+        _workspaceIdMeta,
+        workspaceId.isAcceptableOrUnknown(
+          data['workspace_id']!,
+          _workspaceIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_workspaceIdMeta);
+    }
+    if (data.containsKey('title')) {
+      context.handle(
+        _titleMeta,
+        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_titleMeta);
+    }
+    if (data.containsKey('code')) {
+      context.handle(
+        _codeMeta,
+        code.isAcceptableOrUnknown(data['code']!, _codeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_codeMeta);
+    }
+    if (data.containsKey('tags')) {
+      context.handle(
+        _tagsMeta,
+        tags.isAcceptableOrUnknown(data['tags']!, _tagsMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Snippet map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Snippet(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      workspaceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}workspace_id'],
+      )!,
+      title: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}title'],
+      )!,
+      code: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}code'],
+      )!,
+      tags: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}tags'],
+      ),
+    );
+  }
+
+  @override
+  $SnippetsTable createAlias(String alias) {
+    return $SnippetsTable(attachedDatabase, alias);
+  }
+}
+
+class Snippet extends DataClass implements Insertable<Snippet> {
+  final String id;
+  final String workspaceId;
+  final String title;
+  final String code;
+  final String? tags;
+  const Snippet({
+    required this.id,
+    required this.workspaceId,
+    required this.title,
+    required this.code,
+    this.tags,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['workspace_id'] = Variable<String>(workspaceId);
+    map['title'] = Variable<String>(title);
+    map['code'] = Variable<String>(code);
+    if (!nullToAbsent || tags != null) {
+      map['tags'] = Variable<String>(tags);
+    }
+    return map;
+  }
+
+  SnippetsCompanion toCompanion(bool nullToAbsent) {
+    return SnippetsCompanion(
+      id: Value(id),
+      workspaceId: Value(workspaceId),
+      title: Value(title),
+      code: Value(code),
+      tags: tags == null && nullToAbsent ? const Value.absent() : Value(tags),
+    );
+  }
+
+  factory Snippet.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Snippet(
+      id: serializer.fromJson<String>(json['id']),
+      workspaceId: serializer.fromJson<String>(json['workspaceId']),
+      title: serializer.fromJson<String>(json['title']),
+      code: serializer.fromJson<String>(json['code']),
+      tags: serializer.fromJson<String?>(json['tags']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'workspaceId': serializer.toJson<String>(workspaceId),
+      'title': serializer.toJson<String>(title),
+      'code': serializer.toJson<String>(code),
+      'tags': serializer.toJson<String?>(tags),
+    };
+  }
+
+  Snippet copyWith({
+    String? id,
+    String? workspaceId,
+    String? title,
+    String? code,
+    Value<String?> tags = const Value.absent(),
+  }) => Snippet(
+    id: id ?? this.id,
+    workspaceId: workspaceId ?? this.workspaceId,
+    title: title ?? this.title,
+    code: code ?? this.code,
+    tags: tags.present ? tags.value : this.tags,
+  );
+  Snippet copyWithCompanion(SnippetsCompanion data) {
+    return Snippet(
+      id: data.id.present ? data.id.value : this.id,
+      workspaceId: data.workspaceId.present
+          ? data.workspaceId.value
+          : this.workspaceId,
+      title: data.title.present ? data.title.value : this.title,
+      code: data.code.present ? data.code.value : this.code,
+      tags: data.tags.present ? data.tags.value : this.tags,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Snippet(')
+          ..write('id: $id, ')
+          ..write('workspaceId: $workspaceId, ')
+          ..write('title: $title, ')
+          ..write('code: $code, ')
+          ..write('tags: $tags')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, workspaceId, title, code, tags);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Snippet &&
+          other.id == this.id &&
+          other.workspaceId == this.workspaceId &&
+          other.title == this.title &&
+          other.code == this.code &&
+          other.tags == this.tags);
+}
+
+class SnippetsCompanion extends UpdateCompanion<Snippet> {
+  final Value<String> id;
+  final Value<String> workspaceId;
+  final Value<String> title;
+  final Value<String> code;
+  final Value<String?> tags;
+  final Value<int> rowid;
+  const SnippetsCompanion({
+    this.id = const Value.absent(),
+    this.workspaceId = const Value.absent(),
+    this.title = const Value.absent(),
+    this.code = const Value.absent(),
+    this.tags = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SnippetsCompanion.insert({
+    required String id,
+    required String workspaceId,
+    required String title,
+    required String code,
+    this.tags = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       workspaceId = Value(workspaceId),
+       title = Value(title),
+       code = Value(code);
+  static Insertable<Snippet> custom({
+    Expression<String>? id,
+    Expression<String>? workspaceId,
+    Expression<String>? title,
+    Expression<String>? code,
+    Expression<String>? tags,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (workspaceId != null) 'workspace_id': workspaceId,
+      if (title != null) 'title': title,
+      if (code != null) 'code': code,
+      if (tags != null) 'tags': tags,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SnippetsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? workspaceId,
+    Value<String>? title,
+    Value<String>? code,
+    Value<String?>? tags,
+    Value<int>? rowid,
+  }) {
+    return SnippetsCompanion(
+      id: id ?? this.id,
+      workspaceId: workspaceId ?? this.workspaceId,
+      title: title ?? this.title,
+      code: code ?? this.code,
+      tags: tags ?? this.tags,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (workspaceId.present) {
+      map['workspace_id'] = Variable<String>(workspaceId.value);
+    }
+    if (title.present) {
+      map['title'] = Variable<String>(title.value);
+    }
+    if (code.present) {
+      map['code'] = Variable<String>(code.value);
+    }
+    if (tags.present) {
+      map['tags'] = Variable<String>(tags.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SnippetsCompanion(')
+          ..write('id: $id, ')
+          ..write('workspaceId: $workspaceId, ')
+          ..write('title: $title, ')
+          ..write('code: $code, ')
+          ..write('tags: $tags, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $HostsTable extends Hosts with TableInfo<$HostsTable, Host> {
   @override
   final GeneratedDatabase attachedDatabase;
@@ -1453,6 +1809,20 @@ class $HostsTable extends Hosts with TableInfo<$HostsTable, Host> {
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _startupSnippetIdMeta = const VerificationMeta(
+    'startupSnippetId',
+  );
+  @override
+  late final GeneratedColumn<String> startupSnippetId = GeneratedColumn<String>(
+    'startup_snippet_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES snippets (id) ON DELETE SET NULL',
+    ),
+  );
   static const VerificationMeta _environmentMeta = const VerificationMeta(
     'environment',
   );
@@ -1508,6 +1878,7 @@ class $HostsTable extends Hosts with TableInfo<$HostsTable, Host> {
     colorTag,
     jumpHostId,
     createdAt,
+    startupSnippetId,
     environment,
     mcpVisible,
     mcpDefaultMode,
@@ -1627,6 +1998,15 @@ class $HostsTable extends Hosts with TableInfo<$HostsTable, Host> {
     } else if (isInserting) {
       context.missing(_createdAtMeta);
     }
+    if (data.containsKey('startup_snippet_id')) {
+      context.handle(
+        _startupSnippetIdMeta,
+        startupSnippetId.isAcceptableOrUnknown(
+          data['startup_snippet_id']!,
+          _startupSnippetIdMeta,
+        ),
+      );
+    }
     if (data.containsKey('environment')) {
       context.handle(
         _environmentMeta,
@@ -1716,6 +2096,10 @@ class $HostsTable extends Hosts with TableInfo<$HostsTable, Host> {
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       )!,
+      startupSnippetId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}startup_snippet_id'],
+      ),
       environment: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}environment'],
@@ -1762,6 +2146,10 @@ class Host extends DataClass implements Insertable<Host> {
   final String? jumpHostId;
   final DateTime createdAt;
 
+  /// Snippet typed into this host's terminal once the session first comes up.
+  /// Cleared (not cascaded) when the snippet is deleted.
+  final String? startupSnippetId;
+
   /// 'dev' | 'staging' | 'prod' — the policy engine's criticality signal.
   final String environment;
 
@@ -1785,6 +2173,7 @@ class Host extends DataClass implements Insertable<Host> {
     this.colorTag,
     this.jumpHostId,
     required this.createdAt,
+    this.startupSnippetId,
     required this.environment,
     required this.mcpVisible,
     required this.mcpDefaultMode,
@@ -1820,6 +2209,9 @@ class Host extends DataClass implements Insertable<Host> {
       map['jump_host_id'] = Variable<String>(jumpHostId);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || startupSnippetId != null) {
+      map['startup_snippet_id'] = Variable<String>(startupSnippetId);
+    }
     map['environment'] = Variable<String>(environment);
     map['mcp_visible'] = Variable<bool>(mcpVisible);
     map['mcp_default_mode'] = Variable<String>(mcpDefaultMode);
@@ -1856,6 +2248,9 @@ class Host extends DataClass implements Insertable<Host> {
           ? const Value.absent()
           : Value(jumpHostId),
       createdAt: Value(createdAt),
+      startupSnippetId: startupSnippetId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(startupSnippetId),
       environment: Value(environment),
       mcpVisible: Value(mcpVisible),
       mcpDefaultMode: Value(mcpDefaultMode),
@@ -1882,6 +2277,7 @@ class Host extends DataClass implements Insertable<Host> {
       colorTag: serializer.fromJson<String?>(json['colorTag']),
       jumpHostId: serializer.fromJson<String?>(json['jumpHostId']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      startupSnippetId: serializer.fromJson<String?>(json['startupSnippetId']),
       environment: serializer.fromJson<String>(json['environment']),
       mcpVisible: serializer.fromJson<bool>(json['mcpVisible']),
       mcpDefaultMode: serializer.fromJson<String>(json['mcpDefaultMode']),
@@ -1905,6 +2301,7 @@ class Host extends DataClass implements Insertable<Host> {
       'colorTag': serializer.toJson<String?>(colorTag),
       'jumpHostId': serializer.toJson<String?>(jumpHostId),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'startupSnippetId': serializer.toJson<String?>(startupSnippetId),
       'environment': serializer.toJson<String>(environment),
       'mcpVisible': serializer.toJson<bool>(mcpVisible),
       'mcpDefaultMode': serializer.toJson<String>(mcpDefaultMode),
@@ -1926,6 +2323,7 @@ class Host extends DataClass implements Insertable<Host> {
     Value<String?> colorTag = const Value.absent(),
     Value<String?> jumpHostId = const Value.absent(),
     DateTime? createdAt,
+    Value<String?> startupSnippetId = const Value.absent(),
     String? environment,
     bool? mcpVisible,
     String? mcpDefaultMode,
@@ -1948,6 +2346,9 @@ class Host extends DataClass implements Insertable<Host> {
     colorTag: colorTag.present ? colorTag.value : this.colorTag,
     jumpHostId: jumpHostId.present ? jumpHostId.value : this.jumpHostId,
     createdAt: createdAt ?? this.createdAt,
+    startupSnippetId: startupSnippetId.present
+        ? startupSnippetId.value
+        : this.startupSnippetId,
     environment: environment ?? this.environment,
     mcpVisible: mcpVisible ?? this.mcpVisible,
     mcpDefaultMode: mcpDefaultMode ?? this.mcpDefaultMode,
@@ -1978,6 +2379,9 @@ class Host extends DataClass implements Insertable<Host> {
           ? data.jumpHostId.value
           : this.jumpHostId,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      startupSnippetId: data.startupSnippetId.present
+          ? data.startupSnippetId.value
+          : this.startupSnippetId,
       environment: data.environment.present
           ? data.environment.value
           : this.environment,
@@ -2007,6 +2411,7 @@ class Host extends DataClass implements Insertable<Host> {
           ..write('colorTag: $colorTag, ')
           ..write('jumpHostId: $jumpHostId, ')
           ..write('createdAt: $createdAt, ')
+          ..write('startupSnippetId: $startupSnippetId, ')
           ..write('environment: $environment, ')
           ..write('mcpVisible: $mcpVisible, ')
           ..write('mcpDefaultMode: $mcpDefaultMode')
@@ -2030,6 +2435,7 @@ class Host extends DataClass implements Insertable<Host> {
     colorTag,
     jumpHostId,
     createdAt,
+    startupSnippetId,
     environment,
     mcpVisible,
     mcpDefaultMode,
@@ -2052,6 +2458,7 @@ class Host extends DataClass implements Insertable<Host> {
           other.colorTag == this.colorTag &&
           other.jumpHostId == this.jumpHostId &&
           other.createdAt == this.createdAt &&
+          other.startupSnippetId == this.startupSnippetId &&
           other.environment == this.environment &&
           other.mcpVisible == this.mcpVisible &&
           other.mcpDefaultMode == this.mcpDefaultMode);
@@ -2072,6 +2479,7 @@ class HostsCompanion extends UpdateCompanion<Host> {
   final Value<String?> colorTag;
   final Value<String?> jumpHostId;
   final Value<DateTime> createdAt;
+  final Value<String?> startupSnippetId;
   final Value<String> environment;
   final Value<bool> mcpVisible;
   final Value<String> mcpDefaultMode;
@@ -2091,6 +2499,7 @@ class HostsCompanion extends UpdateCompanion<Host> {
     this.colorTag = const Value.absent(),
     this.jumpHostId = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.startupSnippetId = const Value.absent(),
     this.environment = const Value.absent(),
     this.mcpVisible = const Value.absent(),
     this.mcpDefaultMode = const Value.absent(),
@@ -2111,6 +2520,7 @@ class HostsCompanion extends UpdateCompanion<Host> {
     this.colorTag = const Value.absent(),
     this.jumpHostId = const Value.absent(),
     required DateTime createdAt,
+    this.startupSnippetId = const Value.absent(),
     this.environment = const Value.absent(),
     this.mcpVisible = const Value.absent(),
     this.mcpDefaultMode = const Value.absent(),
@@ -2135,6 +2545,7 @@ class HostsCompanion extends UpdateCompanion<Host> {
     Expression<String>? colorTag,
     Expression<String>? jumpHostId,
     Expression<DateTime>? createdAt,
+    Expression<String>? startupSnippetId,
     Expression<String>? environment,
     Expression<bool>? mcpVisible,
     Expression<String>? mcpDefaultMode,
@@ -2155,6 +2566,7 @@ class HostsCompanion extends UpdateCompanion<Host> {
       if (colorTag != null) 'color_tag': colorTag,
       if (jumpHostId != null) 'jump_host_id': jumpHostId,
       if (createdAt != null) 'created_at': createdAt,
+      if (startupSnippetId != null) 'startup_snippet_id': startupSnippetId,
       if (environment != null) 'environment': environment,
       if (mcpVisible != null) 'mcp_visible': mcpVisible,
       if (mcpDefaultMode != null) 'mcp_default_mode': mcpDefaultMode,
@@ -2177,6 +2589,7 @@ class HostsCompanion extends UpdateCompanion<Host> {
     Value<String?>? colorTag,
     Value<String?>? jumpHostId,
     Value<DateTime>? createdAt,
+    Value<String?>? startupSnippetId,
     Value<String>? environment,
     Value<bool>? mcpVisible,
     Value<String>? mcpDefaultMode,
@@ -2197,6 +2610,7 @@ class HostsCompanion extends UpdateCompanion<Host> {
       colorTag: colorTag ?? this.colorTag,
       jumpHostId: jumpHostId ?? this.jumpHostId,
       createdAt: createdAt ?? this.createdAt,
+      startupSnippetId: startupSnippetId ?? this.startupSnippetId,
       environment: environment ?? this.environment,
       mcpVisible: mcpVisible ?? this.mcpVisible,
       mcpDefaultMode: mcpDefaultMode ?? this.mcpDefaultMode,
@@ -2249,6 +2663,9 @@ class HostsCompanion extends UpdateCompanion<Host> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (startupSnippetId.present) {
+      map['startup_snippet_id'] = Variable<String>(startupSnippetId.value);
+    }
     if (environment.present) {
       map['environment'] = Variable<String>(environment.value);
     }
@@ -2281,6 +2698,7 @@ class HostsCompanion extends UpdateCompanion<Host> {
           ..write('colorTag: $colorTag, ')
           ..write('jumpHostId: $jumpHostId, ')
           ..write('createdAt: $createdAt, ')
+          ..write('startupSnippetId: $startupSnippetId, ')
           ..write('environment: $environment, ')
           ..write('mcpVisible: $mcpVisible, ')
           ..write('mcpDefaultMode: $mcpDefaultMode, ')
@@ -3452,362 +3870,6 @@ class PortForwardRulesCompanion extends UpdateCompanion<PortForwardRule> {
   }
 }
 
-class $SnippetsTable extends Snippets with TableInfo<$SnippetsTable, Snippet> {
-  @override
-  final GeneratedDatabase attachedDatabase;
-  final String? _alias;
-  $SnippetsTable(this.attachedDatabase, [this._alias]);
-  static const VerificationMeta _idMeta = const VerificationMeta('id');
-  @override
-  late final GeneratedColumn<String> id = GeneratedColumn<String>(
-    'id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _workspaceIdMeta = const VerificationMeta(
-    'workspaceId',
-  );
-  @override
-  late final GeneratedColumn<String> workspaceId = GeneratedColumn<String>(
-    'workspace_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'REFERENCES workspaces (id) ON DELETE CASCADE',
-    ),
-  );
-  static const VerificationMeta _titleMeta = const VerificationMeta('title');
-  @override
-  late final GeneratedColumn<String> title = GeneratedColumn<String>(
-    'title',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _codeMeta = const VerificationMeta('code');
-  @override
-  late final GeneratedColumn<String> code = GeneratedColumn<String>(
-    'code',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _tagsMeta = const VerificationMeta('tags');
-  @override
-  late final GeneratedColumn<String> tags = GeneratedColumn<String>(
-    'tags',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  @override
-  List<GeneratedColumn> get $columns => [id, workspaceId, title, code, tags];
-  @override
-  String get aliasedName => _alias ?? actualTableName;
-  @override
-  String get actualTableName => $name;
-  static const String $name = 'snippets';
-  @override
-  VerificationContext validateIntegrity(
-    Insertable<Snippet> instance, {
-    bool isInserting = false,
-  }) {
-    final context = VerificationContext();
-    final data = instance.toColumns(true);
-    if (data.containsKey('id')) {
-      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
-    } else if (isInserting) {
-      context.missing(_idMeta);
-    }
-    if (data.containsKey('workspace_id')) {
-      context.handle(
-        _workspaceIdMeta,
-        workspaceId.isAcceptableOrUnknown(
-          data['workspace_id']!,
-          _workspaceIdMeta,
-        ),
-      );
-    } else if (isInserting) {
-      context.missing(_workspaceIdMeta);
-    }
-    if (data.containsKey('title')) {
-      context.handle(
-        _titleMeta,
-        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_titleMeta);
-    }
-    if (data.containsKey('code')) {
-      context.handle(
-        _codeMeta,
-        code.isAcceptableOrUnknown(data['code']!, _codeMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_codeMeta);
-    }
-    if (data.containsKey('tags')) {
-      context.handle(
-        _tagsMeta,
-        tags.isAcceptableOrUnknown(data['tags']!, _tagsMeta),
-      );
-    }
-    return context;
-  }
-
-  @override
-  Set<GeneratedColumn> get $primaryKey => {id};
-  @override
-  Snippet map(Map<String, dynamic> data, {String? tablePrefix}) {
-    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return Snippet(
-      id: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}id'],
-      )!,
-      workspaceId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}workspace_id'],
-      )!,
-      title: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}title'],
-      )!,
-      code: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}code'],
-      )!,
-      tags: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}tags'],
-      ),
-    );
-  }
-
-  @override
-  $SnippetsTable createAlias(String alias) {
-    return $SnippetsTable(attachedDatabase, alias);
-  }
-}
-
-class Snippet extends DataClass implements Insertable<Snippet> {
-  final String id;
-  final String workspaceId;
-  final String title;
-  final String code;
-  final String? tags;
-  const Snippet({
-    required this.id,
-    required this.workspaceId,
-    required this.title,
-    required this.code,
-    this.tags,
-  });
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    map['id'] = Variable<String>(id);
-    map['workspace_id'] = Variable<String>(workspaceId);
-    map['title'] = Variable<String>(title);
-    map['code'] = Variable<String>(code);
-    if (!nullToAbsent || tags != null) {
-      map['tags'] = Variable<String>(tags);
-    }
-    return map;
-  }
-
-  SnippetsCompanion toCompanion(bool nullToAbsent) {
-    return SnippetsCompanion(
-      id: Value(id),
-      workspaceId: Value(workspaceId),
-      title: Value(title),
-      code: Value(code),
-      tags: tags == null && nullToAbsent ? const Value.absent() : Value(tags),
-    );
-  }
-
-  factory Snippet.fromJson(
-    Map<String, dynamic> json, {
-    ValueSerializer? serializer,
-  }) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return Snippet(
-      id: serializer.fromJson<String>(json['id']),
-      workspaceId: serializer.fromJson<String>(json['workspaceId']),
-      title: serializer.fromJson<String>(json['title']),
-      code: serializer.fromJson<String>(json['code']),
-      tags: serializer.fromJson<String?>(json['tags']),
-    );
-  }
-  @override
-  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return <String, dynamic>{
-      'id': serializer.toJson<String>(id),
-      'workspaceId': serializer.toJson<String>(workspaceId),
-      'title': serializer.toJson<String>(title),
-      'code': serializer.toJson<String>(code),
-      'tags': serializer.toJson<String?>(tags),
-    };
-  }
-
-  Snippet copyWith({
-    String? id,
-    String? workspaceId,
-    String? title,
-    String? code,
-    Value<String?> tags = const Value.absent(),
-  }) => Snippet(
-    id: id ?? this.id,
-    workspaceId: workspaceId ?? this.workspaceId,
-    title: title ?? this.title,
-    code: code ?? this.code,
-    tags: tags.present ? tags.value : this.tags,
-  );
-  Snippet copyWithCompanion(SnippetsCompanion data) {
-    return Snippet(
-      id: data.id.present ? data.id.value : this.id,
-      workspaceId: data.workspaceId.present
-          ? data.workspaceId.value
-          : this.workspaceId,
-      title: data.title.present ? data.title.value : this.title,
-      code: data.code.present ? data.code.value : this.code,
-      tags: data.tags.present ? data.tags.value : this.tags,
-    );
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('Snippet(')
-          ..write('id: $id, ')
-          ..write('workspaceId: $workspaceId, ')
-          ..write('title: $title, ')
-          ..write('code: $code, ')
-          ..write('tags: $tags')
-          ..write(')'))
-        .toString();
-  }
-
-  @override
-  int get hashCode => Object.hash(id, workspaceId, title, code, tags);
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      (other is Snippet &&
-          other.id == this.id &&
-          other.workspaceId == this.workspaceId &&
-          other.title == this.title &&
-          other.code == this.code &&
-          other.tags == this.tags);
-}
-
-class SnippetsCompanion extends UpdateCompanion<Snippet> {
-  final Value<String> id;
-  final Value<String> workspaceId;
-  final Value<String> title;
-  final Value<String> code;
-  final Value<String?> tags;
-  final Value<int> rowid;
-  const SnippetsCompanion({
-    this.id = const Value.absent(),
-    this.workspaceId = const Value.absent(),
-    this.title = const Value.absent(),
-    this.code = const Value.absent(),
-    this.tags = const Value.absent(),
-    this.rowid = const Value.absent(),
-  });
-  SnippetsCompanion.insert({
-    required String id,
-    required String workspaceId,
-    required String title,
-    required String code,
-    this.tags = const Value.absent(),
-    this.rowid = const Value.absent(),
-  }) : id = Value(id),
-       workspaceId = Value(workspaceId),
-       title = Value(title),
-       code = Value(code);
-  static Insertable<Snippet> custom({
-    Expression<String>? id,
-    Expression<String>? workspaceId,
-    Expression<String>? title,
-    Expression<String>? code,
-    Expression<String>? tags,
-    Expression<int>? rowid,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (workspaceId != null) 'workspace_id': workspaceId,
-      if (title != null) 'title': title,
-      if (code != null) 'code': code,
-      if (tags != null) 'tags': tags,
-      if (rowid != null) 'rowid': rowid,
-    });
-  }
-
-  SnippetsCompanion copyWith({
-    Value<String>? id,
-    Value<String>? workspaceId,
-    Value<String>? title,
-    Value<String>? code,
-    Value<String?>? tags,
-    Value<int>? rowid,
-  }) {
-    return SnippetsCompanion(
-      id: id ?? this.id,
-      workspaceId: workspaceId ?? this.workspaceId,
-      title: title ?? this.title,
-      code: code ?? this.code,
-      tags: tags ?? this.tags,
-      rowid: rowid ?? this.rowid,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<String>(id.value);
-    }
-    if (workspaceId.present) {
-      map['workspace_id'] = Variable<String>(workspaceId.value);
-    }
-    if (title.present) {
-      map['title'] = Variable<String>(title.value);
-    }
-    if (code.present) {
-      map['code'] = Variable<String>(code.value);
-    }
-    if (tags.present) {
-      map['tags'] = Variable<String>(tags.value);
-    }
-    if (rowid.present) {
-      map['rowid'] = Variable<int>(rowid.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('SnippetsCompanion(')
-          ..write('id: $id, ')
-          ..write('workspaceId: $workspaceId, ')
-          ..write('title: $title, ')
-          ..write('code: $code, ')
-          ..write('tags: $tags, ')
-          ..write('rowid: $rowid')
-          ..write(')'))
-        .toString();
-  }
-}
-
 class $RunbooksTable extends Runbooks with TableInfo<$RunbooksTable, Runbook> {
   @override
   final GeneratedDatabase attachedDatabase;
@@ -4903,6 +4965,35 @@ class $TemplatesTable extends Templates
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _onOpenRunbookIdMeta = const VerificationMeta(
+    'onOpenRunbookId',
+  );
+  @override
+  late final GeneratedColumn<String> onOpenRunbookId = GeneratedColumn<String>(
+    'on_open_runbook_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES runbooks (id) ON DELETE SET NULL',
+    ),
+  );
+  static const VerificationMeta _onOpenConfirmMeta = const VerificationMeta(
+    'onOpenConfirm',
+  );
+  @override
+  late final GeneratedColumn<bool> onOpenConfirm = GeneratedColumn<bool>(
+    'on_open_confirm',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("on_open_confirm" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -4911,6 +5002,8 @@ class $TemplatesTable extends Templates
     description,
     activePaneId,
     createdAt,
+    onOpenRunbookId,
+    onOpenConfirm,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -4974,6 +5067,24 @@ class $TemplatesTable extends Templates
     } else if (isInserting) {
       context.missing(_createdAtMeta);
     }
+    if (data.containsKey('on_open_runbook_id')) {
+      context.handle(
+        _onOpenRunbookIdMeta,
+        onOpenRunbookId.isAcceptableOrUnknown(
+          data['on_open_runbook_id']!,
+          _onOpenRunbookIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('on_open_confirm')) {
+      context.handle(
+        _onOpenConfirmMeta,
+        onOpenConfirm.isAcceptableOrUnknown(
+          data['on_open_confirm']!,
+          _onOpenConfirmMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -5007,6 +5118,14 @@ class $TemplatesTable extends Templates
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       )!,
+      onOpenRunbookId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}on_open_runbook_id'],
+      ),
+      onOpenConfirm: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}on_open_confirm'],
+      )!,
     );
   }
 
@@ -5027,6 +5146,13 @@ class Template extends DataClass implements Insertable<Template> {
   /// had no focused pane.
   final String? activePaneId;
   final DateTime createdAt;
+
+  /// Runbook started in the background on the template's hosts once the
+  /// template has been opened. Cleared when the runbook is deleted.
+  final String? onOpenRunbookId;
+
+  /// Ask before running [onOpenRunbookId] rather than running it unprompted.
+  final bool onOpenConfirm;
   const Template({
     required this.id,
     required this.workspaceId,
@@ -5034,6 +5160,8 @@ class Template extends DataClass implements Insertable<Template> {
     this.description,
     this.activePaneId,
     required this.createdAt,
+    this.onOpenRunbookId,
+    required this.onOpenConfirm,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -5048,6 +5176,10 @@ class Template extends DataClass implements Insertable<Template> {
       map['active_pane_id'] = Variable<String>(activePaneId);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || onOpenRunbookId != null) {
+      map['on_open_runbook_id'] = Variable<String>(onOpenRunbookId);
+    }
+    map['on_open_confirm'] = Variable<bool>(onOpenConfirm);
     return map;
   }
 
@@ -5063,6 +5195,10 @@ class Template extends DataClass implements Insertable<Template> {
           ? const Value.absent()
           : Value(activePaneId),
       createdAt: Value(createdAt),
+      onOpenRunbookId: onOpenRunbookId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(onOpenRunbookId),
+      onOpenConfirm: Value(onOpenConfirm),
     );
   }
 
@@ -5078,6 +5214,8 @@ class Template extends DataClass implements Insertable<Template> {
       description: serializer.fromJson<String?>(json['description']),
       activePaneId: serializer.fromJson<String?>(json['activePaneId']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      onOpenRunbookId: serializer.fromJson<String?>(json['onOpenRunbookId']),
+      onOpenConfirm: serializer.fromJson<bool>(json['onOpenConfirm']),
     );
   }
   @override
@@ -5090,6 +5228,8 @@ class Template extends DataClass implements Insertable<Template> {
       'description': serializer.toJson<String?>(description),
       'activePaneId': serializer.toJson<String?>(activePaneId),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'onOpenRunbookId': serializer.toJson<String?>(onOpenRunbookId),
+      'onOpenConfirm': serializer.toJson<bool>(onOpenConfirm),
     };
   }
 
@@ -5100,6 +5240,8 @@ class Template extends DataClass implements Insertable<Template> {
     Value<String?> description = const Value.absent(),
     Value<String?> activePaneId = const Value.absent(),
     DateTime? createdAt,
+    Value<String?> onOpenRunbookId = const Value.absent(),
+    bool? onOpenConfirm,
   }) => Template(
     id: id ?? this.id,
     workspaceId: workspaceId ?? this.workspaceId,
@@ -5107,6 +5249,10 @@ class Template extends DataClass implements Insertable<Template> {
     description: description.present ? description.value : this.description,
     activePaneId: activePaneId.present ? activePaneId.value : this.activePaneId,
     createdAt: createdAt ?? this.createdAt,
+    onOpenRunbookId: onOpenRunbookId.present
+        ? onOpenRunbookId.value
+        : this.onOpenRunbookId,
+    onOpenConfirm: onOpenConfirm ?? this.onOpenConfirm,
   );
   Template copyWithCompanion(TemplatesCompanion data) {
     return Template(
@@ -5122,6 +5268,12 @@ class Template extends DataClass implements Insertable<Template> {
           ? data.activePaneId.value
           : this.activePaneId,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      onOpenRunbookId: data.onOpenRunbookId.present
+          ? data.onOpenRunbookId.value
+          : this.onOpenRunbookId,
+      onOpenConfirm: data.onOpenConfirm.present
+          ? data.onOpenConfirm.value
+          : this.onOpenConfirm,
     );
   }
 
@@ -5133,14 +5285,24 @@ class Template extends DataClass implements Insertable<Template> {
           ..write('name: $name, ')
           ..write('description: $description, ')
           ..write('activePaneId: $activePaneId, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('onOpenRunbookId: $onOpenRunbookId, ')
+          ..write('onOpenConfirm: $onOpenConfirm')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, workspaceId, name, description, activePaneId, createdAt);
+  int get hashCode => Object.hash(
+    id,
+    workspaceId,
+    name,
+    description,
+    activePaneId,
+    createdAt,
+    onOpenRunbookId,
+    onOpenConfirm,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -5150,7 +5312,9 @@ class Template extends DataClass implements Insertable<Template> {
           other.name == this.name &&
           other.description == this.description &&
           other.activePaneId == this.activePaneId &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.onOpenRunbookId == this.onOpenRunbookId &&
+          other.onOpenConfirm == this.onOpenConfirm);
 }
 
 class TemplatesCompanion extends UpdateCompanion<Template> {
@@ -5160,6 +5324,8 @@ class TemplatesCompanion extends UpdateCompanion<Template> {
   final Value<String?> description;
   final Value<String?> activePaneId;
   final Value<DateTime> createdAt;
+  final Value<String?> onOpenRunbookId;
+  final Value<bool> onOpenConfirm;
   final Value<int> rowid;
   const TemplatesCompanion({
     this.id = const Value.absent(),
@@ -5168,6 +5334,8 @@ class TemplatesCompanion extends UpdateCompanion<Template> {
     this.description = const Value.absent(),
     this.activePaneId = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.onOpenRunbookId = const Value.absent(),
+    this.onOpenConfirm = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   TemplatesCompanion.insert({
@@ -5177,6 +5345,8 @@ class TemplatesCompanion extends UpdateCompanion<Template> {
     this.description = const Value.absent(),
     this.activePaneId = const Value.absent(),
     required DateTime createdAt,
+    this.onOpenRunbookId = const Value.absent(),
+    this.onOpenConfirm = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        workspaceId = Value(workspaceId),
@@ -5189,6 +5359,8 @@ class TemplatesCompanion extends UpdateCompanion<Template> {
     Expression<String>? description,
     Expression<String>? activePaneId,
     Expression<DateTime>? createdAt,
+    Expression<String>? onOpenRunbookId,
+    Expression<bool>? onOpenConfirm,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -5198,6 +5370,8 @@ class TemplatesCompanion extends UpdateCompanion<Template> {
       if (description != null) 'description': description,
       if (activePaneId != null) 'active_pane_id': activePaneId,
       if (createdAt != null) 'created_at': createdAt,
+      if (onOpenRunbookId != null) 'on_open_runbook_id': onOpenRunbookId,
+      if (onOpenConfirm != null) 'on_open_confirm': onOpenConfirm,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -5209,6 +5383,8 @@ class TemplatesCompanion extends UpdateCompanion<Template> {
     Value<String?>? description,
     Value<String?>? activePaneId,
     Value<DateTime>? createdAt,
+    Value<String?>? onOpenRunbookId,
+    Value<bool>? onOpenConfirm,
     Value<int>? rowid,
   }) {
     return TemplatesCompanion(
@@ -5218,6 +5394,8 @@ class TemplatesCompanion extends UpdateCompanion<Template> {
       description: description ?? this.description,
       activePaneId: activePaneId ?? this.activePaneId,
       createdAt: createdAt ?? this.createdAt,
+      onOpenRunbookId: onOpenRunbookId ?? this.onOpenRunbookId,
+      onOpenConfirm: onOpenConfirm ?? this.onOpenConfirm,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -5243,6 +5421,12 @@ class TemplatesCompanion extends UpdateCompanion<Template> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (onOpenRunbookId.present) {
+      map['on_open_runbook_id'] = Variable<String>(onOpenRunbookId.value);
+    }
+    if (onOpenConfirm.present) {
+      map['on_open_confirm'] = Variable<bool>(onOpenConfirm.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -5258,6 +5442,8 @@ class TemplatesCompanion extends UpdateCompanion<Template> {
           ..write('description: $description, ')
           ..write('activePaneId: $activePaneId, ')
           ..write('createdAt: $createdAt, ')
+          ..write('onOpenRunbookId: $onOpenRunbookId, ')
+          ..write('onOpenConfirm: $onOpenConfirm, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -5367,6 +5553,20 @@ class $TemplatePanesTable extends TemplatePanes
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _startupSnippetIdMeta = const VerificationMeta(
+    'startupSnippetId',
+  );
+  @override
+  late final GeneratedColumn<String> startupSnippetId = GeneratedColumn<String>(
+    'startup_snippet_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES snippets (id) ON DELETE SET NULL',
+    ),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -5378,6 +5578,7 @@ class $TemplatePanesTable extends TemplatePanes
     sessionType,
     hostId,
     title,
+    startupSnippetId,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -5459,6 +5660,15 @@ class $TemplatePanesTable extends TemplatePanes
         title.isAcceptableOrUnknown(data['title']!, _titleMeta),
       );
     }
+    if (data.containsKey('startup_snippet_id')) {
+      context.handle(
+        _startupSnippetIdMeta,
+        startupSnippetId.isAcceptableOrUnknown(
+          data['startup_snippet_id']!,
+          _startupSnippetIdMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -5504,6 +5714,10 @@ class $TemplatePanesTable extends TemplatePanes
         DriftSqlType.string,
         data['${effectivePrefix}title'],
       ),
+      startupSnippetId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}startup_snippet_id'],
+      ),
     );
   }
 
@@ -5535,6 +5749,10 @@ class TemplatePane extends DataClass implements Insertable<TemplatePane> {
   /// exists is skipped with a warning when the template runs.
   final String? hostId;
   final String? title;
+
+  /// Startup snippet for this pane, overriding its host's. Null means use the
+  /// host's own. Cleared when the snippet is deleted.
+  final String? startupSnippetId;
   const TemplatePane({
     required this.id,
     required this.templateId,
@@ -5545,6 +5763,7 @@ class TemplatePane extends DataClass implements Insertable<TemplatePane> {
     required this.sessionType,
     this.hostId,
     this.title,
+    this.startupSnippetId,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -5565,6 +5784,9 @@ class TemplatePane extends DataClass implements Insertable<TemplatePane> {
     }
     if (!nullToAbsent || title != null) {
       map['title'] = Variable<String>(title);
+    }
+    if (!nullToAbsent || startupSnippetId != null) {
+      map['startup_snippet_id'] = Variable<String>(startupSnippetId);
     }
     return map;
   }
@@ -5588,6 +5810,9 @@ class TemplatePane extends DataClass implements Insertable<TemplatePane> {
       title: title == null && nullToAbsent
           ? const Value.absent()
           : Value(title),
+      startupSnippetId: startupSnippetId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(startupSnippetId),
     );
   }
 
@@ -5606,6 +5831,7 @@ class TemplatePane extends DataClass implements Insertable<TemplatePane> {
       sessionType: serializer.fromJson<String>(json['sessionType']),
       hostId: serializer.fromJson<String?>(json['hostId']),
       title: serializer.fromJson<String?>(json['title']),
+      startupSnippetId: serializer.fromJson<String?>(json['startupSnippetId']),
     );
   }
   @override
@@ -5621,6 +5847,7 @@ class TemplatePane extends DataClass implements Insertable<TemplatePane> {
       'sessionType': serializer.toJson<String>(sessionType),
       'hostId': serializer.toJson<String?>(hostId),
       'title': serializer.toJson<String?>(title),
+      'startupSnippetId': serializer.toJson<String?>(startupSnippetId),
     };
   }
 
@@ -5634,6 +5861,7 @@ class TemplatePane extends DataClass implements Insertable<TemplatePane> {
     String? sessionType,
     Value<String?> hostId = const Value.absent(),
     Value<String?> title = const Value.absent(),
+    Value<String?> startupSnippetId = const Value.absent(),
   }) => TemplatePane(
     id: id ?? this.id,
     templateId: templateId ?? this.templateId,
@@ -5646,6 +5874,9 @@ class TemplatePane extends DataClass implements Insertable<TemplatePane> {
     sessionType: sessionType ?? this.sessionType,
     hostId: hostId.present ? hostId.value : this.hostId,
     title: title.present ? title.value : this.title,
+    startupSnippetId: startupSnippetId.present
+        ? startupSnippetId.value
+        : this.startupSnippetId,
   );
   TemplatePane copyWithCompanion(TemplatePanesCompanion data) {
     return TemplatePane(
@@ -5668,6 +5899,9 @@ class TemplatePane extends DataClass implements Insertable<TemplatePane> {
           : this.sessionType,
       hostId: data.hostId.present ? data.hostId.value : this.hostId,
       title: data.title.present ? data.title.value : this.title,
+      startupSnippetId: data.startupSnippetId.present
+          ? data.startupSnippetId.value
+          : this.startupSnippetId,
     );
   }
 
@@ -5682,7 +5916,8 @@ class TemplatePane extends DataClass implements Insertable<TemplatePane> {
           ..write('splitRatio: $splitRatio, ')
           ..write('sessionType: $sessionType, ')
           ..write('hostId: $hostId, ')
-          ..write('title: $title')
+          ..write('title: $title, ')
+          ..write('startupSnippetId: $startupSnippetId')
           ..write(')'))
         .toString();
   }
@@ -5698,6 +5933,7 @@ class TemplatePane extends DataClass implements Insertable<TemplatePane> {
     sessionType,
     hostId,
     title,
+    startupSnippetId,
   );
   @override
   bool operator ==(Object other) =>
@@ -5711,7 +5947,8 @@ class TemplatePane extends DataClass implements Insertable<TemplatePane> {
           other.splitRatio == this.splitRatio &&
           other.sessionType == this.sessionType &&
           other.hostId == this.hostId &&
-          other.title == this.title);
+          other.title == this.title &&
+          other.startupSnippetId == this.startupSnippetId);
 }
 
 class TemplatePanesCompanion extends UpdateCompanion<TemplatePane> {
@@ -5724,6 +5961,7 @@ class TemplatePanesCompanion extends UpdateCompanion<TemplatePane> {
   final Value<String> sessionType;
   final Value<String?> hostId;
   final Value<String?> title;
+  final Value<String?> startupSnippetId;
   final Value<int> rowid;
   const TemplatePanesCompanion({
     this.id = const Value.absent(),
@@ -5735,6 +5973,7 @@ class TemplatePanesCompanion extends UpdateCompanion<TemplatePane> {
     this.sessionType = const Value.absent(),
     this.hostId = const Value.absent(),
     this.title = const Value.absent(),
+    this.startupSnippetId = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   TemplatePanesCompanion.insert({
@@ -5747,6 +5986,7 @@ class TemplatePanesCompanion extends UpdateCompanion<TemplatePane> {
     required String sessionType,
     this.hostId = const Value.absent(),
     this.title = const Value.absent(),
+    this.startupSnippetId = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        templateId = Value(templateId),
@@ -5762,6 +6002,7 @@ class TemplatePanesCompanion extends UpdateCompanion<TemplatePane> {
     Expression<String>? sessionType,
     Expression<String>? hostId,
     Expression<String>? title,
+    Expression<String>? startupSnippetId,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -5774,6 +6015,7 @@ class TemplatePanesCompanion extends UpdateCompanion<TemplatePane> {
       if (sessionType != null) 'session_type': sessionType,
       if (hostId != null) 'host_id': hostId,
       if (title != null) 'title': title,
+      if (startupSnippetId != null) 'startup_snippet_id': startupSnippetId,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -5788,6 +6030,7 @@ class TemplatePanesCompanion extends UpdateCompanion<TemplatePane> {
     Value<String>? sessionType,
     Value<String?>? hostId,
     Value<String?>? title,
+    Value<String?>? startupSnippetId,
     Value<int>? rowid,
   }) {
     return TemplatePanesCompanion(
@@ -5800,6 +6043,7 @@ class TemplatePanesCompanion extends UpdateCompanion<TemplatePane> {
       sessionType: sessionType ?? this.sessionType,
       hostId: hostId ?? this.hostId,
       title: title ?? this.title,
+      startupSnippetId: startupSnippetId ?? this.startupSnippetId,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -5834,6 +6078,9 @@ class TemplatePanesCompanion extends UpdateCompanion<TemplatePane> {
     if (title.present) {
       map['title'] = Variable<String>(title.value);
     }
+    if (startupSnippetId.present) {
+      map['startup_snippet_id'] = Variable<String>(startupSnippetId.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -5852,6 +6099,7 @@ class TemplatePanesCompanion extends UpdateCompanion<TemplatePane> {
           ..write('sessionType: $sessionType, ')
           ..write('hostId: $hostId, ')
           ..write('title: $title, ')
+          ..write('startupSnippetId: $startupSnippetId, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -13668,6 +13916,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $WorkspacesTable workspaces = $WorkspacesTable(this);
   late final $IdentitiesTable identities = $IdentitiesTable(this);
   late final $HostGroupsTable hostGroups = $HostGroupsTable(this);
+  late final $SnippetsTable snippets = $SnippetsTable(this);
   late final $HostsTable hosts = $HostsTable(this);
   late final $HostGroupMembersTable hostGroupMembers = $HostGroupMembersTable(
     this,
@@ -13676,7 +13925,6 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $PortForwardRulesTable portForwardRules = $PortForwardRulesTable(
     this,
   );
-  late final $SnippetsTable snippets = $SnippetsTable(this);
   late final $RunbooksTable runbooks = $RunbooksTable(this);
   late final $RunbookStepsTable runbookSteps = $RunbookStepsTable(this);
   late final $TemplatesTable templates = $TemplatesTable(this);
@@ -13727,11 +13975,11 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     workspaces,
     identities,
     hostGroups,
+    snippets,
     hosts,
     hostGroupMembers,
     knownHosts,
     portForwardRules,
-    snippets,
     runbooks,
     runbookSteps,
     templates,
@@ -13780,6 +14028,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         'workspaces',
         limitUpdateKind: UpdateKind.delete,
       ),
+      result: [TableUpdate('snippets', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'workspaces',
+        limitUpdateKind: UpdateKind.delete,
+      ),
       result: [TableUpdate('hosts', kind: UpdateKind.delete)],
     ),
     WritePropagation(
@@ -13799,6 +14054,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     WritePropagation(
       on: TableUpdateQuery.onTableName(
         'hosts',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('hosts', kind: UpdateKind.update)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'snippets',
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('hosts', kind: UpdateKind.update)],
@@ -13829,13 +14091,6 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         'workspaces',
         limitUpdateKind: UpdateKind.delete,
       ),
-      result: [TableUpdate('snippets', kind: UpdateKind.delete)],
-    ),
-    WritePropagation(
-      on: TableUpdateQuery.onTableName(
-        'workspaces',
-        limitUpdateKind: UpdateKind.delete,
-      ),
       result: [TableUpdate('runbooks', kind: UpdateKind.delete)],
     ),
     WritePropagation(
@@ -13854,10 +14109,24 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
+        'runbooks',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('templates', kind: UpdateKind.update)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
         'templates',
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('template_panes', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'snippets',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('template_panes', kind: UpdateKind.update)],
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
@@ -14010,25 +14279,6 @@ final class $$WorkspacesTableReferences
     );
   }
 
-  static MultiTypedResultKey<$HostsTable, List<Host>> _hostsRefsTable(
-    _$AppDatabase db,
-  ) => MultiTypedResultKey.fromTable(
-    db.hosts,
-    aliasName: 'workspaces__id__hosts__workspace_id',
-  );
-
-  $$HostsTableProcessedTableManager get hostsRefs {
-    final manager = $$HostsTableTableManager(
-      $_db,
-      $_db.hosts,
-    ).filter((f) => f.workspaceId.id.sqlEquals($_itemColumn<String>('id')!));
-
-    final cache = $_typedResult.readTableOrNull(_hostsRefsTable($_db));
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: cache),
-    );
-  }
-
   static MultiTypedResultKey<$SnippetsTable, List<Snippet>> _snippetsRefsTable(
     _$AppDatabase db,
   ) => MultiTypedResultKey.fromTable(
@@ -14043,6 +14293,25 @@ final class $$WorkspacesTableReferences
     ).filter((f) => f.workspaceId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_snippetsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$HostsTable, List<Host>> _hostsRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.hosts,
+    aliasName: 'workspaces__id__hosts__workspace_id',
+  );
+
+  $$HostsTableProcessedTableManager get hostsRefs {
+    final manager = $$HostsTableTableManager(
+      $_db,
+      $_db.hosts,
+    ).filter((f) => f.workspaceId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_hostsRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -14255,31 +14524,6 @@ class $$WorkspacesTableFilterComposer
     return f(composer);
   }
 
-  Expression<bool> hostsRefs(
-    Expression<bool> Function($$HostsTableFilterComposer f) f,
-  ) {
-    final $$HostsTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.hosts,
-      getReferencedColumn: (t) => t.workspaceId,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$HostsTableFilterComposer(
-            $db: $db,
-            $table: $db.hosts,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return f(composer);
-  }
-
   Expression<bool> snippetsRefs(
     Expression<bool> Function($$SnippetsTableFilterComposer f) f,
   ) {
@@ -14296,6 +14540,31 @@ class $$WorkspacesTableFilterComposer
           }) => $$SnippetsTableFilterComposer(
             $db: $db,
             $table: $db.snippets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> hostsRefs(
+    Expression<bool> Function($$HostsTableFilterComposer f) f,
+  ) {
+    final $$HostsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.hosts,
+      getReferencedColumn: (t) => t.workspaceId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$HostsTableFilterComposer(
+            $db: $db,
+            $table: $db.hosts,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -14582,31 +14851,6 @@ class $$WorkspacesTableAnnotationComposer
     return f(composer);
   }
 
-  Expression<T> hostsRefs<T extends Object>(
-    Expression<T> Function($$HostsTableAnnotationComposer a) f,
-  ) {
-    final $$HostsTableAnnotationComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.hosts,
-      getReferencedColumn: (t) => t.workspaceId,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$HostsTableAnnotationComposer(
-            $db: $db,
-            $table: $db.hosts,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return f(composer);
-  }
-
   Expression<T> snippetsRefs<T extends Object>(
     Expression<T> Function($$SnippetsTableAnnotationComposer a) f,
   ) {
@@ -14623,6 +14867,31 @@ class $$WorkspacesTableAnnotationComposer
           }) => $$SnippetsTableAnnotationComposer(
             $db: $db,
             $table: $db.snippets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> hostsRefs<T extends Object>(
+    Expression<T> Function($$HostsTableAnnotationComposer a) f,
+  ) {
+    final $$HostsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.hosts,
+      getReferencedColumn: (t) => t.workspaceId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$HostsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.hosts,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -14824,8 +15093,8 @@ class $$WorkspacesTableTableManager
           PrefetchHooks Function({
             bool identitiesRefs,
             bool hostGroupsRefs,
-            bool hostsRefs,
             bool snippetsRefs,
+            bool hostsRefs,
             bool runbooksRefs,
             bool templatesRefs,
             bool mcpClientsRefs,
@@ -14886,8 +15155,8 @@ class $$WorkspacesTableTableManager
               ({
                 identitiesRefs = false,
                 hostGroupsRefs = false,
-                hostsRefs = false,
                 snippetsRefs = false,
+                hostsRefs = false,
                 runbooksRefs = false,
                 templatesRefs = false,
                 mcpClientsRefs = false,
@@ -14901,8 +15170,8 @@ class $$WorkspacesTableTableManager
                   explicitlyWatchedTables: [
                     if (identitiesRefs) db.identities,
                     if (hostGroupsRefs) db.hostGroups,
-                    if (hostsRefs) db.hosts,
                     if (snippetsRefs) db.snippets,
+                    if (hostsRefs) db.hosts,
                     if (runbooksRefs) db.runbooks,
                     if (templatesRefs) db.templates,
                     if (mcpClientsRefs) db.mcpClients,
@@ -14956,27 +15225,6 @@ class $$WorkspacesTableTableManager
                               ),
                           typedResults: items,
                         ),
-                      if (hostsRefs)
-                        await $_getPrefetchedData<
-                          Workspace,
-                          $WorkspacesTable,
-                          Host
-                        >(
-                          currentTable: table,
-                          referencedTable: $$WorkspacesTableReferences
-                              ._hostsRefsTable(db),
-                          managerFromTypedResult: (p0) =>
-                              $$WorkspacesTableReferences(
-                                db,
-                                table,
-                                p0,
-                              ).hostsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.workspaceId == item.id,
-                              ),
-                          typedResults: items,
-                        ),
                       if (snippetsRefs)
                         await $_getPrefetchedData<
                           Workspace,
@@ -14992,6 +15240,27 @@ class $$WorkspacesTableTableManager
                                 table,
                                 p0,
                               ).snippetsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.workspaceId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (hostsRefs)
+                        await $_getPrefetchedData<
+                          Workspace,
+                          $WorkspacesTable,
+                          Host
+                        >(
+                          currentTable: table,
+                          referencedTable: $$WorkspacesTableReferences
+                              ._hostsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$WorkspacesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).hostsRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.workspaceId == item.id,
@@ -15168,8 +15437,8 @@ typedef $$WorkspacesTableProcessedTableManager =
       PrefetchHooks Function({
         bool identitiesRefs,
         bool hostGroupsRefs,
-        bool hostsRefs,
         bool snippetsRefs,
+        bool hostsRefs,
         bool runbooksRefs,
         bool templatesRefs,
         bool mcpClientsRefs,
@@ -16265,6 +16534,518 @@ typedef $$HostGroupsTableProcessedTableManager =
         bool hostGroupMembersRefs,
       })
     >;
+typedef $$SnippetsTableCreateCompanionBuilder =
+    SnippetsCompanion Function({
+      required String id,
+      required String workspaceId,
+      required String title,
+      required String code,
+      Value<String?> tags,
+      Value<int> rowid,
+    });
+typedef $$SnippetsTableUpdateCompanionBuilder =
+    SnippetsCompanion Function({
+      Value<String> id,
+      Value<String> workspaceId,
+      Value<String> title,
+      Value<String> code,
+      Value<String?> tags,
+      Value<int> rowid,
+    });
+
+final class $$SnippetsTableReferences
+    extends BaseReferences<_$AppDatabase, $SnippetsTable, Snippet> {
+  $$SnippetsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $WorkspacesTable _workspaceIdTable(_$AppDatabase db) =>
+      db.workspaces.createAlias('snippets__workspace_id__workspaces__id');
+
+  $$WorkspacesTableProcessedTableManager get workspaceId {
+    final $_column = $_itemColumn<String>('workspace_id')!;
+
+    final manager = $$WorkspacesTableTableManager(
+      $_db,
+      $_db.workspaces,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_workspaceIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<$HostsTable, List<Host>> _hostsRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.hosts,
+    aliasName: 'snippets__id__hosts__startup_snippet_id',
+  );
+
+  $$HostsTableProcessedTableManager get hostsRefs {
+    final manager = $$HostsTableTableManager($_db, $_db.hosts).filter(
+      (f) => f.startupSnippetId.id.sqlEquals($_itemColumn<String>('id')!),
+    );
+
+    final cache = $_typedResult.readTableOrNull(_hostsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$TemplatePanesTable, List<TemplatePane>>
+  _templatePanesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.templatePanes,
+    aliasName: 'snippets__id__template_panes__startup_snippet_id',
+  );
+
+  $$TemplatePanesTableProcessedTableManager get templatePanesRefs {
+    final manager = $$TemplatePanesTableTableManager($_db, $_db.templatePanes)
+        .filter(
+          (f) => f.startupSnippetId.id.sqlEquals($_itemColumn<String>('id')!),
+        );
+
+    final cache = $_typedResult.readTableOrNull(_templatePanesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$SnippetsTableFilterComposer
+    extends Composer<_$AppDatabase, $SnippetsTable> {
+  $$SnippetsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get code => $composableBuilder(
+    column: $table.code,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get tags => $composableBuilder(
+    column: $table.tags,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$WorkspacesTableFilterComposer get workspaceId {
+    final $$WorkspacesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.workspaceId,
+      referencedTable: $db.workspaces,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WorkspacesTableFilterComposer(
+            $db: $db,
+            $table: $db.workspaces,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> hostsRefs(
+    Expression<bool> Function($$HostsTableFilterComposer f) f,
+  ) {
+    final $$HostsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.hosts,
+      getReferencedColumn: (t) => t.startupSnippetId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$HostsTableFilterComposer(
+            $db: $db,
+            $table: $db.hosts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> templatePanesRefs(
+    Expression<bool> Function($$TemplatePanesTableFilterComposer f) f,
+  ) {
+    final $$TemplatePanesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.templatePanes,
+      getReferencedColumn: (t) => t.startupSnippetId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TemplatePanesTableFilterComposer(
+            $db: $db,
+            $table: $db.templatePanes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$SnippetsTableOrderingComposer
+    extends Composer<_$AppDatabase, $SnippetsTable> {
+  $$SnippetsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get code => $composableBuilder(
+    column: $table.code,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get tags => $composableBuilder(
+    column: $table.tags,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$WorkspacesTableOrderingComposer get workspaceId {
+    final $$WorkspacesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.workspaceId,
+      referencedTable: $db.workspaces,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WorkspacesTableOrderingComposer(
+            $db: $db,
+            $table: $db.workspaces,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SnippetsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SnippetsTable> {
+  $$SnippetsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get title =>
+      $composableBuilder(column: $table.title, builder: (column) => column);
+
+  GeneratedColumn<String> get code =>
+      $composableBuilder(column: $table.code, builder: (column) => column);
+
+  GeneratedColumn<String> get tags =>
+      $composableBuilder(column: $table.tags, builder: (column) => column);
+
+  $$WorkspacesTableAnnotationComposer get workspaceId {
+    final $$WorkspacesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.workspaceId,
+      referencedTable: $db.workspaces,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WorkspacesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.workspaces,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> hostsRefs<T extends Object>(
+    Expression<T> Function($$HostsTableAnnotationComposer a) f,
+  ) {
+    final $$HostsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.hosts,
+      getReferencedColumn: (t) => t.startupSnippetId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$HostsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.hosts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> templatePanesRefs<T extends Object>(
+    Expression<T> Function($$TemplatePanesTableAnnotationComposer a) f,
+  ) {
+    final $$TemplatePanesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.templatePanes,
+      getReferencedColumn: (t) => t.startupSnippetId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TemplatePanesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.templatePanes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$SnippetsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SnippetsTable,
+          Snippet,
+          $$SnippetsTableFilterComposer,
+          $$SnippetsTableOrderingComposer,
+          $$SnippetsTableAnnotationComposer,
+          $$SnippetsTableCreateCompanionBuilder,
+          $$SnippetsTableUpdateCompanionBuilder,
+          (Snippet, $$SnippetsTableReferences),
+          Snippet,
+          PrefetchHooks Function({
+            bool workspaceId,
+            bool hostsRefs,
+            bool templatePanesRefs,
+          })
+        > {
+  $$SnippetsTableTableManager(_$AppDatabase db, $SnippetsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SnippetsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SnippetsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SnippetsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> workspaceId = const Value.absent(),
+                Value<String> title = const Value.absent(),
+                Value<String> code = const Value.absent(),
+                Value<String?> tags = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SnippetsCompanion(
+                id: id,
+                workspaceId: workspaceId,
+                title: title,
+                code: code,
+                tags: tags,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String workspaceId,
+                required String title,
+                required String code,
+                Value<String?> tags = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SnippetsCompanion.insert(
+                id: id,
+                workspaceId: workspaceId,
+                title: title,
+                code: code,
+                tags: tags,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$SnippetsTable, Snippet>(table),
+                  $$SnippetsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({
+                workspaceId = false,
+                hostsRefs = false,
+                templatePanesRefs = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (hostsRefs) db.hosts,
+                    if (templatePanesRefs) db.templatePanes,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (workspaceId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.workspaceId,
+                                    referencedTable: $$SnippetsTableReferences
+                                        ._workspaceIdTable(db),
+                                    referencedColumn: $$SnippetsTableReferences
+                                        ._workspaceIdTable(db)
+                                        .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (hostsRefs)
+                        await $_getPrefetchedData<
+                          Snippet,
+                          $SnippetsTable,
+                          Host
+                        >(
+                          currentTable: table,
+                          referencedTable: $$SnippetsTableReferences
+                              ._hostsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$SnippetsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).hostsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.startupSnippetId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (templatePanesRefs)
+                        await $_getPrefetchedData<
+                          Snippet,
+                          $SnippetsTable,
+                          TemplatePane
+                        >(
+                          currentTable: table,
+                          referencedTable: $$SnippetsTableReferences
+                              ._templatePanesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$SnippetsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).templatePanesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.startupSnippetId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$SnippetsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SnippetsTable,
+      Snippet,
+      $$SnippetsTableFilterComposer,
+      $$SnippetsTableOrderingComposer,
+      $$SnippetsTableAnnotationComposer,
+      $$SnippetsTableCreateCompanionBuilder,
+      $$SnippetsTableUpdateCompanionBuilder,
+      (Snippet, $$SnippetsTableReferences),
+      Snippet,
+      PrefetchHooks Function({
+        bool workspaceId,
+        bool hostsRefs,
+        bool templatePanesRefs,
+      })
+    >;
 typedef $$HostsTableCreateCompanionBuilder =
     HostsCompanion Function({
       required String id,
@@ -16281,6 +17062,7 @@ typedef $$HostsTableCreateCompanionBuilder =
       Value<String?> colorTag,
       Value<String?> jumpHostId,
       required DateTime createdAt,
+      Value<String?> startupSnippetId,
       Value<String> environment,
       Value<bool> mcpVisible,
       Value<String> mcpDefaultMode,
@@ -16302,6 +17084,7 @@ typedef $$HostsTableUpdateCompanionBuilder =
       Value<String?> colorTag,
       Value<String?> jumpHostId,
       Value<DateTime> createdAt,
+      Value<String?> startupSnippetId,
       Value<String> environment,
       Value<bool> mcpVisible,
       Value<String> mcpDefaultMode,
@@ -16374,6 +17157,23 @@ final class $$HostsTableReferences
       $_db.hosts,
     ).filter((f) => f.id.sqlEquals($_column));
     final item = $_typedResult.readTableOrNull(_jumpHostIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $SnippetsTable _startupSnippetIdTable(_$AppDatabase db) =>
+      db.snippets.createAlias('hosts__startup_snippet_id__snippets__id');
+
+  $$SnippetsTableProcessedTableManager? get startupSnippetId {
+    final $_column = $_itemColumn<String>('startup_snippet_id');
+    if ($_column == null) return null;
+    final manager = $$SnippetsTableTableManager(
+      $_db,
+      $_db.snippets,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_startupSnippetIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -16631,6 +17431,29 @@ class $$HostsTableFilterComposer extends Composer<_$AppDatabase, $HostsTable> {
           }) => $$HostsTableFilterComposer(
             $db: $db,
             $table: $db.hosts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$SnippetsTableFilterComposer get startupSnippetId {
+    final $$SnippetsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.startupSnippetId,
+      referencedTable: $db.snippets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SnippetsTableFilterComposer(
+            $db: $db,
+            $table: $db.snippets,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -16931,6 +17754,29 @@ class $$HostsTableOrderingComposer
     );
     return composer;
   }
+
+  $$SnippetsTableOrderingComposer get startupSnippetId {
+    final $$SnippetsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.startupSnippetId,
+      referencedTable: $db.snippets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SnippetsTableOrderingComposer(
+            $db: $db,
+            $table: $db.snippets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$HostsTableAnnotationComposer
@@ -17074,6 +17920,29 @@ class $$HostsTableAnnotationComposer
           }) => $$HostsTableAnnotationComposer(
             $db: $db,
             $table: $db.hosts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$SnippetsTableAnnotationComposer get startupSnippetId {
+    final $$SnippetsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.startupSnippetId,
+      referencedTable: $db.snippets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SnippetsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.snippets,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -17227,6 +18096,7 @@ class $$HostsTableTableManager
             bool groupId,
             bool identityId,
             bool jumpHostId,
+            bool startupSnippetId,
             bool hostGroupMembersRefs,
             bool portForwardRulesRefs,
             bool mcpHostGrantsRefs,
@@ -17261,6 +18131,7 @@ class $$HostsTableTableManager
                 Value<String?> colorTag = const Value.absent(),
                 Value<String?> jumpHostId = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<String?> startupSnippetId = const Value.absent(),
                 Value<String> environment = const Value.absent(),
                 Value<bool> mcpVisible = const Value.absent(),
                 Value<String> mcpDefaultMode = const Value.absent(),
@@ -17280,6 +18151,7 @@ class $$HostsTableTableManager
                 colorTag: colorTag,
                 jumpHostId: jumpHostId,
                 createdAt: createdAt,
+                startupSnippetId: startupSnippetId,
                 environment: environment,
                 mcpVisible: mcpVisible,
                 mcpDefaultMode: mcpDefaultMode,
@@ -17301,6 +18173,7 @@ class $$HostsTableTableManager
                 Value<String?> colorTag = const Value.absent(),
                 Value<String?> jumpHostId = const Value.absent(),
                 required DateTime createdAt,
+                Value<String?> startupSnippetId = const Value.absent(),
                 Value<String> environment = const Value.absent(),
                 Value<bool> mcpVisible = const Value.absent(),
                 Value<String> mcpDefaultMode = const Value.absent(),
@@ -17320,6 +18193,7 @@ class $$HostsTableTableManager
                 colorTag: colorTag,
                 jumpHostId: jumpHostId,
                 createdAt: createdAt,
+                startupSnippetId: startupSnippetId,
                 environment: environment,
                 mcpVisible: mcpVisible,
                 mcpDefaultMode: mcpDefaultMode,
@@ -17339,6 +18213,7 @@ class $$HostsTableTableManager
                 groupId = false,
                 identityId = false,
                 jumpHostId = false,
+                startupSnippetId = false,
                 hostGroupMembersRefs = false,
                 portForwardRulesRefs = false,
                 mcpHostGrantsRefs = false,
@@ -17418,6 +18293,19 @@ class $$HostsTableTableManager
                                         ._jumpHostIdTable(db),
                                     referencedColumn: $$HostsTableReferences
                                         ._jumpHostIdTable(db)
+                                        .id,
+                                  )
+                                  as T;
+                        }
+                        if (startupSnippetId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.startupSnippetId,
+                                    referencedTable: $$HostsTableReferences
+                                        ._startupSnippetIdTable(db),
+                                    referencedColumn: $$HostsTableReferences
+                                        ._startupSnippetIdTable(db)
                                         .id,
                                   )
                                   as T;
@@ -17553,6 +18441,7 @@ typedef $$HostsTableProcessedTableManager =
         bool groupId,
         bool identityId,
         bool jumpHostId,
+        bool startupSnippetId,
         bool hostGroupMembersRefs,
         bool portForwardRulesRefs,
         bool mcpHostGrantsRefs,
@@ -18533,323 +19422,6 @@ typedef $$PortForwardRulesTableProcessedTableManager =
       PortForwardRule,
       PrefetchHooks Function({bool hostId})
     >;
-typedef $$SnippetsTableCreateCompanionBuilder =
-    SnippetsCompanion Function({
-      required String id,
-      required String workspaceId,
-      required String title,
-      required String code,
-      Value<String?> tags,
-      Value<int> rowid,
-    });
-typedef $$SnippetsTableUpdateCompanionBuilder =
-    SnippetsCompanion Function({
-      Value<String> id,
-      Value<String> workspaceId,
-      Value<String> title,
-      Value<String> code,
-      Value<String?> tags,
-      Value<int> rowid,
-    });
-
-final class $$SnippetsTableReferences
-    extends BaseReferences<_$AppDatabase, $SnippetsTable, Snippet> {
-  $$SnippetsTableReferences(super.$_db, super.$_table, super.$_typedResult);
-
-  static $WorkspacesTable _workspaceIdTable(_$AppDatabase db) =>
-      db.workspaces.createAlias('snippets__workspace_id__workspaces__id');
-
-  $$WorkspacesTableProcessedTableManager get workspaceId {
-    final $_column = $_itemColumn<String>('workspace_id')!;
-
-    final manager = $$WorkspacesTableTableManager(
-      $_db,
-      $_db.workspaces,
-    ).filter((f) => f.id.sqlEquals($_column));
-    final item = $_typedResult.readTableOrNull(_workspaceIdTable($_db));
-    if (item == null) return manager;
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: [item]),
-    );
-  }
-}
-
-class $$SnippetsTableFilterComposer
-    extends Composer<_$AppDatabase, $SnippetsTable> {
-  $$SnippetsTableFilterComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnFilters<String> get id => $composableBuilder(
-    column: $table.id,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get title => $composableBuilder(
-    column: $table.title,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get code => $composableBuilder(
-    column: $table.code,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get tags => $composableBuilder(
-    column: $table.tags,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  $$WorkspacesTableFilterComposer get workspaceId {
-    final $$WorkspacesTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.workspaceId,
-      referencedTable: $db.workspaces,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$WorkspacesTableFilterComposer(
-            $db: $db,
-            $table: $db.workspaces,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
-}
-
-class $$SnippetsTableOrderingComposer
-    extends Composer<_$AppDatabase, $SnippetsTable> {
-  $$SnippetsTableOrderingComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnOrderings<String> get id => $composableBuilder(
-    column: $table.id,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get title => $composableBuilder(
-    column: $table.title,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get code => $composableBuilder(
-    column: $table.code,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get tags => $composableBuilder(
-    column: $table.tags,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  $$WorkspacesTableOrderingComposer get workspaceId {
-    final $$WorkspacesTableOrderingComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.workspaceId,
-      referencedTable: $db.workspaces,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$WorkspacesTableOrderingComposer(
-            $db: $db,
-            $table: $db.workspaces,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
-}
-
-class $$SnippetsTableAnnotationComposer
-    extends Composer<_$AppDatabase, $SnippetsTable> {
-  $$SnippetsTableAnnotationComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  GeneratedColumn<String> get id =>
-      $composableBuilder(column: $table.id, builder: (column) => column);
-
-  GeneratedColumn<String> get title =>
-      $composableBuilder(column: $table.title, builder: (column) => column);
-
-  GeneratedColumn<String> get code =>
-      $composableBuilder(column: $table.code, builder: (column) => column);
-
-  GeneratedColumn<String> get tags =>
-      $composableBuilder(column: $table.tags, builder: (column) => column);
-
-  $$WorkspacesTableAnnotationComposer get workspaceId {
-    final $$WorkspacesTableAnnotationComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.workspaceId,
-      referencedTable: $db.workspaces,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$WorkspacesTableAnnotationComposer(
-            $db: $db,
-            $table: $db.workspaces,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
-}
-
-class $$SnippetsTableTableManager
-    extends
-        RootTableManager<
-          _$AppDatabase,
-          $SnippetsTable,
-          Snippet,
-          $$SnippetsTableFilterComposer,
-          $$SnippetsTableOrderingComposer,
-          $$SnippetsTableAnnotationComposer,
-          $$SnippetsTableCreateCompanionBuilder,
-          $$SnippetsTableUpdateCompanionBuilder,
-          (Snippet, $$SnippetsTableReferences),
-          Snippet,
-          PrefetchHooks Function({bool workspaceId})
-        > {
-  $$SnippetsTableTableManager(_$AppDatabase db, $SnippetsTable table)
-    : super(
-        TableManagerState(
-          db: db,
-          table: table,
-          createFilteringComposer: () =>
-              $$SnippetsTableFilterComposer($db: db, $table: table),
-          createOrderingComposer: () =>
-              $$SnippetsTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer: () =>
-              $$SnippetsTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback:
-              ({
-                Value<String> id = const Value.absent(),
-                Value<String> workspaceId = const Value.absent(),
-                Value<String> title = const Value.absent(),
-                Value<String> code = const Value.absent(),
-                Value<String?> tags = const Value.absent(),
-                Value<int> rowid = const Value.absent(),
-              }) => SnippetsCompanion(
-                id: id,
-                workspaceId: workspaceId,
-                title: title,
-                code: code,
-                tags: tags,
-                rowid: rowid,
-              ),
-          createCompanionCallback:
-              ({
-                required String id,
-                required String workspaceId,
-                required String title,
-                required String code,
-                Value<String?> tags = const Value.absent(),
-                Value<int> rowid = const Value.absent(),
-              }) => SnippetsCompanion.insert(
-                id: id,
-                workspaceId: workspaceId,
-                title: title,
-                code: code,
-                tags: tags,
-                rowid: rowid,
-              ),
-          withReferenceMapper: (p0) => p0
-              .map(
-                (e) => (
-                  e.readTable<$SnippetsTable, Snippet>(table),
-                  $$SnippetsTableReferences(db, table, e),
-                ),
-              )
-              .toList(),
-          prefetchHooksCallback: ({workspaceId = false}) {
-            return PrefetchHooks(
-              db: db,
-              explicitlyWatchedTables: [],
-              addJoins:
-                  <
-                    T extends TableManagerState<
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic
-                    >
-                  >(state) {
-                    if (workspaceId) {
-                      state =
-                          state.withJoin(
-                                currentTable: table,
-                                currentColumn: table.workspaceId,
-                                referencedTable: $$SnippetsTableReferences
-                                    ._workspaceIdTable(db),
-                                referencedColumn: $$SnippetsTableReferences
-                                    ._workspaceIdTable(db)
-                                    .id,
-                              )
-                              as T;
-                    }
-
-                    return state;
-                  },
-              getPrefetchedDataCallback: (items) async {
-                return [];
-              },
-            );
-          },
-        ),
-      );
-}
-
-typedef $$SnippetsTableProcessedTableManager =
-    ProcessedTableManager<
-      _$AppDatabase,
-      $SnippetsTable,
-      Snippet,
-      $$SnippetsTableFilterComposer,
-      $$SnippetsTableOrderingComposer,
-      $$SnippetsTableAnnotationComposer,
-      $$SnippetsTableCreateCompanionBuilder,
-      $$SnippetsTableUpdateCompanionBuilder,
-      (Snippet, $$SnippetsTableReferences),
-      Snippet,
-      PrefetchHooks Function({bool workspaceId})
-    >;
 typedef $$RunbooksTableCreateCompanionBuilder =
     RunbooksCompanion Function({
       required String id,
@@ -18905,6 +19477,23 @@ final class $$RunbooksTableReferences
     ).filter((f) => f.runbookId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_runbookStepsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$TemplatesTable, List<Template>>
+  _templatesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.templates,
+    aliasName: 'runbooks__id__templates__on_open_runbook_id',
+  );
+
+  $$TemplatesTableProcessedTableManager get templatesRefs {
+    final manager = $$TemplatesTableTableManager($_db, $_db.templates).filter(
+      (f) => f.onOpenRunbookId.id.sqlEquals($_itemColumn<String>('id')!),
+    );
+
+    final cache = $_typedResult.readTableOrNull(_templatesRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -18984,6 +19573,31 @@ class $$RunbooksTableFilterComposer
           }) => $$RunbookStepsTableFilterComposer(
             $db: $db,
             $table: $db.runbookSteps,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> templatesRefs(
+    Expression<bool> Function($$TemplatesTableFilterComposer f) f,
+  ) {
+    final $$TemplatesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.templates,
+      getReferencedColumn: (t) => t.onOpenRunbookId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TemplatesTableFilterComposer(
+            $db: $db,
+            $table: $db.templates,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -19127,6 +19741,31 @@ class $$RunbooksTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> templatesRefs<T extends Object>(
+    Expression<T> Function($$TemplatesTableAnnotationComposer a) f,
+  ) {
+    final $$TemplatesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.templates,
+      getReferencedColumn: (t) => t.onOpenRunbookId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TemplatesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.templates,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$RunbooksTableTableManager
@@ -19142,7 +19781,11 @@ class $$RunbooksTableTableManager
           $$RunbooksTableUpdateCompanionBuilder,
           (Runbook, $$RunbooksTableReferences),
           Runbook,
-          PrefetchHooks Function({bool workspaceId, bool runbookStepsRefs})
+          PrefetchHooks Function({
+            bool workspaceId,
+            bool runbookStepsRefs,
+            bool templatesRefs,
+          })
         > {
   $$RunbooksTableTableManager(_$AppDatabase db, $RunbooksTable table)
     : super(
@@ -19200,11 +19843,16 @@ class $$RunbooksTableTableManager
               )
               .toList(),
           prefetchHooksCallback:
-              ({workspaceId = false, runbookStepsRefs = false}) {
+              ({
+                workspaceId = false,
+                runbookStepsRefs = false,
+                templatesRefs = false,
+              }) {
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [
                     if (runbookStepsRefs) db.runbookSteps,
+                    if (templatesRefs) db.templates,
                   ],
                   addJoins:
                       <
@@ -19261,6 +19909,27 @@ class $$RunbooksTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (templatesRefs)
+                        await $_getPrefetchedData<
+                          Runbook,
+                          $RunbooksTable,
+                          Template
+                        >(
+                          currentTable: table,
+                          referencedTable: $$RunbooksTableReferences
+                              ._templatesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$RunbooksTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).templatesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.onOpenRunbookId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -19281,7 +19950,11 @@ typedef $$RunbooksTableProcessedTableManager =
       $$RunbooksTableUpdateCompanionBuilder,
       (Runbook, $$RunbooksTableReferences),
       Runbook,
-      PrefetchHooks Function({bool workspaceId, bool runbookStepsRefs})
+      PrefetchHooks Function({
+        bool workspaceId,
+        bool runbookStepsRefs,
+        bool templatesRefs,
+      })
     >;
 typedef $$RunbookStepsTableCreateCompanionBuilder =
     RunbookStepsCompanion Function({
@@ -19690,6 +20363,8 @@ typedef $$TemplatesTableCreateCompanionBuilder =
       Value<String?> description,
       Value<String?> activePaneId,
       required DateTime createdAt,
+      Value<String?> onOpenRunbookId,
+      Value<bool> onOpenConfirm,
       Value<int> rowid,
     });
 typedef $$TemplatesTableUpdateCompanionBuilder =
@@ -19700,6 +20375,8 @@ typedef $$TemplatesTableUpdateCompanionBuilder =
       Value<String?> description,
       Value<String?> activePaneId,
       Value<DateTime> createdAt,
+      Value<String?> onOpenRunbookId,
+      Value<bool> onOpenConfirm,
       Value<int> rowid,
     });
 
@@ -19718,6 +20395,23 @@ final class $$TemplatesTableReferences
       $_db.workspaces,
     ).filter((f) => f.id.sqlEquals($_column));
     final item = $_typedResult.readTableOrNull(_workspaceIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $RunbooksTable _onOpenRunbookIdTable(_$AppDatabase db) =>
+      db.runbooks.createAlias('templates__on_open_runbook_id__runbooks__id');
+
+  $$RunbooksTableProcessedTableManager? get onOpenRunbookId {
+    final $_column = $_itemColumn<String>('on_open_runbook_id');
+    if ($_column == null) return null;
+    final manager = $$RunbooksTableTableManager(
+      $_db,
+      $_db.runbooks,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_onOpenRunbookIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -19795,6 +20489,11 @@ class $$TemplatesTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<bool> get onOpenConfirm => $composableBuilder(
+    column: $table.onOpenConfirm,
+    builder: (column) => ColumnFilters(column),
+  );
+
   $$WorkspacesTableFilterComposer get workspaceId {
     final $$WorkspacesTableFilterComposer composer = $composerBuilder(
       composer: this,
@@ -19809,6 +20508,29 @@ class $$TemplatesTableFilterComposer
           }) => $$WorkspacesTableFilterComposer(
             $db: $db,
             $table: $db.workspaces,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$RunbooksTableFilterComposer get onOpenRunbookId {
+    final $$RunbooksTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.onOpenRunbookId,
+      referencedTable: $db.runbooks,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$RunbooksTableFilterComposer(
+            $db: $db,
+            $table: $db.runbooks,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -19903,6 +20625,11 @@ class $$TemplatesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get onOpenConfirm => $composableBuilder(
+    column: $table.onOpenConfirm,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$WorkspacesTableOrderingComposer get workspaceId {
     final $$WorkspacesTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -19917,6 +20644,29 @@ class $$TemplatesTableOrderingComposer
           }) => $$WorkspacesTableOrderingComposer(
             $db: $db,
             $table: $db.workspaces,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$RunbooksTableOrderingComposer get onOpenRunbookId {
+    final $$RunbooksTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.onOpenRunbookId,
+      referencedTable: $db.runbooks,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$RunbooksTableOrderingComposer(
+            $db: $db,
+            $table: $db.runbooks,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -19955,6 +20705,11 @@ class $$TemplatesTableAnnotationComposer
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
+  GeneratedColumn<bool> get onOpenConfirm => $composableBuilder(
+    column: $table.onOpenConfirm,
+    builder: (column) => column,
+  );
+
   $$WorkspacesTableAnnotationComposer get workspaceId {
     final $$WorkspacesTableAnnotationComposer composer = $composerBuilder(
       composer: this,
@@ -19969,6 +20724,29 @@ class $$TemplatesTableAnnotationComposer
           }) => $$WorkspacesTableAnnotationComposer(
             $db: $db,
             $table: $db.workspaces,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$RunbooksTableAnnotationComposer get onOpenRunbookId {
+    final $$RunbooksTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.onOpenRunbookId,
+      referencedTable: $db.runbooks,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$RunbooksTableAnnotationComposer(
+            $db: $db,
+            $table: $db.runbooks,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -20044,6 +20822,7 @@ class $$TemplatesTableTableManager
           Template,
           PrefetchHooks Function({
             bool workspaceId,
+            bool onOpenRunbookId,
             bool templatePanesRefs,
             bool bookmarksRefs,
           })
@@ -20067,6 +20846,8 @@ class $$TemplatesTableTableManager
                 Value<String?> description = const Value.absent(),
                 Value<String?> activePaneId = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<String?> onOpenRunbookId = const Value.absent(),
+                Value<bool> onOpenConfirm = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => TemplatesCompanion(
                 id: id,
@@ -20075,6 +20856,8 @@ class $$TemplatesTableTableManager
                 description: description,
                 activePaneId: activePaneId,
                 createdAt: createdAt,
+                onOpenRunbookId: onOpenRunbookId,
+                onOpenConfirm: onOpenConfirm,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -20085,6 +20868,8 @@ class $$TemplatesTableTableManager
                 Value<String?> description = const Value.absent(),
                 Value<String?> activePaneId = const Value.absent(),
                 required DateTime createdAt,
+                Value<String?> onOpenRunbookId = const Value.absent(),
+                Value<bool> onOpenConfirm = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => TemplatesCompanion.insert(
                 id: id,
@@ -20093,6 +20878,8 @@ class $$TemplatesTableTableManager
                 description: description,
                 activePaneId: activePaneId,
                 createdAt: createdAt,
+                onOpenRunbookId: onOpenRunbookId,
+                onOpenConfirm: onOpenConfirm,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -20106,6 +20893,7 @@ class $$TemplatesTableTableManager
           prefetchHooksCallback:
               ({
                 workspaceId = false,
+                onOpenRunbookId = false,
                 templatePanesRefs = false,
                 bookmarksRefs = false,
               }) {
@@ -20140,6 +20928,19 @@ class $$TemplatesTableTableManager
                                         ._workspaceIdTable(db),
                                     referencedColumn: $$TemplatesTableReferences
                                         ._workspaceIdTable(db)
+                                        .id,
+                                  )
+                                  as T;
+                        }
+                        if (onOpenRunbookId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.onOpenRunbookId,
+                                    referencedTable: $$TemplatesTableReferences
+                                        ._onOpenRunbookIdTable(db),
+                                    referencedColumn: $$TemplatesTableReferences
+                                        ._onOpenRunbookIdTable(db)
                                         .id,
                                   )
                                   as T;
@@ -20213,6 +21014,7 @@ typedef $$TemplatesTableProcessedTableManager =
       Template,
       PrefetchHooks Function({
         bool workspaceId,
+        bool onOpenRunbookId,
         bool templatePanesRefs,
         bool bookmarksRefs,
       })
@@ -20228,6 +21030,7 @@ typedef $$TemplatePanesTableCreateCompanionBuilder =
       required String sessionType,
       Value<String?> hostId,
       Value<String?> title,
+      Value<String?> startupSnippetId,
       Value<int> rowid,
     });
 typedef $$TemplatePanesTableUpdateCompanionBuilder =
@@ -20241,6 +21044,7 @@ typedef $$TemplatePanesTableUpdateCompanionBuilder =
       Value<String> sessionType,
       Value<String?> hostId,
       Value<String?> title,
+      Value<String?> startupSnippetId,
       Value<int> rowid,
     });
 
@@ -20263,6 +21067,23 @@ final class $$TemplatePanesTableReferences
       $_db.templates,
     ).filter((f) => f.id.sqlEquals($_column));
     final item = $_typedResult.readTableOrNull(_templateIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $SnippetsTable _startupSnippetIdTable(_$AppDatabase db) => db.snippets
+      .createAlias('template_panes__startup_snippet_id__snippets__id');
+
+  $$SnippetsTableProcessedTableManager? get startupSnippetId {
+    final $_column = $_itemColumn<String>('startup_snippet_id');
+    if ($_column == null) return null;
+    final manager = $$SnippetsTableTableManager(
+      $_db,
+      $_db.snippets,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_startupSnippetIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -20333,6 +21154,29 @@ class $$TemplatePanesTableFilterComposer
           }) => $$TemplatesTableFilterComposer(
             $db: $db,
             $table: $db.templates,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$SnippetsTableFilterComposer get startupSnippetId {
+    final $$SnippetsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.startupSnippetId,
+      referencedTable: $db.snippets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SnippetsTableFilterComposer(
+            $db: $db,
+            $table: $db.snippets,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -20414,6 +21258,29 @@ class $$TemplatePanesTableOrderingComposer
     );
     return composer;
   }
+
+  $$SnippetsTableOrderingComposer get startupSnippetId {
+    final $$SnippetsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.startupSnippetId,
+      referencedTable: $db.snippets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SnippetsTableOrderingComposer(
+            $db: $db,
+            $table: $db.snippets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$TemplatePanesTableAnnotationComposer
@@ -20479,6 +21346,29 @@ class $$TemplatePanesTableAnnotationComposer
     );
     return composer;
   }
+
+  $$SnippetsTableAnnotationComposer get startupSnippetId {
+    final $$SnippetsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.startupSnippetId,
+      referencedTable: $db.snippets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SnippetsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.snippets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$TemplatePanesTableTableManager
@@ -20494,7 +21384,7 @@ class $$TemplatePanesTableTableManager
           $$TemplatePanesTableUpdateCompanionBuilder,
           (TemplatePane, $$TemplatePanesTableReferences),
           TemplatePane,
-          PrefetchHooks Function({bool templateId})
+          PrefetchHooks Function({bool templateId, bool startupSnippetId})
         > {
   $$TemplatePanesTableTableManager(_$AppDatabase db, $TemplatePanesTable table)
     : super(
@@ -20518,6 +21408,7 @@ class $$TemplatePanesTableTableManager
                 Value<String> sessionType = const Value.absent(),
                 Value<String?> hostId = const Value.absent(),
                 Value<String?> title = const Value.absent(),
+                Value<String?> startupSnippetId = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => TemplatePanesCompanion(
                 id: id,
@@ -20529,6 +21420,7 @@ class $$TemplatePanesTableTableManager
                 sessionType: sessionType,
                 hostId: hostId,
                 title: title,
+                startupSnippetId: startupSnippetId,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -20542,6 +21434,7 @@ class $$TemplatePanesTableTableManager
                 required String sessionType,
                 Value<String?> hostId = const Value.absent(),
                 Value<String?> title = const Value.absent(),
+                Value<String?> startupSnippetId = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => TemplatePanesCompanion.insert(
                 id: id,
@@ -20553,6 +21446,7 @@ class $$TemplatePanesTableTableManager
                 sessionType: sessionType,
                 hostId: hostId,
                 title: title,
+                startupSnippetId: startupSnippetId,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -20563,47 +21457,65 @@ class $$TemplatePanesTableTableManager
                 ),
               )
               .toList(),
-          prefetchHooksCallback: ({templateId = false}) {
-            return PrefetchHooks(
-              db: db,
-              explicitlyWatchedTables: [],
-              addJoins:
-                  <
-                    T extends TableManagerState<
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic
-                    >
-                  >(state) {
-                    if (templateId) {
-                      state =
-                          state.withJoin(
-                                currentTable: table,
-                                currentColumn: table.templateId,
-                                referencedTable: $$TemplatePanesTableReferences
-                                    ._templateIdTable(db),
-                                referencedColumn: $$TemplatePanesTableReferences
-                                    ._templateIdTable(db)
-                                    .id,
-                              )
-                              as T;
-                    }
+          prefetchHooksCallback:
+              ({templateId = false, startupSnippetId = false}) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (templateId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.templateId,
+                                    referencedTable:
+                                        $$TemplatePanesTableReferences
+                                            ._templateIdTable(db),
+                                    referencedColumn:
+                                        $$TemplatePanesTableReferences
+                                            ._templateIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (startupSnippetId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.startupSnippetId,
+                                    referencedTable:
+                                        $$TemplatePanesTableReferences
+                                            ._startupSnippetIdTable(db),
+                                    referencedColumn:
+                                        $$TemplatePanesTableReferences
+                                            ._startupSnippetIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
 
-                    return state;
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [];
                   },
-              getPrefetchedDataCallback: (items) async {
-                return [];
+                );
               },
-            );
-          },
         ),
       );
 }
@@ -20620,7 +21532,7 @@ typedef $$TemplatePanesTableProcessedTableManager =
       $$TemplatePanesTableUpdateCompanionBuilder,
       (TemplatePane, $$TemplatePanesTableReferences),
       TemplatePane,
-      PrefetchHooks Function({bool templateId})
+      PrefetchHooks Function({bool templateId, bool startupSnippetId})
     >;
 typedef $$PairedDevicesTableCreateCompanionBuilder =
     PairedDevicesCompanion Function({
@@ -26403,6 +27315,8 @@ class $AppDatabaseManager {
       $$IdentitiesTableTableManager(_db, _db.identities);
   $$HostGroupsTableTableManager get hostGroups =>
       $$HostGroupsTableTableManager(_db, _db.hostGroups);
+  $$SnippetsTableTableManager get snippets =>
+      $$SnippetsTableTableManager(_db, _db.snippets);
   $$HostsTableTableManager get hosts =>
       $$HostsTableTableManager(_db, _db.hosts);
   $$HostGroupMembersTableTableManager get hostGroupMembers =>
@@ -26411,8 +27325,6 @@ class $AppDatabaseManager {
       $$KnownHostsTableTableManager(_db, _db.knownHosts);
   $$PortForwardRulesTableTableManager get portForwardRules =>
       $$PortForwardRulesTableTableManager(_db, _db.portForwardRules);
-  $$SnippetsTableTableManager get snippets =>
-      $$SnippetsTableTableManager(_db, _db.snippets);
   $$RunbooksTableTableManager get runbooks =>
       $$RunbooksTableTableManager(_db, _db.runbooks);
   $$RunbookStepsTableTableManager get runbookSteps =>

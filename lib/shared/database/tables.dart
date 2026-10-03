@@ -81,6 +81,14 @@ class Hosts extends Table {
       text().nullable().references(Hosts, #id, onDelete: KeyAction.setNull)();
   DateTimeColumn get createdAt => dateTime()();
 
+  /// Snippet typed into this host's terminal once the session first comes up.
+  /// Cleared (not cascaded) when the snippet is deleted.
+  TextColumn get startupSnippetId => text().nullable().references(
+    Snippets,
+    #id,
+    onDelete: KeyAction.setNull,
+  )();
+
   /// 'dev' | 'staging' | 'prod' — the policy engine's criticality signal.
   TextColumn get environment => text().withDefault(const Constant('dev'))();
 
@@ -298,6 +306,17 @@ class Templates extends Table {
   TextColumn get activePaneId => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
 
+  /// Runbook started in the background on the template's hosts once the
+  /// template has been opened. Cleared when the runbook is deleted.
+  TextColumn get onOpenRunbookId => text().nullable().references(
+    Runbooks,
+    #id,
+    onDelete: KeyAction.setNull,
+  )();
+
+  /// Ask before running [onOpenRunbookId] rather than running it unprompted.
+  BoolColumn get onOpenConfirm => boolean().withDefault(const Constant(true))();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -332,6 +351,14 @@ class TemplatePanes extends Table {
   /// exists is skipped with a warning when the template runs.
   TextColumn get hostId => text().nullable()();
   TextColumn get title => text().nullable()();
+
+  /// Startup snippet for this pane, overriding its host's. Null means use the
+  /// host's own. Cleared when the snippet is deleted.
+  TextColumn get startupSnippetId => text().nullable().references(
+    Snippets,
+    #id,
+    onDelete: KeyAction.setNull,
+  )();
 
   @override
   Set<Column> get primaryKey => {id};

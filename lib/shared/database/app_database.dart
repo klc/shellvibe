@@ -262,6 +262,30 @@ class AppDatabase extends _$AppDatabase {
           // only, and mask the values where they were echoed into commands,
           // output and errors.
           await _scrubRunHistoryValues();
+
+          // Startup snippets and template "on open" runbooks. Nullable
+          // references, so every existing row simply has none. Only where the
+          // table exists, for the same reason as v16. The two tables they
+          // point at are created first if somehow absent: SQLite refuses to
+          // write a row whose foreign key names a table that is not there.
+          await _ensureTable(snippets);
+          await _ensureTable(runbooks);
+          if (await _needsColumn(hosts.actualTableName, 'startup_snippet_id')) {
+            await m.addColumn(hosts, hosts.startupSnippetId);
+          }
+          if (await _needsColumn(
+            templates.actualTableName,
+            'on_open_runbook_id',
+          )) {
+            await m.addColumn(templates, templates.onOpenRunbookId);
+            await m.addColumn(templates, templates.onOpenConfirm);
+          }
+          if (await _needsColumn(
+            templatePanes.actualTableName,
+            'startup_snippet_id',
+          )) {
+            await m.addColumn(templatePanes, templatePanes.startupSnippetId);
+          }
         }
       },
     );
@@ -328,6 +352,16 @@ class AppDatabase extends _$AppDatabase {
         );
       }
     }
+  }
+
+  /// Creates [table] when the database does not have it. Only an install old
+  /// enough to predate it can lack one, and it then gets the current shape.
+  Future<void> _ensureTable(TableInfo<Table, dynamic> table) async {
+    final found = await customSelect(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+      variables: [Variable.withString(table.actualTableName)],
+    ).get();
+    if (found.isEmpty) await createMigrator().createTable(table);
   }
 
   /// True when [table] exists but has no [column] yet: the one case where the

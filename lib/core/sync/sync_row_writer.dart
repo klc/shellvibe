@@ -158,6 +158,13 @@ final class SyncRowWriter {
         final keepIdentity = await exists(db.identities, identityId);
         if (identityId != null && !keepIdentity) cleared.add('identity');
 
+        // Snippets sort ahead of hosts, so a reference that is missing here
+        // really is missing. Absent from an older client's row: no startup
+        // snippet.
+        final startupId = str('startupSnippetId');
+        final keepStartup = await exists(db.snippets, startupId);
+        if (startupId != null && !keepStartup) cleared.add('startup snippet');
+
         await db
             .into(db.hosts)
             .insertOnConflictUpdate(
@@ -176,6 +183,7 @@ final class SyncRowWriter {
                 moshPortRange: Value(str('moshPortRange')),
                 colorTag: Value(str('colorTag')),
                 jumpHostId: Value(str('jumpHostId')),
+                startupSnippetId: Value(keepStartup ? startupId : null),
                 environment: Value(str('environment') ?? 'dev'),
                 mcpVisible: Value(row['mcpVisible'] as bool? ?? true),
                 mcpDefaultMode: Value(str('mcpDefaultMode') ?? 'readonly'),
@@ -320,6 +328,9 @@ final class SyncRowWriter {
           return const RowWriteResult.skipped('workspace');
         }
 
+        final onOpenId = str('onOpenRunbookId');
+        final keepOnOpen = await exists(db.runbooks, onOpenId);
+
         await db
             .into(db.templates)
             .insertOnConflictUpdate(
@@ -330,10 +341,18 @@ final class SyncRowWriter {
                 description: Value(str('description')),
                 activePaneId: Value(str('activePaneId')),
                 createdAt: date('createdAt'),
+                // Absent from an older client's row: no on-open runbook, and
+                // the safe default of asking first.
+                onOpenRunbookId: Value(keepOnOpen ? onOpenId : null),
+                onOpenConfirm: Value(row['onOpenConfirm'] as bool? ?? true),
               ),
             );
 
-        return const RowWriteResult.ok();
+        return RowWriteResult.ok(
+          clearedReferences: [
+            if (onOpenId != null && !keepOnOpen) 'on-open runbook',
+          ],
+        );
 
       case 'template_panes':
         if (!await exists(db.templates, str('templateId'))) {
@@ -343,6 +362,8 @@ final class SyncRowWriter {
         // `hostId` here is deliberately not a foreign key: deleting a host
         // must not rewrite a saved layout, and a pane whose host is gone is
         // skipped when the template runs. So it is written as it is.
+        final paneSnippetId = str('startupSnippetId');
+        final keepPaneSnippet = await exists(db.snippets, paneSnippetId);
         await db
             .into(db.templatePanes)
             .insertOnConflictUpdate(
@@ -358,10 +379,17 @@ final class SyncRowWriter {
                 sessionType: row['sessionType'] as String,
                 hostId: Value(str('hostId')),
                 title: Value(str('title')),
+                startupSnippetId: Value(
+                  keepPaneSnippet ? paneSnippetId : null,
+                ),
               ),
             );
 
-        return const RowWriteResult.ok();
+        return RowWriteResult.ok(
+          clearedReferences: [
+            if (paneSnippetId != null && !keepPaneSnippet) 'startup snippet',
+          ],
+        );
 
       case 'bookmarks':
         if (!await exists(db.workspaces, str('workspaceId'))) {

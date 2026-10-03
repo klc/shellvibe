@@ -213,5 +213,32 @@ void main() {
         expect(updated.colorTag, isNull);
       },
     );
+
+    test('a startup snippet is saved, kept, and cleared on edit', () async {
+      await database.snippetsDao.insertSnippet(
+        SnippetsCompanion.insert(
+          id: 'sn',
+          workspaceId: 'default',
+          title: 'Greet',
+          code: 'echo hi',
+        ),
+      );
+      final host = await repository.saveHost(
+        workspaceId: 'default',
+        label: 'Server',
+        hostname: 'example.com',
+        startupSnippetId: 'sn',
+      );
+      expect(host.startupSnippetId, 'sn');
+      expect((await repository.getHostById(host.id))!.startupSnippetId, 'sn');
+
+      await repository.saveHost(
+        id: host.id,
+        workspaceId: 'default',
+        label: 'Server',
+        hostname: 'example.com',
+      );
+      expect((await repository.getHostById(host.id))!.startupSnippetId, isNull);
+    });
   });
 }

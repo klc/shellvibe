@@ -26,6 +26,9 @@ class HostModel {
   final String? jumpHostId;
   final DateTime createdAt;
 
+  /// Snippet sent into this host's terminal when its session first comes up.
+  final String? startupSnippetId;
+
   const HostModel({
     required this.id,
     required this.workspaceId,
@@ -41,6 +44,7 @@ class HostModel {
     this.colorTag,
     this.jumpHostId,
     required this.createdAt,
+    this.startupSnippetId,
   });
 
   HostModel copyWith({
@@ -58,6 +62,7 @@ class HostModel {
     String? colorTag,
     String? jumpHostId,
     DateTime? createdAt,
+    String? startupSnippetId,
   }) {
     return HostModel(
       id: id ?? this.id,
@@ -74,6 +79,7 @@ class HostModel {
       colorTag: colorTag ?? this.colorTag,
       jumpHostId: jumpHostId ?? this.jumpHostId,
       createdAt: createdAt ?? this.createdAt,
+      startupSnippetId: startupSnippetId ?? this.startupSnippetId,
     );
   }
 
@@ -95,6 +101,7 @@ class HostModel {
           moshPortRange == other.moshPortRange &&
           colorTag == other.colorTag &&
           jumpHostId == other.jumpHostId &&
+          startupSnippetId == other.startupSnippetId &&
           createdAt == other.createdAt;
 
   @override
@@ -112,6 +119,7 @@ class HostModel {
       moshPortRange.hashCode ^
       colorTag.hashCode ^
       jumpHostId.hashCode ^
+      startupSnippetId.hashCode ^
       createdAt.hashCode;
 }
 

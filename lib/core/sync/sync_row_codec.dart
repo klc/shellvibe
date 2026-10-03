@@ -22,11 +22,11 @@ final class SyncRowCodec {
     'workspaces',
     'identities',
     'vault_env_vars',
+    'snippets',
     'host_groups',
     'hosts',
     'host_group_members',
     'port_forward_rules',
-    'snippets',
     'runbooks',
     'runbook_steps',
     'templates',
@@ -109,6 +109,7 @@ final class SyncRowCodec {
     'mcpVisible': h.mcpVisible,
     'mcpDefaultMode': h.mcpDefaultMode,
     'createdAt': h.createdAt.toIso8601String(),
+    'startupSnippetId': h.startupSnippetId,
   };
 
   static Map<String, dynamic> hostGroupMember(HostGroupMember m) => {
@@ -172,6 +173,8 @@ final class SyncRowCodec {
     'description': t.description,
     'activePaneId': t.activePaneId,
     'createdAt': t.createdAt.toIso8601String(),
+    'onOpenRunbookId': t.onOpenRunbookId,
+    'onOpenConfirm': t.onOpenConfirm,
   };
 
   static Map<String, dynamic> templatePane(TemplatePane tp) => {
@@ -184,6 +187,7 @@ final class SyncRowCodec {
     'sessionType': tp.sessionType,
     'hostId': tp.hostId,
     'title': tp.title,
+    'startupSnippetId': tp.startupSnippetId,
   };
 
   static Map<String, dynamic> bookmark(Bookmark b) => {

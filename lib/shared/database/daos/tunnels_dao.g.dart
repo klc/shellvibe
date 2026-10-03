@@ -7,6 +7,7 @@ mixin _$TunnelsDaoMixin on DatabaseAccessor<AppDatabase> {
   $WorkspacesTable get workspaces => attachedDatabase.workspaces;
   $HostGroupsTable get hostGroups => attachedDatabase.hostGroups;
   $IdentitiesTable get identities => attachedDatabase.identities;
+  $SnippetsTable get snippets => attachedDatabase.snippets;
   $HostsTable get hosts => attachedDatabase.hosts;
   $PortForwardRulesTable get portForwardRules =>
       attachedDatabase.portForwardRules;
@@ -22,6 +23,8 @@ class TunnelsDaoManager {
       $$HostGroupsTableTableManager(_db.attachedDatabase, _db.hostGroups);
   $$IdentitiesTableTableManager get identities =>
       $$IdentitiesTableTableManager(_db.attachedDatabase, _db.identities);
+  $$SnippetsTableTableManager get snippets =>
+      $$SnippetsTableTableManager(_db.attachedDatabase, _db.snippets);
   $$HostsTableTableManager get hosts =>
       $$HostsTableTableManager(_db.attachedDatabase, _db.hosts);
   $$PortForwardRulesTableTableManager get portForwardRules =>
