@@ -102,10 +102,11 @@ void main() {
       );
     });
 
-    testWidgets('window chrome frame draws no strip where the platform keeps '
-        'its title bar', (WidgetTester tester) async {
-      // Windows and Linux still get a native caption, so the strip would be a
-      // second, empty title bar stacked under the real one.
+    testWidgets('window chrome frame carries the caption buttons on Windows', (
+      WidgetTester tester,
+    ) async {
+      // The route is pushed over the shell, so without the frame's own strip
+      // a window with its native caption hidden would have no close button.
       debugWindowChromeOverride = TargetPlatform.windows;
       addTearDown(() => debugWindowChromeOverride = null);
       tester.view.physicalSize = const Size(1440, 900);
@@ -130,7 +131,14 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
 
-      expect(find.byType(DragToMoveArea), findsNothing);
+      final strip = find.byType(DragToMoveArea);
+      expect(strip, findsOneWidget);
+      expect(tester.getSize(strip).height, kCaptionStripHeight);
+      expect(find.byKey(const Key('window_caption_close')), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('Files · Test Server')).dy,
+        greaterThanOrEqualTo(kCaptionStripHeight),
+      );
     });
 
     testWidgets('window chrome frame leaves the phone layout alone', (

@@ -20,14 +20,29 @@ TargetPlatform? get _host {
 
 /// Whether the platform title bar is gone and the app draws to the window edge.
 ///
-/// macOS only. `setTitleBarStyle(hidden)` there hides the title and makes the
-/// bar transparent, but leaves the traffic lights floating over the Flutter
-/// view, so the window keeps its close, minimise and zoom controls. The same
-/// call on Windows and Linux takes the whole caption with it — those three
-/// buttons included — and a window with no way to be closed is worse than a
-/// window whose bar does not match the theme. Both keep their native bar and
-/// settle for [syncWindowChromeToTheme] tinting the frame instead.
-bool get usesHiddenTitleBar => _host == TargetPlatform.macOS;
+/// Every desktop. On macOS `setTitleBarStyle(hidden)` hides the title and makes
+/// the bar transparent, but leaves the traffic lights floating over the Flutter
+/// view. On Windows and Linux the same call takes the whole caption, its close,
+/// minimise and maximise buttons included, so the app draws those itself: see
+/// [drawsOwnCaptionButtons]. The native caption they replace was a second bar
+/// stacked over the shell's own chrome, and on KDE the GTK header bar alone is
+/// some 46px of nothing but the window title.
+bool get usesHiddenTitleBar =>
+    _host == TargetPlatform.macOS ||
+    _host == TargetPlatform.windows ||
+    _host == TargetPlatform.linux;
+
+/// Whether minimise, maximise and close are the app's own buttons, drawn at the
+/// right of the caption strip where both platforms put them.
+bool get drawsOwnCaptionButtons =>
+    _host == TargetPlatform.windows || _host == TargetPlatform.linux;
+
+/// Whether the window's edges have to be made resizable by the app.
+///
+/// Linux only: a GTK window without its decoration loses the frame the
+/// compositor resized it by. A Windows window keeps its sizing border with the
+/// caption hidden.
+bool get drawsOwnResizeEdges => _host == TargetPlatform.linux;
 
 /// Smallest window the desktop shell is still usable in.
 ///
@@ -44,10 +59,18 @@ const Size kMinimumWindowSize = Size(560, 480);
 /// spans the shell rather than being an inset on the rail alone.
 const double kTrafficLightStripHeight = 28;
 
+/// Height of the caption strip on Windows and Linux: the compact caption
+/// Windows 11 apps with their own title bar use, and room for the 32px-high
+/// buttons [drawsOwnCaptionButtons] puts in it.
+const double kCaptionStripHeight = 32;
+
 /// Top inset the shell owes the window controls before it may draw its own
 /// chrome. Zero wherever the platform still draws a title bar of its own.
-double get windowChromeTopInset =>
-    usesHiddenTitleBar ? kTrafficLightStripHeight : 0;
+double get windowChromeTopInset => switch (_host) {
+  TargetPlatform.macOS => kTrafficLightStripHeight,
+  TargetPlatform.windows || TargetPlatform.linux => kCaptionStripHeight,
+  _ => 0,
+};
 
 /// Closes the host window without quitting the app.
 ///
@@ -122,7 +145,7 @@ Future<void> showHostWindow() async {
   }
 }
 
-/// Hides the platform title bar where doing so leaves the window controllable.
+/// Hides the platform title bar; the shell's caption strip takes its place.
 ///
 /// Call once, before the window is shown — the style change is not animated and
 /// applying it to a visible window flashes the bar away.
@@ -130,16 +153,16 @@ Future<void> applyWindowChrome() async {
   if (!usesHiddenTitleBar) return;
   await windowManager.setTitleBarStyle(
     TitleBarStyle.hidden,
-    windowButtonVisibility: true,
+    // macOS keeps its traffic lights; elsewhere the app draws the buttons.
+    windowButtonVisibility: !drawsOwnCaptionButtons,
   );
 }
 
 /// Re-tints the native window frame to the active theme: [canvas] is the
 /// selected palette's canvas at [brightness].
 ///
-/// On macOS the Flutter view covers the window, but the frame still shows
-/// through during a live resize; on Windows and Linux, which keep their
-/// caption, this is the whole of what the platform lets us theme.
+/// The Flutter view covers the window, but the frame still shows through
+/// during a live resize.
 ///
 /// Called from the widget layer, so it swallows its own failures: a test
 /// harness or a headless run has no window behind the method channel, and the

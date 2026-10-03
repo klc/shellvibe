@@ -22,6 +22,10 @@ void main() {
     'lib/app/widgets/app_navigation_shell.dart':
         '_RailButton is a navigation item — it carries a selected state and '
         'stacks its label under its glyph, which no button does',
+    'lib/app/widgets/window_caption_strip.dart':
+        '_CaptionButton is window chrome standing in for the platform caption: '
+        'flush 46x32 cells with no radius or border, and close fills with the '
+        'danger colour on hover the way both Windows and KDE do it',
     'lib/features/terminal/presentation/widgets/terminal_tab_strip.dart':
         '_TabBarIconButton is shaped as a tab: full tab-strip height, rounded '
         'on the top corners only, and ruled on three sides so it joins the '
