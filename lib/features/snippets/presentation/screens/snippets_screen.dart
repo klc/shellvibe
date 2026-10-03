@@ -11,6 +11,7 @@ import '../../domain/models/snippet_model.dart';
 import '../../domain/services/snippet_variable_parser.dart';
 import '../notifiers/runbooks_notifier.dart';
 import '../notifiers/snippets_notifier.dart';
+import '../widgets/automation_section_layout.dart';
 import '../widgets/runbook_editor_dialog.dart';
 import '../widgets/snippet_form_dialog.dart';
 import '../widgets/variable_input_dialog.dart';
@@ -70,7 +71,10 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
         final showDetailDrawer =
             constraints.maxWidth >= tierTokens.breakpointExpanded;
 
+        // Like the other modules: the shell has painted the canvas, and the
+        // work area and its drawer are slabs on it.
         return Scaffold(
+          backgroundColor: Colors.transparent,
           body: Row(
             children: [
               if (showContextColumn) _buildContextColumn(context),
@@ -195,7 +199,8 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
         },
     ];
 
-    return Column(
+    final header = Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         if (showContextColumn)
           ShellVibeWorkToolbar(
@@ -226,24 +231,25 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
           ),
         if (!showContextColumn)
           _buildCompactFilterBar(context, snippetsAsync.value ?? const []),
-        Expanded(
-          child: switch (_section) {
-            AutomationSection.snippets => _buildSnippetsSection(
-              context,
-              snippetsAsync,
-              compact: !showContextColumn,
-              showDetailDrawer: showDetailDrawer,
-            ),
-            AutomationSection.runbooks => RunbooksScreen(
-              workspaceId: _workspaceId,
-              searchQuery: _searchQuery,
-              compact: !showContextColumn,
-              showDetailDrawer: showDetailDrawer,
-            ),
-          },
-        ),
       ],
     );
+
+    return switch (_section) {
+      AutomationSection.snippets => _buildSnippetsSection(
+        context,
+        snippetsAsync,
+        header: header,
+        compact: !showContextColumn,
+        showDetailDrawer: showDetailDrawer,
+      ),
+      AutomationSection.runbooks => RunbooksScreen(
+        workspaceId: _workspaceId,
+        header: header,
+        searchQuery: _searchQuery,
+        compact: !showContextColumn,
+        showDetailDrawer: showDetailDrawer,
+      ),
+    };
   }
 
   Widget _buildCompactFilterBar(
@@ -312,42 +318,56 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
   Widget _buildSnippetsSection(
     BuildContext context,
     AsyncValue<List<SnippetModel>> snippetsAsync, {
+    required Widget header,
     required bool compact,
     required bool showDetailDrawer,
   }) {
     final tokens = ShellVibeTokens.resolve(context);
 
+    Widget layout(Widget body, {Widget? drawer}) => AutomationSectionLayout(
+      header: header,
+      body: body,
+      drawer: drawer,
+      framed: !compact,
+    );
+
     return snippetsAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, stackTrace) => ShellVibeEmptyState(
-        icon: LucideIcons.triangleAlert,
-        title: 'Snippets could not be loaded',
-        description: '$error',
+      loading: () => layout(const Center(child: CircularProgressIndicator())),
+      error: (error, stackTrace) => layout(
+        ShellVibeEmptyState(
+          icon: LucideIcons.triangleAlert,
+          title: 'Snippets could not be loaded',
+          description: '$error',
+        ),
       ),
       data: (snippets) {
         if (snippets.isEmpty) {
-          return ShellVibeEmptyState(
-            icon: LucideIcons.codeXml,
-            title: 'No snippets yet.',
-            description:
-                'Save a command once and reuse it across every host in this '
-                'workspace.',
-            actions: [
-              ShellVibeButton(
-                label: 'Add Snippet',
-                icon: LucideIcons.plus,
-                onPressed: _openSnippetForm,
-              ),
-            ],
+          return layout(
+            ShellVibeEmptyState(
+              icon: LucideIcons.codeXml,
+              title: 'No snippets yet.',
+              description:
+                  'Save a command once and reuse it across every host in this '
+                  'workspace.',
+              actions: [
+                ShellVibeButton(
+                  label: 'Add Snippet',
+                  icon: LucideIcons.plus,
+                  onPressed: _openSnippetForm,
+                ),
+              ],
+            ),
           );
         }
 
         final visible = _visibleSnippets(snippets);
         if (visible.isEmpty) {
-          return const ShellVibeEmptyState(
-            icon: LucideIcons.searchX,
-            title: 'No snippets match your filters.',
-            description: 'Try another word, or clear the selected tag.',
+          return layout(
+            const ShellVibeEmptyState(
+              icon: LucideIcons.searchX,
+              title: 'No snippets match your filters.',
+              description: 'Try another word, or clear the selected tag.',
+            ),
           );
         }
 
@@ -355,56 +375,54 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
             .where((snippet) => snippet.id == _selectedSnippetId)
             .firstOrNull;
 
-        return Row(
-          children: [
-            Expanded(
-              child: Column(
-                children: [
-                  _SnippetListHeader(tokens: tokens, compact: compact),
-                  Expanded(
-                    child: ListView.builder(
-                      itemCount: visible.length,
-                      itemBuilder: (context, index) {
-                        final snippet = visible[index];
-                        return _SnippetRow(
-                          key: ValueKey(snippet.id),
-                          snippet: snippet,
-                          compact: compact,
-                          selected: snippet.id == _selectedSnippetId,
-                          onSelect: () {
-                            setState(() => _selectedSnippetId = snippet.id);
-                            // Too narrow for the inline drawer, so the detail
-                            // becomes a sheet rather than a selection that
-                            // leads nowhere.
-                            if (!showDetailDrawer) {
-                              _showSnippetDetailSheet(snippet);
-                            }
-                          },
-                          onCopy: () =>
-                              _handleExecuteOrCopy(snippet, copyOnly: true),
-                          onRun: () => _handleExecuteOrCopy(snippet),
-                          onEdit: () => _openSnippetForm(snippet: snippet),
-                          onDelete: () => _deleteSnippet(snippet),
-                        );
-                      },
-                    ),
+        return layout(
+          drawer: showDetailDrawer && selected != null
+              ? ShellVibeDetailDrawer(
+                  child: _SnippetDetailPanel(
+                    snippet: selected,
+                    canRun: widget.onExecuteCommand != null,
+                    onCopy: () =>
+                        _handleExecuteOrCopy(selected, copyOnly: true),
+                    onRun: () => _handleExecuteOrCopy(selected),
+                    onEdit: () => _openSnippetForm(snippet: selected),
+                    onDelete: () => _deleteSnippet(selected),
+                    onClose: () => setState(() => _selectedSnippetId = null),
                   ),
-                ],
-              ),
-            ),
-            if (showDetailDrawer && selected != null)
-              ShellVibeDetailDrawer(
-                child: _SnippetDetailPanel(
-                  snippet: selected,
-                  canRun: widget.onExecuteCommand != null,
-                  onCopy: () => _handleExecuteOrCopy(selected, copyOnly: true),
-                  onRun: () => _handleExecuteOrCopy(selected),
-                  onEdit: () => _openSnippetForm(snippet: selected),
-                  onDelete: () => _deleteSnippet(selected),
-                  onClose: () => setState(() => _selectedSnippetId = null),
+                )
+              : null,
+          Column(
+            children: [
+              _SnippetListHeader(tokens: tokens, compact: compact),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: visible.length,
+                  itemBuilder: (context, index) {
+                    final snippet = visible[index];
+                    return _SnippetRow(
+                      key: ValueKey(snippet.id),
+                      snippet: snippet,
+                      compact: compact,
+                      selected: snippet.id == _selectedSnippetId,
+                      onSelect: () {
+                        setState(() => _selectedSnippetId = snippet.id);
+                        // Too narrow for the inline drawer, so the detail
+                        // becomes a sheet rather than a selection that
+                        // leads nowhere.
+                        if (!showDetailDrawer) {
+                          _showSnippetDetailSheet(snippet);
+                        }
+                      },
+                      onCopy: () =>
+                          _handleExecuteOrCopy(snippet, copyOnly: true),
+                      onRun: () => _handleExecuteOrCopy(snippet),
+                      onEdit: () => _openSnippetForm(snippet: snippet),
+                      onDelete: () => _deleteSnippet(snippet),
+                    );
+                  },
                 ),
               ),
-          ],
+            ],
+          ),
         );
       },
     );

@@ -11,6 +11,7 @@ import '../../domain/models/runbook_step_model.dart';
 import '../../domain/services/runbook_executor.dart';
 import '../../domain/services/snippet_variable_parser.dart';
 import '../notifiers/runbooks_notifier.dart';
+import '../widgets/automation_section_layout.dart';
 import '../widgets/runbook_editor_dialog.dart';
 import '../widgets/variable_input_dialog.dart';
 
@@ -38,6 +39,10 @@ class RunbooksScreen extends ConsumerStatefulWidget {
   )?
   customCommandRunner;
 
+  /// The toolbar `SnippetsScreen` shares between its sections, laid out in
+  /// this section's slab so the detail drawer can sit beside it.
+  final Widget header;
+
   /// Lower-cased query owned by the shell's search field.
   final String searchQuery;
 
@@ -51,6 +56,7 @@ class RunbooksScreen extends ConsumerStatefulWidget {
     super.key,
     this.workspaceId,
     this.customCommandRunner,
+    this.header = const SizedBox.shrink(),
     this.searchQuery = '',
     this.compact = true,
     this.showDetailDrawer = false,
@@ -74,40 +80,53 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
     final runbooksAsync = ref.watch(runbooksProvider);
     final tokens = ShellVibeTokens.resolve(context);
 
+    Widget layout(Widget body, {Widget? drawer}) => AutomationSectionLayout(
+      header: widget.header,
+      body: body,
+      drawer: drawer,
+      framed: !widget.compact,
+    );
+
     return runbooksAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, stackTrace) => ShellVibeEmptyState(
-        icon: LucideIcons.triangleAlert,
-        title: 'Runbooks could not be loaded',
-        description: '$error',
+      loading: () => layout(const Center(child: CircularProgressIndicator())),
+      error: (error, stackTrace) => layout(
+        ShellVibeEmptyState(
+          icon: LucideIcons.triangleAlert,
+          title: 'Runbooks could not be loaded',
+          description: '$error',
+        ),
       ),
       data: (runbooks) {
         if (runbooks.isEmpty) {
-          return ShellVibeEmptyState(
-            icon: LucideIcons.listChecks,
-            title: 'No runbooks defined.',
-            description:
-                'Chain commands into a multi-step workflow that reports where '
-                'it stopped.',
-            actions: [
-              // Flexible, not a bare Text: a shadcn button shrink-wraps its
-              // label, so at a large system text scale an unbounded one
-              // overflows the button it sits in.
-              ShellVibeButton(
-                label: 'Add Runbook',
-                icon: LucideIcons.plus,
-                onPressed: _openEditor,
-              ),
-            ],
+          return layout(
+            ShellVibeEmptyState(
+              icon: LucideIcons.listChecks,
+              title: 'No runbooks defined.',
+              description:
+                  'Chain commands into a multi-step workflow that reports where '
+                  'it stopped.',
+              actions: [
+                // Flexible, not a bare Text: a shadcn button shrink-wraps its
+                // label, so at a large system text scale an unbounded one
+                // overflows the button it sits in.
+                ShellVibeButton(
+                  label: 'Add Runbook',
+                  icon: LucideIcons.plus,
+                  onPressed: _openEditor,
+                ),
+              ],
+            ),
           );
         }
 
         final visible = _visibleRunbooks(runbooks);
         if (visible.isEmpty) {
-          return const ShellVibeEmptyState(
-            icon: LucideIcons.searchX,
-            title: 'No runbooks match your search.',
-            description: 'Try another word from the title or description.',
+          return layout(
+            const ShellVibeEmptyState(
+              icon: LucideIcons.searchX,
+              title: 'No runbooks match your search.',
+              description: 'Try another word from the title or description.',
+            ),
           );
         }
 
@@ -115,57 +134,54 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
             .where((runbook) => runbook.id == _selectedRunbookId)
             .firstOrNull;
 
-        return Row(
-          children: [
-            Expanded(
-              child: Column(
-                children: [
-                  _RunbookListHeader(tokens: tokens, compact: widget.compact),
-                  Expanded(
-                    child: ListView.builder(
-                      itemCount: visible.length,
-                      itemBuilder: (context, index) {
-                        final runbook = visible[index];
-                        return _RunbookRow(
-                          key: ValueKey(runbook.id),
-                          runbook: runbook,
-                          compact: widget.compact,
-                          selected: runbook.id == _selectedRunbookId,
-                          isExecuting:
-                              _isExecuting && _executingRunbookId == runbook.id,
-                          onSelect: () {
-                            setState(() => _selectedRunbookId = runbook.id);
-                            // Too narrow for the inline drawer, so the step
-                            // list becomes a sheet rather than a selection
-                            // that leads nowhere.
-                            if (!widget.showDetailDrawer) {
-                              _showDetailSheet(runbook);
-                            }
-                          },
-                          onRun: () => _executeRunbook(runbook),
-                          onEdit: () => _openEditor(runbook: runbook),
-                          onDelete: () => _deleteRunbook(runbook),
-                        );
-                      },
-                    ),
+        return layout(
+          drawer: widget.showDetailDrawer && selected != null
+              ? ShellVibeDetailDrawer(
+                  child: _RunbookDetailPanel(
+                    runbook: selected,
+                    stepStatuses: _stepStatuses,
+                    isExecuting:
+                        _isExecuting && _executingRunbookId == selected.id,
+                    onRun: () => _executeRunbook(selected),
+                    onEdit: () => _openEditor(runbook: selected),
+                    onDelete: () => _deleteRunbook(selected),
+                    onClose: () => setState(() => _selectedRunbookId = null),
                   ),
-                ],
-              ),
-            ),
-            if (widget.showDetailDrawer && selected != null)
-              ShellVibeDetailDrawer(
-                child: _RunbookDetailPanel(
-                  runbook: selected,
-                  stepStatuses: _stepStatuses,
-                  isExecuting:
-                      _isExecuting && _executingRunbookId == selected.id,
-                  onRun: () => _executeRunbook(selected),
-                  onEdit: () => _openEditor(runbook: selected),
-                  onDelete: () => _deleteRunbook(selected),
-                  onClose: () => setState(() => _selectedRunbookId = null),
+                )
+              : null,
+          Column(
+            children: [
+              _RunbookListHeader(tokens: tokens, compact: widget.compact),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: visible.length,
+                  itemBuilder: (context, index) {
+                    final runbook = visible[index];
+                    return _RunbookRow(
+                      key: ValueKey(runbook.id),
+                      runbook: runbook,
+                      compact: widget.compact,
+                      selected: runbook.id == _selectedRunbookId,
+                      isExecuting:
+                          _isExecuting && _executingRunbookId == runbook.id,
+                      onSelect: () {
+                        setState(() => _selectedRunbookId = runbook.id);
+                        // Too narrow for the inline drawer, so the step
+                        // list becomes a sheet rather than a selection
+                        // that leads nowhere.
+                        if (!widget.showDetailDrawer) {
+                          _showDetailSheet(runbook);
+                        }
+                      },
+                      onRun: () => _executeRunbook(runbook),
+                      onEdit: () => _openEditor(runbook: runbook),
+                      onDelete: () => _deleteRunbook(runbook),
+                    );
+                  },
                 ),
               ),
-          ],
+            ],
+          ),
         );
       },
     );

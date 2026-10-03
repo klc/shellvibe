@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
+import 'package:shellvibe/app/widgets/shellvibe_ui.dart';
 import 'package:shellvibe/features/snippets/presentation/screens/snippets_screen.dart';
 import 'package:shellvibe/shared/database/app_database.dart';
 import 'package:shellvibe/shared/providers/database_providers.dart';
@@ -111,6 +112,21 @@ void main() {
       await tester.tap(find.byKey(const Key('snippet_card_s1')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('snippet_detail_drawer')), findsOneWidget);
+
+      // Laid out like the other modules: the toolbar and list share one
+      // slab, and the drawer is a slab beside it, not one nested inside.
+      final workSlab = find.ancestor(
+        of: find.byType(ShellVibeWorkToolbar),
+        matching: find.byType(ShellVibePanel),
+      );
+      expect(workSlab, findsOneWidget);
+      expect(
+        find.descendant(
+          of: workSlab,
+          matching: find.byKey(const Key('snippet_detail_drawer')),
+        ),
+        findsNothing,
+      );
     });
 
     testWidgets('Section switcher swaps the library half', (tester) async {
