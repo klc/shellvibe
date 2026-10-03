@@ -35,6 +35,33 @@ class PendingHostAccessApproval {
   });
 }
 
+/// A runbook-run approval waiting on a human answer.
+class PendingRunbookApproval {
+  final String id;
+  final RunbookApprovalRequest request;
+  final DateTime requestedAt;
+  final DateTime expiresAt;
+
+  const PendingRunbookApproval({
+    required this.id,
+    required this.request,
+    required this.requestedAt,
+    required this.expiresAt,
+  });
+}
+
+class _PendingRunbook {
+  final PendingRunbookApproval pending;
+  final Completer<RunbookApprovalDecision> completer;
+  final Timer timer;
+
+  _PendingRunbook({
+    required this.pending,
+    required this.completer,
+    required this.timer,
+  });
+}
+
 class _PendingCommand {
   final PendingCommandApproval pending;
   final Completer<ApprovalDecision> completer;
@@ -79,12 +106,21 @@ class ApprovalCoordinator {
 
   final Map<String, _PendingCommand> _commands = {};
   final Map<String, _PendingHostAccess> _hostAccess = {};
+  final Map<String, _PendingRunbook> _runbooks = {};
 
   final StreamController<List<PendingCommandApproval>> _commandsController =
       StreamController<List<PendingCommandApproval>>.broadcast();
   final StreamController<List<PendingHostAccessApproval>>
   _hostAccessController =
       StreamController<List<PendingHostAccessApproval>>.broadcast();
+
+  final StreamController<List<PendingRunbookApproval>> _runbooksController =
+      StreamController<List<PendingRunbookApproval>>.broadcast();
+
+  Stream<List<PendingRunbookApproval>> get pendingRunbooks =>
+      _runbooksController.stream;
+  List<PendingRunbookApproval> get currentRunbooks =>
+      _runbooks.values.map((r) => r.pending).toList(growable: false);
 
   Stream<List<PendingCommandApproval>> get pendingCommands =>
       _commandsController.stream;
@@ -122,6 +158,53 @@ class ApprovalCoordinator {
     );
     _emitCommands();
     return completer.future;
+  }
+
+  /// Registers one runbook-run approval and returns a [Future] that completes
+  /// when the user answers, or with [RunbookApprovalDecision.denied] if
+  /// [timeout] elapses first. Fail-closed like every other request here: an
+  /// unanswered run is a refused run.
+  Future<RunbookApprovalDecision> requestRunbookApproval(
+    RunbookApprovalRequest request, {
+    Duration timeout = const Duration(seconds: 120),
+  }) {
+    final id = _uuid.v4();
+    final requestedAt = DateTime.now().toUtc();
+    final pending = PendingRunbookApproval(
+      id: id,
+      request: request,
+      requestedAt: requestedAt,
+      expiresAt: requestedAt.add(timeout),
+    );
+    final completer = Completer<RunbookApprovalDecision>();
+    final timer = Timer(timeout, () {
+      _completeRunbook(id, RunbookApprovalDecision.denied);
+    });
+    _runbooks[id] = _PendingRunbook(
+      pending: pending,
+      completer: completer,
+      timer: timer,
+    );
+    _emitRunbooks();
+    return completer.future;
+  }
+
+  /// Answers a pending runbook approval.
+  void resolveRunbook(String id, RunbookApprovalDecision decision) {
+    _completeRunbook(id, decision);
+  }
+
+  void _completeRunbook(String id, RunbookApprovalDecision decision) {
+    final entry = _runbooks.remove(id);
+    if (entry == null) return;
+    entry.timer.cancel();
+    if (!entry.completer.isCompleted) entry.completer.complete(decision);
+    _emitRunbooks();
+  }
+
+  void _emitRunbooks() {
+    if (_runbooksController.isClosed) return;
+    _runbooksController.add(currentRunbooks);
   }
 
   /// Registers one host-access request and returns a [Future] that completes
@@ -215,6 +298,9 @@ class ApprovalCoordinator {
     for (final id in _commands.keys.toList()) {
       _completeCommand(id, ApprovalDecision.denied);
     }
+    for (final id in _runbooks.keys.toList()) {
+      _completeRunbook(id, RunbookApprovalDecision.denied);
+    }
     for (final id in _hostAccess.keys.toList()) {
       final entry = _hostAccess[id];
       if (entry == null) continue;
@@ -236,5 +322,6 @@ class ApprovalCoordinator {
     cancelAll();
     _commandsController.close();
     _hostAccessController.close();
+    _runbooksController.close();
   }
 }

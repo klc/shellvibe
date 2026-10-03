@@ -201,6 +201,18 @@ enum McpErrorCode {
   /// cooldown expires.
   cooldown,
 
+  /// No runbook with that id in this client's workspace.
+  runbookNotFound,
+
+  /// No run with that id that this client started.
+  runNotFound,
+
+  /// A runbook run is already in progress; only one runs at a time.
+  runbookBusy,
+
+  /// The variables passed to a runbook are not acceptable.
+  invalidVariables,
+
   /// Missing, revoked, or expired bearer token.
   unauthorized,
 
@@ -221,6 +233,10 @@ enum McpErrorCode {
     McpErrorCode.hostKeyUntrusted => 'HOST_KEY_UNTRUSTED',
     McpErrorCode.hostNotVisible => 'HOST_NOT_VISIBLE',
     McpErrorCode.cooldown => 'COOLDOWN',
+    McpErrorCode.runbookNotFound => 'RUNBOOK_NOT_FOUND',
+    McpErrorCode.runNotFound => 'RUN_NOT_FOUND',
+    McpErrorCode.runbookBusy => 'RUNBOOK_BUSY',
+    McpErrorCode.invalidVariables => 'INVALID_VARIABLES',
     McpErrorCode.unauthorized => 'UNAUTHORIZED',
     McpErrorCode.rateLimited => 'RATE_LIMITED',
     McpErrorCode.internal => 'INTERNAL_ERROR',

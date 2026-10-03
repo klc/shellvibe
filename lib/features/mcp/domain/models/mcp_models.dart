@@ -287,6 +287,97 @@ class CommandApprovalRequest {
   });
 }
 
+/// One step of a runbook as the approval dialog lists it.
+class RunbookApprovalStep {
+  final int order;
+
+  /// `command`, `snippet` or `approval`.
+  final String kind;
+
+  /// The command, the snippet's current code, or the approval message.
+  final String text;
+
+  const RunbookApprovalStep({
+    required this.order,
+    required this.kind,
+    required this.text,
+  });
+}
+
+/// A target host of a runbook approval.
+class RunbookApprovalHost {
+  final String id;
+  final String label;
+  final HostEnvironment environment;
+
+  const RunbookApprovalHost({
+    required this.id,
+    required this.label,
+    required this.environment,
+  });
+}
+
+/// A secret variable the user has to type into the approval dialog, because an
+/// agent may not pass one.
+class RunbookSecretField {
+  final String name;
+  final String label;
+  final bool required;
+  final String? description;
+
+  const RunbookSecretField({
+    required this.name,
+    required this.label,
+    this.required = true,
+    this.description,
+  });
+}
+
+/// A pending runbook-run approval handed to the UI.
+///
+/// A runbook is several commands on several hosts, so this is asked every
+/// time, whatever the policy mode and whatever was approved before: nothing
+/// about a single command's approval says anything about a whole run.
+class RunbookApprovalRequest {
+  final String clientId;
+  final String clientName;
+  final String runbookTitle;
+  final List<RunbookApprovalStep> steps;
+  final List<RunbookApprovalHost> hosts;
+  final String strategyLabel;
+
+  /// The non-secret values the agent supplied, shown as they will be used.
+  final Map<String, String> variables;
+  final List<RunbookSecretField> secretFields;
+
+  const RunbookApprovalRequest({
+    required this.clientId,
+    required this.clientName,
+    required this.runbookTitle,
+    required this.steps,
+    required this.hosts,
+    required this.strategyLabel,
+    this.variables = const {},
+    this.secretFields = const [],
+  });
+}
+
+/// The user's answer to a [RunbookApprovalRequest].
+class RunbookApprovalDecision {
+  final bool approved;
+
+  /// What the user typed for each [RunbookSecretField]. Only ever in memory:
+  /// they go to the run and nowhere else.
+  final Map<String, String> secretValues;
+
+  const RunbookApprovalDecision({
+    required this.approved,
+    this.secretValues = const {},
+  });
+
+  static const denied = RunbookApprovalDecision(approved: false);
+}
+
 /// A pending host-access approval handed to the UI.
 class HostAccessRequest {
   final String clientId;

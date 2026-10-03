@@ -195,7 +195,7 @@ class _McpCommandApprovalDialogState extends State<McpCommandApprovalDialog> {
                       ),
                     ),
                   ),
-                  _EnvironmentBadge(environment: request.environment),
+                  McpEnvironmentBadge(environment: request.environment),
                 ],
               ),
               const SizedBox(height: 4),
@@ -341,10 +341,10 @@ class _McpCommandApprovalDialogState extends State<McpCommandApprovalDialog> {
   };
 }
 
-class _EnvironmentBadge extends StatelessWidget {
+class McpEnvironmentBadge extends StatelessWidget {
   final HostEnvironment environment;
 
-  const _EnvironmentBadge({required this.environment});
+  const McpEnvironmentBadge({super.key, required this.environment});
 
   @override
   Widget build(BuildContext context) {
