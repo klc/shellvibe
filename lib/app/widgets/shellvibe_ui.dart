@@ -17,6 +17,21 @@ import '../theme/shellvibe_tokens.dart';
 double shellvibeControlHeight(ShellVibeTokens tokens, double designed) =>
     isMobilePlatform ? math.max(designed, tokens.touchTarget) : designed;
 
+/// Sizes a [PopupMenuButton]'s trigger like a [ShellVibeIconButton]: one
+/// control height square.
+///
+/// Left to Material the trigger is 48px on a touch host and 40px under a
+/// pointer, so a row that budgets its trailing controls by control height
+/// comes up short by the difference.
+ButtonStyle shellvibeMenuTriggerStyle(ShellVibeTokens tokens) {
+  final side = shellvibeControlHeight(tokens, tokens.controlHeight);
+  return ButtonStyle(
+    fixedSize: WidgetStatePropertyAll(Size.square(side)),
+    minimumSize: const WidgetStatePropertyAll(Size.zero),
+    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+  );
+}
+
 /// Whether the shell shows the icon rail instead of the phone tab bar.
 ///
 /// Width alone is not enough. A phone held sideways is 852px wide and still a

@@ -236,9 +236,8 @@ class _HostRowState extends State<HostRow> {
                     ),
                   ],
                   SizedBox(
-                    width: compact
-                        ? kHostActionsWidthCompact
-                        : kHostActionsWidth,
+                    key: Key('host_actions_${host.id}'),
+                    width: hostActionsWidth(tokens, compact: compact),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
@@ -274,11 +273,16 @@ class _HostRowState extends State<HostRow> {
                         // menu overflowed the row, and selecting a host there
                         // opens the detail sheet, which carries Connect anyway.
                         else if (selected && !compact)
-                          ShellVibeButton.secondary(
-                            buttonKey: Key('connect_host_${host.id}'),
-                            label: 'Open',
-                            icon: LucideIcons.terminal,
-                            onPressed: onConnect,
+                          // Flexible, so a UI font that sets "Open" wider than
+                          // the slot allows ellipsizes the label instead of
+                          // pushing the menu off the row.
+                          Flexible(
+                            child: ShellVibeButton.secondary(
+                              buttonKey: Key('connect_host_${host.id}'),
+                              label: 'Open',
+                              icon: LucideIcons.terminal,
+                              onPressed: onConnect,
+                            ),
                           )
                         else
                           ShellVibeIconButton(
@@ -307,6 +311,9 @@ class _HostRowState extends State<HostRow> {
                           // items.
                           padding: EdgeInsets.zero,
                           iconSize: 16,
+                          // Sized like the icon buttons beside it, so
+                          // [hostActionsWidth] can count it as one of them.
+                          style: shellvibeMenuTriggerStyle(tokens),
                           icon: const Icon(LucideIcons.ellipsis, size: 16),
                           onSelected: (value) {
                             if (value == 'edit') onEdit();
