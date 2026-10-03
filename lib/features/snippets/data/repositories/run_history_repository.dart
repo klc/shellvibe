@@ -16,6 +16,9 @@ import '../../domain/services/runbook_run_service.dart';
 class RunHistorySummary {
   final String id;
   final String? runbookId;
+
+  /// Set for a snippet run: which snippet it was of.
+  final String? snippetId;
   final String kind;
   final String title;
   final RunStrategy strategy;
@@ -30,6 +33,7 @@ class RunHistorySummary {
   const RunHistorySummary({
     required this.id,
     required this.runbookId,
+    required this.snippetId,
     required this.kind,
     required this.title,
     required this.strategy,
@@ -226,6 +230,7 @@ class RunHistoryRepository {
       RunHistorySummary(
         id: row.id,
         runbookId: row.runbookId,
+        snippetId: row.snippetId,
         kind: row.kind,
         title: row.title,
         strategy: RunStrategy.parse(row.strategy),

@@ -20,6 +20,7 @@ import '../notifiers/runbooks_notifier.dart';
 import '../notifiers/snippets_notifier.dart';
 import '../widgets/automation_section_layout.dart';
 import '../widgets/prod_confirmation.dart';
+import '../widgets/run_history_section.dart';
 import '../widgets/run_progress_view.dart';
 import '../widgets/run_target_sheet.dart';
 import '../widgets/runbook_editor_dialog.dart';
@@ -1168,6 +1169,8 @@ class _SnippetDetailPanel extends StatelessWidget {
           label: 'tags',
           value: snippet.tags.isEmpty ? 'none' : '${snippet.tags.length}',
         ),
+        const SizedBox(height: 14),
+        SnippetHistorySection(snippet: snippet),
         const SizedBox(height: 14),
         ShellVibeButton.danger(
           key: const Key('snippet_detail_delete'),

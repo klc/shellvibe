@@ -99,6 +99,92 @@ final class RunbookHistoryFamily extends $Family
   String toString() => r'runbookHistoryProvider';
 }
 
+/// A snippet's stored runs, newest first.
+
+@ProviderFor(snippetHistory)
+final snippetHistoryProvider = SnippetHistoryFamily._();
+
+/// A snippet's stored runs, newest first.
+
+final class SnippetHistoryProvider
+    extends
+        $FunctionalProvider<
+          AsyncValue<List<RunHistorySummary>>,
+          List<RunHistorySummary>,
+          FutureOr<List<RunHistorySummary>>
+        >
+    with
+        $FutureModifier<List<RunHistorySummary>>,
+        $FutureProvider<List<RunHistorySummary>> {
+  /// A snippet's stored runs, newest first.
+  SnippetHistoryProvider._({
+    required SnippetHistoryFamily super.from,
+    required String super.argument,
+  }) : super(
+         retry: null,
+         name: r'snippetHistoryProvider',
+         isAutoDispose: true,
+         dependencies: null,
+         $allTransitiveDependencies: null,
+       );
+
+  @override
+  String debugGetCreateSourceHash() => _$snippetHistoryHash();
+
+  @override
+  String toString() {
+    return r'snippetHistoryProvider'
+        ''
+        '($argument)';
+  }
+
+  @$internal
+  @override
+  $FutureProviderElement<List<RunHistorySummary>> $createElement(
+    $ProviderPointer pointer,
+  ) => $FutureProviderElement(pointer);
+
+  @override
+  FutureOr<List<RunHistorySummary>> create(Ref ref) {
+    final argument = this.argument as String;
+    return snippetHistory(ref, argument);
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return other is SnippetHistoryProvider && other.argument == argument;
+  }
+
+  @override
+  int get hashCode {
+    return argument.hashCode;
+  }
+}
+
+String _$snippetHistoryHash() => r'1a322c8a464466309b58e9a25e3d19270d796fc2';
+
+/// A snippet's stored runs, newest first.
+
+final class SnippetHistoryFamily extends $Family
+    with $FunctionalFamilyOverride<FutureOr<List<RunHistorySummary>>, String> {
+  SnippetHistoryFamily._()
+    : super(
+        retry: null,
+        name: r'snippetHistoryProvider',
+        dependencies: null,
+        $allTransitiveDependencies: null,
+        isAutoDispose: true,
+      );
+
+  /// A snippet's stored runs, newest first.
+
+  SnippetHistoryProvider call(String snippetId) =>
+      SnippetHistoryProvider._(argument: snippetId, from: this);
+
+  @override
+  String toString() => r'snippetHistoryProvider';
+}
+
 /// One stored run in full, or null once it has been pruned.
 
 @ProviderFor(storedRun)

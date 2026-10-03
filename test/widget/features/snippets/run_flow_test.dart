@@ -10,6 +10,7 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:shellvibe/features/hosts/domain/models/host_model.dart';
 import 'package:shellvibe/features/snippets/data/run_providers.dart';
 import 'package:shellvibe/features/snippets/domain/services/remote_command_session.dart';
+import 'package:shellvibe/features/snippets/presentation/notifiers/snippets_notifier.dart';
 import 'package:shellvibe/features/snippets/presentation/screens/snippets_screen.dart';
 import 'package:shellvibe/shared/database/app_database.dart';
 import 'package:shellvibe/shared/providers/database_providers.dart';
@@ -837,6 +838,138 @@ void main() {
 
       expect(factory.ran, ['echo a', 'echo a']);
       expect(find.text('2 cancelled'), findsOneWidget);
+    });
+  });
+
+  group('Snippet recent runs', () {
+    Future<void> seedAndRun(WidgetTester tester, _FakeFactory factory) async {
+      await db.snippetsDao.insertSnippet(
+        SnippetsCompanion.insert(
+          id: 'sn',
+          workspaceId: 'default',
+          title: 'Show home',
+          code: 'echo v1',
+        ),
+      );
+      await pumpScreen(tester, factory, section: AutomationSection.snippets);
+      await tester.tap(find.byKey(const Key('snippet_run_sn')));
+      await tester.pumpAndSettle();
+      await pickHosts(tester, ['h1']);
+      await tester.tap(find.byKey(const Key('run_result_close')));
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> openDetail(WidgetTester tester) async {
+      await tester.tap(find.byKey(const Key('snippet_card_sn')));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('run_history_section')),
+        200,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const Key('snippet_detail_drawer')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+    }
+
+    final entry = find.byWidgetPredicate((w) {
+      final key = w.key;
+      return key is ValueKey<String> &&
+          RegExp(r'^run_history_[0-9a-f-]{36}$').hasMatch(key.value);
+    });
+
+    testWidgets('the snippet lists its own runs and opens one read-only', (
+      tester,
+    ) async {
+      final factory = _FakeFactory(
+        handler: (hostId, command) async => ('stored v1\n', 0),
+      );
+      await seedAndRun(tester, factory);
+      await openDetail(tester);
+
+      expect(find.text('Recent runs'.toUpperCase()), findsOneWidget);
+      expect(entry, findsOneWidget);
+      expect(find.text('1 of 1 host succeeded'), findsWidgets);
+
+      await tester.tap(entry);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('run_history_dialog')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('run_host_open_h1')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('stored v1'), findsOneWidget);
+    });
+
+    testWidgets('running again from it runs the snippet as it is now', (
+      tester,
+    ) async {
+      final factory = _FakeFactory();
+      await seedAndRun(tester, factory);
+      expect(factory.ran, ['echo v1']);
+
+      await (db.update(db.snippets)..where((t) => t.id.equals('sn'))).write(
+        const SnippetsCompanion(code: Value('echo v2')),
+      );
+      // The library reloads with the edit.
+      ProviderScope.containerOf(
+        tester.element(find.byType(SnippetsScreen)),
+      ).invalidate(snippetsProvider);
+      await tester.pumpAndSettle();
+      await openDetail(tester);
+      await tester.tap(entry);
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const Key('run_history_dialog')),
+          matching: find.byKey(const Key('run_run_again')),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(factory.ran, ['echo v1', 'echo v2']);
+    });
+
+    testWidgets("Clear removes only that snippet's runs", (tester) async {
+      final factory = _FakeFactory();
+      await seedAndRun(tester, factory);
+      // Another snippet's run stays.
+      await db.snippetsDao.insertSnippet(
+        SnippetsCompanion.insert(
+          id: 'other',
+          workspaceId: 'default',
+          title: 'Other',
+          code: 'uptime',
+        ),
+      );
+      ProviderScope.containerOf(
+        tester.element(find.byType(SnippetsScreen)),
+      ).invalidate(snippetsProvider);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('snippet_run_other')));
+      await tester.pumpAndSettle();
+      await pickHosts(tester, ['h2']);
+      await tester.tap(find.byKey(const Key('run_result_close')));
+      await tester.pumpAndSettle();
+
+      await openDetail(tester);
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('run_history_clear')),
+        200,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const Key('snippet_detail_drawer')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.tap(find.byKey(const Key('run_history_clear')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('run_history_clear_confirm')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('run_history_section')), findsNothing);
+      final left = await db.select(db.runbookRuns).get();
+      expect(left.single.snippetId, 'other');
     });
   });
 }

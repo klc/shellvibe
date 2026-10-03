@@ -15,6 +15,13 @@ Future<List<RunHistorySummary>> runbookHistory(Ref ref, String runbookId) {
   return ref.watch(runHistoryRepositoryProvider).forRunbook(runbookId);
 }
 
+/// A snippet's stored runs, newest first.
+@riverpod
+Future<List<RunHistorySummary>> snippetHistory(Ref ref, String snippetId) {
+  ref.watch(runHistoryRevisionProvider);
+  return ref.watch(runHistoryRepositoryProvider).forSnippet(snippetId);
+}
+
 /// One stored run in full, or null once it has been pruned.
 @riverpod
 Future<StoredRun?> storedRun(Ref ref, String runId) {

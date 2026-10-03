@@ -1127,7 +1127,18 @@ class RunHistoryDialog extends ConsumerWidget {
     // snapshot, without the step policies, and the point is to run what the
     // user has today on the same hosts.
     final id = stored.summary.runbookId;
-    final current = id == null
+    final snippetId = stored.summary.snippetId;
+    final snippet = snippetId == null
+        ? null
+        : ref
+              .read(snippetsProvider)
+              .value
+              ?.where((s) => s.id == snippetId)
+              .firstOrNull;
+    // A snippet run runs the snippet as it is now, the same way.
+    final current = snippet != null
+        ? RunbookRunService.runbookForSnippet(snippet)
+        : id == null
         ? null
         : ref
               .read(runbooksProvider)
