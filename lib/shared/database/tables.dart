@@ -234,8 +234,11 @@ class RunbookRuns extends Table {
   /// `succeeded`, `failed` or `cancelled`.
   TextColumn get status => text()();
 
-  /// JSON object of the `${INPUT:...}` values used.
-  TextColumn get variableValues => text().withDefault(const Constant('{}'))();
+  /// JSON array of the NAMES of the `${INPUT:...}` variables the run was given.
+  /// Never the values: they can be passwords or tokens, and this file is not
+  /// encrypted. (Before v17 this held a name-to-value object; the v17 migration
+  /// rewrites those rows, and readers still accept the old shape.)
+  TextColumn get variableValues => text().withDefault(const Constant('[]'))();
 
   @override
   Set<Column> get primaryKey => {id};

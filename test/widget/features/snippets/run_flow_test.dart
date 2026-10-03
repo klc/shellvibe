@@ -477,6 +477,107 @@ void main() {
       expect(factory.openedHosts, ['h1', 'h2', 'h1']);
     });
 
+    testWidgets('history never stores input values, and running again from '
+        'it asks for them again', (tester) async {
+      await seedRunbook(command: r'echo ${INPUT:who}');
+      final factory = _FakeFactory(
+        handler: (hostId, command) async => ('said $command\n', 0),
+      );
+      await pumpScreen(tester, factory);
+
+      await tester.tap(find.byKey(const Key('runbook_execute_rb')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('run_target_host_h1')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('run_target_confirm')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('variable_input_who')),
+        'hunter2-s3cret',
+      );
+      await tester.tap(find.byKey(const Key('variable_input_confirm_button')));
+      await tester.pumpAndSettle();
+      expect(factory.ran, ['echo hunter2-s3cret']);
+
+      // Nothing on disk holds the value, not even the echoed output.
+      for (final table in [
+        'runbook_runs',
+        'runbook_run_hosts',
+        'runbook_run_steps',
+      ]) {
+        final rows = await db.customSelect('SELECT * FROM $table').get();
+        expect(rows, isNotEmpty);
+        for (final row in rows) {
+          for (final value in row.data.values) {
+            expect('$value', isNot(contains('hunter2-s3cret')), reason: table);
+          }
+        }
+      }
+
+      await tester.tap(find.byKey(const Key('run_result_close')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('runbook_tile_rb')));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('run_history_section')),
+        200,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const Key('runbook_detail_drawer')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.tap(
+        find.byWidgetPredicate((w) {
+          final key = w.key;
+          return key is ValueKey<String> &&
+              RegExp(r'^run_history_[0-9a-f-]{36}$').hasMatch(key.value);
+        }),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const Key('run_history_dialog')),
+          matching: find.byKey(const Key('run_run_again')),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Asked again, with nothing prefilled, and nothing ran yet.
+      final field = find.byKey(const Key('variable_input_who'));
+      expect(field, findsOneWidget);
+      expect(tester.widget<ShadInput>(field).controller?.text ?? '', isEmpty);
+      expect(factory.ran, hasLength(1));
+
+      await tester.enterText(field, 'again');
+      await tester.tap(find.byKey(const Key('variable_input_confirm_button')));
+      await tester.pumpAndSettle();
+      expect(factory.ran, ['echo hunter2-s3cret', 'echo again']);
+    });
+
+    testWidgets('re-running a live run reuses its in-memory values', (
+      tester,
+    ) async {
+      await seedRunbook(command: r'echo ${INPUT:who}');
+      final factory = _FakeFactory();
+      await pumpScreen(tester, factory);
+      await tester.tap(find.byKey(const Key('runbook_execute_rb')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('run_target_host_h1')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('run_target_confirm')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('variable_input_who')), 'x1');
+      await tester.tap(find.byKey(const Key('variable_input_confirm_button')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('run_run_again')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('variable_input_who')), findsNothing);
+      expect(factory.ran, ['echo x1', 'echo x1']);
+    });
+
     testWidgets('clearing the history removes the section', (tester) async {
       await seedRunbook();
       await pumpScreen(tester, _FakeFactory());

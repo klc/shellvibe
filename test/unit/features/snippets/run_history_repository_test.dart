@@ -121,7 +121,8 @@ void main() {
     expect(stored.summary.strategy, RunStrategy.parallel(3));
     expect(stored.hostIds, ['h1', 'h2', 'h3']);
     expect(stored.run.fromHistory, isTrue);
-    expect(stored.run.variableValues, {'who': 'world'});
+    // Values are never stored, so there is nothing to read back.
+    expect(stored.run.variableValues, isEmpty);
     expect(stored.run.hosts.map((h) => h.status), [
       RunHostStatus.succeeded,
       RunHostStatus.failed,
@@ -133,12 +134,67 @@ void main() {
     expect(r.output, 'out');
     expect(r.exitCode, 0);
     expect(r.attempts, 2);
-    // The command as it was sent, not the template.
-    expect(r.command, 'echo world');
+    // The template, not the command as sent: that would hold the value.
+    expect(r.command, r'echo ${INPUT:who}');
     expect(stored.run.runbook.steps.map((s) => s.stepOrder), [1, 2]);
     // A step that never ran still has its status, but no result.
     expect(stored.run.hosts[2].steps['s1'], RunStepStatus.skipped);
     expect(stored.run.hosts[2].results, isEmpty);
+  });
+
+  test('input values reach no stored column, only the names do', () async {
+    const secret = 'hunter2-s3cret';
+    final book = runbook();
+    final hostRun = ActiveRun(
+      runbook: book,
+      running: false,
+      variableValues: const {'who': secret},
+      startedAt: DateTime(2026),
+      finishedAt: DateTime(2026),
+      hosts: [
+        HostRunState(
+          hostId: 'h1',
+          label: 'web-1',
+          status: RunHostStatus.failed,
+          steps: const {'s1': RunStepStatus.failed},
+          results: {
+            's1': RunbookStepResult(
+              step: step1,
+              success: false,
+              exitCode: 1,
+              output: 'login as $secret failed',
+              errorMessage: 'bad password $secret',
+              command: 'echo $secret',
+            ),
+          },
+        ),
+      ],
+    );
+    final id = await repo.save(hostRun);
+
+    for (final table in [
+      'runbook_runs',
+      'runbook_run_hosts',
+      'runbook_run_steps',
+    ]) {
+      final rows = await db.customSelect('SELECT * FROM $table').get();
+      for (final row in rows) {
+        for (final value in row.data.values) {
+          expect('$value', isNot(contains(secret)), reason: table);
+        }
+      }
+    }
+    final raw = await db
+        .customSelect('SELECT variable_values FROM runbook_runs')
+        .getSingle();
+    expect(jsonDecode(raw.read<String>('variable_values')), ['who']);
+
+    final stored = (await repo.load(id))!;
+    expect(stored.run.variableValues, isEmpty);
+    expect(
+      stored.run.hosts.single.results['s1']!.output,
+      'login as [redacted] failed',
+    );
   });
 
   test(

@@ -11,7 +11,6 @@ import '../../domain/models/runbook_model.dart';
 import '../../domain/models/runbook_step_model.dart';
 import '../../domain/services/runbook_executor.dart';
 import '../../domain/services/runbook_run_service.dart';
-import '../../domain/services/snippet_variable_parser.dart';
 
 /// One line of a history list.
 class RunHistorySummary {
@@ -105,19 +104,18 @@ class RunHistoryRepository {
       );
       for (final step in steps) {
         final result = host.results[step.id];
-        final (output, truncated) = _tail(result?.output ?? '');
+        final (output, truncated) = _tail(
+          _redact(result?.output ?? '', run.variableValues),
+        );
         stepRows.add(
           RunbookRunStepsCompanion.insert(
             id: _uuid.v4(),
             runHostId: hostRowId,
             stepId: step.id,
             stepOrder: step.stepOrder,
-            command:
-                result?.command ??
-                SnippetVariableParser.substituteVariables(
-                  step.command,
-                  run.variableValues,
-                ),
+            // The template, never the substituted command: an `${INPUT:...}`
+            // value is exactly what must not reach this unencrypted file.
+            command: step.command,
             status: (host.steps[step.id] ?? RunStepStatus.pending).name,
             exitCode: Value(result?.exitCode),
             attempts: Value(result?.attempts ?? 0),
@@ -125,7 +123,11 @@ class RunHistoryRepository {
             outputTruncated: Value(
               truncated || (result?.outputTruncated ?? false),
             ),
-            error: Value(result?.errorMessage),
+            error: Value(
+              result?.errorMessage == null
+                  ? null
+                  : _redact(result!.errorMessage!, run.variableValues),
+            ),
             durationMs: Value(result?.durationMs),
           ),
         );
@@ -143,12 +145,27 @@ class RunHistoryRepository {
         startedAt: run.startedAt,
         finishedAt: run.finishedAt ?? DateTime.now(),
         status: run.outcome,
-        variableValues: Value(jsonEncode(run.variableValues)),
+        variableValues: Value(
+          jsonEncode(run.variableValues.keys.toList()..sort()),
+        ),
       ),
       hostRows,
       stepRows,
     );
     return runId;
+  }
+
+  /// Output with every non-empty input value masked. Exact matches only: a
+  /// program that transforms the value before echoing it is out of reach, which
+  /// is why the values are also never stored themselves.
+  static String _redact(String text, Map<String, String> values) {
+    var result = text;
+    final secrets = values.values.where((v) => v.isNotEmpty).toList()
+      ..sort((a, b) => b.length.compareTo(a.length));
+    for (final secret in secrets) {
+      result = result.replaceAll(secret, '[redacted]');
+    }
+    return result;
   }
 
   /// The last [maxOutputBytes] of [output], cut on a character boundary.
@@ -277,9 +294,6 @@ class RunHistoryRepository {
       );
     }
 
-    final values = (jsonDecode(row.variableValues) as Map<String, dynamic>).map(
-      (k, v) => MapEntry(k, v as String),
-    );
     return StoredRun(
       summary: _summary(row, hostRows),
       hostIds: [for (final h in hostRows) h.hostId],
@@ -288,7 +302,7 @@ class RunHistoryRepository {
         running: false,
         hosts: hosts,
         strategy: RunStrategy.parse(row.strategy),
-        variableValues: values,
+        // Never stored, so a re-run from history asks again.
         startedAt: row.startedAt,
         finishedAt: row.finishedAt,
         fromHistory: true,

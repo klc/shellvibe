@@ -116,7 +116,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 16;
+  int get schemaVersion => 17;
 
   @override
   MigrationStrategy get migration {
@@ -256,8 +256,78 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(runbookSteps, runbookSteps.retries);
           }
         }
+        if (from < 17) {
+          // Run history stored the values typed into `${INPUT:...}` prompts,
+          // in a file that is not encrypted. Rewrite what is there to names
+          // only, and mask the values where they were echoed into commands,
+          // output and errors.
+          await _scrubRunHistoryValues();
+        }
       },
     );
+  }
+
+  /// Rewrites every history row that holds input values (a JSON object) to
+  /// hold only their names, replacing each value found in the stored commands
+  /// with its `${INPUT:name}` placeholder and in output / errors with
+  /// `[redacted]`. Exact matches only; rows already in the name-array form
+  /// are left alone.
+  Future<void> _scrubRunHistoryValues() async {
+    final tables = await customSelect(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN "
+      "('runbook_runs', 'runbook_run_hosts', 'runbook_run_steps')",
+    ).get();
+    if (tables.length < 3) return;
+
+    final runs = await customSelect(
+      'SELECT id, variable_values FROM runbook_runs',
+    ).get();
+    for (final run in runs) {
+      final runId = run.read<String>('id');
+      Object? decoded;
+      try {
+        decoded = jsonDecode(run.read<String>('variable_values'));
+      } catch (_) {
+        decoded = null;
+      }
+      if (decoded is List) continue;
+
+      final values = <String, String>{
+        if (decoded is Map)
+          for (final e in decoded.entries) '${e.key}': '${e.value}',
+      };
+      await customStatement(
+        'UPDATE runbook_runs SET variable_values = ? WHERE id = ?',
+        [jsonEncode(values.keys.toList()..sort()), runId],
+      );
+      final secrets = values.entries.where((e) => e.value.isNotEmpty).toList()
+        ..sort((a, b) => b.value.length.compareTo(a.value.length));
+      if (secrets.isEmpty) continue;
+
+      final steps = await customSelect(
+        'SELECT s.id, s.command, s.output, s.error FROM runbook_run_steps s '
+        'JOIN runbook_run_hosts h ON h.id = s.run_host_id WHERE h.run_id = ?',
+        variables: [Variable.withString(runId)],
+      ).get();
+      for (final step in steps) {
+        var command = step.read<String>('command');
+        var output = step.read<String>('output');
+        var error = step.read<String?>('error');
+        for (final secret in secrets) {
+          command = command.replaceAll(
+            secret.value,
+            '\${INPUT:${secret.key}}',
+          );
+          output = output.replaceAll(secret.value, '[redacted]');
+          error = error?.replaceAll(secret.value, '[redacted]');
+        }
+        await customStatement(
+          'UPDATE runbook_run_steps SET command = ?, output = ?, error = ? '
+          'WHERE id = ?',
+          [command, output, error, step.read<String>('id')],
+        );
+      }
+    }
   }
 
   /// True when [table] exists but has no [column] yet: the one case where the

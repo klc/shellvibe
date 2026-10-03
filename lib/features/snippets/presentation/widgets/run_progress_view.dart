@@ -14,9 +14,11 @@ import '../../domain/models/runbook_model.dart';
 import '../../domain/models/runbook_step_model.dart';
 import '../../domain/services/runbook_executor.dart';
 import '../../domain/services/runbook_run_service.dart';
+import '../../domain/services/snippet_variable_parser.dart';
 import '../notifiers/run_history_providers.dart';
 import '../notifiers/runbook_run_notifier.dart';
 import '../notifiers/runbooks_notifier.dart';
+import 'variable_input_dialog.dart';
 
 /// Below this width the host×step matrix does not fit (a phone is 360), and
 /// the per-host list takes over.
@@ -146,6 +148,28 @@ Future<bool> rerunOnHosts(
 ) async {
   final notifier = ref.read(runbookRunProvider.notifier);
   if (notifier.isRunning) return false;
+
+  // A live run keeps its values in memory, so they are reused. A stored run
+  // has none (values are never written to disk), so anything the runbook asks
+  // for is asked again, with nothing prefilled.
+  final needed = <String>{
+    for (final step in runbook.steps)
+      ...SnippetVariableParser.extractVariables(step.command),
+  };
+  final missing = needed
+      .where((name) => !source.variableValues.containsKey(name))
+      .toList();
+  var variableValues = source.variableValues;
+  if (missing.isNotEmpty) {
+    final entered = await VariableInputDialog.show(
+      context,
+      variables: missing,
+      title: 'Runbook Input Parameters',
+    );
+    if (entered == null || !context.mounted) return false;
+    variableValues = {...variableValues, ...entered};
+  }
+
   final hosts = await notifier.hostsFor(hostIds);
   final dropped = hostIds.length - hosts.length;
   if (!context.mounted) return false;
@@ -166,7 +190,7 @@ Future<bool> rerunOnHosts(
     notifier.start(
       runbook,
       hosts,
-      variableValues: source.variableValues,
+      variableValues: variableValues,
       strategy: source.strategy,
     ),
   );
