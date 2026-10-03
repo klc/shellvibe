@@ -1341,8 +1341,26 @@ class $SnippetsTable extends Snippets with TableInfo<$SnippetsTable, Snippet> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _variablesMeta = const VerificationMeta(
+    'variables',
+  );
   @override
-  List<GeneratedColumn> get $columns => [id, workspaceId, title, code, tags];
+  late final GeneratedColumn<String> variables = GeneratedColumn<String>(
+    'variables',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    workspaceId,
+    title,
+    code,
+    tags,
+    variables,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -1393,6 +1411,12 @@ class $SnippetsTable extends Snippets with TableInfo<$SnippetsTable, Snippet> {
         tags.isAcceptableOrUnknown(data['tags']!, _tagsMeta),
       );
     }
+    if (data.containsKey('variables')) {
+      context.handle(
+        _variablesMeta,
+        variables.isAcceptableOrUnknown(data['variables']!, _variablesMeta),
+      );
+    }
     return context;
   }
 
@@ -1422,6 +1446,10 @@ class $SnippetsTable extends Snippets with TableInfo<$SnippetsTable, Snippet> {
         DriftSqlType.string,
         data['${effectivePrefix}tags'],
       ),
+      variables: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}variables'],
+      ),
     );
   }
 
@@ -1437,12 +1465,18 @@ class Snippet extends DataClass implements Insertable<Snippet> {
   final String title;
   final String code;
   final String? tags;
+
+  /// JSON array of variable declarations (`VariableDeclaration`): type,
+  /// default, options, description. Null means every `${INPUT:...}` is plain
+  /// required text.
+  final String? variables;
   const Snippet({
     required this.id,
     required this.workspaceId,
     required this.title,
     required this.code,
     this.tags,
+    this.variables,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1454,6 +1488,9 @@ class Snippet extends DataClass implements Insertable<Snippet> {
     if (!nullToAbsent || tags != null) {
       map['tags'] = Variable<String>(tags);
     }
+    if (!nullToAbsent || variables != null) {
+      map['variables'] = Variable<String>(variables);
+    }
     return map;
   }
 
@@ -1464,6 +1501,9 @@ class Snippet extends DataClass implements Insertable<Snippet> {
       title: Value(title),
       code: Value(code),
       tags: tags == null && nullToAbsent ? const Value.absent() : Value(tags),
+      variables: variables == null && nullToAbsent
+          ? const Value.absent()
+          : Value(variables),
     );
   }
 
@@ -1478,6 +1518,7 @@ class Snippet extends DataClass implements Insertable<Snippet> {
       title: serializer.fromJson<String>(json['title']),
       code: serializer.fromJson<String>(json['code']),
       tags: serializer.fromJson<String?>(json['tags']),
+      variables: serializer.fromJson<String?>(json['variables']),
     );
   }
   @override
@@ -1489,6 +1530,7 @@ class Snippet extends DataClass implements Insertable<Snippet> {
       'title': serializer.toJson<String>(title),
       'code': serializer.toJson<String>(code),
       'tags': serializer.toJson<String?>(tags),
+      'variables': serializer.toJson<String?>(variables),
     };
   }
 
@@ -1498,12 +1540,14 @@ class Snippet extends DataClass implements Insertable<Snippet> {
     String? title,
     String? code,
     Value<String?> tags = const Value.absent(),
+    Value<String?> variables = const Value.absent(),
   }) => Snippet(
     id: id ?? this.id,
     workspaceId: workspaceId ?? this.workspaceId,
     title: title ?? this.title,
     code: code ?? this.code,
     tags: tags.present ? tags.value : this.tags,
+    variables: variables.present ? variables.value : this.variables,
   );
   Snippet copyWithCompanion(SnippetsCompanion data) {
     return Snippet(
@@ -1514,6 +1558,7 @@ class Snippet extends DataClass implements Insertable<Snippet> {
       title: data.title.present ? data.title.value : this.title,
       code: data.code.present ? data.code.value : this.code,
       tags: data.tags.present ? data.tags.value : this.tags,
+      variables: data.variables.present ? data.variables.value : this.variables,
     );
   }
 
@@ -1524,13 +1569,15 @@ class Snippet extends DataClass implements Insertable<Snippet> {
           ..write('workspaceId: $workspaceId, ')
           ..write('title: $title, ')
           ..write('code: $code, ')
-          ..write('tags: $tags')
+          ..write('tags: $tags, ')
+          ..write('variables: $variables')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, workspaceId, title, code, tags);
+  int get hashCode =>
+      Object.hash(id, workspaceId, title, code, tags, variables);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1539,7 +1586,8 @@ class Snippet extends DataClass implements Insertable<Snippet> {
           other.workspaceId == this.workspaceId &&
           other.title == this.title &&
           other.code == this.code &&
-          other.tags == this.tags);
+          other.tags == this.tags &&
+          other.variables == this.variables);
 }
 
 class SnippetsCompanion extends UpdateCompanion<Snippet> {
@@ -1548,6 +1596,7 @@ class SnippetsCompanion extends UpdateCompanion<Snippet> {
   final Value<String> title;
   final Value<String> code;
   final Value<String?> tags;
+  final Value<String?> variables;
   final Value<int> rowid;
   const SnippetsCompanion({
     this.id = const Value.absent(),
@@ -1555,6 +1604,7 @@ class SnippetsCompanion extends UpdateCompanion<Snippet> {
     this.title = const Value.absent(),
     this.code = const Value.absent(),
     this.tags = const Value.absent(),
+    this.variables = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   SnippetsCompanion.insert({
@@ -1563,6 +1613,7 @@ class SnippetsCompanion extends UpdateCompanion<Snippet> {
     required String title,
     required String code,
     this.tags = const Value.absent(),
+    this.variables = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        workspaceId = Value(workspaceId),
@@ -1574,6 +1625,7 @@ class SnippetsCompanion extends UpdateCompanion<Snippet> {
     Expression<String>? title,
     Expression<String>? code,
     Expression<String>? tags,
+    Expression<String>? variables,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1582,6 +1634,7 @@ class SnippetsCompanion extends UpdateCompanion<Snippet> {
       if (title != null) 'title': title,
       if (code != null) 'code': code,
       if (tags != null) 'tags': tags,
+      if (variables != null) 'variables': variables,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1592,6 +1645,7 @@ class SnippetsCompanion extends UpdateCompanion<Snippet> {
     Value<String>? title,
     Value<String>? code,
     Value<String?>? tags,
+    Value<String?>? variables,
     Value<int>? rowid,
   }) {
     return SnippetsCompanion(
@@ -1600,6 +1654,7 @@ class SnippetsCompanion extends UpdateCompanion<Snippet> {
       title: title ?? this.title,
       code: code ?? this.code,
       tags: tags ?? this.tags,
+      variables: variables ?? this.variables,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1622,6 +1677,9 @@ class SnippetsCompanion extends UpdateCompanion<Snippet> {
     if (tags.present) {
       map['tags'] = Variable<String>(tags.value);
     }
+    if (variables.present) {
+      map['variables'] = Variable<String>(variables.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1636,6 +1694,7 @@ class SnippetsCompanion extends UpdateCompanion<Snippet> {
           ..write('title: $title, ')
           ..write('code: $code, ')
           ..write('tags: $tags, ')
+          ..write('variables: $variables, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -3940,6 +3999,26 @@ class $RunbooksTable extends Runbooks with TableInfo<$RunbooksTable, Runbook> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _variablesMeta = const VerificationMeta(
+    'variables',
+  );
+  @override
+  late final GeneratedColumn<String> variables = GeneratedColumn<String>(
+    'variables',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _tagsMeta = const VerificationMeta('tags');
+  @override
+  late final GeneratedColumn<String> tags = GeneratedColumn<String>(
+    'tags',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -3948,6 +4027,8 @@ class $RunbooksTable extends Runbooks with TableInfo<$RunbooksTable, Runbook> {
     description,
     createdAt,
     defaultHostIds,
+    variables,
+    tags,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -4011,6 +4092,18 @@ class $RunbooksTable extends Runbooks with TableInfo<$RunbooksTable, Runbook> {
         ),
       );
     }
+    if (data.containsKey('variables')) {
+      context.handle(
+        _variablesMeta,
+        variables.isAcceptableOrUnknown(data['variables']!, _variablesMeta),
+      );
+    }
+    if (data.containsKey('tags')) {
+      context.handle(
+        _tagsMeta,
+        tags.isAcceptableOrUnknown(data['tags']!, _tagsMeta),
+      );
+    }
     return context;
   }
 
@@ -4044,6 +4137,14 @@ class $RunbooksTable extends Runbooks with TableInfo<$RunbooksTable, Runbook> {
         DriftSqlType.string,
         data['${effectivePrefix}default_host_ids'],
       ),
+      variables: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}variables'],
+      ),
+      tags: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}tags'],
+      ),
     );
   }
 
@@ -4064,6 +4165,12 @@ class Runbook extends DataClass implements Insertable<Runbook> {
   /// runbook has no default. Ids of hosts deleted since are tolerated by the
   /// reader, not cleaned up here.
   final String? defaultHostIds;
+
+  /// JSON array of variable declarations, as on [Snippets].
+  final String? variables;
+
+  /// JSON array of strings, as on [Snippets].
+  final String? tags;
   const Runbook({
     required this.id,
     required this.workspaceId,
@@ -4071,6 +4178,8 @@ class Runbook extends DataClass implements Insertable<Runbook> {
     this.description,
     required this.createdAt,
     this.defaultHostIds,
+    this.variables,
+    this.tags,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -4084,6 +4193,12 @@ class Runbook extends DataClass implements Insertable<Runbook> {
     map['created_at'] = Variable<DateTime>(createdAt);
     if (!nullToAbsent || defaultHostIds != null) {
       map['default_host_ids'] = Variable<String>(defaultHostIds);
+    }
+    if (!nullToAbsent || variables != null) {
+      map['variables'] = Variable<String>(variables);
+    }
+    if (!nullToAbsent || tags != null) {
+      map['tags'] = Variable<String>(tags);
     }
     return map;
   }
@@ -4100,6 +4215,10 @@ class Runbook extends DataClass implements Insertable<Runbook> {
       defaultHostIds: defaultHostIds == null && nullToAbsent
           ? const Value.absent()
           : Value(defaultHostIds),
+      variables: variables == null && nullToAbsent
+          ? const Value.absent()
+          : Value(variables),
+      tags: tags == null && nullToAbsent ? const Value.absent() : Value(tags),
     );
   }
 
@@ -4115,6 +4234,8 @@ class Runbook extends DataClass implements Insertable<Runbook> {
       description: serializer.fromJson<String?>(json['description']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       defaultHostIds: serializer.fromJson<String?>(json['defaultHostIds']),
+      variables: serializer.fromJson<String?>(json['variables']),
+      tags: serializer.fromJson<String?>(json['tags']),
     );
   }
   @override
@@ -4127,6 +4248,8 @@ class Runbook extends DataClass implements Insertable<Runbook> {
       'description': serializer.toJson<String?>(description),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'defaultHostIds': serializer.toJson<String?>(defaultHostIds),
+      'variables': serializer.toJson<String?>(variables),
+      'tags': serializer.toJson<String?>(tags),
     };
   }
 
@@ -4137,6 +4260,8 @@ class Runbook extends DataClass implements Insertable<Runbook> {
     Value<String?> description = const Value.absent(),
     DateTime? createdAt,
     Value<String?> defaultHostIds = const Value.absent(),
+    Value<String?> variables = const Value.absent(),
+    Value<String?> tags = const Value.absent(),
   }) => Runbook(
     id: id ?? this.id,
     workspaceId: workspaceId ?? this.workspaceId,
@@ -4146,6 +4271,8 @@ class Runbook extends DataClass implements Insertable<Runbook> {
     defaultHostIds: defaultHostIds.present
         ? defaultHostIds.value
         : this.defaultHostIds,
+    variables: variables.present ? variables.value : this.variables,
+    tags: tags.present ? tags.value : this.tags,
   );
   Runbook copyWithCompanion(RunbooksCompanion data) {
     return Runbook(
@@ -4161,6 +4288,8 @@ class Runbook extends DataClass implements Insertable<Runbook> {
       defaultHostIds: data.defaultHostIds.present
           ? data.defaultHostIds.value
           : this.defaultHostIds,
+      variables: data.variables.present ? data.variables.value : this.variables,
+      tags: data.tags.present ? data.tags.value : this.tags,
     );
   }
 
@@ -4172,7 +4301,9 @@ class Runbook extends DataClass implements Insertable<Runbook> {
           ..write('title: $title, ')
           ..write('description: $description, ')
           ..write('createdAt: $createdAt, ')
-          ..write('defaultHostIds: $defaultHostIds')
+          ..write('defaultHostIds: $defaultHostIds, ')
+          ..write('variables: $variables, ')
+          ..write('tags: $tags')
           ..write(')'))
         .toString();
   }
@@ -4185,6 +4316,8 @@ class Runbook extends DataClass implements Insertable<Runbook> {
     description,
     createdAt,
     defaultHostIds,
+    variables,
+    tags,
   );
   @override
   bool operator ==(Object other) =>
@@ -4195,7 +4328,9 @@ class Runbook extends DataClass implements Insertable<Runbook> {
           other.title == this.title &&
           other.description == this.description &&
           other.createdAt == this.createdAt &&
-          other.defaultHostIds == this.defaultHostIds);
+          other.defaultHostIds == this.defaultHostIds &&
+          other.variables == this.variables &&
+          other.tags == this.tags);
 }
 
 class RunbooksCompanion extends UpdateCompanion<Runbook> {
@@ -4205,6 +4340,8 @@ class RunbooksCompanion extends UpdateCompanion<Runbook> {
   final Value<String?> description;
   final Value<DateTime> createdAt;
   final Value<String?> defaultHostIds;
+  final Value<String?> variables;
+  final Value<String?> tags;
   final Value<int> rowid;
   const RunbooksCompanion({
     this.id = const Value.absent(),
@@ -4213,6 +4350,8 @@ class RunbooksCompanion extends UpdateCompanion<Runbook> {
     this.description = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.defaultHostIds = const Value.absent(),
+    this.variables = const Value.absent(),
+    this.tags = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   RunbooksCompanion.insert({
@@ -4222,6 +4361,8 @@ class RunbooksCompanion extends UpdateCompanion<Runbook> {
     this.description = const Value.absent(),
     required DateTime createdAt,
     this.defaultHostIds = const Value.absent(),
+    this.variables = const Value.absent(),
+    this.tags = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        workspaceId = Value(workspaceId),
@@ -4234,6 +4375,8 @@ class RunbooksCompanion extends UpdateCompanion<Runbook> {
     Expression<String>? description,
     Expression<DateTime>? createdAt,
     Expression<String>? defaultHostIds,
+    Expression<String>? variables,
+    Expression<String>? tags,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -4243,6 +4386,8 @@ class RunbooksCompanion extends UpdateCompanion<Runbook> {
       if (description != null) 'description': description,
       if (createdAt != null) 'created_at': createdAt,
       if (defaultHostIds != null) 'default_host_ids': defaultHostIds,
+      if (variables != null) 'variables': variables,
+      if (tags != null) 'tags': tags,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -4254,6 +4399,8 @@ class RunbooksCompanion extends UpdateCompanion<Runbook> {
     Value<String?>? description,
     Value<DateTime>? createdAt,
     Value<String?>? defaultHostIds,
+    Value<String?>? variables,
+    Value<String?>? tags,
     Value<int>? rowid,
   }) {
     return RunbooksCompanion(
@@ -4263,6 +4410,8 @@ class RunbooksCompanion extends UpdateCompanion<Runbook> {
       description: description ?? this.description,
       createdAt: createdAt ?? this.createdAt,
       defaultHostIds: defaultHostIds ?? this.defaultHostIds,
+      variables: variables ?? this.variables,
+      tags: tags ?? this.tags,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -4288,6 +4437,12 @@ class RunbooksCompanion extends UpdateCompanion<Runbook> {
     if (defaultHostIds.present) {
       map['default_host_ids'] = Variable<String>(defaultHostIds.value);
     }
+    if (variables.present) {
+      map['variables'] = Variable<String>(variables.value);
+    }
+    if (tags.present) {
+      map['tags'] = Variable<String>(tags.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -4303,6 +4458,8 @@ class RunbooksCompanion extends UpdateCompanion<Runbook> {
           ..write('description: $description, ')
           ..write('createdAt: $createdAt, ')
           ..write('defaultHostIds: $defaultHostIds, ')
+          ..write('variables: $variables, ')
+          ..write('tags: $tags, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -4419,6 +4576,30 @@ class $RunbookStepsTable extends RunbookSteps
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+    'kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('command'),
+  );
+  static const VerificationMeta _snippetIdMeta = const VerificationMeta(
+    'snippetId',
+  );
+  @override
+  late final GeneratedColumn<String> snippetId = GeneratedColumn<String>(
+    'snippet_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES snippets (id) ON DELETE SET NULL',
+    ),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -4430,6 +4611,8 @@ class $RunbookStepsTable extends RunbookSteps
     timeoutSeconds,
     onFailure,
     retries,
+    kind,
+    snippetId,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -4511,6 +4694,18 @@ class $RunbookStepsTable extends RunbookSteps
         retries.isAcceptableOrUnknown(data['retries']!, _retriesMeta),
       );
     }
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
+      );
+    }
+    if (data.containsKey('snippet_id')) {
+      context.handle(
+        _snippetIdMeta,
+        snippetId.isAcceptableOrUnknown(data['snippet_id']!, _snippetIdMeta),
+      );
+    }
     return context;
   }
 
@@ -4556,6 +4751,14 @@ class $RunbookStepsTable extends RunbookSteps
         DriftSqlType.int,
         data['${effectivePrefix}retries'],
       )!,
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}kind'],
+      )!,
+      snippetId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}snippet_id'],
+      ),
     );
   }
 
@@ -4579,6 +4782,15 @@ class RunbookStep extends DataClass implements Insertable<RunbookStep> {
 
   /// Extra attempts after the first failure, 0-5.
   final int retries;
+
+  /// `command`, `snippet` or `approval`. Only `command` existed before, and
+  /// it stays the default.
+  final String kind;
+
+  /// The snippet a `snippet` step runs; its current code is used at run time.
+  /// Cleared when the snippet is deleted, which makes the step fail with a
+  /// clear message rather than vanish.
+  final String? snippetId;
   const RunbookStep({
     required this.id,
     required this.runbookId,
@@ -4589,6 +4801,8 @@ class RunbookStep extends DataClass implements Insertable<RunbookStep> {
     required this.timeoutSeconds,
     required this.onFailure,
     required this.retries,
+    required this.kind,
+    this.snippetId,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -4604,6 +4818,10 @@ class RunbookStep extends DataClass implements Insertable<RunbookStep> {
     map['timeout_seconds'] = Variable<int>(timeoutSeconds);
     map['on_failure'] = Variable<String>(onFailure);
     map['retries'] = Variable<int>(retries);
+    map['kind'] = Variable<String>(kind);
+    if (!nullToAbsent || snippetId != null) {
+      map['snippet_id'] = Variable<String>(snippetId);
+    }
     return map;
   }
 
@@ -4620,6 +4838,10 @@ class RunbookStep extends DataClass implements Insertable<RunbookStep> {
       timeoutSeconds: Value(timeoutSeconds),
       onFailure: Value(onFailure),
       retries: Value(retries),
+      kind: Value(kind),
+      snippetId: snippetId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(snippetId),
     );
   }
 
@@ -4640,6 +4862,8 @@ class RunbookStep extends DataClass implements Insertable<RunbookStep> {
       timeoutSeconds: serializer.fromJson<int>(json['timeoutSeconds']),
       onFailure: serializer.fromJson<String>(json['onFailure']),
       retries: serializer.fromJson<int>(json['retries']),
+      kind: serializer.fromJson<String>(json['kind']),
+      snippetId: serializer.fromJson<String?>(json['snippetId']),
     );
   }
   @override
@@ -4657,6 +4881,8 @@ class RunbookStep extends DataClass implements Insertable<RunbookStep> {
       'timeoutSeconds': serializer.toJson<int>(timeoutSeconds),
       'onFailure': serializer.toJson<String>(onFailure),
       'retries': serializer.toJson<int>(retries),
+      'kind': serializer.toJson<String>(kind),
+      'snippetId': serializer.toJson<String?>(snippetId),
     };
   }
 
@@ -4670,6 +4896,8 @@ class RunbookStep extends DataClass implements Insertable<RunbookStep> {
     int? timeoutSeconds,
     String? onFailure,
     int? retries,
+    String? kind,
+    Value<String?> snippetId = const Value.absent(),
   }) => RunbookStep(
     id: id ?? this.id,
     runbookId: runbookId ?? this.runbookId,
@@ -4682,6 +4910,8 @@ class RunbookStep extends DataClass implements Insertable<RunbookStep> {
     timeoutSeconds: timeoutSeconds ?? this.timeoutSeconds,
     onFailure: onFailure ?? this.onFailure,
     retries: retries ?? this.retries,
+    kind: kind ?? this.kind,
+    snippetId: snippetId.present ? snippetId.value : this.snippetId,
   );
   RunbookStep copyWithCompanion(RunbookStepsCompanion data) {
     return RunbookStep(
@@ -4700,6 +4930,8 @@ class RunbookStep extends DataClass implements Insertable<RunbookStep> {
           : this.timeoutSeconds,
       onFailure: data.onFailure.present ? data.onFailure.value : this.onFailure,
       retries: data.retries.present ? data.retries.value : this.retries,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      snippetId: data.snippetId.present ? data.snippetId.value : this.snippetId,
     );
   }
 
@@ -4714,7 +4946,9 @@ class RunbookStep extends DataClass implements Insertable<RunbookStep> {
           ..write('expectedOutputPattern: $expectedOutputPattern, ')
           ..write('timeoutSeconds: $timeoutSeconds, ')
           ..write('onFailure: $onFailure, ')
-          ..write('retries: $retries')
+          ..write('retries: $retries, ')
+          ..write('kind: $kind, ')
+          ..write('snippetId: $snippetId')
           ..write(')'))
         .toString();
   }
@@ -4730,6 +4964,8 @@ class RunbookStep extends DataClass implements Insertable<RunbookStep> {
     timeoutSeconds,
     onFailure,
     retries,
+    kind,
+    snippetId,
   );
   @override
   bool operator ==(Object other) =>
@@ -4743,7 +4979,9 @@ class RunbookStep extends DataClass implements Insertable<RunbookStep> {
           other.expectedOutputPattern == this.expectedOutputPattern &&
           other.timeoutSeconds == this.timeoutSeconds &&
           other.onFailure == this.onFailure &&
-          other.retries == this.retries);
+          other.retries == this.retries &&
+          other.kind == this.kind &&
+          other.snippetId == this.snippetId);
 }
 
 class RunbookStepsCompanion extends UpdateCompanion<RunbookStep> {
@@ -4756,6 +4994,8 @@ class RunbookStepsCompanion extends UpdateCompanion<RunbookStep> {
   final Value<int> timeoutSeconds;
   final Value<String> onFailure;
   final Value<int> retries;
+  final Value<String> kind;
+  final Value<String?> snippetId;
   final Value<int> rowid;
   const RunbookStepsCompanion({
     this.id = const Value.absent(),
@@ -4767,6 +5007,8 @@ class RunbookStepsCompanion extends UpdateCompanion<RunbookStep> {
     this.timeoutSeconds = const Value.absent(),
     this.onFailure = const Value.absent(),
     this.retries = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.snippetId = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   RunbookStepsCompanion.insert({
@@ -4779,6 +5021,8 @@ class RunbookStepsCompanion extends UpdateCompanion<RunbookStep> {
     this.timeoutSeconds = const Value.absent(),
     this.onFailure = const Value.absent(),
     this.retries = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.snippetId = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        runbookId = Value(runbookId),
@@ -4794,6 +5038,8 @@ class RunbookStepsCompanion extends UpdateCompanion<RunbookStep> {
     Expression<int>? timeoutSeconds,
     Expression<String>? onFailure,
     Expression<int>? retries,
+    Expression<String>? kind,
+    Expression<String>? snippetId,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -4807,6 +5053,8 @@ class RunbookStepsCompanion extends UpdateCompanion<RunbookStep> {
       if (timeoutSeconds != null) 'timeout_seconds': timeoutSeconds,
       if (onFailure != null) 'on_failure': onFailure,
       if (retries != null) 'retries': retries,
+      if (kind != null) 'kind': kind,
+      if (snippetId != null) 'snippet_id': snippetId,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -4821,6 +5069,8 @@ class RunbookStepsCompanion extends UpdateCompanion<RunbookStep> {
     Value<int>? timeoutSeconds,
     Value<String>? onFailure,
     Value<int>? retries,
+    Value<String>? kind,
+    Value<String?>? snippetId,
     Value<int>? rowid,
   }) {
     return RunbookStepsCompanion(
@@ -4834,6 +5084,8 @@ class RunbookStepsCompanion extends UpdateCompanion<RunbookStep> {
       timeoutSeconds: timeoutSeconds ?? this.timeoutSeconds,
       onFailure: onFailure ?? this.onFailure,
       retries: retries ?? this.retries,
+      kind: kind ?? this.kind,
+      snippetId: snippetId ?? this.snippetId,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -4870,6 +5122,12 @@ class RunbookStepsCompanion extends UpdateCompanion<RunbookStep> {
     if (retries.present) {
       map['retries'] = Variable<int>(retries.value);
     }
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
+    }
+    if (snippetId.present) {
+      map['snippet_id'] = Variable<String>(snippetId.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -4888,6 +5146,8 @@ class RunbookStepsCompanion extends UpdateCompanion<RunbookStep> {
           ..write('timeoutSeconds: $timeoutSeconds, ')
           ..write('onFailure: $onFailure, ')
           ..write('retries: $retries, ')
+          ..write('kind: $kind, ')
+          ..write('snippetId: $snippetId, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -12164,6 +12424,17 @@ class $RunbookRunsTable extends RunbookRuns
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _snippetIdMeta = const VerificationMeta(
+    'snippetId',
+  );
+  @override
+  late final GeneratedColumn<String> snippetId = GeneratedColumn<String>(
+    'snippet_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _titleMeta = const VerificationMeta('title');
   @override
   late final GeneratedColumn<String> title = GeneratedColumn<String>(
@@ -12233,6 +12504,7 @@ class $RunbookRunsTable extends RunbookRuns
     workspaceId,
     runbookId,
     kind,
+    snippetId,
     title,
     strategy,
     startedAt,
@@ -12281,6 +12553,12 @@ class $RunbookRunsTable extends RunbookRuns
       );
     } else if (isInserting) {
       context.missing(_kindMeta);
+    }
+    if (data.containsKey('snippet_id')) {
+      context.handle(
+        _snippetIdMeta,
+        snippetId.isAcceptableOrUnknown(data['snippet_id']!, _snippetIdMeta),
+      );
     }
     if (data.containsKey('title')) {
       context.handle(
@@ -12356,6 +12634,10 @@ class $RunbookRunsTable extends RunbookRuns
         DriftSqlType.string,
         data['${effectivePrefix}kind'],
       )!,
+      snippetId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}snippet_id'],
+      ),
       title: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}title'],
@@ -12399,6 +12681,11 @@ class RunbookRun extends DataClass implements Insertable<RunbookRun> {
 
   /// `runbook` or `snippet`.
   final String kind;
+
+  /// The snippet a snippet run was of, so a snippet can list its own runs. Null
+  /// for a runbook run and for rows from before v18. Plain text: the snippet
+  /// may be deleted later.
+  final String? snippetId;
   final String title;
 
   /// `parallel:<n>` or `rolling`.
@@ -12419,6 +12706,7 @@ class RunbookRun extends DataClass implements Insertable<RunbookRun> {
     required this.workspaceId,
     this.runbookId,
     required this.kind,
+    this.snippetId,
     required this.title,
     required this.strategy,
     required this.startedAt,
@@ -12435,6 +12723,9 @@ class RunbookRun extends DataClass implements Insertable<RunbookRun> {
       map['runbook_id'] = Variable<String>(runbookId);
     }
     map['kind'] = Variable<String>(kind);
+    if (!nullToAbsent || snippetId != null) {
+      map['snippet_id'] = Variable<String>(snippetId);
+    }
     map['title'] = Variable<String>(title);
     map['strategy'] = Variable<String>(strategy);
     map['started_at'] = Variable<DateTime>(startedAt);
@@ -12452,6 +12743,9 @@ class RunbookRun extends DataClass implements Insertable<RunbookRun> {
           ? const Value.absent()
           : Value(runbookId),
       kind: Value(kind),
+      snippetId: snippetId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(snippetId),
       title: Value(title),
       strategy: Value(strategy),
       startedAt: Value(startedAt),
@@ -12471,6 +12765,7 @@ class RunbookRun extends DataClass implements Insertable<RunbookRun> {
       workspaceId: serializer.fromJson<String>(json['workspaceId']),
       runbookId: serializer.fromJson<String?>(json['runbookId']),
       kind: serializer.fromJson<String>(json['kind']),
+      snippetId: serializer.fromJson<String?>(json['snippetId']),
       title: serializer.fromJson<String>(json['title']),
       strategy: serializer.fromJson<String>(json['strategy']),
       startedAt: serializer.fromJson<DateTime>(json['startedAt']),
@@ -12487,6 +12782,7 @@ class RunbookRun extends DataClass implements Insertable<RunbookRun> {
       'workspaceId': serializer.toJson<String>(workspaceId),
       'runbookId': serializer.toJson<String?>(runbookId),
       'kind': serializer.toJson<String>(kind),
+      'snippetId': serializer.toJson<String?>(snippetId),
       'title': serializer.toJson<String>(title),
       'strategy': serializer.toJson<String>(strategy),
       'startedAt': serializer.toJson<DateTime>(startedAt),
@@ -12501,6 +12797,7 @@ class RunbookRun extends DataClass implements Insertable<RunbookRun> {
     String? workspaceId,
     Value<String?> runbookId = const Value.absent(),
     String? kind,
+    Value<String?> snippetId = const Value.absent(),
     String? title,
     String? strategy,
     DateTime? startedAt,
@@ -12512,6 +12809,7 @@ class RunbookRun extends DataClass implements Insertable<RunbookRun> {
     workspaceId: workspaceId ?? this.workspaceId,
     runbookId: runbookId.present ? runbookId.value : this.runbookId,
     kind: kind ?? this.kind,
+    snippetId: snippetId.present ? snippetId.value : this.snippetId,
     title: title ?? this.title,
     strategy: strategy ?? this.strategy,
     startedAt: startedAt ?? this.startedAt,
@@ -12527,6 +12825,7 @@ class RunbookRun extends DataClass implements Insertable<RunbookRun> {
           : this.workspaceId,
       runbookId: data.runbookId.present ? data.runbookId.value : this.runbookId,
       kind: data.kind.present ? data.kind.value : this.kind,
+      snippetId: data.snippetId.present ? data.snippetId.value : this.snippetId,
       title: data.title.present ? data.title.value : this.title,
       strategy: data.strategy.present ? data.strategy.value : this.strategy,
       startedAt: data.startedAt.present ? data.startedAt.value : this.startedAt,
@@ -12547,6 +12846,7 @@ class RunbookRun extends DataClass implements Insertable<RunbookRun> {
           ..write('workspaceId: $workspaceId, ')
           ..write('runbookId: $runbookId, ')
           ..write('kind: $kind, ')
+          ..write('snippetId: $snippetId, ')
           ..write('title: $title, ')
           ..write('strategy: $strategy, ')
           ..write('startedAt: $startedAt, ')
@@ -12563,6 +12863,7 @@ class RunbookRun extends DataClass implements Insertable<RunbookRun> {
     workspaceId,
     runbookId,
     kind,
+    snippetId,
     title,
     strategy,
     startedAt,
@@ -12578,6 +12879,7 @@ class RunbookRun extends DataClass implements Insertable<RunbookRun> {
           other.workspaceId == this.workspaceId &&
           other.runbookId == this.runbookId &&
           other.kind == this.kind &&
+          other.snippetId == this.snippetId &&
           other.title == this.title &&
           other.strategy == this.strategy &&
           other.startedAt == this.startedAt &&
@@ -12591,6 +12893,7 @@ class RunbookRunsCompanion extends UpdateCompanion<RunbookRun> {
   final Value<String> workspaceId;
   final Value<String?> runbookId;
   final Value<String> kind;
+  final Value<String?> snippetId;
   final Value<String> title;
   final Value<String> strategy;
   final Value<DateTime> startedAt;
@@ -12603,6 +12906,7 @@ class RunbookRunsCompanion extends UpdateCompanion<RunbookRun> {
     this.workspaceId = const Value.absent(),
     this.runbookId = const Value.absent(),
     this.kind = const Value.absent(),
+    this.snippetId = const Value.absent(),
     this.title = const Value.absent(),
     this.strategy = const Value.absent(),
     this.startedAt = const Value.absent(),
@@ -12616,6 +12920,7 @@ class RunbookRunsCompanion extends UpdateCompanion<RunbookRun> {
     required String workspaceId,
     this.runbookId = const Value.absent(),
     required String kind,
+    this.snippetId = const Value.absent(),
     required String title,
     required String strategy,
     required DateTime startedAt,
@@ -12636,6 +12941,7 @@ class RunbookRunsCompanion extends UpdateCompanion<RunbookRun> {
     Expression<String>? workspaceId,
     Expression<String>? runbookId,
     Expression<String>? kind,
+    Expression<String>? snippetId,
     Expression<String>? title,
     Expression<String>? strategy,
     Expression<DateTime>? startedAt,
@@ -12649,6 +12955,7 @@ class RunbookRunsCompanion extends UpdateCompanion<RunbookRun> {
       if (workspaceId != null) 'workspace_id': workspaceId,
       if (runbookId != null) 'runbook_id': runbookId,
       if (kind != null) 'kind': kind,
+      if (snippetId != null) 'snippet_id': snippetId,
       if (title != null) 'title': title,
       if (strategy != null) 'strategy': strategy,
       if (startedAt != null) 'started_at': startedAt,
@@ -12664,6 +12971,7 @@ class RunbookRunsCompanion extends UpdateCompanion<RunbookRun> {
     Value<String>? workspaceId,
     Value<String?>? runbookId,
     Value<String>? kind,
+    Value<String?>? snippetId,
     Value<String>? title,
     Value<String>? strategy,
     Value<DateTime>? startedAt,
@@ -12677,6 +12985,7 @@ class RunbookRunsCompanion extends UpdateCompanion<RunbookRun> {
       workspaceId: workspaceId ?? this.workspaceId,
       runbookId: runbookId ?? this.runbookId,
       kind: kind ?? this.kind,
+      snippetId: snippetId ?? this.snippetId,
       title: title ?? this.title,
       strategy: strategy ?? this.strategy,
       startedAt: startedAt ?? this.startedAt,
@@ -12701,6 +13010,9 @@ class RunbookRunsCompanion extends UpdateCompanion<RunbookRun> {
     }
     if (kind.present) {
       map['kind'] = Variable<String>(kind.value);
+    }
+    if (snippetId.present) {
+      map['snippet_id'] = Variable<String>(snippetId.value);
     }
     if (title.present) {
       map['title'] = Variable<String>(title.value);
@@ -12733,6 +13045,7 @@ class RunbookRunsCompanion extends UpdateCompanion<RunbookRun> {
           ..write('workspaceId: $workspaceId, ')
           ..write('runbookId: $runbookId, ')
           ..write('kind: $kind, ')
+          ..write('snippetId: $snippetId, ')
           ..write('title: $title, ')
           ..write('strategy: $strategy, ')
           ..write('startedAt: $startedAt, ')
@@ -14099,6 +14412,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('runbook_steps', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'snippets',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('runbook_steps', kind: UpdateKind.update)],
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
@@ -16541,6 +16861,7 @@ typedef $$SnippetsTableCreateCompanionBuilder =
       required String title,
       required String code,
       Value<String?> tags,
+      Value<String?> variables,
       Value<int> rowid,
     });
 typedef $$SnippetsTableUpdateCompanionBuilder =
@@ -16550,6 +16871,7 @@ typedef $$SnippetsTableUpdateCompanionBuilder =
       Value<String> title,
       Value<String> code,
       Value<String?> tags,
+      Value<String?> variables,
       Value<int> rowid,
     });
 
@@ -16587,6 +16909,24 @@ final class $$SnippetsTableReferences
     );
 
     final cache = $_typedResult.readTableOrNull(_hostsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$RunbookStepsTable, List<RunbookStep>>
+  _runbookStepsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.runbookSteps,
+    aliasName: 'snippets__id__runbook_steps__snippet_id',
+  );
+
+  $$RunbookStepsTableProcessedTableManager get runbookStepsRefs {
+    final manager = $$RunbookStepsTableTableManager(
+      $_db,
+      $_db.runbookSteps,
+    ).filter((f) => f.snippetId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_runbookStepsRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -16640,6 +16980,11 @@ class $$SnippetsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get variables => $composableBuilder(
+    column: $table.variables,
+    builder: (column) => ColumnFilters(column),
+  );
+
   $$WorkspacesTableFilterComposer get workspaceId {
     final $$WorkspacesTableFilterComposer composer = $composerBuilder(
       composer: this,
@@ -16679,6 +17024,31 @@ class $$SnippetsTableFilterComposer
           }) => $$HostsTableFilterComposer(
             $db: $db,
             $table: $db.hosts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> runbookStepsRefs(
+    Expression<bool> Function($$RunbookStepsTableFilterComposer f) f,
+  ) {
+    final $$RunbookStepsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.runbookSteps,
+      getReferencedColumn: (t) => t.snippetId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$RunbookStepsTableFilterComposer(
+            $db: $db,
+            $table: $db.runbookSteps,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -16743,6 +17113,11 @@ class $$SnippetsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get variables => $composableBuilder(
+    column: $table.variables,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$WorkspacesTableOrderingComposer get workspaceId {
     final $$WorkspacesTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -16788,6 +17163,9 @@ class $$SnippetsTableAnnotationComposer
   GeneratedColumn<String> get tags =>
       $composableBuilder(column: $table.tags, builder: (column) => column);
 
+  GeneratedColumn<String> get variables =>
+      $composableBuilder(column: $table.variables, builder: (column) => column);
+
   $$WorkspacesTableAnnotationComposer get workspaceId {
     final $$WorkspacesTableAnnotationComposer composer = $composerBuilder(
       composer: this,
@@ -16827,6 +17205,31 @@ class $$SnippetsTableAnnotationComposer
           }) => $$HostsTableAnnotationComposer(
             $db: $db,
             $table: $db.hosts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> runbookStepsRefs<T extends Object>(
+    Expression<T> Function($$RunbookStepsTableAnnotationComposer a) f,
+  ) {
+    final $$RunbookStepsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.runbookSteps,
+      getReferencedColumn: (t) => t.snippetId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$RunbookStepsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.runbookSteps,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -16878,6 +17281,7 @@ class $$SnippetsTableTableManager
           PrefetchHooks Function({
             bool workspaceId,
             bool hostsRefs,
+            bool runbookStepsRefs,
             bool templatePanesRefs,
           })
         > {
@@ -16899,6 +17303,7 @@ class $$SnippetsTableTableManager
                 Value<String> title = const Value.absent(),
                 Value<String> code = const Value.absent(),
                 Value<String?> tags = const Value.absent(),
+                Value<String?> variables = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SnippetsCompanion(
                 id: id,
@@ -16906,6 +17311,7 @@ class $$SnippetsTableTableManager
                 title: title,
                 code: code,
                 tags: tags,
+                variables: variables,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -16915,6 +17321,7 @@ class $$SnippetsTableTableManager
                 required String title,
                 required String code,
                 Value<String?> tags = const Value.absent(),
+                Value<String?> variables = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SnippetsCompanion.insert(
                 id: id,
@@ -16922,6 +17329,7 @@ class $$SnippetsTableTableManager
                 title: title,
                 code: code,
                 tags: tags,
+                variables: variables,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -16936,12 +17344,14 @@ class $$SnippetsTableTableManager
               ({
                 workspaceId = false,
                 hostsRefs = false,
+                runbookStepsRefs = false,
                 templatePanesRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [
                     if (hostsRefs) db.hosts,
+                    if (runbookStepsRefs) db.runbookSteps,
                     if (templatePanesRefs) db.templatePanes,
                   ],
                   addJoins:
@@ -16999,6 +17409,27 @@ class $$SnippetsTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (runbookStepsRefs)
+                        await $_getPrefetchedData<
+                          Snippet,
+                          $SnippetsTable,
+                          RunbookStep
+                        >(
+                          currentTable: table,
+                          referencedTable: $$SnippetsTableReferences
+                              ._runbookStepsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$SnippetsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).runbookStepsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.snippetId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                       if (templatePanesRefs)
                         await $_getPrefetchedData<
                           Snippet,
@@ -17043,6 +17474,7 @@ typedef $$SnippetsTableProcessedTableManager =
       PrefetchHooks Function({
         bool workspaceId,
         bool hostsRefs,
+        bool runbookStepsRefs,
         bool templatePanesRefs,
       })
     >;
@@ -19430,6 +19862,8 @@ typedef $$RunbooksTableCreateCompanionBuilder =
       Value<String?> description,
       required DateTime createdAt,
       Value<String?> defaultHostIds,
+      Value<String?> variables,
+      Value<String?> tags,
       Value<int> rowid,
     });
 typedef $$RunbooksTableUpdateCompanionBuilder =
@@ -19440,6 +19874,8 @@ typedef $$RunbooksTableUpdateCompanionBuilder =
       Value<String?> description,
       Value<DateTime> createdAt,
       Value<String?> defaultHostIds,
+      Value<String?> variables,
+      Value<String?> tags,
       Value<int> rowid,
     });
 
@@ -19531,6 +19967,16 @@ class $$RunbooksTableFilterComposer
 
   ColumnFilters<String> get defaultHostIds => $composableBuilder(
     column: $table.defaultHostIds,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get variables => $composableBuilder(
+    column: $table.variables,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get tags => $composableBuilder(
+    column: $table.tags,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -19642,6 +20088,16 @@ class $$RunbooksTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get variables => $composableBuilder(
+    column: $table.variables,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get tags => $composableBuilder(
+    column: $table.tags,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$WorkspacesTableOrderingComposer get workspaceId {
     final $$WorkspacesTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -19693,6 +20149,12 @@ class $$RunbooksTableAnnotationComposer
     column: $table.defaultHostIds,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get variables =>
+      $composableBuilder(column: $table.variables, builder: (column) => column);
+
+  GeneratedColumn<String> get tags =>
+      $composableBuilder(column: $table.tags, builder: (column) => column);
 
   $$WorkspacesTableAnnotationComposer get workspaceId {
     final $$WorkspacesTableAnnotationComposer composer = $composerBuilder(
@@ -19806,6 +20268,8 @@ class $$RunbooksTableTableManager
                 Value<String?> description = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<String?> defaultHostIds = const Value.absent(),
+                Value<String?> variables = const Value.absent(),
+                Value<String?> tags = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => RunbooksCompanion(
                 id: id,
@@ -19814,6 +20278,8 @@ class $$RunbooksTableTableManager
                 description: description,
                 createdAt: createdAt,
                 defaultHostIds: defaultHostIds,
+                variables: variables,
+                tags: tags,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -19824,6 +20290,8 @@ class $$RunbooksTableTableManager
                 Value<String?> description = const Value.absent(),
                 required DateTime createdAt,
                 Value<String?> defaultHostIds = const Value.absent(),
+                Value<String?> variables = const Value.absent(),
+                Value<String?> tags = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => RunbooksCompanion.insert(
                 id: id,
@@ -19832,6 +20300,8 @@ class $$RunbooksTableTableManager
                 description: description,
                 createdAt: createdAt,
                 defaultHostIds: defaultHostIds,
+                variables: variables,
+                tags: tags,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -19967,6 +20437,8 @@ typedef $$RunbookStepsTableCreateCompanionBuilder =
       Value<int> timeoutSeconds,
       Value<String> onFailure,
       Value<int> retries,
+      Value<String> kind,
+      Value<String?> snippetId,
       Value<int> rowid,
     });
 typedef $$RunbookStepsTableUpdateCompanionBuilder =
@@ -19980,6 +20452,8 @@ typedef $$RunbookStepsTableUpdateCompanionBuilder =
       Value<int> timeoutSeconds,
       Value<String> onFailure,
       Value<int> retries,
+      Value<String> kind,
+      Value<String?> snippetId,
       Value<int> rowid,
     });
 
@@ -19998,6 +20472,23 @@ final class $$RunbookStepsTableReferences
       $_db.runbooks,
     ).filter((f) => f.id.sqlEquals($_column));
     final item = $_typedResult.readTableOrNull(_runbookIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $SnippetsTable _snippetIdTable(_$AppDatabase db) =>
+      db.snippets.createAlias('runbook_steps__snippet_id__snippets__id');
+
+  $$SnippetsTableProcessedTableManager? get snippetId {
+    final $_column = $_itemColumn<String>('snippet_id');
+    if ($_column == null) return null;
+    final manager = $$SnippetsTableTableManager(
+      $_db,
+      $_db.snippets,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_snippetIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -20054,6 +20545,11 @@ class $$RunbookStepsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnFilters(column),
+  );
+
   $$RunbooksTableFilterComposer get runbookId {
     final $$RunbooksTableFilterComposer composer = $composerBuilder(
       composer: this,
@@ -20068,6 +20564,29 @@ class $$RunbookStepsTableFilterComposer
           }) => $$RunbooksTableFilterComposer(
             $db: $db,
             $table: $db.runbooks,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$SnippetsTableFilterComposer get snippetId {
+    final $$SnippetsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.snippetId,
+      referencedTable: $db.snippets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SnippetsTableFilterComposer(
+            $db: $db,
+            $table: $db.snippets,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -20127,6 +20646,11 @@ class $$RunbookStepsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$RunbooksTableOrderingComposer get runbookId {
     final $$RunbooksTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -20141,6 +20665,29 @@ class $$RunbookStepsTableOrderingComposer
           }) => $$RunbooksTableOrderingComposer(
             $db: $db,
             $table: $db.runbooks,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$SnippetsTableOrderingComposer get snippetId {
+    final $$SnippetsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.snippetId,
+      referencedTable: $db.snippets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SnippetsTableOrderingComposer(
+            $db: $db,
+            $table: $db.snippets,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -20190,6 +20737,9 @@ class $$RunbookStepsTableAnnotationComposer
   GeneratedColumn<int> get retries =>
       $composableBuilder(column: $table.retries, builder: (column) => column);
 
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
   $$RunbooksTableAnnotationComposer get runbookId {
     final $$RunbooksTableAnnotationComposer composer = $composerBuilder(
       composer: this,
@@ -20204,6 +20754,29 @@ class $$RunbookStepsTableAnnotationComposer
           }) => $$RunbooksTableAnnotationComposer(
             $db: $db,
             $table: $db.runbooks,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$SnippetsTableAnnotationComposer get snippetId {
+    final $$SnippetsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.snippetId,
+      referencedTable: $db.snippets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SnippetsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.snippets,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -20227,7 +20800,7 @@ class $$RunbookStepsTableTableManager
           $$RunbookStepsTableUpdateCompanionBuilder,
           (RunbookStep, $$RunbookStepsTableReferences),
           RunbookStep,
-          PrefetchHooks Function({bool runbookId})
+          PrefetchHooks Function({bool runbookId, bool snippetId})
         > {
   $$RunbookStepsTableTableManager(_$AppDatabase db, $RunbookStepsTable table)
     : super(
@@ -20251,6 +20824,8 @@ class $$RunbookStepsTableTableManager
                 Value<int> timeoutSeconds = const Value.absent(),
                 Value<String> onFailure = const Value.absent(),
                 Value<int> retries = const Value.absent(),
+                Value<String> kind = const Value.absent(),
+                Value<String?> snippetId = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => RunbookStepsCompanion(
                 id: id,
@@ -20262,6 +20837,8 @@ class $$RunbookStepsTableTableManager
                 timeoutSeconds: timeoutSeconds,
                 onFailure: onFailure,
                 retries: retries,
+                kind: kind,
+                snippetId: snippetId,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -20275,6 +20852,8 @@ class $$RunbookStepsTableTableManager
                 Value<int> timeoutSeconds = const Value.absent(),
                 Value<String> onFailure = const Value.absent(),
                 Value<int> retries = const Value.absent(),
+                Value<String> kind = const Value.absent(),
+                Value<String?> snippetId = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => RunbookStepsCompanion.insert(
                 id: id,
@@ -20286,6 +20865,8 @@ class $$RunbookStepsTableTableManager
                 timeoutSeconds: timeoutSeconds,
                 onFailure: onFailure,
                 retries: retries,
+                kind: kind,
+                snippetId: snippetId,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -20296,7 +20877,7 @@ class $$RunbookStepsTableTableManager
                 ),
               )
               .toList(),
-          prefetchHooksCallback: ({runbookId = false}) {
+          prefetchHooksCallback: ({runbookId = false, snippetId = false}) {
             return PrefetchHooks(
               db: db,
               explicitlyWatchedTables: [],
@@ -20329,6 +20910,19 @@ class $$RunbookStepsTableTableManager
                               )
                               as T;
                     }
+                    if (snippetId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.snippetId,
+                                referencedTable: $$RunbookStepsTableReferences
+                                    ._snippetIdTable(db),
+                                referencedColumn: $$RunbookStepsTableReferences
+                                    ._snippetIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
 
                     return state;
                   },
@@ -20353,7 +20947,7 @@ typedef $$RunbookStepsTableProcessedTableManager =
       $$RunbookStepsTableUpdateCompanionBuilder,
       (RunbookStep, $$RunbookStepsTableReferences),
       RunbookStep,
-      PrefetchHooks Function({bool runbookId})
+      PrefetchHooks Function({bool runbookId, bool snippetId})
     >;
 typedef $$TemplatesTableCreateCompanionBuilder =
     TemplatesCompanion Function({
@@ -25875,6 +26469,7 @@ typedef $$RunbookRunsTableCreateCompanionBuilder =
       required String workspaceId,
       Value<String?> runbookId,
       required String kind,
+      Value<String?> snippetId,
       required String title,
       required String strategy,
       required DateTime startedAt,
@@ -25889,6 +26484,7 @@ typedef $$RunbookRunsTableUpdateCompanionBuilder =
       Value<String> workspaceId,
       Value<String?> runbookId,
       Value<String> kind,
+      Value<String?> snippetId,
       Value<String> title,
       Value<String> strategy,
       Value<DateTime> startedAt,
@@ -25961,6 +26557,11 @@ class $$RunbookRunsTableFilterComposer
 
   ColumnFilters<String> get kind => $composableBuilder(
     column: $table.kind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get snippetId => $composableBuilder(
+    column: $table.snippetId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -26067,6 +26668,11 @@ class $$RunbookRunsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get snippetId => $composableBuilder(
+    column: $table.snippetId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get title => $composableBuilder(
     column: $table.title,
     builder: (column) => ColumnOrderings(column),
@@ -26138,6 +26744,9 @@ class $$RunbookRunsTableAnnotationComposer
 
   GeneratedColumn<String> get kind =>
       $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<String> get snippetId =>
+      $composableBuilder(column: $table.snippetId, builder: (column) => column);
 
   GeneratedColumn<String> get title =>
       $composableBuilder(column: $table.title, builder: (column) => column);
@@ -26242,6 +26851,7 @@ class $$RunbookRunsTableTableManager
                 Value<String> workspaceId = const Value.absent(),
                 Value<String?> runbookId = const Value.absent(),
                 Value<String> kind = const Value.absent(),
+                Value<String?> snippetId = const Value.absent(),
                 Value<String> title = const Value.absent(),
                 Value<String> strategy = const Value.absent(),
                 Value<DateTime> startedAt = const Value.absent(),
@@ -26254,6 +26864,7 @@ class $$RunbookRunsTableTableManager
                 workspaceId: workspaceId,
                 runbookId: runbookId,
                 kind: kind,
+                snippetId: snippetId,
                 title: title,
                 strategy: strategy,
                 startedAt: startedAt,
@@ -26268,6 +26879,7 @@ class $$RunbookRunsTableTableManager
                 required String workspaceId,
                 Value<String?> runbookId = const Value.absent(),
                 required String kind,
+                Value<String?> snippetId = const Value.absent(),
                 required String title,
                 required String strategy,
                 required DateTime startedAt,
@@ -26280,6 +26892,7 @@ class $$RunbookRunsTableTableManager
                 workspaceId: workspaceId,
                 runbookId: runbookId,
                 kind: kind,
+                snippetId: snippetId,
                 title: title,
                 strategy: strategy,
                 startedAt: startedAt,

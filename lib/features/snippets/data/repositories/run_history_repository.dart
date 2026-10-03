@@ -139,6 +139,13 @@ class RunHistoryRepository {
         id: runId,
         workspaceId: run.runbook.workspaceId,
         runbookId: Value(isSnippet ? null : run.runbook.id),
+        snippetId: Value(
+          isSnippet
+              ? run.runbook.id.substring(
+                  RunbookRunService.snippetRunbookPrefix.length,
+                )
+              : null,
+        ),
         kind: isSnippet ? 'snippet' : 'runbook',
         title: run.runbook.title,
         strategy: run.strategy.wireName,
@@ -186,6 +193,10 @@ class RunHistoryRepository {
 
   Future<List<RunHistorySummary>> forSnippets({int? limit}) =>
       _summaries(_dao.snippetRuns(limit: limit));
+
+  /// One snippet's runs, newest first.
+  Future<List<RunHistorySummary>> forSnippet(String snippetId, {int? limit}) =>
+      _summaries(_dao.runsForSnippet(snippetId, limit: limit));
 
   /// The most recent run of each runbook in [runbookIds], for list badges.
   Future<Map<String, RunHistorySummary>> latestByRunbook(
@@ -310,7 +321,8 @@ class RunHistoryRepository {
     );
   }
 
-  /// Deletes a runbook's history, or every snippet run when [runbookId] is
-  /// null.
-  Future<void> clear({String? runbookId}) => _dao.clear(runbookId: runbookId);
+  /// Deletes a runbook's history, a snippet's, or every snippet run when
+  /// neither is given.
+  Future<void> clear({String? runbookId, String? snippetId}) =>
+      _dao.clear(runbookId: runbookId, snippetId: snippetId);
 }

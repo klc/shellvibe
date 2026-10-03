@@ -720,6 +720,7 @@ class E2EECloudSyncService {
                   title: item['title'] as String,
                   code: item['code'] as String,
                   tags: Value(item['tags'] as String?),
+                  variables: Value(item['variables'] as String?),
                 ),
               );
         }
@@ -759,6 +760,8 @@ class E2EECloudSyncService {
                   description: Value(item['description'] as String?),
                   createdAt: DateTime.parse(item['createdAt'] as String),
                   defaultHostIds: Value(item['defaultHostIds'] as String?),
+                  variables: Value(item['variables'] as String?),
+                  tags: Value(item['tags'] as String?),
                 ),
               );
         }
@@ -789,6 +792,12 @@ class E2EECloudSyncService {
                   timeoutSeconds: Value(item['timeoutSeconds'] as int? ?? 30),
                   onFailure: Value(item['onFailure'] as String? ?? 'stop'),
                   retries: Value(item['retries'] as int? ?? 0),
+                  kind: Value(item['kind'] as String? ?? 'command'),
+                  snippetId: Value(
+                    snippetIds.contains(item['snippetId'])
+                        ? item['snippetId'] as String?
+                        : null,
+                  ),
                 ),
               );
         }

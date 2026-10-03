@@ -1,4 +1,5 @@
 import 'runbook_step_model.dart';
+import 'variable_declaration.dart';
 
 /// Model representing an Executable Runbook.
 class RunbookModel {
@@ -13,6 +14,10 @@ class RunbookModel {
   /// exist; readers drop those.
   final List<String> defaultHostIds;
 
+  /// What the runbook says about its `${INPUT:...}` placeholders.
+  final List<VariableDeclaration> variables;
+  final List<String> tags;
+
   const RunbookModel({
     required this.id,
     required this.workspaceId,
@@ -21,6 +26,8 @@ class RunbookModel {
     this.steps = const [],
     required this.createdAt,
     this.defaultHostIds = const [],
+    this.variables = const [],
+    this.tags = const [],
   });
 
   RunbookModel copyWith({
@@ -31,6 +38,8 @@ class RunbookModel {
     List<RunbookStepModel>? steps,
     DateTime? createdAt,
     List<String>? defaultHostIds,
+    List<VariableDeclaration>? variables,
+    List<String>? tags,
   }) {
     return RunbookModel(
       id: id ?? this.id,
@@ -40,6 +49,8 @@ class RunbookModel {
       steps: steps ?? this.steps,
       createdAt: createdAt ?? this.createdAt,
       defaultHostIds: defaultHostIds ?? this.defaultHostIds,
+      variables: variables ?? this.variables,
+      tags: tags ?? this.tags,
     );
   }
 
@@ -51,6 +62,8 @@ class RunbookModel {
     'steps': steps.map((s) => s.toJson()).toList(),
     'createdAt': createdAt.toIso8601String(),
     'defaultHostIds': defaultHostIds,
+    'variables': [for (final v in variables) v.toJson()],
+    'tags': tags,
   };
 
   factory RunbookModel.fromJson(Map<String, dynamic> json) => RunbookModel(
@@ -69,5 +82,10 @@ class RunbookModel {
             ?.whereType<String>()
             .toList() ??
         const [],
+    variables: [
+      for (final v in (json['variables'] as List?) ?? const [])
+        ?VariableDeclaration.tryFromJson(v),
+    ],
+    tags: (json['tags'] as List?)?.whereType<String>().toList() ?? const [],
   );
 }

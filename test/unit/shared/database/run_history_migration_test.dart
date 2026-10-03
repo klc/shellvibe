@@ -61,7 +61,7 @@ void main() {
 
     final appDb = AppDatabase(NativeDatabase(dbFile));
     db = appDb;
-    expect(appDb.schemaVersion, 17);
+    expect(appDb.schemaVersion, 18);
 
     // Existing rows take the defaults: no default targets, the old behaviour.
     final runbook = (await appDb.runbooksDao.getAllRunbooks()).single;

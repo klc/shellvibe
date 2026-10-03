@@ -65,6 +65,15 @@ class RunHistoryDao extends DatabaseAccessor<AppDatabase>
     return q.get();
   }
 
+  /// A snippet's own runs, newest first.
+  Future<List<RunbookRun>> runsForSnippet(String snippetId, {int? limit}) {
+    final q = select(runbookRuns)
+      ..where((t) => t.snippetId.equals(snippetId))
+      ..orderBy([(t) => OrderingTerm.desc(t.startedAt)]);
+    if (limit != null) q.limit(limit);
+    return q.get();
+  }
+
   Future<RunbookRun?> getRun(String id) =>
       (select(runbookRuns)..where((t) => t.id.equals(id))).getSingleOrNull();
 
@@ -84,13 +93,15 @@ class RunHistoryDao extends DatabaseAccessor<AppDatabase>
     return q.map((row) => row.readTable(runbookRunSteps)).get();
   }
 
-  /// Deletes a runbook's history, or every snippet run when [runbookId] is
-  /// null.
-  Future<void> clear({String? runbookId}) async {
+  /// Deletes a runbook's history, a snippet's, or every snippet run when
+  /// neither is given.
+  Future<void> clear({String? runbookId, String? snippetId}) async {
     await (delete(runbookRuns)..where(
-          (t) => runbookId == null
-              ? t.kind.equals('snippet')
-              : t.runbookId.equals(runbookId),
+          (t) => runbookId != null
+              ? t.runbookId.equals(runbookId)
+              : snippetId != null
+              ? t.snippetId.equals(snippetId)
+              : t.kind.equals('snippet'),
         ))
         .go();
   }

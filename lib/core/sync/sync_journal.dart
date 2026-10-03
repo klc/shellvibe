@@ -702,6 +702,7 @@ final class SyncJournal {
     'snippets': [
       ('hosts', 'startup_snippet_id'),
       ('template_panes', 'startup_snippet_id'),
+      ('runbook_steps', 'snippet_id'),
     ],
     'runbooks': [('templates', 'on_open_runbook_id')],
   };

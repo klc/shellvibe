@@ -116,7 +116,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 17;
+  int get schemaVersion => 18;
 
   @override
   MigrationStrategy get migration {
@@ -285,6 +285,28 @@ class AppDatabase extends _$AppDatabase {
             'startup_snippet_id',
           )) {
             await m.addColumn(templatePanes, templatePanes.startupSnippetId);
+          }
+        }
+        if (from < 18) {
+          // Step kinds, typed variables, runbook tags and a snippet's own run
+          // history. Every column is nullable or defaulted, so existing rows
+          // keep meaning what they meant. Where the table exists, as before.
+          await _ensureTable(snippets);
+          if (await _needsColumn(snippets.actualTableName, 'variables')) {
+            await m.addColumn(snippets, snippets.variables);
+          }
+          if (await _needsColumn(runbooks.actualTableName, 'variables')) {
+            await m.addColumn(runbooks, runbooks.variables);
+          }
+          if (await _needsColumn(runbooks.actualTableName, 'tags')) {
+            await m.addColumn(runbooks, runbooks.tags);
+          }
+          if (await _needsColumn(runbookSteps.actualTableName, 'kind')) {
+            await m.addColumn(runbookSteps, runbookSteps.kind);
+            await m.addColumn(runbookSteps, runbookSteps.snippetId);
+          }
+          if (await _needsColumn(runbookRuns.actualTableName, 'snippet_id')) {
+            await m.addColumn(runbookRuns, runbookRuns.snippetId);
           }
         }
       },

@@ -273,6 +273,8 @@ final class SyncRowWriter {
                 title: row['title'] as String,
                 code: row['code'] as String,
                 tags: Value(str('tags')),
+                // Absent from an older client's row: plain required text.
+                variables: Value(str('variables')),
               ),
             );
 
@@ -294,6 +296,8 @@ final class SyncRowWriter {
                 createdAt: date('createdAt'),
                 // Absent from an older client's row: no default targets.
                 defaultHostIds: Value(str('defaultHostIds')),
+                variables: Value(str('variables')),
+                tags: Value(str('tags')),
               ),
             );
 
@@ -303,6 +307,11 @@ final class SyncRowWriter {
         if (!await exists(db.runbooks, str('runbookId'))) {
           return const RowWriteResult.skipped('runbook');
         }
+
+        // A snippet step whose snippet is not here keeps running as a step
+        // that fails clearly, instead of the whole step being dropped.
+        final stepSnippetId = str('snippetId');
+        final keepStepSnippet = await exists(db.snippets, stepSnippetId);
 
         await db
             .into(db.runbookSteps)
@@ -318,10 +327,17 @@ final class SyncRowWriter {
                 // Absent from an older client's row: the old behaviour.
                 onFailure: Value(str('onFailure') ?? 'stop'),
                 retries: Value(row['retries'] as int? ?? 0),
+                // Absent from an older client's row: an ordinary command.
+                kind: Value(str('kind') ?? 'command'),
+                snippetId: Value(keepStepSnippet ? stepSnippetId : null),
               ),
             );
 
-        return const RowWriteResult.ok();
+        return RowWriteResult.ok(
+          clearedReferences: [
+            if (stepSnippetId != null && !keepStepSnippet) 'step snippet',
+          ],
+        );
 
       case 'templates':
         if (!await exists(db.workspaces, str('workspaceId'))) {

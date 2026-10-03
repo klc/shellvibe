@@ -6,6 +6,7 @@ import '../../../../shared/database/app_database.dart';
 import '../../../../shared/database/daos/runbooks_dao.dart';
 import '../../domain/models/runbook_model.dart';
 import '../../domain/models/runbook_step_model.dart';
+import '../../domain/models/variable_declaration.dart';
 
 class RunbooksRepository {
   final RunbooksDao _dao;
@@ -50,6 +51,8 @@ class RunbooksRepository {
       description: Value(runbook.description),
       createdAt: runbook.createdAt,
       defaultHostIds: Value(encodeHostIds(runbook.defaultHostIds)),
+      variables: Value(VariableDeclaration.encodeList(runbook.variables)),
+      tags: Value(runbook.tags.isEmpty ? null : jsonEncode(runbook.tags)),
     );
     await _dao.insertRunbook(companion);
 
@@ -65,6 +68,8 @@ class RunbooksRepository {
             timeoutSeconds: Value(s.timeoutSeconds),
             onFailure: Value(s.onFailure.wireName),
             retries: Value(s.retries),
+            kind: Value(s.kind.name),
+            snippetId: Value(s.snippetId),
           ),
         )
         .toList();
@@ -99,6 +104,8 @@ class RunbooksRepository {
       description: Value(runbook.description),
       createdAt: Value(runbook.createdAt),
       defaultHostIds: Value(encodeHostIds(runbook.defaultHostIds)),
+      variables: Value(VariableDeclaration.encodeList(runbook.variables)),
+      tags: Value(runbook.tags.isEmpty ? null : jsonEncode(runbook.tags)),
     );
     await _dao.updateRunbook(companion);
 
@@ -114,6 +121,8 @@ class RunbooksRepository {
             timeoutSeconds: Value(s.timeoutSeconds),
             onFailure: Value(s.onFailure.wireName),
             retries: Value(s.retries),
+            kind: Value(s.kind.name),
+            snippetId: Value(s.snippetId),
           ),
         )
         .toList();
@@ -132,6 +141,8 @@ class RunbooksRepository {
       description: r.description,
       createdAt: r.createdAt,
       defaultHostIds: decodeHostIds(r.defaultHostIds),
+      variables: VariableDeclaration.decodeList(r.variables),
+      tags: decodeHostIds(r.tags),
       steps: steps
           .map(
             (s) => RunbookStepModel(
@@ -144,6 +155,8 @@ class RunbooksRepository {
               timeoutSeconds: s.timeoutSeconds,
               onFailure: StepFailurePolicy.parse(s.onFailure),
               retries: s.retries.clamp(0, RunbookStepModel.maxRetries),
+              kind: StepKind.parse(s.kind),
+              snippetId: s.snippetId,
             ),
           )
           .toList(),

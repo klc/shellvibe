@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'variable_declaration.dart';
+
 /// Model representing a code snippet.
 class SnippetModel {
   final String id;
@@ -8,12 +10,16 @@ class SnippetModel {
   final String code;
   final List<String> tags;
 
+  /// What the snippet says about its `${INPUT:...}` placeholders.
+  final List<VariableDeclaration> variables;
+
   const SnippetModel({
     required this.id,
     required this.workspaceId,
     required this.title,
     required this.code,
     this.tags = const [],
+    this.variables = const [],
   });
 
   SnippetModel copyWith({
@@ -22,6 +28,7 @@ class SnippetModel {
     String? title,
     String? code,
     List<String>? tags,
+    List<VariableDeclaration>? variables,
   }) {
     return SnippetModel(
       id: id ?? this.id,
@@ -29,6 +36,7 @@ class SnippetModel {
       title: title ?? this.title,
       code: code ?? this.code,
       tags: tags ?? this.tags,
+      variables: variables ?? this.variables,
     );
   }
 
@@ -38,6 +46,7 @@ class SnippetModel {
         'title': title,
         'code': code,
         'tags': tags,
+        'variables': [for (final v in variables) v.toJson()],
       };
 
   factory SnippetModel.fromJson(Map<String, dynamic> json) {
@@ -59,6 +68,10 @@ class SnippetModel {
       title: json['title'] as String,
       code: json['code'] as String,
       tags: tagsList,
+      variables: [
+        for (final v in (json['variables'] as List?) ?? const [])
+          ?VariableDeclaration.tryFromJson(v),
+      ],
     );
   }
 }

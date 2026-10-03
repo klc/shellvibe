@@ -15,6 +15,24 @@ enum StepFailurePolicy {
       value == 'continue' ? continueRun : stop;
 }
 
+/// What a step is.
+enum StepKind {
+  /// A shell command: the original and default kind.
+  command,
+
+  /// Runs a saved snippet; its current code is used when the run happens.
+  snippet,
+
+  /// A manual gate with no command: the run waits for a person to continue.
+  approval;
+
+  static StepKind parse(String? value) => switch (value) {
+    'snippet' => snippet,
+    'approval' => approval,
+    _ => command,
+  };
+}
+
 /// Model representing a single step within a Runbook.
 class RunbookStepModel {
   final String id;
@@ -25,6 +43,11 @@ class RunbookStepModel {
   final String? expectedOutputPattern;
   final int timeoutSeconds;
   final StepFailurePolicy onFailure;
+  final StepKind kind;
+
+  /// The snippet a [StepKind.snippet] step runs. Null once that snippet is
+  /// deleted.
+  final String? snippetId;
 
   /// Extra attempts after the first failure, 0-[maxRetries].
   final int retries;
@@ -41,6 +64,8 @@ class RunbookStepModel {
     this.timeoutSeconds = 30,
     this.onFailure = StepFailurePolicy.stop,
     this.retries = 0,
+    this.kind = StepKind.command,
+    this.snippetId,
   });
 
   RunbookStepModel copyWith({
@@ -53,6 +78,9 @@ class RunbookStepModel {
     int? timeoutSeconds,
     StepFailurePolicy? onFailure,
     int? retries,
+    StepKind? kind,
+    String? snippetId,
+    bool clearSnippet = false,
   }) {
     return RunbookStepModel(
       id: id ?? this.id,
@@ -65,6 +93,8 @@ class RunbookStepModel {
       timeoutSeconds: timeoutSeconds ?? this.timeoutSeconds,
       onFailure: onFailure ?? this.onFailure,
       retries: retries ?? this.retries,
+      kind: kind ?? this.kind,
+      snippetId: clearSnippet ? null : (snippetId ?? this.snippetId),
     );
   }
 
@@ -78,6 +108,8 @@ class RunbookStepModel {
     'timeoutSeconds': timeoutSeconds,
     'onFailure': onFailure.wireName,
     'retries': retries,
+    'kind': kind.name,
+    'snippetId': snippetId,
   };
 
   factory RunbookStepModel.fromJson(Map<String, dynamic> json) =>
@@ -91,5 +123,7 @@ class RunbookStepModel {
         timeoutSeconds: (json['timeoutSeconds'] as int?) ?? 30,
         onFailure: StepFailurePolicy.parse(json['onFailure'] as String?),
         retries: ((json['retries'] as int?) ?? 0).clamp(0, maxRetries),
+        kind: StepKind.parse(json['kind'] as String?),
+        snippetId: json['snippetId'] as String?,
       );
 }

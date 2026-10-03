@@ -174,6 +174,11 @@ class Snippets extends Table {
   TextColumn get code => text()();
   TextColumn get tags => text().nullable()(); // JSON Array of strings
 
+  /// JSON array of variable declarations (`VariableDeclaration`): type,
+  /// default, options, description. Null means every `${INPUT:...}` is plain
+  /// required text.
+  TextColumn get variables => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -191,6 +196,12 @@ class Runbooks extends Table {
   /// runbook has no default. Ids of hosts deleted since are tolerated by the
   /// reader, not cleaned up here.
   TextColumn get defaultHostIds => text().nullable()();
+
+  /// JSON array of variable declarations, as on [Snippets].
+  TextColumn get variables => text().nullable()();
+
+  /// JSON array of strings, as on [Snippets].
+  TextColumn get tags => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -213,6 +224,19 @@ class RunbookSteps extends Table {
   /// Extra attempts after the first failure, 0-5.
   IntColumn get retries => integer().withDefault(const Constant(0))();
 
+  /// `command`, `snippet` or `approval`. Only `command` existed before, and
+  /// it stays the default.
+  TextColumn get kind => text().withDefault(const Constant('command'))();
+
+  /// The snippet a `snippet` step runs; its current code is used at run time.
+  /// Cleared when the snippet is deleted, which makes the step fail with a
+  /// clear message rather than vanish.
+  TextColumn get snippetId => text().nullable().references(
+    Snippets,
+    #id,
+    onDelete: KeyAction.setNull,
+  )();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -232,6 +256,11 @@ class RunbookRuns extends Table {
 
   /// `runbook` or `snippet`.
   TextColumn get kind => text()();
+
+  /// The snippet a snippet run was of, so a snippet can list its own runs. Null
+  /// for a runbook run and for rows from before v18. Plain text: the snippet
+  /// may be deleted later.
+  TextColumn get snippetId => text().nullable()();
   TextColumn get title => text()();
 
   /// `parallel:<n>` or `rolling`.

@@ -6,6 +6,7 @@ part of 'runbooks_dao.dart';
 mixin _$RunbooksDaoMixin on DatabaseAccessor<AppDatabase> {
   $WorkspacesTable get workspaces => attachedDatabase.workspaces;
   $RunbooksTable get runbooks => attachedDatabase.runbooks;
+  $SnippetsTable get snippets => attachedDatabase.snippets;
   $RunbookStepsTable get runbookSteps => attachedDatabase.runbookSteps;
   RunbooksDaoManager get managers => RunbooksDaoManager(this);
 }
@@ -17,6 +18,8 @@ class RunbooksDaoManager {
       $$WorkspacesTableTableManager(_db.attachedDatabase, _db.workspaces);
   $$RunbooksTableTableManager get runbooks =>
       $$RunbooksTableTableManager(_db.attachedDatabase, _db.runbooks);
+  $$SnippetsTableTableManager get snippets =>
+      $$SnippetsTableTableManager(_db.attachedDatabase, _db.snippets);
   $$RunbookStepsTableTableManager get runbookSteps =>
       $$RunbookStepsTableTableManager(_db.attachedDatabase, _db.runbookSteps);
 }

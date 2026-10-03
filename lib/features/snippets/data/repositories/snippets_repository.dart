@@ -4,6 +4,7 @@ import 'package:drift/drift.dart';
 import '../../../../shared/database/app_database.dart';
 import '../../../../shared/database/daos/snippets_dao.dart';
 import '../../domain/models/snippet_model.dart';
+import '../../domain/models/variable_declaration.dart';
 
 class SnippetsRepository {
   final SnippetsDao _dao;
@@ -33,6 +34,7 @@ class SnippetsRepository {
       title: snippet.title,
       code: snippet.code,
       tags: Value(jsonEncode(snippet.tags)),
+      variables: Value(VariableDeclaration.encodeList(snippet.variables)),
     );
     await _dao.insertSnippet(companion);
   }
@@ -44,6 +46,7 @@ class SnippetsRepository {
       title: Value(snippet.title),
       code: Value(snippet.code),
       tags: Value(jsonEncode(snippet.tags)),
+      variables: Value(VariableDeclaration.encodeList(snippet.variables)),
     );
     await _dao.updateSnippet(companion);
   }
@@ -68,6 +71,7 @@ class SnippetsRepository {
       title: row.title,
       code: row.code,
       tags: tags,
+      variables: VariableDeclaration.decodeList(row.variables),
     );
   }
 }
