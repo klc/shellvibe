@@ -108,4 +108,67 @@ void main() {
       'sn',
     );
   });
+
+  test('v18 fields survive a restore: variables, tags, step kinds', () async {
+    await source.snippetsDao.insertSnippet(
+      SnippetsCompanion.insert(
+        id: 'sn',
+        workspaceId: 'default',
+        title: 'Greet',
+        code: r'echo ${INPUT:who}',
+        variables: const Value('[{"name":"who","type":"secret"}]'),
+      ),
+    );
+    await source.runbooksDao.insertRunbook(
+      RunbooksCompanion.insert(
+        id: 'rb',
+        workspaceId: 'default',
+        title: 'R',
+        createdAt: DateTime(2026),
+        tags: const Value('["ops"]'),
+        variables: const Value(
+          '[{"name":"env","type":"enum","options":["a"]}]',
+        ),
+      ),
+    );
+    await source.runbooksDao.replaceSteps('rb', [
+      RunbookStepsCompanion.insert(
+        id: 's1',
+        runbookId: 'rb',
+        stepOrder: 1,
+        command: '# snippet: Greet',
+        kind: const Value('snippet'),
+        snippetId: const Value('sn'),
+      ),
+      RunbookStepsCompanion.insert(
+        id: 's2',
+        runbookId: 'rb',
+        stepOrder: 2,
+        command: 'Check',
+        kind: const Value('approval'),
+      ),
+    ]);
+
+    final envelope = await sync.exportEncryptedBackup(
+      db: source,
+      masterPassword: 'pw',
+    );
+    await sync.importEncryptedBackup(
+      backupPackageJson: envelope,
+      db: target,
+      masterPassword: 'pw',
+    );
+
+    expect(
+      (await target.select(target.snippets).get()).single.variables,
+      '[{"name":"who","type":"secret"}]',
+    );
+    final runbook = (await target.select(target.runbooks).get()).single;
+    expect(runbook.tags, '["ops"]');
+    expect(runbook.variables, contains('"env"'));
+    final steps = await target.select(target.runbookSteps).get();
+    expect(steps.firstWhere((s) => s.id == 's1').kind, 'snippet');
+    expect(steps.firstWhere((s) => s.id == 's1').snippetId, 'sn');
+    expect(steps.firstWhere((s) => s.id == 's2').kind, 'approval');
+  });
 }
