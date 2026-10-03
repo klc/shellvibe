@@ -89,21 +89,23 @@ class TunnelsState {
 
 @riverpod
 class TunnelsNotifier extends _$TunnelsNotifier {
-  /// Set when the autoDispose notifier is torn down; the deferred load in
-  /// [build] must not write state after disposal (no `ref.mounted` in 2.x).
-  bool _disposed = false;
-
   @override
   TunnelsState build() {
     ref.watch(activeWorkspaceIdProvider);
-    ref.onDispose(() => _disposed = true);
-    // Initial fetch of rules
+    // Initial fetch of rules. The notifier instance survives rebuilds (the
+    // active workspace resolves from 'default' to the saved id at startup),
+    // so this must run again on every build — a one-way "disposed" flag set
+    // from onDispose fired on that rebuild too and left the screen loading.
     Future.microtask(() => loadRules());
     return const TunnelsState(isLoading: true);
   }
 
   Future<void> loadRules([String? hostId]) async {
-    if (_disposed) return;
+    // Captured so a load started by an earlier build cannot overwrite the
+    // state of a newer one: the captured ref unmounts on rebuild, while the
+    // `ref` getter always returns the current build's.
+    final ref = this.ref;
+    if (!ref.mounted) return;
     state = state.copyWith(isLoading: true, error: null);
     try {
       final repository = ref.read(tunnelRepositoryProvider);
@@ -112,22 +114,22 @@ class TunnelsNotifier extends _$TunnelsNotifier {
           : await repository.getRulesByWorkspace(
               ref.read(activeWorkspaceIdProvider),
             );
-      if (_disposed) return;
+      if (!ref.mounted) return;
       state = state.copyWith(rules: rules, isLoading: false);
     } catch (e) {
-      if (_disposed) return;
+      if (!ref.mounted) return;
       state = state.copyWith(error: e.toString(), isLoading: false);
     }
   }
 
   Future<void> addRule(TunnelRuleModel rule) async {
-    if (_disposed) return;
+    if (!ref.mounted) return;
     try {
       final repository = ref.read(tunnelRepositoryProvider);
       await repository.addRule(rule);
       await loadRules();
     } catch (e) {
-      if (_disposed) rethrow;
+      if (!ref.mounted) rethrow;
       state = state.copyWith(error: 'Failed to add rule: $e');
       // Rethrow so the calling screen can toast the failure instead of
       // silently closing as if the rule was saved.
@@ -136,20 +138,20 @@ class TunnelsNotifier extends _$TunnelsNotifier {
   }
 
   Future<void> updateRule(TunnelRuleModel rule) async {
-    if (_disposed) return;
+    if (!ref.mounted) return;
     try {
       final repository = ref.read(tunnelRepositoryProvider);
       await repository.updateRule(rule);
       await loadRules();
     } catch (e) {
-      if (_disposed) rethrow;
+      if (!ref.mounted) rethrow;
       state = state.copyWith(error: 'Failed to update rule: $e');
       rethrow;
     }
   }
 
   Future<void> deleteRule(String id) async {
-    if (_disposed) return;
+    if (!ref.mounted) return;
     try {
       await ref.read(tunnelEngineProvider).stopTunnel(id);
       await ref.read(tunnelSshPoolProvider).release(id);
@@ -157,7 +159,7 @@ class TunnelsNotifier extends _$TunnelsNotifier {
       await repository.deleteRule(id);
       await loadRules();
     } catch (e) {
-      if (_disposed) return;
+      if (!ref.mounted) return;
       state = state.copyWith(error: 'Failed to delete rule: $e');
     }
   }
@@ -187,7 +189,7 @@ class TunnelsNotifier extends _$TunnelsNotifier {
     resolveIdentity,
     HostKeyPromptCallback? onHostKeyPrompt,
   }) async {
-    if (_disposed) return;
+    if (!ref.mounted) return;
     final engine = ref.read(tunnelEngineProvider);
     final pool = ref.read(tunnelSshPoolProvider);
 
@@ -227,7 +229,7 @@ class TunnelsNotifier extends _$TunnelsNotifier {
         );
       }
     } catch (e) {
-      if (!_disposed) {
+      if (ref.mounted) {
         state = state.copyWith(error: 'Failed to connect: $e');
       }
       rethrow;
@@ -265,7 +267,7 @@ class TunnelsNotifier extends _$TunnelsNotifier {
       // more — hand the claim back so a pool-owned session does not stay open
       // for a rule that failed.
       await pool.release(rule.id);
-      if (!_disposed) {
+      if (ref.mounted) {
         state = state.copyWith(error: 'Failed to start tunnel: $e');
       }
       rethrow;
