@@ -46,12 +46,15 @@ void main() {
       expect(substituted, equals('8080:80 8080'));
     });
 
-    test('an empty entered value substitutes to empty; a missing one stays', () {
-      const code = 'a\${INPUT:x}b\${INPUT:y}';
-      expect(
-        SnippetVariableParser.substituteVariables(code, {'x': ''}),
-        equals('ab\${INPUT:y}'),
-      );
-    });
+    test(
+      'an empty entered value substitutes to empty; a missing one stays',
+      () {
+        const code = 'a\${INPUT:x}b\${INPUT:y}';
+        expect(
+          SnippetVariableParser.substituteVariables(code, {'x': ''}),
+          equals('ab\${INPUT:y}'),
+        );
+      },
+    );
   });
 }

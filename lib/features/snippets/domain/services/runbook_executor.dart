@@ -28,11 +28,17 @@ class RunbookExecutionResult {
   final List<RunbookStepResult> stepResults;
   final RunbookStepModel? failedStep;
 
+  /// True when the run was stopped by the caller. Distinct from a failure:
+  /// [failedStep] is null and the steps that never ran were reported
+  /// `cancelled`, not `failed`.
+  final bool cancelled;
+
   const RunbookExecutionResult({
     required this.runbookId,
     required this.overallSuccess,
     required this.stepResults,
     this.failedStep,
+    this.cancelled = false,
   });
 }
 
@@ -45,12 +51,17 @@ class RunbookExecutor {
   /// so [RunbookStepModel.expectedExitCode] can be enforced for real.
   /// [variableValues] optional map of variable inputs to substitute into command templates.
   /// [onProgress] optional callback invoked before each step starts.
+  /// [isCancelled] is polled before each step and again once a step's runner
+  /// returns or throws; once true the in-flight step and every later one are
+  /// reported `cancelled` and the run ends. It cannot stop a runner by itself —
+  /// the caller interrupts that.
   Future<RunbookExecutionResult> executeRunbook(
     RunbookModel runbook,
     Future<(String output, int exitCode)> Function(String command, int timeoutSeconds)
         commandRunner, {
     Map<String, String> variableValues = const {},
     void Function(RunbookStepModel step, String status)? onProgress,
+    bool Function()? isCancelled,
   }) async {
     final results = <RunbookStepResult>[];
 
@@ -58,7 +69,21 @@ class RunbookExecutor {
     final sortedSteps = List<RunbookStepModel>.from(runbook.steps)
       ..sort((a, b) => a.stepOrder.compareTo(b.stepOrder));
 
-    for (final step in sortedSteps) {
+    RunbookExecutionResult cancelledFrom(int index) {
+      for (final rest in sortedSteps.skip(index)) {
+        onProgress?.call(rest, 'cancelled');
+      }
+      return RunbookExecutionResult(
+        runbookId: runbook.id,
+        overallSuccess: false,
+        stepResults: results,
+        cancelled: true,
+      );
+    }
+
+    for (var i = 0; i < sortedSteps.length; i++) {
+      final step = sortedSteps[i];
+      if (isCancelled?.call() ?? false) return cancelledFrom(i);
       if (onProgress != null) {
         onProgress(step, 'running');
       }
@@ -68,6 +93,7 @@ class RunbookExecutor {
 
       try {
         final (output, exitCode) = await commandRunner(commandToRun, step.timeoutSeconds);
+        if (isCancelled?.call() ?? false) return cancelledFrom(i);
 
         // Check output verification pattern if specified
         bool patternMatches = true;
@@ -111,6 +137,7 @@ class RunbookExecutor {
 
         if (onProgress != null) onProgress(step, 'success');
       } catch (e) {
+        if (isCancelled?.call() ?? false) return cancelledFrom(i);
         final stepResult = RunbookStepResult(
           step: step,
           success: false,
