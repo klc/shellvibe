@@ -284,6 +284,8 @@ final class SyncRowWriter {
                 title: row['title'] as String,
                 description: Value(str('description')),
                 createdAt: date('createdAt'),
+                // Absent from an older client's row: no default targets.
+                defaultHostIds: Value(str('defaultHostIds')),
               ),
             );
 
@@ -305,6 +307,9 @@ final class SyncRowWriter {
                 expectedExitCode: Value(row['expectedExitCode'] as int? ?? 0),
                 expectedOutputPattern: Value(str('expectedOutputPattern')),
                 timeoutSeconds: Value(row['timeoutSeconds'] as int? ?? 30),
+                // Absent from an older client's row: the old behaviour.
+                onFailure: Value(str('onFailure') ?? 'stop'),
+                retries: Value(row['retries'] as int? ?? 0),
               ),
             );
 

@@ -1,3 +1,20 @@
+/// What a run does after a step fails (once its retries are spent).
+enum StepFailurePolicy {
+  /// The host's run ends at this step. The default, and the only behaviour
+  /// before the policy existed.
+  stop,
+
+  /// The failure is recorded and the next step runs; the host still ends
+  /// `failed`.
+  continueRun;
+
+  /// The stored form (`stop` / `continue`), shared by the database and sync.
+  String get wireName => this == stop ? 'stop' : 'continue';
+
+  static StepFailurePolicy parse(String? value) =>
+      value == 'continue' ? continueRun : stop;
+}
+
 /// Model representing a single step within a Runbook.
 class RunbookStepModel {
   final String id;
@@ -7,6 +24,12 @@ class RunbookStepModel {
   final int expectedExitCode;
   final String? expectedOutputPattern;
   final int timeoutSeconds;
+  final StepFailurePolicy onFailure;
+
+  /// Extra attempts after the first failure, 0-[maxRetries].
+  final int retries;
+
+  static const int maxRetries = 5;
 
   const RunbookStepModel({
     required this.id,
@@ -16,6 +39,8 @@ class RunbookStepModel {
     this.expectedExitCode = 0,
     this.expectedOutputPattern,
     this.timeoutSeconds = 30,
+    this.onFailure = StepFailurePolicy.stop,
+    this.retries = 0,
   });
 
   RunbookStepModel copyWith({
@@ -26,6 +51,8 @@ class RunbookStepModel {
     int? expectedExitCode,
     String? expectedOutputPattern,
     int? timeoutSeconds,
+    StepFailurePolicy? onFailure,
+    int? retries,
   }) {
     return RunbookStepModel(
       id: id ?? this.id,
@@ -33,22 +60,28 @@ class RunbookStepModel {
       stepOrder: stepOrder ?? this.stepOrder,
       command: command ?? this.command,
       expectedExitCode: expectedExitCode ?? this.expectedExitCode,
-      expectedOutputPattern: expectedOutputPattern ?? this.expectedOutputPattern,
+      expectedOutputPattern:
+          expectedOutputPattern ?? this.expectedOutputPattern,
       timeoutSeconds: timeoutSeconds ?? this.timeoutSeconds,
+      onFailure: onFailure ?? this.onFailure,
+      retries: retries ?? this.retries,
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'runbookId': runbookId,
-        'stepOrder': stepOrder,
-        'command': command,
-        'expectedExitCode': expectedExitCode,
-        'expectedOutputPattern': expectedOutputPattern,
-        'timeoutSeconds': timeoutSeconds,
-      };
+    'id': id,
+    'runbookId': runbookId,
+    'stepOrder': stepOrder,
+    'command': command,
+    'expectedExitCode': expectedExitCode,
+    'expectedOutputPattern': expectedOutputPattern,
+    'timeoutSeconds': timeoutSeconds,
+    'onFailure': onFailure.wireName,
+    'retries': retries,
+  };
 
-  factory RunbookStepModel.fromJson(Map<String, dynamic> json) => RunbookStepModel(
+  factory RunbookStepModel.fromJson(Map<String, dynamic> json) =>
+      RunbookStepModel(
         id: json['id'] as String,
         runbookId: json['runbookId'] as String,
         stepOrder: json['stepOrder'] as int,
@@ -56,5 +89,7 @@ class RunbookStepModel {
         expectedExitCode: (json['expectedExitCode'] as int?) ?? 0,
         expectedOutputPattern: json['expectedOutputPattern'] as String?,
         timeoutSeconds: (json['timeoutSeconds'] as int?) ?? 30,
+        onFailure: StepFailurePolicy.parse(json['onFailure'] as String?),
+        retries: ((json['retries'] as int?) ?? 0).clamp(0, maxRetries),
       );
 }

@@ -3867,6 +3867,17 @@ class $RunbooksTable extends Runbooks with TableInfo<$RunbooksTable, Runbook> {
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _defaultHostIdsMeta = const VerificationMeta(
+    'defaultHostIds',
+  );
+  @override
+  late final GeneratedColumn<String> defaultHostIds = GeneratedColumn<String>(
+    'default_host_ids',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -3874,6 +3885,7 @@ class $RunbooksTable extends Runbooks with TableInfo<$RunbooksTable, Runbook> {
     title,
     description,
     createdAt,
+    defaultHostIds,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -3928,6 +3940,15 @@ class $RunbooksTable extends Runbooks with TableInfo<$RunbooksTable, Runbook> {
     } else if (isInserting) {
       context.missing(_createdAtMeta);
     }
+    if (data.containsKey('default_host_ids')) {
+      context.handle(
+        _defaultHostIdsMeta,
+        defaultHostIds.isAcceptableOrUnknown(
+          data['default_host_ids']!,
+          _defaultHostIdsMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -3957,6 +3978,10 @@ class $RunbooksTable extends Runbooks with TableInfo<$RunbooksTable, Runbook> {
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       )!,
+      defaultHostIds: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}default_host_ids'],
+      ),
     );
   }
 
@@ -3972,12 +3997,18 @@ class Runbook extends DataClass implements Insertable<Runbook> {
   final String title;
   final String? description;
   final DateTime createdAt;
+
+  /// JSON array of host ids the run-target sheet preselects. Null when the
+  /// runbook has no default. Ids of hosts deleted since are tolerated by the
+  /// reader, not cleaned up here.
+  final String? defaultHostIds;
   const Runbook({
     required this.id,
     required this.workspaceId,
     required this.title,
     this.description,
     required this.createdAt,
+    this.defaultHostIds,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -3989,6 +4020,9 @@ class Runbook extends DataClass implements Insertable<Runbook> {
       map['description'] = Variable<String>(description);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || defaultHostIds != null) {
+      map['default_host_ids'] = Variable<String>(defaultHostIds);
+    }
     return map;
   }
 
@@ -4001,6 +4035,9 @@ class Runbook extends DataClass implements Insertable<Runbook> {
           ? const Value.absent()
           : Value(description),
       createdAt: Value(createdAt),
+      defaultHostIds: defaultHostIds == null && nullToAbsent
+          ? const Value.absent()
+          : Value(defaultHostIds),
     );
   }
 
@@ -4015,6 +4052,7 @@ class Runbook extends DataClass implements Insertable<Runbook> {
       title: serializer.fromJson<String>(json['title']),
       description: serializer.fromJson<String?>(json['description']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      defaultHostIds: serializer.fromJson<String?>(json['defaultHostIds']),
     );
   }
   @override
@@ -4026,6 +4064,7 @@ class Runbook extends DataClass implements Insertable<Runbook> {
       'title': serializer.toJson<String>(title),
       'description': serializer.toJson<String?>(description),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'defaultHostIds': serializer.toJson<String?>(defaultHostIds),
     };
   }
 
@@ -4035,12 +4074,16 @@ class Runbook extends DataClass implements Insertable<Runbook> {
     String? title,
     Value<String?> description = const Value.absent(),
     DateTime? createdAt,
+    Value<String?> defaultHostIds = const Value.absent(),
   }) => Runbook(
     id: id ?? this.id,
     workspaceId: workspaceId ?? this.workspaceId,
     title: title ?? this.title,
     description: description.present ? description.value : this.description,
     createdAt: createdAt ?? this.createdAt,
+    defaultHostIds: defaultHostIds.present
+        ? defaultHostIds.value
+        : this.defaultHostIds,
   );
   Runbook copyWithCompanion(RunbooksCompanion data) {
     return Runbook(
@@ -4053,6 +4096,9 @@ class Runbook extends DataClass implements Insertable<Runbook> {
           ? data.description.value
           : this.description,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      defaultHostIds: data.defaultHostIds.present
+          ? data.defaultHostIds.value
+          : this.defaultHostIds,
     );
   }
 
@@ -4063,14 +4109,21 @@ class Runbook extends DataClass implements Insertable<Runbook> {
           ..write('workspaceId: $workspaceId, ')
           ..write('title: $title, ')
           ..write('description: $description, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('defaultHostIds: $defaultHostIds')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, workspaceId, title, description, createdAt);
+  int get hashCode => Object.hash(
+    id,
+    workspaceId,
+    title,
+    description,
+    createdAt,
+    defaultHostIds,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -4079,7 +4132,8 @@ class Runbook extends DataClass implements Insertable<Runbook> {
           other.workspaceId == this.workspaceId &&
           other.title == this.title &&
           other.description == this.description &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.defaultHostIds == this.defaultHostIds);
 }
 
 class RunbooksCompanion extends UpdateCompanion<Runbook> {
@@ -4088,6 +4142,7 @@ class RunbooksCompanion extends UpdateCompanion<Runbook> {
   final Value<String> title;
   final Value<String?> description;
   final Value<DateTime> createdAt;
+  final Value<String?> defaultHostIds;
   final Value<int> rowid;
   const RunbooksCompanion({
     this.id = const Value.absent(),
@@ -4095,6 +4150,7 @@ class RunbooksCompanion extends UpdateCompanion<Runbook> {
     this.title = const Value.absent(),
     this.description = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.defaultHostIds = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   RunbooksCompanion.insert({
@@ -4103,6 +4159,7 @@ class RunbooksCompanion extends UpdateCompanion<Runbook> {
     required String title,
     this.description = const Value.absent(),
     required DateTime createdAt,
+    this.defaultHostIds = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        workspaceId = Value(workspaceId),
@@ -4114,6 +4171,7 @@ class RunbooksCompanion extends UpdateCompanion<Runbook> {
     Expression<String>? title,
     Expression<String>? description,
     Expression<DateTime>? createdAt,
+    Expression<String>? defaultHostIds,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -4122,6 +4180,7 @@ class RunbooksCompanion extends UpdateCompanion<Runbook> {
       if (title != null) 'title': title,
       if (description != null) 'description': description,
       if (createdAt != null) 'created_at': createdAt,
+      if (defaultHostIds != null) 'default_host_ids': defaultHostIds,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -4132,6 +4191,7 @@ class RunbooksCompanion extends UpdateCompanion<Runbook> {
     Value<String>? title,
     Value<String?>? description,
     Value<DateTime>? createdAt,
+    Value<String?>? defaultHostIds,
     Value<int>? rowid,
   }) {
     return RunbooksCompanion(
@@ -4140,6 +4200,7 @@ class RunbooksCompanion extends UpdateCompanion<Runbook> {
       title: title ?? this.title,
       description: description ?? this.description,
       createdAt: createdAt ?? this.createdAt,
+      defaultHostIds: defaultHostIds ?? this.defaultHostIds,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -4162,6 +4223,9 @@ class RunbooksCompanion extends UpdateCompanion<Runbook> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (defaultHostIds.present) {
+      map['default_host_ids'] = Variable<String>(defaultHostIds.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -4176,6 +4240,7 @@ class RunbooksCompanion extends UpdateCompanion<Runbook> {
           ..write('title: $title, ')
           ..write('description: $description, ')
           ..write('createdAt: $createdAt, ')
+          ..write('defaultHostIds: $defaultHostIds, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -4268,6 +4333,30 @@ class $RunbookStepsTable extends RunbookSteps
     requiredDuringInsert: false,
     defaultValue: const Constant(30),
   );
+  static const VerificationMeta _onFailureMeta = const VerificationMeta(
+    'onFailure',
+  );
+  @override
+  late final GeneratedColumn<String> onFailure = GeneratedColumn<String>(
+    'on_failure',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('stop'),
+  );
+  static const VerificationMeta _retriesMeta = const VerificationMeta(
+    'retries',
+  );
+  @override
+  late final GeneratedColumn<int> retries = GeneratedColumn<int>(
+    'retries',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -4277,6 +4366,8 @@ class $RunbookStepsTable extends RunbookSteps
     expectedExitCode,
     expectedOutputPattern,
     timeoutSeconds,
+    onFailure,
+    retries,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -4346,6 +4437,18 @@ class $RunbookStepsTable extends RunbookSteps
         ),
       );
     }
+    if (data.containsKey('on_failure')) {
+      context.handle(
+        _onFailureMeta,
+        onFailure.isAcceptableOrUnknown(data['on_failure']!, _onFailureMeta),
+      );
+    }
+    if (data.containsKey('retries')) {
+      context.handle(
+        _retriesMeta,
+        retries.isAcceptableOrUnknown(data['retries']!, _retriesMeta),
+      );
+    }
     return context;
   }
 
@@ -4383,6 +4486,14 @@ class $RunbookStepsTable extends RunbookSteps
         DriftSqlType.int,
         data['${effectivePrefix}timeout_seconds'],
       )!,
+      onFailure: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}on_failure'],
+      )!,
+      retries: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}retries'],
+      )!,
     );
   }
 
@@ -4400,6 +4511,12 @@ class RunbookStep extends DataClass implements Insertable<RunbookStep> {
   final int expectedExitCode;
   final String? expectedOutputPattern;
   final int timeoutSeconds;
+
+  /// `stop` (the run ends here on this host) or `continue`.
+  final String onFailure;
+
+  /// Extra attempts after the first failure, 0-5.
+  final int retries;
   const RunbookStep({
     required this.id,
     required this.runbookId,
@@ -4408,6 +4525,8 @@ class RunbookStep extends DataClass implements Insertable<RunbookStep> {
     required this.expectedExitCode,
     this.expectedOutputPattern,
     required this.timeoutSeconds,
+    required this.onFailure,
+    required this.retries,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -4421,6 +4540,8 @@ class RunbookStep extends DataClass implements Insertable<RunbookStep> {
       map['expected_output_pattern'] = Variable<String>(expectedOutputPattern);
     }
     map['timeout_seconds'] = Variable<int>(timeoutSeconds);
+    map['on_failure'] = Variable<String>(onFailure);
+    map['retries'] = Variable<int>(retries);
     return map;
   }
 
@@ -4435,6 +4556,8 @@ class RunbookStep extends DataClass implements Insertable<RunbookStep> {
           ? const Value.absent()
           : Value(expectedOutputPattern),
       timeoutSeconds: Value(timeoutSeconds),
+      onFailure: Value(onFailure),
+      retries: Value(retries),
     );
   }
 
@@ -4453,6 +4576,8 @@ class RunbookStep extends DataClass implements Insertable<RunbookStep> {
         json['expectedOutputPattern'],
       ),
       timeoutSeconds: serializer.fromJson<int>(json['timeoutSeconds']),
+      onFailure: serializer.fromJson<String>(json['onFailure']),
+      retries: serializer.fromJson<int>(json['retries']),
     );
   }
   @override
@@ -4468,6 +4593,8 @@ class RunbookStep extends DataClass implements Insertable<RunbookStep> {
         expectedOutputPattern,
       ),
       'timeoutSeconds': serializer.toJson<int>(timeoutSeconds),
+      'onFailure': serializer.toJson<String>(onFailure),
+      'retries': serializer.toJson<int>(retries),
     };
   }
 
@@ -4479,6 +4606,8 @@ class RunbookStep extends DataClass implements Insertable<RunbookStep> {
     int? expectedExitCode,
     Value<String?> expectedOutputPattern = const Value.absent(),
     int? timeoutSeconds,
+    String? onFailure,
+    int? retries,
   }) => RunbookStep(
     id: id ?? this.id,
     runbookId: runbookId ?? this.runbookId,
@@ -4489,6 +4618,8 @@ class RunbookStep extends DataClass implements Insertable<RunbookStep> {
         ? expectedOutputPattern.value
         : this.expectedOutputPattern,
     timeoutSeconds: timeoutSeconds ?? this.timeoutSeconds,
+    onFailure: onFailure ?? this.onFailure,
+    retries: retries ?? this.retries,
   );
   RunbookStep copyWithCompanion(RunbookStepsCompanion data) {
     return RunbookStep(
@@ -4505,6 +4636,8 @@ class RunbookStep extends DataClass implements Insertable<RunbookStep> {
       timeoutSeconds: data.timeoutSeconds.present
           ? data.timeoutSeconds.value
           : this.timeoutSeconds,
+      onFailure: data.onFailure.present ? data.onFailure.value : this.onFailure,
+      retries: data.retries.present ? data.retries.value : this.retries,
     );
   }
 
@@ -4517,7 +4650,9 @@ class RunbookStep extends DataClass implements Insertable<RunbookStep> {
           ..write('command: $command, ')
           ..write('expectedExitCode: $expectedExitCode, ')
           ..write('expectedOutputPattern: $expectedOutputPattern, ')
-          ..write('timeoutSeconds: $timeoutSeconds')
+          ..write('timeoutSeconds: $timeoutSeconds, ')
+          ..write('onFailure: $onFailure, ')
+          ..write('retries: $retries')
           ..write(')'))
         .toString();
   }
@@ -4531,6 +4666,8 @@ class RunbookStep extends DataClass implements Insertable<RunbookStep> {
     expectedExitCode,
     expectedOutputPattern,
     timeoutSeconds,
+    onFailure,
+    retries,
   );
   @override
   bool operator ==(Object other) =>
@@ -4542,7 +4679,9 @@ class RunbookStep extends DataClass implements Insertable<RunbookStep> {
           other.command == this.command &&
           other.expectedExitCode == this.expectedExitCode &&
           other.expectedOutputPattern == this.expectedOutputPattern &&
-          other.timeoutSeconds == this.timeoutSeconds);
+          other.timeoutSeconds == this.timeoutSeconds &&
+          other.onFailure == this.onFailure &&
+          other.retries == this.retries);
 }
 
 class RunbookStepsCompanion extends UpdateCompanion<RunbookStep> {
@@ -4553,6 +4692,8 @@ class RunbookStepsCompanion extends UpdateCompanion<RunbookStep> {
   final Value<int> expectedExitCode;
   final Value<String?> expectedOutputPattern;
   final Value<int> timeoutSeconds;
+  final Value<String> onFailure;
+  final Value<int> retries;
   final Value<int> rowid;
   const RunbookStepsCompanion({
     this.id = const Value.absent(),
@@ -4562,6 +4703,8 @@ class RunbookStepsCompanion extends UpdateCompanion<RunbookStep> {
     this.expectedExitCode = const Value.absent(),
     this.expectedOutputPattern = const Value.absent(),
     this.timeoutSeconds = const Value.absent(),
+    this.onFailure = const Value.absent(),
+    this.retries = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   RunbookStepsCompanion.insert({
@@ -4572,6 +4715,8 @@ class RunbookStepsCompanion extends UpdateCompanion<RunbookStep> {
     this.expectedExitCode = const Value.absent(),
     this.expectedOutputPattern = const Value.absent(),
     this.timeoutSeconds = const Value.absent(),
+    this.onFailure = const Value.absent(),
+    this.retries = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        runbookId = Value(runbookId),
@@ -4585,6 +4730,8 @@ class RunbookStepsCompanion extends UpdateCompanion<RunbookStep> {
     Expression<int>? expectedExitCode,
     Expression<String>? expectedOutputPattern,
     Expression<int>? timeoutSeconds,
+    Expression<String>? onFailure,
+    Expression<int>? retries,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -4596,6 +4743,8 @@ class RunbookStepsCompanion extends UpdateCompanion<RunbookStep> {
       if (expectedOutputPattern != null)
         'expected_output_pattern': expectedOutputPattern,
       if (timeoutSeconds != null) 'timeout_seconds': timeoutSeconds,
+      if (onFailure != null) 'on_failure': onFailure,
+      if (retries != null) 'retries': retries,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -4608,6 +4757,8 @@ class RunbookStepsCompanion extends UpdateCompanion<RunbookStep> {
     Value<int>? expectedExitCode,
     Value<String?>? expectedOutputPattern,
     Value<int>? timeoutSeconds,
+    Value<String>? onFailure,
+    Value<int>? retries,
     Value<int>? rowid,
   }) {
     return RunbookStepsCompanion(
@@ -4619,6 +4770,8 @@ class RunbookStepsCompanion extends UpdateCompanion<RunbookStep> {
       expectedOutputPattern:
           expectedOutputPattern ?? this.expectedOutputPattern,
       timeoutSeconds: timeoutSeconds ?? this.timeoutSeconds,
+      onFailure: onFailure ?? this.onFailure,
+      retries: retries ?? this.retries,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -4649,6 +4802,12 @@ class RunbookStepsCompanion extends UpdateCompanion<RunbookStep> {
     if (timeoutSeconds.present) {
       map['timeout_seconds'] = Variable<int>(timeoutSeconds.value);
     }
+    if (onFailure.present) {
+      map['on_failure'] = Variable<String>(onFailure.value);
+    }
+    if (retries.present) {
+      map['retries'] = Variable<int>(retries.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -4665,6 +4824,8 @@ class RunbookStepsCompanion extends UpdateCompanion<RunbookStep> {
           ..write('expectedExitCode: $expectedExitCode, ')
           ..write('expectedOutputPattern: $expectedOutputPattern, ')
           ..write('timeoutSeconds: $timeoutSeconds, ')
+          ..write('onFailure: $onFailure, ')
+          ..write('retries: $retries, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -11706,6 +11867,1798 @@ class VaultEnvVarsCompanion extends UpdateCompanion<VaultEnvVar> {
   }
 }
 
+class $RunbookRunsTable extends RunbookRuns
+    with TableInfo<$RunbookRunsTable, RunbookRun> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $RunbookRunsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _workspaceIdMeta = const VerificationMeta(
+    'workspaceId',
+  );
+  @override
+  late final GeneratedColumn<String> workspaceId = GeneratedColumn<String>(
+    'workspace_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES workspaces (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _runbookIdMeta = const VerificationMeta(
+    'runbookId',
+  );
+  @override
+  late final GeneratedColumn<String> runbookId = GeneratedColumn<String>(
+    'runbook_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+    'kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _titleMeta = const VerificationMeta('title');
+  @override
+  late final GeneratedColumn<String> title = GeneratedColumn<String>(
+    'title',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _strategyMeta = const VerificationMeta(
+    'strategy',
+  );
+  @override
+  late final GeneratedColumn<String> strategy = GeneratedColumn<String>(
+    'strategy',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _startedAtMeta = const VerificationMeta(
+    'startedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> startedAt = GeneratedColumn<DateTime>(
+    'started_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _finishedAtMeta = const VerificationMeta(
+    'finishedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> finishedAt = GeneratedColumn<DateTime>(
+    'finished_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _variableValuesMeta = const VerificationMeta(
+    'variableValues',
+  );
+  @override
+  late final GeneratedColumn<String> variableValues = GeneratedColumn<String>(
+    'variable_values',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('{}'),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    workspaceId,
+    runbookId,
+    kind,
+    title,
+    strategy,
+    startedAt,
+    finishedAt,
+    status,
+    variableValues,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'runbook_runs';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<RunbookRun> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('workspace_id')) {
+      context.handle(
+        _workspaceIdMeta,
+        workspaceId.isAcceptableOrUnknown(
+          data['workspace_id']!,
+          _workspaceIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_workspaceIdMeta);
+    }
+    if (data.containsKey('runbook_id')) {
+      context.handle(
+        _runbookIdMeta,
+        runbookId.isAcceptableOrUnknown(data['runbook_id']!, _runbookIdMeta),
+      );
+    }
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_kindMeta);
+    }
+    if (data.containsKey('title')) {
+      context.handle(
+        _titleMeta,
+        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_titleMeta);
+    }
+    if (data.containsKey('strategy')) {
+      context.handle(
+        _strategyMeta,
+        strategy.isAcceptableOrUnknown(data['strategy']!, _strategyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_strategyMeta);
+    }
+    if (data.containsKey('started_at')) {
+      context.handle(
+        _startedAtMeta,
+        startedAt.isAcceptableOrUnknown(data['started_at']!, _startedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_startedAtMeta);
+    }
+    if (data.containsKey('finished_at')) {
+      context.handle(
+        _finishedAtMeta,
+        finishedAt.isAcceptableOrUnknown(data['finished_at']!, _finishedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_finishedAtMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_statusMeta);
+    }
+    if (data.containsKey('variable_values')) {
+      context.handle(
+        _variableValuesMeta,
+        variableValues.isAcceptableOrUnknown(
+          data['variable_values']!,
+          _variableValuesMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  RunbookRun map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return RunbookRun(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      workspaceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}workspace_id'],
+      )!,
+      runbookId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}runbook_id'],
+      ),
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}kind'],
+      )!,
+      title: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}title'],
+      )!,
+      strategy: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}strategy'],
+      )!,
+      startedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}started_at'],
+      )!,
+      finishedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}finished_at'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      variableValues: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}variable_values'],
+      )!,
+    );
+  }
+
+  @override
+  $RunbookRunsTable createAlias(String alias) {
+    return $RunbookRunsTable(attachedDatabase, alias);
+  }
+}
+
+class RunbookRun extends DataClass implements Insertable<RunbookRun> {
+  final String id;
+  final String workspaceId;
+
+  /// Null for a snippet run, and survives the runbook being deleted: history
+  /// is a snapshot, not a view of the live runbook.
+  final String? runbookId;
+
+  /// `runbook` or `snippet`.
+  final String kind;
+  final String title;
+
+  /// `parallel:<n>` or `rolling`.
+  final String strategy;
+  final DateTime startedAt;
+  final DateTime finishedAt;
+
+  /// `succeeded`, `failed` or `cancelled`.
+  final String status;
+
+  /// JSON object of the `${INPUT:...}` values used.
+  final String variableValues;
+  const RunbookRun({
+    required this.id,
+    required this.workspaceId,
+    this.runbookId,
+    required this.kind,
+    required this.title,
+    required this.strategy,
+    required this.startedAt,
+    required this.finishedAt,
+    required this.status,
+    required this.variableValues,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['workspace_id'] = Variable<String>(workspaceId);
+    if (!nullToAbsent || runbookId != null) {
+      map['runbook_id'] = Variable<String>(runbookId);
+    }
+    map['kind'] = Variable<String>(kind);
+    map['title'] = Variable<String>(title);
+    map['strategy'] = Variable<String>(strategy);
+    map['started_at'] = Variable<DateTime>(startedAt);
+    map['finished_at'] = Variable<DateTime>(finishedAt);
+    map['status'] = Variable<String>(status);
+    map['variable_values'] = Variable<String>(variableValues);
+    return map;
+  }
+
+  RunbookRunsCompanion toCompanion(bool nullToAbsent) {
+    return RunbookRunsCompanion(
+      id: Value(id),
+      workspaceId: Value(workspaceId),
+      runbookId: runbookId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(runbookId),
+      kind: Value(kind),
+      title: Value(title),
+      strategy: Value(strategy),
+      startedAt: Value(startedAt),
+      finishedAt: Value(finishedAt),
+      status: Value(status),
+      variableValues: Value(variableValues),
+    );
+  }
+
+  factory RunbookRun.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return RunbookRun(
+      id: serializer.fromJson<String>(json['id']),
+      workspaceId: serializer.fromJson<String>(json['workspaceId']),
+      runbookId: serializer.fromJson<String?>(json['runbookId']),
+      kind: serializer.fromJson<String>(json['kind']),
+      title: serializer.fromJson<String>(json['title']),
+      strategy: serializer.fromJson<String>(json['strategy']),
+      startedAt: serializer.fromJson<DateTime>(json['startedAt']),
+      finishedAt: serializer.fromJson<DateTime>(json['finishedAt']),
+      status: serializer.fromJson<String>(json['status']),
+      variableValues: serializer.fromJson<String>(json['variableValues']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'workspaceId': serializer.toJson<String>(workspaceId),
+      'runbookId': serializer.toJson<String?>(runbookId),
+      'kind': serializer.toJson<String>(kind),
+      'title': serializer.toJson<String>(title),
+      'strategy': serializer.toJson<String>(strategy),
+      'startedAt': serializer.toJson<DateTime>(startedAt),
+      'finishedAt': serializer.toJson<DateTime>(finishedAt),
+      'status': serializer.toJson<String>(status),
+      'variableValues': serializer.toJson<String>(variableValues),
+    };
+  }
+
+  RunbookRun copyWith({
+    String? id,
+    String? workspaceId,
+    Value<String?> runbookId = const Value.absent(),
+    String? kind,
+    String? title,
+    String? strategy,
+    DateTime? startedAt,
+    DateTime? finishedAt,
+    String? status,
+    String? variableValues,
+  }) => RunbookRun(
+    id: id ?? this.id,
+    workspaceId: workspaceId ?? this.workspaceId,
+    runbookId: runbookId.present ? runbookId.value : this.runbookId,
+    kind: kind ?? this.kind,
+    title: title ?? this.title,
+    strategy: strategy ?? this.strategy,
+    startedAt: startedAt ?? this.startedAt,
+    finishedAt: finishedAt ?? this.finishedAt,
+    status: status ?? this.status,
+    variableValues: variableValues ?? this.variableValues,
+  );
+  RunbookRun copyWithCompanion(RunbookRunsCompanion data) {
+    return RunbookRun(
+      id: data.id.present ? data.id.value : this.id,
+      workspaceId: data.workspaceId.present
+          ? data.workspaceId.value
+          : this.workspaceId,
+      runbookId: data.runbookId.present ? data.runbookId.value : this.runbookId,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      title: data.title.present ? data.title.value : this.title,
+      strategy: data.strategy.present ? data.strategy.value : this.strategy,
+      startedAt: data.startedAt.present ? data.startedAt.value : this.startedAt,
+      finishedAt: data.finishedAt.present
+          ? data.finishedAt.value
+          : this.finishedAt,
+      status: data.status.present ? data.status.value : this.status,
+      variableValues: data.variableValues.present
+          ? data.variableValues.value
+          : this.variableValues,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RunbookRun(')
+          ..write('id: $id, ')
+          ..write('workspaceId: $workspaceId, ')
+          ..write('runbookId: $runbookId, ')
+          ..write('kind: $kind, ')
+          ..write('title: $title, ')
+          ..write('strategy: $strategy, ')
+          ..write('startedAt: $startedAt, ')
+          ..write('finishedAt: $finishedAt, ')
+          ..write('status: $status, ')
+          ..write('variableValues: $variableValues')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    workspaceId,
+    runbookId,
+    kind,
+    title,
+    strategy,
+    startedAt,
+    finishedAt,
+    status,
+    variableValues,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is RunbookRun &&
+          other.id == this.id &&
+          other.workspaceId == this.workspaceId &&
+          other.runbookId == this.runbookId &&
+          other.kind == this.kind &&
+          other.title == this.title &&
+          other.strategy == this.strategy &&
+          other.startedAt == this.startedAt &&
+          other.finishedAt == this.finishedAt &&
+          other.status == this.status &&
+          other.variableValues == this.variableValues);
+}
+
+class RunbookRunsCompanion extends UpdateCompanion<RunbookRun> {
+  final Value<String> id;
+  final Value<String> workspaceId;
+  final Value<String?> runbookId;
+  final Value<String> kind;
+  final Value<String> title;
+  final Value<String> strategy;
+  final Value<DateTime> startedAt;
+  final Value<DateTime> finishedAt;
+  final Value<String> status;
+  final Value<String> variableValues;
+  final Value<int> rowid;
+  const RunbookRunsCompanion({
+    this.id = const Value.absent(),
+    this.workspaceId = const Value.absent(),
+    this.runbookId = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.title = const Value.absent(),
+    this.strategy = const Value.absent(),
+    this.startedAt = const Value.absent(),
+    this.finishedAt = const Value.absent(),
+    this.status = const Value.absent(),
+    this.variableValues = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  RunbookRunsCompanion.insert({
+    required String id,
+    required String workspaceId,
+    this.runbookId = const Value.absent(),
+    required String kind,
+    required String title,
+    required String strategy,
+    required DateTime startedAt,
+    required DateTime finishedAt,
+    required String status,
+    this.variableValues = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       workspaceId = Value(workspaceId),
+       kind = Value(kind),
+       title = Value(title),
+       strategy = Value(strategy),
+       startedAt = Value(startedAt),
+       finishedAt = Value(finishedAt),
+       status = Value(status);
+  static Insertable<RunbookRun> custom({
+    Expression<String>? id,
+    Expression<String>? workspaceId,
+    Expression<String>? runbookId,
+    Expression<String>? kind,
+    Expression<String>? title,
+    Expression<String>? strategy,
+    Expression<DateTime>? startedAt,
+    Expression<DateTime>? finishedAt,
+    Expression<String>? status,
+    Expression<String>? variableValues,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (workspaceId != null) 'workspace_id': workspaceId,
+      if (runbookId != null) 'runbook_id': runbookId,
+      if (kind != null) 'kind': kind,
+      if (title != null) 'title': title,
+      if (strategy != null) 'strategy': strategy,
+      if (startedAt != null) 'started_at': startedAt,
+      if (finishedAt != null) 'finished_at': finishedAt,
+      if (status != null) 'status': status,
+      if (variableValues != null) 'variable_values': variableValues,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  RunbookRunsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? workspaceId,
+    Value<String?>? runbookId,
+    Value<String>? kind,
+    Value<String>? title,
+    Value<String>? strategy,
+    Value<DateTime>? startedAt,
+    Value<DateTime>? finishedAt,
+    Value<String>? status,
+    Value<String>? variableValues,
+    Value<int>? rowid,
+  }) {
+    return RunbookRunsCompanion(
+      id: id ?? this.id,
+      workspaceId: workspaceId ?? this.workspaceId,
+      runbookId: runbookId ?? this.runbookId,
+      kind: kind ?? this.kind,
+      title: title ?? this.title,
+      strategy: strategy ?? this.strategy,
+      startedAt: startedAt ?? this.startedAt,
+      finishedAt: finishedAt ?? this.finishedAt,
+      status: status ?? this.status,
+      variableValues: variableValues ?? this.variableValues,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (workspaceId.present) {
+      map['workspace_id'] = Variable<String>(workspaceId.value);
+    }
+    if (runbookId.present) {
+      map['runbook_id'] = Variable<String>(runbookId.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
+    }
+    if (title.present) {
+      map['title'] = Variable<String>(title.value);
+    }
+    if (strategy.present) {
+      map['strategy'] = Variable<String>(strategy.value);
+    }
+    if (startedAt.present) {
+      map['started_at'] = Variable<DateTime>(startedAt.value);
+    }
+    if (finishedAt.present) {
+      map['finished_at'] = Variable<DateTime>(finishedAt.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (variableValues.present) {
+      map['variable_values'] = Variable<String>(variableValues.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RunbookRunsCompanion(')
+          ..write('id: $id, ')
+          ..write('workspaceId: $workspaceId, ')
+          ..write('runbookId: $runbookId, ')
+          ..write('kind: $kind, ')
+          ..write('title: $title, ')
+          ..write('strategy: $strategy, ')
+          ..write('startedAt: $startedAt, ')
+          ..write('finishedAt: $finishedAt, ')
+          ..write('status: $status, ')
+          ..write('variableValues: $variableValues, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $RunbookRunHostsTable extends RunbookRunHosts
+    with TableInfo<$RunbookRunHostsTable, RunbookRunHost> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $RunbookRunHostsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _runIdMeta = const VerificationMeta('runId');
+  @override
+  late final GeneratedColumn<String> runId = GeneratedColumn<String>(
+    'run_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES runbook_runs (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _positionMeta = const VerificationMeta(
+    'position',
+  );
+  @override
+  late final GeneratedColumn<int> position = GeneratedColumn<int>(
+    'position',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _hostIdMeta = const VerificationMeta('hostId');
+  @override
+  late final GeneratedColumn<String> hostId = GeneratedColumn<String>(
+    'host_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _hostLabelMeta = const VerificationMeta(
+    'hostLabel',
+  );
+  @override
+  late final GeneratedColumn<String> hostLabel = GeneratedColumn<String>(
+    'host_label',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _errorMeta = const VerificationMeta('error');
+  @override
+  late final GeneratedColumn<String> error = GeneratedColumn<String>(
+    'error',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    runId,
+    position,
+    hostId,
+    hostLabel,
+    status,
+    error,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'runbook_run_hosts';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<RunbookRunHost> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('run_id')) {
+      context.handle(
+        _runIdMeta,
+        runId.isAcceptableOrUnknown(data['run_id']!, _runIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_runIdMeta);
+    }
+    if (data.containsKey('position')) {
+      context.handle(
+        _positionMeta,
+        position.isAcceptableOrUnknown(data['position']!, _positionMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_positionMeta);
+    }
+    if (data.containsKey('host_id')) {
+      context.handle(
+        _hostIdMeta,
+        hostId.isAcceptableOrUnknown(data['host_id']!, _hostIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_hostIdMeta);
+    }
+    if (data.containsKey('host_label')) {
+      context.handle(
+        _hostLabelMeta,
+        hostLabel.isAcceptableOrUnknown(data['host_label']!, _hostLabelMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_hostLabelMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_statusMeta);
+    }
+    if (data.containsKey('error')) {
+      context.handle(
+        _errorMeta,
+        error.isAcceptableOrUnknown(data['error']!, _errorMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  RunbookRunHost map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return RunbookRunHost(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      runId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}run_id'],
+      )!,
+      position: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}position'],
+      )!,
+      hostId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}host_id'],
+      )!,
+      hostLabel: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}host_label'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      error: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}error'],
+      ),
+    );
+  }
+
+  @override
+  $RunbookRunHostsTable createAlias(String alias) {
+    return $RunbookRunHostsTable(attachedDatabase, alias);
+  }
+}
+
+class RunbookRunHost extends DataClass implements Insertable<RunbookRunHost> {
+  final String id;
+  final String runId;
+  final int position;
+
+  /// Plain text, no foreign key: the host may be deleted later.
+  final String hostId;
+  final String hostLabel;
+  final String status;
+  final String? error;
+  const RunbookRunHost({
+    required this.id,
+    required this.runId,
+    required this.position,
+    required this.hostId,
+    required this.hostLabel,
+    required this.status,
+    this.error,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['run_id'] = Variable<String>(runId);
+    map['position'] = Variable<int>(position);
+    map['host_id'] = Variable<String>(hostId);
+    map['host_label'] = Variable<String>(hostLabel);
+    map['status'] = Variable<String>(status);
+    if (!nullToAbsent || error != null) {
+      map['error'] = Variable<String>(error);
+    }
+    return map;
+  }
+
+  RunbookRunHostsCompanion toCompanion(bool nullToAbsent) {
+    return RunbookRunHostsCompanion(
+      id: Value(id),
+      runId: Value(runId),
+      position: Value(position),
+      hostId: Value(hostId),
+      hostLabel: Value(hostLabel),
+      status: Value(status),
+      error: error == null && nullToAbsent
+          ? const Value.absent()
+          : Value(error),
+    );
+  }
+
+  factory RunbookRunHost.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return RunbookRunHost(
+      id: serializer.fromJson<String>(json['id']),
+      runId: serializer.fromJson<String>(json['runId']),
+      position: serializer.fromJson<int>(json['position']),
+      hostId: serializer.fromJson<String>(json['hostId']),
+      hostLabel: serializer.fromJson<String>(json['hostLabel']),
+      status: serializer.fromJson<String>(json['status']),
+      error: serializer.fromJson<String?>(json['error']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'runId': serializer.toJson<String>(runId),
+      'position': serializer.toJson<int>(position),
+      'hostId': serializer.toJson<String>(hostId),
+      'hostLabel': serializer.toJson<String>(hostLabel),
+      'status': serializer.toJson<String>(status),
+      'error': serializer.toJson<String?>(error),
+    };
+  }
+
+  RunbookRunHost copyWith({
+    String? id,
+    String? runId,
+    int? position,
+    String? hostId,
+    String? hostLabel,
+    String? status,
+    Value<String?> error = const Value.absent(),
+  }) => RunbookRunHost(
+    id: id ?? this.id,
+    runId: runId ?? this.runId,
+    position: position ?? this.position,
+    hostId: hostId ?? this.hostId,
+    hostLabel: hostLabel ?? this.hostLabel,
+    status: status ?? this.status,
+    error: error.present ? error.value : this.error,
+  );
+  RunbookRunHost copyWithCompanion(RunbookRunHostsCompanion data) {
+    return RunbookRunHost(
+      id: data.id.present ? data.id.value : this.id,
+      runId: data.runId.present ? data.runId.value : this.runId,
+      position: data.position.present ? data.position.value : this.position,
+      hostId: data.hostId.present ? data.hostId.value : this.hostId,
+      hostLabel: data.hostLabel.present ? data.hostLabel.value : this.hostLabel,
+      status: data.status.present ? data.status.value : this.status,
+      error: data.error.present ? data.error.value : this.error,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RunbookRunHost(')
+          ..write('id: $id, ')
+          ..write('runId: $runId, ')
+          ..write('position: $position, ')
+          ..write('hostId: $hostId, ')
+          ..write('hostLabel: $hostLabel, ')
+          ..write('status: $status, ')
+          ..write('error: $error')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, runId, position, hostId, hostLabel, status, error);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is RunbookRunHost &&
+          other.id == this.id &&
+          other.runId == this.runId &&
+          other.position == this.position &&
+          other.hostId == this.hostId &&
+          other.hostLabel == this.hostLabel &&
+          other.status == this.status &&
+          other.error == this.error);
+}
+
+class RunbookRunHostsCompanion extends UpdateCompanion<RunbookRunHost> {
+  final Value<String> id;
+  final Value<String> runId;
+  final Value<int> position;
+  final Value<String> hostId;
+  final Value<String> hostLabel;
+  final Value<String> status;
+  final Value<String?> error;
+  final Value<int> rowid;
+  const RunbookRunHostsCompanion({
+    this.id = const Value.absent(),
+    this.runId = const Value.absent(),
+    this.position = const Value.absent(),
+    this.hostId = const Value.absent(),
+    this.hostLabel = const Value.absent(),
+    this.status = const Value.absent(),
+    this.error = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  RunbookRunHostsCompanion.insert({
+    required String id,
+    required String runId,
+    required int position,
+    required String hostId,
+    required String hostLabel,
+    required String status,
+    this.error = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       runId = Value(runId),
+       position = Value(position),
+       hostId = Value(hostId),
+       hostLabel = Value(hostLabel),
+       status = Value(status);
+  static Insertable<RunbookRunHost> custom({
+    Expression<String>? id,
+    Expression<String>? runId,
+    Expression<int>? position,
+    Expression<String>? hostId,
+    Expression<String>? hostLabel,
+    Expression<String>? status,
+    Expression<String>? error,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (runId != null) 'run_id': runId,
+      if (position != null) 'position': position,
+      if (hostId != null) 'host_id': hostId,
+      if (hostLabel != null) 'host_label': hostLabel,
+      if (status != null) 'status': status,
+      if (error != null) 'error': error,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  RunbookRunHostsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? runId,
+    Value<int>? position,
+    Value<String>? hostId,
+    Value<String>? hostLabel,
+    Value<String>? status,
+    Value<String?>? error,
+    Value<int>? rowid,
+  }) {
+    return RunbookRunHostsCompanion(
+      id: id ?? this.id,
+      runId: runId ?? this.runId,
+      position: position ?? this.position,
+      hostId: hostId ?? this.hostId,
+      hostLabel: hostLabel ?? this.hostLabel,
+      status: status ?? this.status,
+      error: error ?? this.error,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (runId.present) {
+      map['run_id'] = Variable<String>(runId.value);
+    }
+    if (position.present) {
+      map['position'] = Variable<int>(position.value);
+    }
+    if (hostId.present) {
+      map['host_id'] = Variable<String>(hostId.value);
+    }
+    if (hostLabel.present) {
+      map['host_label'] = Variable<String>(hostLabel.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (error.present) {
+      map['error'] = Variable<String>(error.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RunbookRunHostsCompanion(')
+          ..write('id: $id, ')
+          ..write('runId: $runId, ')
+          ..write('position: $position, ')
+          ..write('hostId: $hostId, ')
+          ..write('hostLabel: $hostLabel, ')
+          ..write('status: $status, ')
+          ..write('error: $error, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $RunbookRunStepsTable extends RunbookRunSteps
+    with TableInfo<$RunbookRunStepsTable, RunbookRunStep> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $RunbookRunStepsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _runHostIdMeta = const VerificationMeta(
+    'runHostId',
+  );
+  @override
+  late final GeneratedColumn<String> runHostId = GeneratedColumn<String>(
+    'run_host_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES runbook_run_hosts (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _stepIdMeta = const VerificationMeta('stepId');
+  @override
+  late final GeneratedColumn<String> stepId = GeneratedColumn<String>(
+    'step_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _stepOrderMeta = const VerificationMeta(
+    'stepOrder',
+  );
+  @override
+  late final GeneratedColumn<int> stepOrder = GeneratedColumn<int>(
+    'step_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _commandMeta = const VerificationMeta(
+    'command',
+  );
+  @override
+  late final GeneratedColumn<String> command = GeneratedColumn<String>(
+    'command',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _exitCodeMeta = const VerificationMeta(
+    'exitCode',
+  );
+  @override
+  late final GeneratedColumn<int> exitCode = GeneratedColumn<int>(
+    'exit_code',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _attemptsMeta = const VerificationMeta(
+    'attempts',
+  );
+  @override
+  late final GeneratedColumn<int> attempts = GeneratedColumn<int>(
+    'attempts',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _outputMeta = const VerificationMeta('output');
+  @override
+  late final GeneratedColumn<String> output = GeneratedColumn<String>(
+    'output',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _outputTruncatedMeta = const VerificationMeta(
+    'outputTruncated',
+  );
+  @override
+  late final GeneratedColumn<bool> outputTruncated = GeneratedColumn<bool>(
+    'output_truncated',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("output_truncated" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _errorMeta = const VerificationMeta('error');
+  @override
+  late final GeneratedColumn<String> error = GeneratedColumn<String>(
+    'error',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _durationMsMeta = const VerificationMeta(
+    'durationMs',
+  );
+  @override
+  late final GeneratedColumn<int> durationMs = GeneratedColumn<int>(
+    'duration_ms',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    runHostId,
+    stepId,
+    stepOrder,
+    command,
+    status,
+    exitCode,
+    attempts,
+    output,
+    outputTruncated,
+    error,
+    durationMs,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'runbook_run_steps';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<RunbookRunStep> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('run_host_id')) {
+      context.handle(
+        _runHostIdMeta,
+        runHostId.isAcceptableOrUnknown(data['run_host_id']!, _runHostIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_runHostIdMeta);
+    }
+    if (data.containsKey('step_id')) {
+      context.handle(
+        _stepIdMeta,
+        stepId.isAcceptableOrUnknown(data['step_id']!, _stepIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_stepIdMeta);
+    }
+    if (data.containsKey('step_order')) {
+      context.handle(
+        _stepOrderMeta,
+        stepOrder.isAcceptableOrUnknown(data['step_order']!, _stepOrderMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_stepOrderMeta);
+    }
+    if (data.containsKey('command')) {
+      context.handle(
+        _commandMeta,
+        command.isAcceptableOrUnknown(data['command']!, _commandMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_commandMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_statusMeta);
+    }
+    if (data.containsKey('exit_code')) {
+      context.handle(
+        _exitCodeMeta,
+        exitCode.isAcceptableOrUnknown(data['exit_code']!, _exitCodeMeta),
+      );
+    }
+    if (data.containsKey('attempts')) {
+      context.handle(
+        _attemptsMeta,
+        attempts.isAcceptableOrUnknown(data['attempts']!, _attemptsMeta),
+      );
+    }
+    if (data.containsKey('output')) {
+      context.handle(
+        _outputMeta,
+        output.isAcceptableOrUnknown(data['output']!, _outputMeta),
+      );
+    }
+    if (data.containsKey('output_truncated')) {
+      context.handle(
+        _outputTruncatedMeta,
+        outputTruncated.isAcceptableOrUnknown(
+          data['output_truncated']!,
+          _outputTruncatedMeta,
+        ),
+      );
+    }
+    if (data.containsKey('error')) {
+      context.handle(
+        _errorMeta,
+        error.isAcceptableOrUnknown(data['error']!, _errorMeta),
+      );
+    }
+    if (data.containsKey('duration_ms')) {
+      context.handle(
+        _durationMsMeta,
+        durationMs.isAcceptableOrUnknown(data['duration_ms']!, _durationMsMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  RunbookRunStep map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return RunbookRunStep(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      runHostId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}run_host_id'],
+      )!,
+      stepId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}step_id'],
+      )!,
+      stepOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}step_order'],
+      )!,
+      command: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}command'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      exitCode: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}exit_code'],
+      ),
+      attempts: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}attempts'],
+      )!,
+      output: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}output'],
+      )!,
+      outputTruncated: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}output_truncated'],
+      )!,
+      error: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}error'],
+      ),
+      durationMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}duration_ms'],
+      ),
+    );
+  }
+
+  @override
+  $RunbookRunStepsTable createAlias(String alias) {
+    return $RunbookRunStepsTable(attachedDatabase, alias);
+  }
+}
+
+class RunbookRunStep extends DataClass implements Insertable<RunbookRunStep> {
+  final String id;
+  final String runHostId;
+  final String stepId;
+  final int stepOrder;
+
+  /// The command as sent, after `${INPUT:...}` substitution.
+  final String command;
+  final String status;
+  final int? exitCode;
+  final int attempts;
+
+  /// At most the last 16 KiB of output.
+  final String output;
+  final bool outputTruncated;
+  final String? error;
+  final int? durationMs;
+  const RunbookRunStep({
+    required this.id,
+    required this.runHostId,
+    required this.stepId,
+    required this.stepOrder,
+    required this.command,
+    required this.status,
+    this.exitCode,
+    required this.attempts,
+    required this.output,
+    required this.outputTruncated,
+    this.error,
+    this.durationMs,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['run_host_id'] = Variable<String>(runHostId);
+    map['step_id'] = Variable<String>(stepId);
+    map['step_order'] = Variable<int>(stepOrder);
+    map['command'] = Variable<String>(command);
+    map['status'] = Variable<String>(status);
+    if (!nullToAbsent || exitCode != null) {
+      map['exit_code'] = Variable<int>(exitCode);
+    }
+    map['attempts'] = Variable<int>(attempts);
+    map['output'] = Variable<String>(output);
+    map['output_truncated'] = Variable<bool>(outputTruncated);
+    if (!nullToAbsent || error != null) {
+      map['error'] = Variable<String>(error);
+    }
+    if (!nullToAbsent || durationMs != null) {
+      map['duration_ms'] = Variable<int>(durationMs);
+    }
+    return map;
+  }
+
+  RunbookRunStepsCompanion toCompanion(bool nullToAbsent) {
+    return RunbookRunStepsCompanion(
+      id: Value(id),
+      runHostId: Value(runHostId),
+      stepId: Value(stepId),
+      stepOrder: Value(stepOrder),
+      command: Value(command),
+      status: Value(status),
+      exitCode: exitCode == null && nullToAbsent
+          ? const Value.absent()
+          : Value(exitCode),
+      attempts: Value(attempts),
+      output: Value(output),
+      outputTruncated: Value(outputTruncated),
+      error: error == null && nullToAbsent
+          ? const Value.absent()
+          : Value(error),
+      durationMs: durationMs == null && nullToAbsent
+          ? const Value.absent()
+          : Value(durationMs),
+    );
+  }
+
+  factory RunbookRunStep.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return RunbookRunStep(
+      id: serializer.fromJson<String>(json['id']),
+      runHostId: serializer.fromJson<String>(json['runHostId']),
+      stepId: serializer.fromJson<String>(json['stepId']),
+      stepOrder: serializer.fromJson<int>(json['stepOrder']),
+      command: serializer.fromJson<String>(json['command']),
+      status: serializer.fromJson<String>(json['status']),
+      exitCode: serializer.fromJson<int?>(json['exitCode']),
+      attempts: serializer.fromJson<int>(json['attempts']),
+      output: serializer.fromJson<String>(json['output']),
+      outputTruncated: serializer.fromJson<bool>(json['outputTruncated']),
+      error: serializer.fromJson<String?>(json['error']),
+      durationMs: serializer.fromJson<int?>(json['durationMs']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'runHostId': serializer.toJson<String>(runHostId),
+      'stepId': serializer.toJson<String>(stepId),
+      'stepOrder': serializer.toJson<int>(stepOrder),
+      'command': serializer.toJson<String>(command),
+      'status': serializer.toJson<String>(status),
+      'exitCode': serializer.toJson<int?>(exitCode),
+      'attempts': serializer.toJson<int>(attempts),
+      'output': serializer.toJson<String>(output),
+      'outputTruncated': serializer.toJson<bool>(outputTruncated),
+      'error': serializer.toJson<String?>(error),
+      'durationMs': serializer.toJson<int?>(durationMs),
+    };
+  }
+
+  RunbookRunStep copyWith({
+    String? id,
+    String? runHostId,
+    String? stepId,
+    int? stepOrder,
+    String? command,
+    String? status,
+    Value<int?> exitCode = const Value.absent(),
+    int? attempts,
+    String? output,
+    bool? outputTruncated,
+    Value<String?> error = const Value.absent(),
+    Value<int?> durationMs = const Value.absent(),
+  }) => RunbookRunStep(
+    id: id ?? this.id,
+    runHostId: runHostId ?? this.runHostId,
+    stepId: stepId ?? this.stepId,
+    stepOrder: stepOrder ?? this.stepOrder,
+    command: command ?? this.command,
+    status: status ?? this.status,
+    exitCode: exitCode.present ? exitCode.value : this.exitCode,
+    attempts: attempts ?? this.attempts,
+    output: output ?? this.output,
+    outputTruncated: outputTruncated ?? this.outputTruncated,
+    error: error.present ? error.value : this.error,
+    durationMs: durationMs.present ? durationMs.value : this.durationMs,
+  );
+  RunbookRunStep copyWithCompanion(RunbookRunStepsCompanion data) {
+    return RunbookRunStep(
+      id: data.id.present ? data.id.value : this.id,
+      runHostId: data.runHostId.present ? data.runHostId.value : this.runHostId,
+      stepId: data.stepId.present ? data.stepId.value : this.stepId,
+      stepOrder: data.stepOrder.present ? data.stepOrder.value : this.stepOrder,
+      command: data.command.present ? data.command.value : this.command,
+      status: data.status.present ? data.status.value : this.status,
+      exitCode: data.exitCode.present ? data.exitCode.value : this.exitCode,
+      attempts: data.attempts.present ? data.attempts.value : this.attempts,
+      output: data.output.present ? data.output.value : this.output,
+      outputTruncated: data.outputTruncated.present
+          ? data.outputTruncated.value
+          : this.outputTruncated,
+      error: data.error.present ? data.error.value : this.error,
+      durationMs: data.durationMs.present
+          ? data.durationMs.value
+          : this.durationMs,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RunbookRunStep(')
+          ..write('id: $id, ')
+          ..write('runHostId: $runHostId, ')
+          ..write('stepId: $stepId, ')
+          ..write('stepOrder: $stepOrder, ')
+          ..write('command: $command, ')
+          ..write('status: $status, ')
+          ..write('exitCode: $exitCode, ')
+          ..write('attempts: $attempts, ')
+          ..write('output: $output, ')
+          ..write('outputTruncated: $outputTruncated, ')
+          ..write('error: $error, ')
+          ..write('durationMs: $durationMs')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    runHostId,
+    stepId,
+    stepOrder,
+    command,
+    status,
+    exitCode,
+    attempts,
+    output,
+    outputTruncated,
+    error,
+    durationMs,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is RunbookRunStep &&
+          other.id == this.id &&
+          other.runHostId == this.runHostId &&
+          other.stepId == this.stepId &&
+          other.stepOrder == this.stepOrder &&
+          other.command == this.command &&
+          other.status == this.status &&
+          other.exitCode == this.exitCode &&
+          other.attempts == this.attempts &&
+          other.output == this.output &&
+          other.outputTruncated == this.outputTruncated &&
+          other.error == this.error &&
+          other.durationMs == this.durationMs);
+}
+
+class RunbookRunStepsCompanion extends UpdateCompanion<RunbookRunStep> {
+  final Value<String> id;
+  final Value<String> runHostId;
+  final Value<String> stepId;
+  final Value<int> stepOrder;
+  final Value<String> command;
+  final Value<String> status;
+  final Value<int?> exitCode;
+  final Value<int> attempts;
+  final Value<String> output;
+  final Value<bool> outputTruncated;
+  final Value<String?> error;
+  final Value<int?> durationMs;
+  final Value<int> rowid;
+  const RunbookRunStepsCompanion({
+    this.id = const Value.absent(),
+    this.runHostId = const Value.absent(),
+    this.stepId = const Value.absent(),
+    this.stepOrder = const Value.absent(),
+    this.command = const Value.absent(),
+    this.status = const Value.absent(),
+    this.exitCode = const Value.absent(),
+    this.attempts = const Value.absent(),
+    this.output = const Value.absent(),
+    this.outputTruncated = const Value.absent(),
+    this.error = const Value.absent(),
+    this.durationMs = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  RunbookRunStepsCompanion.insert({
+    required String id,
+    required String runHostId,
+    required String stepId,
+    required int stepOrder,
+    required String command,
+    required String status,
+    this.exitCode = const Value.absent(),
+    this.attempts = const Value.absent(),
+    this.output = const Value.absent(),
+    this.outputTruncated = const Value.absent(),
+    this.error = const Value.absent(),
+    this.durationMs = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       runHostId = Value(runHostId),
+       stepId = Value(stepId),
+       stepOrder = Value(stepOrder),
+       command = Value(command),
+       status = Value(status);
+  static Insertable<RunbookRunStep> custom({
+    Expression<String>? id,
+    Expression<String>? runHostId,
+    Expression<String>? stepId,
+    Expression<int>? stepOrder,
+    Expression<String>? command,
+    Expression<String>? status,
+    Expression<int>? exitCode,
+    Expression<int>? attempts,
+    Expression<String>? output,
+    Expression<bool>? outputTruncated,
+    Expression<String>? error,
+    Expression<int>? durationMs,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (runHostId != null) 'run_host_id': runHostId,
+      if (stepId != null) 'step_id': stepId,
+      if (stepOrder != null) 'step_order': stepOrder,
+      if (command != null) 'command': command,
+      if (status != null) 'status': status,
+      if (exitCode != null) 'exit_code': exitCode,
+      if (attempts != null) 'attempts': attempts,
+      if (output != null) 'output': output,
+      if (outputTruncated != null) 'output_truncated': outputTruncated,
+      if (error != null) 'error': error,
+      if (durationMs != null) 'duration_ms': durationMs,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  RunbookRunStepsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? runHostId,
+    Value<String>? stepId,
+    Value<int>? stepOrder,
+    Value<String>? command,
+    Value<String>? status,
+    Value<int?>? exitCode,
+    Value<int>? attempts,
+    Value<String>? output,
+    Value<bool>? outputTruncated,
+    Value<String?>? error,
+    Value<int?>? durationMs,
+    Value<int>? rowid,
+  }) {
+    return RunbookRunStepsCompanion(
+      id: id ?? this.id,
+      runHostId: runHostId ?? this.runHostId,
+      stepId: stepId ?? this.stepId,
+      stepOrder: stepOrder ?? this.stepOrder,
+      command: command ?? this.command,
+      status: status ?? this.status,
+      exitCode: exitCode ?? this.exitCode,
+      attempts: attempts ?? this.attempts,
+      output: output ?? this.output,
+      outputTruncated: outputTruncated ?? this.outputTruncated,
+      error: error ?? this.error,
+      durationMs: durationMs ?? this.durationMs,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (runHostId.present) {
+      map['run_host_id'] = Variable<String>(runHostId.value);
+    }
+    if (stepId.present) {
+      map['step_id'] = Variable<String>(stepId.value);
+    }
+    if (stepOrder.present) {
+      map['step_order'] = Variable<int>(stepOrder.value);
+    }
+    if (command.present) {
+      map['command'] = Variable<String>(command.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (exitCode.present) {
+      map['exit_code'] = Variable<int>(exitCode.value);
+    }
+    if (attempts.present) {
+      map['attempts'] = Variable<int>(attempts.value);
+    }
+    if (output.present) {
+      map['output'] = Variable<String>(output.value);
+    }
+    if (outputTruncated.present) {
+      map['output_truncated'] = Variable<bool>(outputTruncated.value);
+    }
+    if (error.present) {
+      map['error'] = Variable<String>(error.value);
+    }
+    if (durationMs.present) {
+      map['duration_ms'] = Variable<int>(durationMs.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RunbookRunStepsCompanion(')
+          ..write('id: $id, ')
+          ..write('runHostId: $runHostId, ')
+          ..write('stepId: $stepId, ')
+          ..write('stepOrder: $stepOrder, ')
+          ..write('command: $command, ')
+          ..write('status: $status, ')
+          ..write('exitCode: $exitCode, ')
+          ..write('attempts: $attempts, ')
+          ..write('output: $output, ')
+          ..write('outputTruncated: $outputTruncated, ')
+          ..write('error: $error, ')
+          ..write('durationMs: $durationMs, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -11739,6 +13692,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $SyncEntityVersionsTable syncEntityVersions =
       $SyncEntityVersionsTable(this);
   late final $VaultEnvVarsTable vaultEnvVars = $VaultEnvVarsTable(this);
+  late final $RunbookRunsTable runbookRuns = $RunbookRunsTable(this);
+  late final $RunbookRunHostsTable runbookRunHosts = $RunbookRunHostsTable(
+    this,
+  );
+  late final $RunbookRunStepsTable runbookRunSteps = $RunbookRunStepsTable(
+    this,
+  );
   late final HostsDao hostsDao = HostsDao(this as AppDatabase);
   late final IdentitiesDao identitiesDao = IdentitiesDao(this as AppDatabase);
   late final KnownHostsDao knownHostsDao = KnownHostsDao(this as AppDatabase);
@@ -11755,6 +13715,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final VaultEnvVarsDao vaultEnvVarsDao = VaultEnvVarsDao(
     this as AppDatabase,
   );
+  late final RunHistoryDao runHistoryDao = RunHistoryDao(this as AppDatabase);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -11784,6 +13745,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     syncState,
     syncEntityVersions,
     vaultEnvVars,
+    runbookRuns,
+    runbookRunHosts,
+    runbookRunSteps,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -11961,6 +13925,27 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('vault_env_vars', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'workspaces',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('runbook_runs', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'runbook_runs',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('runbook_run_hosts', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'runbook_run_hosts',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('runbook_run_steps', kind: UpdateKind.delete)],
     ),
   ]);
 }
@@ -12164,6 +14149,24 @@ final class $$WorkspacesTableReferences
     ).filter((f) => f.workspaceId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_vaultEnvVarsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$RunbookRunsTable, List<RunbookRun>>
+  _runbookRunsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.runbookRuns,
+    aliasName: 'workspaces__id__runbook_runs__workspace_id',
+  );
+
+  $$RunbookRunsTableProcessedTableManager get runbookRunsRefs {
+    final manager = $$RunbookRunsTableTableManager(
+      $_db,
+      $_db.runbookRuns,
+    ).filter((f) => f.workspaceId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_runbookRunsRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -12440,6 +14443,31 @@ class $$WorkspacesTableFilterComposer
           }) => $$VaultEnvVarsTableFilterComposer(
             $db: $db,
             $table: $db.vaultEnvVars,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> runbookRunsRefs(
+    Expression<bool> Function($$RunbookRunsTableFilterComposer f) f,
+  ) {
+    final $$RunbookRunsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.runbookRuns,
+      getReferencedColumn: (t) => t.workspaceId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$RunbookRunsTableFilterComposer(
+            $db: $db,
+            $table: $db.runbookRuns,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -12750,6 +14778,31 @@ class $$WorkspacesTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> runbookRunsRefs<T extends Object>(
+    Expression<T> Function($$RunbookRunsTableAnnotationComposer a) f,
+  ) {
+    final $$RunbookRunsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.runbookRuns,
+      getReferencedColumn: (t) => t.workspaceId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$RunbookRunsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.runbookRuns,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$WorkspacesTableTableManager
@@ -12776,6 +14829,7 @@ class $$WorkspacesTableTableManager
             bool mcpPolicyRulesRefs,
             bool bookmarksRefs,
             bool vaultEnvVarsRefs,
+            bool runbookRunsRefs,
           })
         > {
   $$WorkspacesTableTableManager(_$AppDatabase db, $WorkspacesTable table)
@@ -12837,6 +14891,7 @@ class $$WorkspacesTableTableManager
                 mcpPolicyRulesRefs = false,
                 bookmarksRefs = false,
                 vaultEnvVarsRefs = false,
+                runbookRunsRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -12851,6 +14906,7 @@ class $$WorkspacesTableTableManager
                     if (mcpPolicyRulesRefs) db.mcpPolicyRules,
                     if (bookmarksRefs) db.bookmarks,
                     if (vaultEnvVarsRefs) db.vaultEnvVars,
+                    if (runbookRunsRefs) db.runbookRuns,
                   ],
                   addJoins: null,
                   getPrefetchedDataCallback: (items) async {
@@ -13065,6 +15121,27 @@ class $$WorkspacesTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (runbookRunsRefs)
+                        await $_getPrefetchedData<
+                          Workspace,
+                          $WorkspacesTable,
+                          RunbookRun
+                        >(
+                          currentTable: table,
+                          referencedTable: $$WorkspacesTableReferences
+                              ._runbookRunsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$WorkspacesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).runbookRunsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.workspaceId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -13096,6 +15173,7 @@ typedef $$WorkspacesTableProcessedTableManager =
         bool mcpPolicyRulesRefs,
         bool bookmarksRefs,
         bool vaultEnvVarsRefs,
+        bool runbookRunsRefs,
       })
     >;
 typedef $$IdentitiesTableCreateCompanionBuilder =
@@ -16776,6 +18854,7 @@ typedef $$RunbooksTableCreateCompanionBuilder =
       required String title,
       Value<String?> description,
       required DateTime createdAt,
+      Value<String?> defaultHostIds,
       Value<int> rowid,
     });
 typedef $$RunbooksTableUpdateCompanionBuilder =
@@ -16785,6 +18864,7 @@ typedef $$RunbooksTableUpdateCompanionBuilder =
       Value<String> title,
       Value<String?> description,
       Value<DateTime> createdAt,
+      Value<String?> defaultHostIds,
       Value<int> rowid,
     });
 
@@ -16854,6 +18934,11 @@ class $$RunbooksTableFilterComposer
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get defaultHostIds => $composableBuilder(
+    column: $table.defaultHostIds,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -16935,6 +19020,11 @@ class $$RunbooksTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get defaultHostIds => $composableBuilder(
+    column: $table.defaultHostIds,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$WorkspacesTableOrderingComposer get workspaceId {
     final $$WorkspacesTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -16981,6 +19071,11 @@ class $$RunbooksTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<String> get defaultHostIds => $composableBuilder(
+    column: $table.defaultHostIds,
+    builder: (column) => column,
+  );
 
   $$WorkspacesTableAnnotationComposer get workspaceId {
     final $$WorkspacesTableAnnotationComposer composer = $composerBuilder(
@@ -17064,6 +19159,7 @@ class $$RunbooksTableTableManager
                 Value<String> title = const Value.absent(),
                 Value<String?> description = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<String?> defaultHostIds = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => RunbooksCompanion(
                 id: id,
@@ -17071,6 +19167,7 @@ class $$RunbooksTableTableManager
                 title: title,
                 description: description,
                 createdAt: createdAt,
+                defaultHostIds: defaultHostIds,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -17080,6 +19177,7 @@ class $$RunbooksTableTableManager
                 required String title,
                 Value<String?> description = const Value.absent(),
                 required DateTime createdAt,
+                Value<String?> defaultHostIds = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => RunbooksCompanion.insert(
                 id: id,
@@ -17087,6 +19185,7 @@ class $$RunbooksTableTableManager
                 title: title,
                 description: description,
                 createdAt: createdAt,
+                defaultHostIds: defaultHostIds,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -17190,6 +19289,8 @@ typedef $$RunbookStepsTableCreateCompanionBuilder =
       Value<int> expectedExitCode,
       Value<String?> expectedOutputPattern,
       Value<int> timeoutSeconds,
+      Value<String> onFailure,
+      Value<int> retries,
       Value<int> rowid,
     });
 typedef $$RunbookStepsTableUpdateCompanionBuilder =
@@ -17201,6 +19302,8 @@ typedef $$RunbookStepsTableUpdateCompanionBuilder =
       Value<int> expectedExitCode,
       Value<String?> expectedOutputPattern,
       Value<int> timeoutSeconds,
+      Value<String> onFailure,
+      Value<int> retries,
       Value<int> rowid,
     });
 
@@ -17262,6 +19365,16 @@ class $$RunbookStepsTableFilterComposer
 
   ColumnFilters<int> get timeoutSeconds => $composableBuilder(
     column: $table.timeoutSeconds,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get onFailure => $composableBuilder(
+    column: $table.onFailure,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get retries => $composableBuilder(
+    column: $table.retries,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -17328,6 +19441,16 @@ class $$RunbookStepsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get onFailure => $composableBuilder(
+    column: $table.onFailure,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get retries => $composableBuilder(
+    column: $table.retries,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$RunbooksTableOrderingComposer get runbookId {
     final $$RunbooksTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -17384,6 +19507,12 @@ class $$RunbookStepsTableAnnotationComposer
     column: $table.timeoutSeconds,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get onFailure =>
+      $composableBuilder(column: $table.onFailure, builder: (column) => column);
+
+  GeneratedColumn<int> get retries =>
+      $composableBuilder(column: $table.retries, builder: (column) => column);
 
   $$RunbooksTableAnnotationComposer get runbookId {
     final $$RunbooksTableAnnotationComposer composer = $composerBuilder(
@@ -17444,6 +19573,8 @@ class $$RunbookStepsTableTableManager
                 Value<int> expectedExitCode = const Value.absent(),
                 Value<String?> expectedOutputPattern = const Value.absent(),
                 Value<int> timeoutSeconds = const Value.absent(),
+                Value<String> onFailure = const Value.absent(),
+                Value<int> retries = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => RunbookStepsCompanion(
                 id: id,
@@ -17453,6 +19584,8 @@ class $$RunbookStepsTableTableManager
                 expectedExitCode: expectedExitCode,
                 expectedOutputPattern: expectedOutputPattern,
                 timeoutSeconds: timeoutSeconds,
+                onFailure: onFailure,
+                retries: retries,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -17464,6 +19597,8 @@ class $$RunbookStepsTableTableManager
                 Value<int> expectedExitCode = const Value.absent(),
                 Value<String?> expectedOutputPattern = const Value.absent(),
                 Value<int> timeoutSeconds = const Value.absent(),
+                Value<String> onFailure = const Value.absent(),
+                Value<int> retries = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => RunbookStepsCompanion.insert(
                 id: id,
@@ -17473,6 +19608,8 @@ class $$RunbookStepsTableTableManager
                 expectedExitCode: expectedExitCode,
                 expectedOutputPattern: expectedOutputPattern,
                 timeoutSeconds: timeoutSeconds,
+                onFailure: onFailure,
+                retries: retries,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -22817,6 +24954,1442 @@ typedef $$VaultEnvVarsTableProcessedTableManager =
       VaultEnvVar,
       PrefetchHooks Function({bool workspaceId})
     >;
+typedef $$RunbookRunsTableCreateCompanionBuilder =
+    RunbookRunsCompanion Function({
+      required String id,
+      required String workspaceId,
+      Value<String?> runbookId,
+      required String kind,
+      required String title,
+      required String strategy,
+      required DateTime startedAt,
+      required DateTime finishedAt,
+      required String status,
+      Value<String> variableValues,
+      Value<int> rowid,
+    });
+typedef $$RunbookRunsTableUpdateCompanionBuilder =
+    RunbookRunsCompanion Function({
+      Value<String> id,
+      Value<String> workspaceId,
+      Value<String?> runbookId,
+      Value<String> kind,
+      Value<String> title,
+      Value<String> strategy,
+      Value<DateTime> startedAt,
+      Value<DateTime> finishedAt,
+      Value<String> status,
+      Value<String> variableValues,
+      Value<int> rowid,
+    });
+
+final class $$RunbookRunsTableReferences
+    extends BaseReferences<_$AppDatabase, $RunbookRunsTable, RunbookRun> {
+  $$RunbookRunsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $WorkspacesTable _workspaceIdTable(_$AppDatabase db) =>
+      db.workspaces.createAlias('runbook_runs__workspace_id__workspaces__id');
+
+  $$WorkspacesTableProcessedTableManager get workspaceId {
+    final $_column = $_itemColumn<String>('workspace_id')!;
+
+    final manager = $$WorkspacesTableTableManager(
+      $_db,
+      $_db.workspaces,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_workspaceIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<$RunbookRunHostsTable, List<RunbookRunHost>>
+  _runbookRunHostsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.runbookRunHosts,
+    aliasName: 'runbook_runs__id__runbook_run_hosts__run_id',
+  );
+
+  $$RunbookRunHostsTableProcessedTableManager get runbookRunHostsRefs {
+    final manager = $$RunbookRunHostsTableTableManager(
+      $_db,
+      $_db.runbookRunHosts,
+    ).filter((f) => f.runId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _runbookRunHostsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$RunbookRunsTableFilterComposer
+    extends Composer<_$AppDatabase, $RunbookRunsTable> {
+  $$RunbookRunsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get runbookId => $composableBuilder(
+    column: $table.runbookId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get strategy => $composableBuilder(
+    column: $table.strategy,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get startedAt => $composableBuilder(
+    column: $table.startedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get finishedAt => $composableBuilder(
+    column: $table.finishedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get variableValues => $composableBuilder(
+    column: $table.variableValues,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$WorkspacesTableFilterComposer get workspaceId {
+    final $$WorkspacesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.workspaceId,
+      referencedTable: $db.workspaces,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WorkspacesTableFilterComposer(
+            $db: $db,
+            $table: $db.workspaces,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> runbookRunHostsRefs(
+    Expression<bool> Function($$RunbookRunHostsTableFilterComposer f) f,
+  ) {
+    final $$RunbookRunHostsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.runbookRunHosts,
+      getReferencedColumn: (t) => t.runId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$RunbookRunHostsTableFilterComposer(
+            $db: $db,
+            $table: $db.runbookRunHosts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$RunbookRunsTableOrderingComposer
+    extends Composer<_$AppDatabase, $RunbookRunsTable> {
+  $$RunbookRunsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get runbookId => $composableBuilder(
+    column: $table.runbookId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get strategy => $composableBuilder(
+    column: $table.strategy,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get startedAt => $composableBuilder(
+    column: $table.startedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get finishedAt => $composableBuilder(
+    column: $table.finishedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get variableValues => $composableBuilder(
+    column: $table.variableValues,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$WorkspacesTableOrderingComposer get workspaceId {
+    final $$WorkspacesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.workspaceId,
+      referencedTable: $db.workspaces,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WorkspacesTableOrderingComposer(
+            $db: $db,
+            $table: $db.workspaces,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$RunbookRunsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $RunbookRunsTable> {
+  $$RunbookRunsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get runbookId =>
+      $composableBuilder(column: $table.runbookId, builder: (column) => column);
+
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<String> get title =>
+      $composableBuilder(column: $table.title, builder: (column) => column);
+
+  GeneratedColumn<String> get strategy =>
+      $composableBuilder(column: $table.strategy, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get startedAt =>
+      $composableBuilder(column: $table.startedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get finishedAt => $composableBuilder(
+    column: $table.finishedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<String> get variableValues => $composableBuilder(
+    column: $table.variableValues,
+    builder: (column) => column,
+  );
+
+  $$WorkspacesTableAnnotationComposer get workspaceId {
+    final $$WorkspacesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.workspaceId,
+      referencedTable: $db.workspaces,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WorkspacesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.workspaces,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> runbookRunHostsRefs<T extends Object>(
+    Expression<T> Function($$RunbookRunHostsTableAnnotationComposer a) f,
+  ) {
+    final $$RunbookRunHostsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.runbookRunHosts,
+      getReferencedColumn: (t) => t.runId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$RunbookRunHostsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.runbookRunHosts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$RunbookRunsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $RunbookRunsTable,
+          RunbookRun,
+          $$RunbookRunsTableFilterComposer,
+          $$RunbookRunsTableOrderingComposer,
+          $$RunbookRunsTableAnnotationComposer,
+          $$RunbookRunsTableCreateCompanionBuilder,
+          $$RunbookRunsTableUpdateCompanionBuilder,
+          (RunbookRun, $$RunbookRunsTableReferences),
+          RunbookRun,
+          PrefetchHooks Function({bool workspaceId, bool runbookRunHostsRefs})
+        > {
+  $$RunbookRunsTableTableManager(_$AppDatabase db, $RunbookRunsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$RunbookRunsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$RunbookRunsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$RunbookRunsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> workspaceId = const Value.absent(),
+                Value<String?> runbookId = const Value.absent(),
+                Value<String> kind = const Value.absent(),
+                Value<String> title = const Value.absent(),
+                Value<String> strategy = const Value.absent(),
+                Value<DateTime> startedAt = const Value.absent(),
+                Value<DateTime> finishedAt = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<String> variableValues = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => RunbookRunsCompanion(
+                id: id,
+                workspaceId: workspaceId,
+                runbookId: runbookId,
+                kind: kind,
+                title: title,
+                strategy: strategy,
+                startedAt: startedAt,
+                finishedAt: finishedAt,
+                status: status,
+                variableValues: variableValues,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String workspaceId,
+                Value<String?> runbookId = const Value.absent(),
+                required String kind,
+                required String title,
+                required String strategy,
+                required DateTime startedAt,
+                required DateTime finishedAt,
+                required String status,
+                Value<String> variableValues = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => RunbookRunsCompanion.insert(
+                id: id,
+                workspaceId: workspaceId,
+                runbookId: runbookId,
+                kind: kind,
+                title: title,
+                strategy: strategy,
+                startedAt: startedAt,
+                finishedAt: finishedAt,
+                status: status,
+                variableValues: variableValues,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$RunbookRunsTable, RunbookRun>(table),
+                  $$RunbookRunsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({workspaceId = false, runbookRunHostsRefs = false}) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (runbookRunHostsRefs) db.runbookRunHosts,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (workspaceId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.workspaceId,
+                                    referencedTable:
+                                        $$RunbookRunsTableReferences
+                                            ._workspaceIdTable(db),
+                                    referencedColumn:
+                                        $$RunbookRunsTableReferences
+                                            ._workspaceIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (runbookRunHostsRefs)
+                        await $_getPrefetchedData<
+                          RunbookRun,
+                          $RunbookRunsTable,
+                          RunbookRunHost
+                        >(
+                          currentTable: table,
+                          referencedTable: $$RunbookRunsTableReferences
+                              ._runbookRunHostsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$RunbookRunsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).runbookRunHostsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.runId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$RunbookRunsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $RunbookRunsTable,
+      RunbookRun,
+      $$RunbookRunsTableFilterComposer,
+      $$RunbookRunsTableOrderingComposer,
+      $$RunbookRunsTableAnnotationComposer,
+      $$RunbookRunsTableCreateCompanionBuilder,
+      $$RunbookRunsTableUpdateCompanionBuilder,
+      (RunbookRun, $$RunbookRunsTableReferences),
+      RunbookRun,
+      PrefetchHooks Function({bool workspaceId, bool runbookRunHostsRefs})
+    >;
+typedef $$RunbookRunHostsTableCreateCompanionBuilder =
+    RunbookRunHostsCompanion Function({
+      required String id,
+      required String runId,
+      required int position,
+      required String hostId,
+      required String hostLabel,
+      required String status,
+      Value<String?> error,
+      Value<int> rowid,
+    });
+typedef $$RunbookRunHostsTableUpdateCompanionBuilder =
+    RunbookRunHostsCompanion Function({
+      Value<String> id,
+      Value<String> runId,
+      Value<int> position,
+      Value<String> hostId,
+      Value<String> hostLabel,
+      Value<String> status,
+      Value<String?> error,
+      Value<int> rowid,
+    });
+
+final class $$RunbookRunHostsTableReferences
+    extends
+        BaseReferences<_$AppDatabase, $RunbookRunHostsTable, RunbookRunHost> {
+  $$RunbookRunHostsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $RunbookRunsTable _runIdTable(_$AppDatabase db) =>
+      db.runbookRuns.createAlias('runbook_run_hosts__run_id__runbook_runs__id');
+
+  $$RunbookRunsTableProcessedTableManager get runId {
+    final $_column = $_itemColumn<String>('run_id')!;
+
+    final manager = $$RunbookRunsTableTableManager(
+      $_db,
+      $_db.runbookRuns,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_runIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<$RunbookRunStepsTable, List<RunbookRunStep>>
+  _runbookRunStepsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.runbookRunSteps,
+    aliasName: 'runbook_run_hosts__id__runbook_run_steps__run_host_id',
+  );
+
+  $$RunbookRunStepsTableProcessedTableManager get runbookRunStepsRefs {
+    final manager = $$RunbookRunStepsTableTableManager(
+      $_db,
+      $_db.runbookRunSteps,
+    ).filter((f) => f.runHostId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _runbookRunStepsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$RunbookRunHostsTableFilterComposer
+    extends Composer<_$AppDatabase, $RunbookRunHostsTable> {
+  $$RunbookRunHostsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get position => $composableBuilder(
+    column: $table.position,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get hostId => $composableBuilder(
+    column: $table.hostId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get hostLabel => $composableBuilder(
+    column: $table.hostLabel,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get error => $composableBuilder(
+    column: $table.error,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$RunbookRunsTableFilterComposer get runId {
+    final $$RunbookRunsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.runId,
+      referencedTable: $db.runbookRuns,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$RunbookRunsTableFilterComposer(
+            $db: $db,
+            $table: $db.runbookRuns,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> runbookRunStepsRefs(
+    Expression<bool> Function($$RunbookRunStepsTableFilterComposer f) f,
+  ) {
+    final $$RunbookRunStepsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.runbookRunSteps,
+      getReferencedColumn: (t) => t.runHostId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$RunbookRunStepsTableFilterComposer(
+            $db: $db,
+            $table: $db.runbookRunSteps,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$RunbookRunHostsTableOrderingComposer
+    extends Composer<_$AppDatabase, $RunbookRunHostsTable> {
+  $$RunbookRunHostsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get position => $composableBuilder(
+    column: $table.position,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get hostId => $composableBuilder(
+    column: $table.hostId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get hostLabel => $composableBuilder(
+    column: $table.hostLabel,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get error => $composableBuilder(
+    column: $table.error,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$RunbookRunsTableOrderingComposer get runId {
+    final $$RunbookRunsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.runId,
+      referencedTable: $db.runbookRuns,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$RunbookRunsTableOrderingComposer(
+            $db: $db,
+            $table: $db.runbookRuns,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$RunbookRunHostsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $RunbookRunHostsTable> {
+  $$RunbookRunHostsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get position =>
+      $composableBuilder(column: $table.position, builder: (column) => column);
+
+  GeneratedColumn<String> get hostId =>
+      $composableBuilder(column: $table.hostId, builder: (column) => column);
+
+  GeneratedColumn<String> get hostLabel =>
+      $composableBuilder(column: $table.hostLabel, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<String> get error =>
+      $composableBuilder(column: $table.error, builder: (column) => column);
+
+  $$RunbookRunsTableAnnotationComposer get runId {
+    final $$RunbookRunsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.runId,
+      referencedTable: $db.runbookRuns,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$RunbookRunsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.runbookRuns,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> runbookRunStepsRefs<T extends Object>(
+    Expression<T> Function($$RunbookRunStepsTableAnnotationComposer a) f,
+  ) {
+    final $$RunbookRunStepsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.runbookRunSteps,
+      getReferencedColumn: (t) => t.runHostId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$RunbookRunStepsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.runbookRunSteps,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$RunbookRunHostsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $RunbookRunHostsTable,
+          RunbookRunHost,
+          $$RunbookRunHostsTableFilterComposer,
+          $$RunbookRunHostsTableOrderingComposer,
+          $$RunbookRunHostsTableAnnotationComposer,
+          $$RunbookRunHostsTableCreateCompanionBuilder,
+          $$RunbookRunHostsTableUpdateCompanionBuilder,
+          (RunbookRunHost, $$RunbookRunHostsTableReferences),
+          RunbookRunHost,
+          PrefetchHooks Function({bool runId, bool runbookRunStepsRefs})
+        > {
+  $$RunbookRunHostsTableTableManager(
+    _$AppDatabase db,
+    $RunbookRunHostsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$RunbookRunHostsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$RunbookRunHostsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$RunbookRunHostsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> runId = const Value.absent(),
+                Value<int> position = const Value.absent(),
+                Value<String> hostId = const Value.absent(),
+                Value<String> hostLabel = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<String?> error = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => RunbookRunHostsCompanion(
+                id: id,
+                runId: runId,
+                position: position,
+                hostId: hostId,
+                hostLabel: hostLabel,
+                status: status,
+                error: error,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String runId,
+                required int position,
+                required String hostId,
+                required String hostLabel,
+                required String status,
+                Value<String?> error = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => RunbookRunHostsCompanion.insert(
+                id: id,
+                runId: runId,
+                position: position,
+                hostId: hostId,
+                hostLabel: hostLabel,
+                status: status,
+                error: error,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$RunbookRunHostsTable, RunbookRunHost>(table),
+                  $$RunbookRunHostsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({runId = false, runbookRunStepsRefs = false}) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (runbookRunStepsRefs) db.runbookRunSteps,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (runId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.runId,
+                                    referencedTable:
+                                        $$RunbookRunHostsTableReferences
+                                            ._runIdTable(db),
+                                    referencedColumn:
+                                        $$RunbookRunHostsTableReferences
+                                            ._runIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (runbookRunStepsRefs)
+                        await $_getPrefetchedData<
+                          RunbookRunHost,
+                          $RunbookRunHostsTable,
+                          RunbookRunStep
+                        >(
+                          currentTable: table,
+                          referencedTable: $$RunbookRunHostsTableReferences
+                              ._runbookRunStepsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$RunbookRunHostsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).runbookRunStepsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.runHostId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$RunbookRunHostsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $RunbookRunHostsTable,
+      RunbookRunHost,
+      $$RunbookRunHostsTableFilterComposer,
+      $$RunbookRunHostsTableOrderingComposer,
+      $$RunbookRunHostsTableAnnotationComposer,
+      $$RunbookRunHostsTableCreateCompanionBuilder,
+      $$RunbookRunHostsTableUpdateCompanionBuilder,
+      (RunbookRunHost, $$RunbookRunHostsTableReferences),
+      RunbookRunHost,
+      PrefetchHooks Function({bool runId, bool runbookRunStepsRefs})
+    >;
+typedef $$RunbookRunStepsTableCreateCompanionBuilder =
+    RunbookRunStepsCompanion Function({
+      required String id,
+      required String runHostId,
+      required String stepId,
+      required int stepOrder,
+      required String command,
+      required String status,
+      Value<int?> exitCode,
+      Value<int> attempts,
+      Value<String> output,
+      Value<bool> outputTruncated,
+      Value<String?> error,
+      Value<int?> durationMs,
+      Value<int> rowid,
+    });
+typedef $$RunbookRunStepsTableUpdateCompanionBuilder =
+    RunbookRunStepsCompanion Function({
+      Value<String> id,
+      Value<String> runHostId,
+      Value<String> stepId,
+      Value<int> stepOrder,
+      Value<String> command,
+      Value<String> status,
+      Value<int?> exitCode,
+      Value<int> attempts,
+      Value<String> output,
+      Value<bool> outputTruncated,
+      Value<String?> error,
+      Value<int?> durationMs,
+      Value<int> rowid,
+    });
+
+final class $$RunbookRunStepsTableReferences
+    extends
+        BaseReferences<_$AppDatabase, $RunbookRunStepsTable, RunbookRunStep> {
+  $$RunbookRunStepsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $RunbookRunHostsTable _runHostIdTable(_$AppDatabase db) => db
+      .runbookRunHosts
+      .createAlias('runbook_run_steps__run_host_id__runbook_run_hosts__id');
+
+  $$RunbookRunHostsTableProcessedTableManager get runHostId {
+    final $_column = $_itemColumn<String>('run_host_id')!;
+
+    final manager = $$RunbookRunHostsTableTableManager(
+      $_db,
+      $_db.runbookRunHosts,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_runHostIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$RunbookRunStepsTableFilterComposer
+    extends Composer<_$AppDatabase, $RunbookRunStepsTable> {
+  $$RunbookRunStepsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get stepId => $composableBuilder(
+    column: $table.stepId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get stepOrder => $composableBuilder(
+    column: $table.stepOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get command => $composableBuilder(
+    column: $table.command,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get exitCode => $composableBuilder(
+    column: $table.exitCode,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get attempts => $composableBuilder(
+    column: $table.attempts,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get output => $composableBuilder(
+    column: $table.output,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get outputTruncated => $composableBuilder(
+    column: $table.outputTruncated,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get error => $composableBuilder(
+    column: $table.error,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get durationMs => $composableBuilder(
+    column: $table.durationMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$RunbookRunHostsTableFilterComposer get runHostId {
+    final $$RunbookRunHostsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.runHostId,
+      referencedTable: $db.runbookRunHosts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$RunbookRunHostsTableFilterComposer(
+            $db: $db,
+            $table: $db.runbookRunHosts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$RunbookRunStepsTableOrderingComposer
+    extends Composer<_$AppDatabase, $RunbookRunStepsTable> {
+  $$RunbookRunStepsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get stepId => $composableBuilder(
+    column: $table.stepId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get stepOrder => $composableBuilder(
+    column: $table.stepOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get command => $composableBuilder(
+    column: $table.command,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get exitCode => $composableBuilder(
+    column: $table.exitCode,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get attempts => $composableBuilder(
+    column: $table.attempts,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get output => $composableBuilder(
+    column: $table.output,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get outputTruncated => $composableBuilder(
+    column: $table.outputTruncated,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get error => $composableBuilder(
+    column: $table.error,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get durationMs => $composableBuilder(
+    column: $table.durationMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$RunbookRunHostsTableOrderingComposer get runHostId {
+    final $$RunbookRunHostsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.runHostId,
+      referencedTable: $db.runbookRunHosts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$RunbookRunHostsTableOrderingComposer(
+            $db: $db,
+            $table: $db.runbookRunHosts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$RunbookRunStepsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $RunbookRunStepsTable> {
+  $$RunbookRunStepsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get stepId =>
+      $composableBuilder(column: $table.stepId, builder: (column) => column);
+
+  GeneratedColumn<int> get stepOrder =>
+      $composableBuilder(column: $table.stepOrder, builder: (column) => column);
+
+  GeneratedColumn<String> get command =>
+      $composableBuilder(column: $table.command, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<int> get exitCode =>
+      $composableBuilder(column: $table.exitCode, builder: (column) => column);
+
+  GeneratedColumn<int> get attempts =>
+      $composableBuilder(column: $table.attempts, builder: (column) => column);
+
+  GeneratedColumn<String> get output =>
+      $composableBuilder(column: $table.output, builder: (column) => column);
+
+  GeneratedColumn<bool> get outputTruncated => $composableBuilder(
+    column: $table.outputTruncated,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get error =>
+      $composableBuilder(column: $table.error, builder: (column) => column);
+
+  GeneratedColumn<int> get durationMs => $composableBuilder(
+    column: $table.durationMs,
+    builder: (column) => column,
+  );
+
+  $$RunbookRunHostsTableAnnotationComposer get runHostId {
+    final $$RunbookRunHostsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.runHostId,
+      referencedTable: $db.runbookRunHosts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$RunbookRunHostsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.runbookRunHosts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$RunbookRunStepsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $RunbookRunStepsTable,
+          RunbookRunStep,
+          $$RunbookRunStepsTableFilterComposer,
+          $$RunbookRunStepsTableOrderingComposer,
+          $$RunbookRunStepsTableAnnotationComposer,
+          $$RunbookRunStepsTableCreateCompanionBuilder,
+          $$RunbookRunStepsTableUpdateCompanionBuilder,
+          (RunbookRunStep, $$RunbookRunStepsTableReferences),
+          RunbookRunStep,
+          PrefetchHooks Function({bool runHostId})
+        > {
+  $$RunbookRunStepsTableTableManager(
+    _$AppDatabase db,
+    $RunbookRunStepsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$RunbookRunStepsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$RunbookRunStepsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$RunbookRunStepsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> runHostId = const Value.absent(),
+                Value<String> stepId = const Value.absent(),
+                Value<int> stepOrder = const Value.absent(),
+                Value<String> command = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<int?> exitCode = const Value.absent(),
+                Value<int> attempts = const Value.absent(),
+                Value<String> output = const Value.absent(),
+                Value<bool> outputTruncated = const Value.absent(),
+                Value<String?> error = const Value.absent(),
+                Value<int?> durationMs = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => RunbookRunStepsCompanion(
+                id: id,
+                runHostId: runHostId,
+                stepId: stepId,
+                stepOrder: stepOrder,
+                command: command,
+                status: status,
+                exitCode: exitCode,
+                attempts: attempts,
+                output: output,
+                outputTruncated: outputTruncated,
+                error: error,
+                durationMs: durationMs,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String runHostId,
+                required String stepId,
+                required int stepOrder,
+                required String command,
+                required String status,
+                Value<int?> exitCode = const Value.absent(),
+                Value<int> attempts = const Value.absent(),
+                Value<String> output = const Value.absent(),
+                Value<bool> outputTruncated = const Value.absent(),
+                Value<String?> error = const Value.absent(),
+                Value<int?> durationMs = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => RunbookRunStepsCompanion.insert(
+                id: id,
+                runHostId: runHostId,
+                stepId: stepId,
+                stepOrder: stepOrder,
+                command: command,
+                status: status,
+                exitCode: exitCode,
+                attempts: attempts,
+                output: output,
+                outputTruncated: outputTruncated,
+                error: error,
+                durationMs: durationMs,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$RunbookRunStepsTable, RunbookRunStep>(table),
+                  $$RunbookRunStepsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({runHostId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (runHostId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.runHostId,
+                                referencedTable:
+                                    $$RunbookRunStepsTableReferences
+                                        ._runHostIdTable(db),
+                                referencedColumn:
+                                    $$RunbookRunStepsTableReferences
+                                        ._runHostIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$RunbookRunStepsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $RunbookRunStepsTable,
+      RunbookRunStep,
+      $$RunbookRunStepsTableFilterComposer,
+      $$RunbookRunStepsTableOrderingComposer,
+      $$RunbookRunStepsTableAnnotationComposer,
+      $$RunbookRunStepsTableCreateCompanionBuilder,
+      $$RunbookRunStepsTableUpdateCompanionBuilder,
+      (RunbookRunStep, $$RunbookRunStepsTableReferences),
+      RunbookRunStep,
+      PrefetchHooks Function({bool runHostId})
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -22869,4 +26442,10 @@ class $AppDatabaseManager {
       $$SyncEntityVersionsTableTableManager(_db, _db.syncEntityVersions);
   $$VaultEnvVarsTableTableManager get vaultEnvVars =>
       $$VaultEnvVarsTableTableManager(_db, _db.vaultEnvVars);
+  $$RunbookRunsTableTableManager get runbookRuns =>
+      $$RunbookRunsTableTableManager(_db, _db.runbookRuns);
+  $$RunbookRunHostsTableTableManager get runbookRunHosts =>
+      $$RunbookRunHostsTableTableManager(_db, _db.runbookRunHosts);
+  $$RunbookRunStepsTableTableManager get runbookRunSteps =>
+      $$RunbookRunStepsTableTableManager(_db, _db.runbookRunSteps);
 }

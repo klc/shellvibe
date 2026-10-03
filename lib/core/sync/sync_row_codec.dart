@@ -150,6 +150,7 @@ final class SyncRowCodec {
     'title': r.title,
     'description': r.description,
     'createdAt': r.createdAt.toIso8601String(),
+    'defaultHostIds': r.defaultHostIds,
   };
 
   static Map<String, dynamic> runbookStep(RunbookStep rs) => {
@@ -160,6 +161,8 @@ final class SyncRowCodec {
     'expectedExitCode': rs.expectedExitCode,
     'expectedOutputPattern': rs.expectedOutputPattern,
     'timeoutSeconds': rs.timeoutSeconds,
+    'onFailure': rs.onFailure,
+    'retries': rs.retries,
   };
 
   static Map<String, dynamic> template(Template t) => {

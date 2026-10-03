@@ -32,6 +32,17 @@ class RunbooksDao extends DatabaseAccessor<AppDatabase>
     write: () => into(runbooks).insert(runbook),
   );
 
+  /// Writes only `default_host_ids`, as a normal synced runbook change.
+  Future<void> setDefaultHostIds(String id, String? encoded) async {
+    await db.recordUpsert(
+      entityType: 'runbooks',
+      entityId: id,
+      write: () => (update(runbooks)..where((t) => t.id.equals(id))).write(
+        RunbooksCompanion(defaultHostIds: Value(encoded)),
+      ),
+    );
+  }
+
   Future<bool> updateRunbook(RunbooksCompanion runbook) => db.recordUpsert(
     entityType: 'runbooks',
     entityId: runbook.id.value,

@@ -179,6 +179,11 @@ class Runbooks extends Table {
   TextColumn get description => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
 
+  /// JSON array of host ids the run-target sheet preselects. Null when the
+  /// runbook has no default. Ids of hosts deleted since are tolerated by the
+  /// reader, not cleaned up here.
+  TextColumn get defaultHostIds => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -193,6 +198,84 @@ class RunbookSteps extends Table {
   IntColumn get expectedExitCode => integer().withDefault(const Constant(0))();
   TextColumn get expectedOutputPattern => text().nullable()();
   IntColumn get timeoutSeconds => integer().withDefault(const Constant(30))();
+
+  /// `stop` (the run ends here on this host) or `continue`.
+  TextColumn get onFailure => text().withDefault(const Constant('stop'))();
+
+  /// Extra attempts after the first failure, 0-5.
+  IntColumn get retries => integer().withDefault(const Constant(0))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// Local run history. NEVER synced or backed up: it carries command output,
+/// which can hold secrets, and the database file is not encrypted. It is
+/// deliberately absent from `SyncRowCodec.syncableTypes`, the sync journal's
+/// cascade map and every backup payload; a test pins that.
+class RunbookRuns extends Table {
+  TextColumn get id => text()();
+  TextColumn get workspaceId =>
+      text().references(Workspaces, #id, onDelete: KeyAction.cascade)();
+
+  /// Null for a snippet run, and survives the runbook being deleted: history
+  /// is a snapshot, not a view of the live runbook.
+  TextColumn get runbookId => text().nullable()();
+
+  /// `runbook` or `snippet`.
+  TextColumn get kind => text()();
+  TextColumn get title => text()();
+
+  /// `parallel:<n>` or `rolling`.
+  TextColumn get strategy => text()();
+  DateTimeColumn get startedAt => dateTime()();
+  DateTimeColumn get finishedAt => dateTime()();
+
+  /// `succeeded`, `failed` or `cancelled`.
+  TextColumn get status => text()();
+
+  /// JSON object of the `${INPUT:...}` values used.
+  TextColumn get variableValues => text().withDefault(const Constant('{}'))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class RunbookRunHosts extends Table {
+  TextColumn get id => text()();
+  TextColumn get runId =>
+      text().references(RunbookRuns, #id, onDelete: KeyAction.cascade)();
+  IntColumn get position => integer()();
+
+  /// Plain text, no foreign key: the host may be deleted later.
+  TextColumn get hostId => text()();
+  TextColumn get hostLabel => text()();
+  TextColumn get status => text()();
+  TextColumn get error => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class RunbookRunSteps extends Table {
+  TextColumn get id => text()();
+  TextColumn get runHostId =>
+      text().references(RunbookRunHosts, #id, onDelete: KeyAction.cascade)();
+  TextColumn get stepId => text()();
+  IntColumn get stepOrder => integer()();
+
+  /// The command as sent, after `${INPUT:...}` substitution.
+  TextColumn get command => text()();
+  TextColumn get status => text()();
+  IntColumn get exitCode => integer().nullable()();
+  IntColumn get attempts => integer().withDefault(const Constant(1))();
+
+  /// At most the last 16 KiB of output.
+  TextColumn get output => text().withDefault(const Constant(''))();
+  BoolColumn get outputTruncated =>
+      boolean().withDefault(const Constant(false))();
+  TextColumn get error => text().nullable()();
+  IntColumn get durationMs => integer().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};

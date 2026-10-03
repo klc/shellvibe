@@ -738,6 +738,7 @@ class E2EECloudSyncService {
                   title: item['title'] as String,
                   description: Value(item['description'] as String?),
                   createdAt: DateTime.parse(item['createdAt'] as String),
+                  defaultHostIds: Value(item['defaultHostIds'] as String?),
                 ),
               );
         }
@@ -766,6 +767,8 @@ class E2EECloudSyncService {
                     item['expectedOutputPattern'] as String?,
                   ),
                   timeoutSeconds: Value(item['timeoutSeconds'] as int? ?? 30),
+                  onFailure: Value(item['onFailure'] as String? ?? 'stop'),
+                  retries: Value(item['retries'] as int? ?? 0),
                 ),
               );
         }

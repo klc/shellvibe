@@ -9,6 +9,10 @@ class RunbookModel {
   final List<RunbookStepModel> steps;
   final DateTime createdAt;
 
+  /// Hosts the run-target sheet preselects. May name hosts that no longer
+  /// exist; readers drop those.
+  final List<String> defaultHostIds;
+
   const RunbookModel({
     required this.id,
     required this.workspaceId,
@@ -16,6 +20,7 @@ class RunbookModel {
     this.description,
     this.steps = const [],
     required this.createdAt,
+    this.defaultHostIds = const [],
   });
 
   RunbookModel copyWith({
@@ -25,6 +30,7 @@ class RunbookModel {
     String? description,
     List<RunbookStepModel>? steps,
     DateTime? createdAt,
+    List<String>? defaultHostIds,
   }) {
     return RunbookModel(
       id: id ?? this.id,
@@ -33,27 +39,35 @@ class RunbookModel {
       description: description ?? this.description,
       steps: steps ?? this.steps,
       createdAt: createdAt ?? this.createdAt,
+      defaultHostIds: defaultHostIds ?? this.defaultHostIds,
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'workspaceId': workspaceId,
-        'title': title,
-        'description': description,
-        'steps': steps.map((s) => s.toJson()).toList(),
-        'createdAt': createdAt.toIso8601String(),
-      };
+    'id': id,
+    'workspaceId': workspaceId,
+    'title': title,
+    'description': description,
+    'steps': steps.map((s) => s.toJson()).toList(),
+    'createdAt': createdAt.toIso8601String(),
+    'defaultHostIds': defaultHostIds,
+  };
 
   factory RunbookModel.fromJson(Map<String, dynamic> json) => RunbookModel(
-        id: json['id'] as String,
-        workspaceId: json['workspaceId'] as String,
-        title: json['title'] as String,
-        description: json['description'] as String?,
-        steps: (json['steps'] as List<dynamic>?)
-                ?.map((e) => RunbookStepModel.fromJson(e as Map<String, dynamic>))
-                .toList() ??
-            const [],
-        createdAt: DateTime.parse(json['createdAt'] as String),
-      );
+    id: json['id'] as String,
+    workspaceId: json['workspaceId'] as String,
+    title: json['title'] as String,
+    description: json['description'] as String?,
+    steps:
+        (json['steps'] as List<dynamic>?)
+            ?.map((e) => RunbookStepModel.fromJson(e as Map<String, dynamic>))
+            .toList() ??
+        const [],
+    createdAt: DateTime.parse(json['createdAt'] as String),
+    defaultHostIds:
+        (json['defaultHostIds'] as List<dynamic>?)
+            ?.whereType<String>()
+            .toList() ??
+        const [],
+  );
 }

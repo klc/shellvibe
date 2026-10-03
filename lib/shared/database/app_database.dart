@@ -13,6 +13,7 @@ import 'daos/identities_dao.dart';
 import 'daos/known_hosts_dao.dart';
 import 'daos/mcp_dao.dart';
 import 'daos/paired_devices_dao.dart';
+import 'daos/run_history_dao.dart';
 import 'daos/runbooks_dao.dart';
 import 'daos/snippets_dao.dart';
 import 'daos/templates_dao.dart';
@@ -48,6 +49,9 @@ part 'app_database.g.dart';
     SyncState,
     SyncEntityVersions,
     VaultEnvVars,
+    RunbookRuns,
+    RunbookRunHosts,
+    RunbookRunSteps,
   ],
   daos: [
     HostsDao,
@@ -62,6 +66,7 @@ part 'app_database.g.dart';
     McpDao,
     BookmarksDao,
     VaultEnvVarsDao,
+    RunHistoryDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -111,7 +116,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 15;
+  int get schemaVersion => 16;
 
   @override
   MigrationStrategy get migration {
@@ -234,8 +239,32 @@ class AppDatabase extends _$AppDatabase {
             await customStatement('UPDATE hosts SET group_id = NULL');
           }
         }
+        if (from < 16) {
+          // Run history (local only) plus the runbook policy columns, which
+          // sync. The columns are added only where the table exists: a
+          // database old enough to lack `runbooks` gets it, columns included,
+          // from an earlier step's `createTable`, which builds the current
+          // definition.
+          await m.createTable(runbookRuns);
+          await m.createTable(runbookRunHosts);
+          await m.createTable(runbookRunSteps);
+          if (await _needsColumn(runbooks.actualTableName, 'default_host_ids')) {
+            await m.addColumn(runbooks, runbooks.defaultHostIds);
+          }
+          if (await _needsColumn(runbookSteps.actualTableName, 'on_failure')) {
+            await m.addColumn(runbookSteps, runbookSteps.onFailure);
+            await m.addColumn(runbookSteps, runbookSteps.retries);
+          }
+        }
       },
     );
+  }
+
+  /// True when [table] exists but has no [column] yet: the one case where the
+  /// v16 `addColumn` is both possible and needed.
+  Future<bool> _needsColumn(String table, String column) async {
+    final info = await customSelect('PRAGMA table_info("$table")').get();
+    return info.isNotEmpty && !info.any((r) => r.read<String>('name') == column);
   }
 
   /// Rewrites identities stored with the removed `'agent'` auth type to
