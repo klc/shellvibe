@@ -143,6 +143,14 @@ class TerminalTabSession {
   bool isConnected;
   String? errorMessage;
 
+  /// Startup snippet a template pane asks for, taking precedence over the
+  /// host's own. Null means use the host's.
+  String? startupSnippetOverrideId;
+
+  /// Set once the startup snippet has been dealt with for this tab, so that
+  /// reconnecting the same tab never types it again.
+  bool startupSnippetHandled = false;
+
   /// Set when a live session ended by itself. `remoteExit` is a normal
   /// shell exit and must not be reported as an error; `connectionLost` is a
   /// dropped transport. Null while connecting or connected, and for a session

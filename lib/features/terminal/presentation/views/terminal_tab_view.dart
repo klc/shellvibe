@@ -88,6 +88,15 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
     final tabsState = ref.watch(terminalTabsProvider);
     final activeRootTab = _resolveRootTab(tabsState);
 
+    // Notices the notifier cannot toast itself (a startup snippet that needs
+    // input).
+    ref.listen(terminalNoticeProvider, (_, notice) {
+      if (notice == null) return;
+      ShadToaster.maybeOf(
+        context,
+      )?.show(ShadToast(description: Text(notice.message)));
+    });
+
     return Focus(
       focusNode: _focusNode,
       autofocus: true,

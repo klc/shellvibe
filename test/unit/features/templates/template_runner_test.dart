@@ -13,6 +13,9 @@ import 'package:shellvibe/features/vault/domain/models/identity_model.dart';
 /// each pane it "creates" — the notifier contract the runner relies on.
 class _RecordingTarget implements TemplateRunnerTarget {
   final List<String> calls = [];
+
+  /// The startup snippet each opened or split pane was asked to carry.
+  final Map<String, String?> startupSnippets = {};
   final Set<String> failingHostIds;
   var _counter = 0;
   String? _activeTabId;
@@ -31,7 +34,11 @@ class _RecordingTarget implements TemplateRunnerTarget {
   String? get activeTabId => _activeTabId;
 
   @override
-  Future<void> openTabForHost(HostModel host, {IdentityModel? identity}) async {
+  Future<void> openTabForHost(
+    HostModel host, {
+    IdentityModel? identity,
+    String? startupSnippetId,
+  }) async {
     if (failingHostIds.contains(host.id)) {
       // Mirrors a connect that never produces a pane.
       _activeTabId = null;
@@ -39,6 +46,7 @@ class _RecordingTarget implements TemplateRunnerTarget {
       return;
     }
     _created('openTabForHost(${host.id})');
+    startupSnippets[_activeTabId!] = startupSnippetId;
     await connectionGate?.future;
   }
 
@@ -51,9 +59,11 @@ class _RecordingTarget implements TemplateRunnerTarget {
     required Axis direction,
     HostModel? host,
     IdentityModel? identity,
+    String? startupSnippetId,
   }) async {
     final axis = direction == Axis.horizontal ? 'h' : 'v';
     _created('splitTab($parentTabId, $axis, host=${host?.id})');
+    startupSnippets[_activeTabId!] = startupSnippetId;
     await connectionGate?.future;
   }
 
@@ -83,6 +93,7 @@ TemplatePaneModel _pane({
   TerminalSessionType sessionType = TerminalSessionType.local,
   String? hostId,
   String? title,
+  String? startupSnippetId,
 }) {
   return TemplatePaneModel(
     id: id,
@@ -94,6 +105,7 @@ TemplatePaneModel _pane({
     sessionType: sessionType,
     hostId: hostId,
     title: title,
+    startupSnippetId: startupSnippetId,
   );
 }
 
@@ -119,6 +131,35 @@ void main() {
   const runner = TemplateRunner();
 
   group('TemplateRunner', () {
+    test('hands each pane its own startup snippet to open with', () async {
+      final target = _RecordingTarget();
+      await runner.run(
+        _template([
+          _pane(
+            id: 'p0',
+            order: 0,
+            sessionType: TerminalSessionType.ssh,
+            hostId: 'a',
+            startupSnippetId: 'sn',
+          ),
+          _pane(
+            id: 'p1',
+            order: 1,
+            parentPaneId: 'p0',
+            splitDirection: Axis.horizontal,
+            sessionType: TerminalSessionType.ssh,
+            hostId: 'a',
+          ),
+        ]),
+        target: target,
+        hostsById: {'a': _host('a')},
+        resolveIdentity: _resolveOk,
+      );
+      // The root pane carries its override; the split, with none, leaves the
+      // host's own default to apply.
+      expect(target.startupSnippets, {'live_0': 'sn', 'live_1': null});
+    });
+
     test('recreates panes in capture order', () async {
       final target = _RecordingTarget();
 

@@ -20,6 +20,7 @@ import '../../../hosts/domain/models/host_model.dart';
 import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
 import '../../../settings/domain/models/app_settings_model.dart';
 import '../../../settings/presentation/notifiers/settings_notifier.dart';
+import '../../../snippets/presentation/notifiers/snippets_notifier.dart';
 import '../../../device_link/data/repositories/device_link_pairing_repository.dart';
 import '../../../vault/data/repositories/vault_env_repository.dart';
 import '../../../vault/domain/models/identity_model.dart';
@@ -30,6 +31,7 @@ import '../../domain/models/terminal_palette_data.dart';
 import '../../domain/models/terminal_tab_session.dart';
 import '../../domain/services/broadcast_input_router.dart';
 import '../../domain/services/device_link_server_host.dart';
+import '../../domain/services/startup_snippet_sender.dart';
 import '../../domain/services/terminal_pane_layout.dart';
 import '../../domain/services/terminal_session_connector.dart';
 import 'terminal_tabs_state.dart';
@@ -117,6 +119,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       notifyChanged: () => state = state.copyWith(tabs: [...state.tabs]),
       syncBroadcast: _syncBroadcast,
       watchConnectivity: _watchConnectivity,
+      onSessionLive: (tab) => unawaited(_startupSnippets.onSessionLive(tab)),
     );
     _deviceLinkHost = DeviceLinkServerHost(
       pairingRepository: () => ref.read(deviceLinkPairingRepositoryProvider),
@@ -185,10 +188,26 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     }
   }
 
+  /// Types startup snippets into panes as their sessions first come up.
+  late final StartupSnippetSender _startupSnippets = StartupSnippetSender(
+    loadSnippet: (id) async {
+      final all = await ref.read(snippetsRepositoryProvider).getAllSnippets();
+      return all.where((s) => s.id == id).firstOrNull;
+    },
+    send: (tab, code) {
+      // Pasted, then Enter typed: inside a bracketed paste a newline is text.
+      tab.terminal.paste(code);
+      tab.terminal.textInput('\r');
+    },
+    notify: (message) =>
+        ref.read(terminalNoticeProvider.notifier).post(message),
+  );
+
   Future<void> openTabForHost(
     HostModel host, {
     IdentityModel? identity,
     HostKeyPromptCallback? onHostKeyPrompt,
+    String? startupSnippetId,
   }) async {
     final tabId = const Uuid().v4();
     final terminal = Terminal(
@@ -205,7 +224,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       terminal: terminal,
       isConnecting: true,
       hostKeyPromptCallback: onHostKeyPrompt,
-    );
+    )..startupSnippetOverrideId = startupSnippetId;
     _ownedTabs.add(newTab);
 
     final updatedTabs = [...state.tabs, newTab];
@@ -758,6 +777,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     HostModel? host,
     IdentityModel? identity,
     HostKeyPromptCallback? onHostKeyPrompt,
+    String? startupSnippetId,
   }) {
     final parentIndex = state.tabs.indexWhere((t) => t.id == parentTabId);
     if (parentIndex == -1) return null;
@@ -794,7 +814,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       splitDirection: direction,
       isConnecting: isSshSplit,
       hostKeyPromptCallback: onHostKeyPrompt,
-    );
+    )..startupSnippetOverrideId = startupSnippetId;
     _ownedTabs.add(splitTab);
 
     if (isSshSplit) {
@@ -857,5 +877,20 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     state = state.copyWith(tabs: [...state.tabs]);
     // Wire broadcast if this pane is already part of the selection.
     _syncBroadcast();
+  }
+}
+
+/// A one-line notice from the terminal layer for the screen that is showing
+/// it: there is no `BuildContext` down in the notifier to toast from.
+///
+/// The id changes on every post, so the same message twice in a row is still
+/// two events to a listener.
+@Riverpod(keepAlive: true)
+class TerminalNotice extends _$TerminalNotice {
+  @override
+  ({int id, String message})? build() => null;
+
+  void post(String message) {
+    state = (id: (state?.id ?? 0) + 1, message: message);
   }
 }
