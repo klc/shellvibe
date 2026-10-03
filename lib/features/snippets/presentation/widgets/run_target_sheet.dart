@@ -10,6 +10,7 @@ import '../../../hosts/domain/models/host_model.dart';
 import '../../../hosts/presentation/notifiers/host_groups_notifier.dart';
 import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
 import '../../../terminal/presentation/notifiers/terminal_tabs_notifier.dart';
+import '../../domain/models/run_strategy.dart';
 import '../../domain/models/run_target.dart';
 
 /// Asks where a snippet or runbook should run.
@@ -19,25 +20,44 @@ import '../../domain/models/run_target.dart';
 /// offered only for snippets ([allowTerminal]): a runbook needs the exit codes
 /// a background run can read and a typed-in command cannot.
 ///
-/// Resolves to the chosen targets — either one [HostRunTarget] per host, or a
-/// single terminal target — or null when dismissed.
+/// With more than one host selected it also asks how to spread the run:
+/// in parallel (and how many at once), or rolling, one host at a time with a
+/// stop at the first failure.
+///
+/// [defaultHostIds] are preselected (ids with no host are ignored), and
+/// [allowSaveDefault] adds a "Save as default targets" switch.
+///
+/// Resolves to a [RunTargetSelection], or null when dismissed.
 class RunTargetSheet extends ConsumerStatefulWidget {
   final bool allowTerminal;
+  final List<String> defaultHostIds;
+  final bool allowSaveDefault;
 
-  const RunTargetSheet({super.key, this.allowTerminal = false});
+  const RunTargetSheet({
+    super.key,
+    this.allowTerminal = false,
+    this.defaultHostIds = const [],
+    this.allowSaveDefault = false,
+  });
 
-  static Future<List<RunTarget>?> show(
+  static Future<RunTargetSelection?> show(
     BuildContext context, {
     required String subject,
     bool allowTerminal = false,
+    List<String> defaultHostIds = const [],
+    bool allowSaveDefault = false,
   }) {
-    return showAdaptivePanel<List<RunTarget>>(
+    return showAdaptivePanel<RunTargetSelection>(
       context: context,
       title: 'Run "$subject"',
-      desktopHeight: 560,
+      desktopHeight: 620,
       desktopWidth: 520,
       isScrollControlled: true,
-      builder: (ctx) => RunTargetSheet(allowTerminal: allowTerminal),
+      builder: (ctx) => RunTargetSheet(
+        allowTerminal: allowTerminal,
+        defaultHostIds: defaultHostIds,
+        allowSaveDefault: allowSaveDefault,
+      ),
     );
   }
 
@@ -49,6 +69,10 @@ class _RunTargetSheetState extends ConsumerState<RunTargetSheet> {
   final Set<String> _selectedIds = {};
   String _query = '';
   String? _groupId;
+  bool _seeded = false;
+  bool _rolling = false;
+  int _concurrency = RunStrategy.defaultConcurrency;
+  bool _saveDefault = false;
 
   /// Local shells cannot take a background connection yet.
   static bool _selectable(HostModel host) => host.protocol != 'local';
@@ -69,6 +93,72 @@ class _RunTargetSheetState extends ConsumerState<RunTargetSheet> {
     });
   }
 
+  /// Parallel or rolling, and how wide parallel goes. Only shown for more than
+  /// one host: with one there is nothing to spread.
+  Widget _strategyPicker(ShellVibeTokens tokens) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              _GroupChip(
+                chipKey: const Key('run_strategy_parallel'),
+                label: 'Parallel',
+                selected: !_rolling,
+                onTap: () => setState(() => _rolling = false),
+              ),
+              _GroupChip(
+                chipKey: const Key('run_strategy_rolling'),
+                label: 'Rolling',
+                selected: _rolling,
+                onTap: () => setState(() => _rolling = true),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          if (_rolling)
+            Text(
+              'One host at a time, in the order shown. The first failure '
+              'leaves the rest unstarted.',
+              style: TextStyle(color: tokens.textMuted, fontSize: 11),
+            )
+          else
+            Row(
+              children: [
+                Text(
+                  'At once',
+                  style: TextStyle(color: tokens.textMuted, fontSize: 12),
+                ),
+                ShellVibeIconButton(
+                  key: const Key('run_concurrency_dec'),
+                  icon: LucideIcons.minus,
+                  tooltip: 'Fewer at once',
+                  onPressed: _concurrency > 1
+                      ? () => setState(() => _concurrency--)
+                      : null,
+                ),
+                Text(
+                  '$_concurrency',
+                  key: const Key('run_concurrency_value'),
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                ShellVibeIconButton(
+                  key: const Key('run_concurrency_inc'),
+                  icon: LucideIcons.plus,
+                  tooltip: 'More at once',
+                  onPressed: _concurrency < RunStrategy.maxConcurrency
+                      ? () => setState(() => _concurrency++)
+                      : null,
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final tokens = ShellVibeTokens.resolve(context);
@@ -87,6 +177,14 @@ class _RunTargetSheetState extends ConsumerState<RunTargetSheet> {
         child: Text('Hosts could not be loaded: $e'),
       ),
       data: (hosts) {
+        if (!_seeded) {
+          _seeded = true;
+          _selectedIds.addAll([
+            for (final host in hosts)
+              if (_selectable(host) && widget.defaultHostIds.contains(host.id))
+                host.id,
+          ]);
+        }
         final visible = _visible(hosts);
         final selectable = visible.where(_selectable).toList();
         final allSelected =
@@ -110,7 +208,7 @@ class _RunTargetSheetState extends ConsumerState<RunTargetSheet> {
                 ),
                 onTap: () => Navigator.of(
                   context,
-                ).pop(<RunTarget>[const ActivePaneRunTarget()]),
+                ).pop(const RunTargetSelection([ActivePaneRunTarget()])),
               ),
               if (tabs.isBroadcasting)
                 ListTile(
@@ -123,7 +221,7 @@ class _RunTargetSheetState extends ConsumerState<RunTargetSheet> {
                   subtitle: const Text('Broadcasts to every selected pane.'),
                   onTap: () => Navigator.of(
                     context,
-                  ).pop(<RunTarget>[const SelectedPanesRunTarget()]),
+                  ).pop(const RunTargetSelection([SelectedPanesRunTarget()])),
                 ),
               const ShellVibeSectionLabel(label: 'Background on hosts'),
             ],
@@ -210,6 +308,16 @@ class _RunTargetSheetState extends ConsumerState<RunTargetSheet> {
                     ),
             ),
             Divider(height: 1, color: tokens.border),
+            if (count > 1) _strategyPicker(tokens),
+            if (widget.allowSaveDefault)
+              CheckboxListTile(
+                key: const Key('run_target_save_default'),
+                dense: true,
+                controlAffinity: ListTileControlAffinity.leading,
+                value: _saveDefault,
+                onChanged: (on) => setState(() => _saveDefault = on == true),
+                title: const Text('Save as default targets'),
+              ),
             Padding(
               padding: const EdgeInsets.all(12),
               child: ShellVibeButton(
@@ -227,7 +335,16 @@ class _RunTargetSheetState extends ConsumerState<RunTargetSheet> {
                             if (_selectedIds.contains(host.id))
                               HostRunTarget(host),
                         ];
-                        Navigator.of(context).pop(<RunTarget>[...chosen]);
+                        Navigator.of(context).pop(
+                          RunTargetSelection(
+                            chosen,
+                            strategy: _rolling
+                                ? const RunStrategy.rolling()
+                                : RunStrategy.parallel(_concurrency),
+                            saveAsDefault:
+                                widget.allowSaveDefault && _saveDefault,
+                          ),
+                        );
                       },
               ),
             ),

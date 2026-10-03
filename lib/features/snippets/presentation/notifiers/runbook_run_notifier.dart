@@ -1,86 +1,14 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../hosts/domain/models/host_model.dart';
+import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
 import '../../data/run_providers.dart';
+import '../../domain/models/active_run.dart';
+import '../../domain/models/run_strategy.dart';
 import '../../domain/models/runbook_model.dart';
-import '../../domain/services/runbook_executor.dart';
 import '../../domain/services/runbook_run_service.dart';
 
 part 'runbook_run_notifier.g.dart';
-
-/// One host's live state within an [ActiveRun].
-class HostRunState {
-  final HostModel host;
-  final RunHostStatus status;
-
-  /// Connection failure message, when the host never connected.
-  final String? error;
-  final Map<String, RunStepStatus> steps;
-
-  /// Per-step output and exit codes; null until the host has finished.
-  final RunbookExecutionResult? execution;
-
-  const HostRunState({
-    required this.host,
-    this.status = RunHostStatus.queued,
-    this.error,
-    this.steps = const {},
-    this.execution,
-  });
-
-  bool get finished => switch (status) {
-    RunHostStatus.succeeded ||
-    RunHostStatus.failed ||
-    RunHostStatus.cancelled => true,
-    _ => false,
-  };
-
-  HostRunState copyWith({
-    RunHostStatus? status,
-    String? error,
-    Map<String, RunStepStatus>? steps,
-    RunbookExecutionResult? execution,
-  }) => HostRunState(
-    host: host,
-    status: status ?? this.status,
-    error: error ?? this.error,
-    steps: steps ?? this.steps,
-    execution: execution ?? this.execution,
-  );
-}
-
-/// The run on screen: a runbook (or a snippet wrapped as one) across its hosts.
-class ActiveRun {
-  final RunbookModel runbook;
-
-  /// True while any host may still change; false once the run has settled.
-  final bool running;
-
-  /// [RunbookRun.cancel] was requested and the run is winding down.
-  final bool cancelling;
-  final List<HostRunState> hosts;
-
-  const ActiveRun({
-    required this.runbook,
-    required this.running,
-    this.cancelling = false,
-    required this.hosts,
-  });
-
-  int get succeededCount =>
-      hosts.where((h) => h.status == RunHostStatus.succeeded).length;
-
-  ActiveRun copyWith({
-    bool? running,
-    bool? cancelling,
-    List<HostRunState>? hosts,
-  }) => ActiveRun(
-    runbook: runbook,
-    running: running ?? this.running,
-    cancelling: cancelling ?? this.cancelling,
-    hosts: hosts ?? this.hosts,
-  );
-}
 
 /// Holds the run the Automation library is showing, so progress and Stop
 /// outlive the widget that started it.
@@ -91,9 +19,12 @@ class ActiveRun {
 /// What it retains once settled is plain data — every SSH session is closed in
 /// the run service's `finally`, and disposing mid-run (the app container going
 /// away) cancels the run, which closes the ones still open.
+///
+/// A run is written to local history once, when it settles (cancelled runs
+/// included). A run cut off by the app quitting is therefore not recorded.
 @Riverpod(keepAlive: true)
 class RunbookRunNotifier extends _$RunbookRunNotifier {
-  RunbookRun? _run;
+  RunHandle? _run;
 
   @override
   ActiveRun? build() {
@@ -113,35 +44,62 @@ class RunbookRunNotifier extends _$RunbookRunNotifier {
     RunbookModel runbook,
     List<HostModel> hosts, {
     Map<String, String> variableValues = const {},
+    RunStrategy strategy = RunStrategy.defaultParallel,
   }) async {
     if (isRunning) return;
     state = ActiveRun(
       runbook: runbook,
       running: true,
-      hosts: [for (final host in hosts) HostRunState(host: host)],
+      strategy: strategy,
+      variableValues: variableValues,
+      startedAt: DateTime.now(),
+      hosts: [
+        for (final host in hosts)
+          HostRunState(hostId: host.id, label: host.label),
+      ],
     );
 
     final run = ref
         .read(runbookRunServiceProvider)
-        .start(runbook, hosts, variableValues: variableValues, onEvent: _apply);
+        .start(
+          runbook,
+          hosts,
+          variableValues: variableValues,
+          strategy: strategy,
+          onEvent: _apply,
+        );
     _run = run;
     try {
-      final results = await run.result;
+      await run.result;
       if (!ref.mounted) return;
-      final byHost = {for (final r in results) r.host.id: r};
-      state = state?.copyWith(
-        running: false,
-        hosts: [
-          for (final h in state!.hosts)
-            if (byHost[h.host.id] case final r?)
-              h.copyWith(execution: r.execution)
-            else
-              h,
-        ],
-      );
+      state = state?.copyWith(running: false, finishedAt: DateTime.now());
+      await _record();
     } finally {
       _run = null;
     }
+  }
+
+  /// Writes the settled run to history. Best effort: a history failure must
+  /// never turn a finished run into an error.
+  Future<void> _record() async {
+    final settled = state;
+    if (settled == null) return;
+    try {
+      await ref.read(runHistoryRepositoryProvider).save(settled);
+      if (ref.mounted) ref.read(runHistoryRevisionProvider.notifier).bump();
+    } catch (_) {}
+  }
+
+  /// The saved hosts among [ids], in that order. Ids with no host (deleted
+  /// since a stored run, or a default target list) are dropped.
+  ///
+  /// Awaits the host list rather than reading it: nothing is watching
+  /// `hostsProvider` once the target sheet has closed, so it may not be loaded.
+  Future<List<HostModel>> hostsFor(List<String> ids) async {
+    final byId = {
+      for (final host in await ref.read(hostsProvider.future)) host.id: host,
+    };
+    return [for (final id in ids) ?byId[id]];
   }
 
   /// Asks the in-flight run to stop. A no-op when nothing is running.
@@ -166,7 +124,7 @@ class RunbookRunNotifier extends _$RunbookRunNotifier {
     state = current.copyWith(
       hosts: [
         for (final h in current.hosts)
-          if (h.host.id != event.hostId)
+          if (h.hostId != event.hostId)
             h
           else
             switch (event) {
@@ -177,8 +135,21 @@ class RunbookRunNotifier extends _$RunbookRunNotifier {
               StepStatusEvent(:final stepId, :final status) => h.copyWith(
                 steps: {...h.steps, stepId: status},
               ),
+              StepFinishedEvent(:final result) => h.copyWith(
+                results: {...h.results, result.step.id: result},
+              ),
             },
       ],
     );
   }
+}
+
+/// Bumped each time a run is written to history, so history lists and
+/// last-run badges reload.
+@Riverpod(keepAlive: true)
+class RunHistoryRevision extends _$RunHistoryRevision {
+  @override
+  int build() => 0;
+
+  void bump() => state++;
 }

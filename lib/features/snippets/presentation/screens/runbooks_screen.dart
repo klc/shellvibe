@@ -6,11 +6,13 @@ import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/widgets/adaptive_modal.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../../../shared/providers/workspace_provider.dart';
-import '../../domain/models/run_target.dart';
+import '../../data/repositories/run_history_repository.dart';
 import '../../domain/models/runbook_model.dart';
 import '../../domain/models/runbook_step_model.dart';
 import '../../domain/services/runbook_run_service.dart';
 import '../../domain/services/snippet_variable_parser.dart';
+import '../../data/run_providers.dart';
+import '../notifiers/run_history_providers.dart';
 import '../notifiers/runbook_run_notifier.dart';
 import '../notifiers/runbooks_notifier.dart';
 import '../widgets/automation_section_layout.dart';
@@ -75,6 +77,9 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
     final runbooksAsync = ref.watch(runbooksProvider);
     final tokens = ShellVibeTokens.resolve(context);
     final activeRun = ref.watch(runbookRunProvider);
+    final lastRuns =
+        ref.watch(latestRunbookRunsProvider).value ??
+        const <String, RunHistorySummary>{};
     bool isRunning(RunbookModel runbook) =>
         activeRun != null &&
         activeRun.running &&
@@ -160,6 +165,7 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
                       compact: widget.compact,
                       selected: runbook.id == _selectedRunbookId,
                       isExecuting: isRunning(runbook),
+                      lastRun: lastRuns[runbook.id],
                       onSelect: () {
                         setState(() => _selectedRunbookId = runbook.id);
                         // Too narrow for the inline drawer, so the step
@@ -292,15 +298,14 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
       return;
     }
 
-    final targets = await RunTargetSheet.show(
+    final selection = await RunTargetSheet.show(
       context,
       subject: runbook.title,
+      defaultHostIds: runbook.defaultHostIds,
+      allowSaveDefault: true,
     );
-    if (!mounted || targets == null) return;
-    final hosts = [
-      for (final target in targets)
-        if (target is HostRunTarget) target.host,
-    ];
+    if (!mounted || selection == null) return;
+    final hosts = selection.hosts;
     if (hosts.isEmpty) return;
 
     final allVars = <String>{};
@@ -318,11 +323,25 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
       variableValues = inputs;
     }
 
+    // Saved once the run is certain to start, so backing out of the variables
+    // dialog does not rewrite the runbook's defaults.
+    if (selection.saveAsDefault) {
+      await ref.read(runbooksProvider.notifier).setDefaultHostIds(runbook.id, [
+        for (final host in hosts) host.id,
+      ]);
+      if (!mounted) return;
+    }
+
     // Selecting the running runbook keeps its progress on screen.
     setState(() => _selectedRunbookId = runbook.id);
     await ref
         .read(runbookRunProvider.notifier)
-        .start(runbook, hosts, variableValues: variableValues);
+        .start(
+          runbook,
+          hosts,
+          variableValues: variableValues,
+          strategy: selection.strategy,
+        );
     if (!mounted) return;
     await RunResultDialog.show(context);
   }
@@ -374,6 +393,9 @@ class _RunbookRow extends StatelessWidget {
   final bool compact;
   final bool selected;
   final bool isExecuting;
+
+  /// The runbook's most recent stored run, for the last-run badge.
+  final RunHistorySummary? lastRun;
   final VoidCallback onSelect;
   final VoidCallback onRun;
   final VoidCallback onEdit;
@@ -385,6 +407,7 @@ class _RunbookRow extends StatelessWidget {
     required this.compact,
     required this.selected,
     required this.isExecuting,
+    this.lastRun,
     required this.onSelect,
     required this.onRun,
     required this.onEdit,
@@ -397,9 +420,16 @@ class _RunbookRow extends StatelessWidget {
     final mutedStyle = Theme.of(
       context,
     ).textTheme.bodySmall?.copyWith(color: tokens.textMuted, fontSize: 12);
-    final stepLabel = runbook.steps.length == 1
+    final stepCount = runbook.steps.length == 1
         ? '1 step'
         : '${runbook.steps.length} steps';
+    // ✓ / ✗ and a time: the outcome is a glyph, not only a colour.
+    final last = lastRun;
+    final lastText = last == null
+        ? null
+        : '${last.status == 'succeeded' ? '✓' : '✗'} '
+              '${relativeTime(last.finishedAt, DateTime.now())}';
+    final stepLabel = lastText == null ? stepCount : '$stepCount · $lastText';
 
     return Semantics(
       button: true,
@@ -635,8 +665,18 @@ class _RunbookDetailPanel extends ConsumerWidget {
           const SizedBox(height: 8),
           const ShellVibeSectionLabel(label: 'Run', padding: EdgeInsets.zero),
           const SizedBox(height: 6),
-          RunHostsSection(run: run),
+          LiveRunView(run: run),
+          const SizedBox(height: 6),
+          ShellVibeButton.secondary(
+            key: const Key('runbook_open_run'),
+            label: 'Open run view',
+            icon: LucideIcons.layoutGrid,
+            onPressed: () => RunResultDialog.show(context),
+            expand: true,
+          ),
         ],
+        const SizedBox(height: 8),
+        _RunHistorySection(runbook: runbook),
         const SizedBox(height: 14),
         ShellVibeButton.danger(
           key: const Key('runbook_detail_delete'),
@@ -688,11 +728,134 @@ class _RunbookStepTile extends StatelessWidget {
                     label: 'expects ${step.expectedOutputPattern}',
                   ),
                 ],
+                if (step.onFailure == StepFailurePolicy.continueRun ||
+                    step.retries > 0) ...[
+                  const SizedBox(height: 4),
+                  Wrap(
+                    spacing: 4,
+                    runSpacing: 4,
+                    children: [
+                      if (step.onFailure == StepFailurePolicy.continueRun)
+                        const ShellVibeStatusChip(
+                          label: 'continues on failure',
+                        ),
+                      if (step.retries > 0)
+                        ShellVibeStatusChip(
+                          label:
+                              '${step.retries} ${step.retries == 1 ? 'retry' : 'retries'}',
+                        ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
         ],
       ),
     );
+  }
+}
+
+/// The runbook's recent stored runs, with Clear.
+class _RunHistorySection extends ConsumerWidget {
+  final RunbookModel runbook;
+
+  const _RunHistorySection({required this.runbook});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ShellVibeTokens.resolve(context);
+    final history = ref.watch(runbookHistoryProvider(runbook.id)).value;
+    if (history == null || history.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      key: const Key('run_history_section'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const ShellVibeSectionLabel(label: 'History', padding: EdgeInsets.zero),
+        const SizedBox(height: 6),
+        for (final run in history.take(8))
+          InkWell(
+            key: Key('run_history_${run.id}'),
+            onTap: () => RunHistoryDialog.show(context, run),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 5),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    run.status == 'succeeded'
+                        ? LucideIcons.circleCheck
+                        : run.status == 'cancelled'
+                        ? LucideIcons.ban
+                        : LucideIcons.circleX,
+                    size: 14,
+                    color: run.status == 'succeeded'
+                        ? tokens.success
+                        : run.status == 'cancelled'
+                        ? tokens.textMuted
+                        : tokens.danger,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          run.summaryText,
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        Text(
+                          '${relativeTime(run.startedAt, DateTime.now())} · '
+                          '${run.strategy.label}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: tokens.textMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        const SizedBox(height: 4),
+        ShellVibeButton.quiet(
+          key: const Key('run_history_clear'),
+          label: 'Clear run history',
+          icon: LucideIcons.trash2,
+          onPressed: () => _confirmClear(context, ref),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _confirmClear(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => ShadDialog.alert(
+        title: const Text('Clear run history'),
+        description: Text(
+          'Delete every stored run of "${runbook.title}"? The runbook itself '
+          'is not affected.',
+        ),
+        actions: adaptiveDialogActions(dialogContext, [
+          ShellVibeButton.secondary(
+            label: 'Cancel',
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+          ),
+          ShellVibeButton.danger(
+            key: const Key('run_history_clear_confirm'),
+            label: 'Clear',
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+          ),
+        ]),
+        actionsAxis: adaptiveDialogActionsAxis(dialogContext),
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    await ref.read(runHistoryRepositoryProvider).clear(runbookId: runbook.id);
+    ref.read(runHistoryRevisionProvider.notifier).bump();
   }
 }

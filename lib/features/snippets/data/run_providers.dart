@@ -1,8 +1,10 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../../shared/providers/database_providers.dart';
 import '../../mcp/data/mcp_providers.dart';
 import '../domain/services/remote_command_session.dart';
 import '../domain/services/runbook_run_service.dart';
+import 'repositories/run_history_repository.dart';
 import 'services/ssh_remote_command_session_factory.dart';
 
 part 'run_providers.g.dart';
@@ -22,4 +24,10 @@ RunbookRunService runbookRunService(Ref ref) {
   return RunbookRunService(
     sessionFactory: ref.watch(remoteCommandSessionFactoryProvider),
   );
+}
+
+/// Local run history (never synced). Overridable in tests.
+@riverpod
+RunHistoryRepository runHistoryRepository(Ref ref) {
+  return RunHistoryRepository(ref.watch(appDatabaseProvider).runHistoryDao);
 }

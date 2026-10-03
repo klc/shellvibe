@@ -70,4 +70,15 @@ class RunbooksNotifier extends _$RunbooksNotifier {
       );
     });
   }
+
+  /// Saves the hosts the target sheet preselects for [runbookId]. Reloads in
+  /// place, without the loading state the editor's writes pass through: this
+  /// happens as a run starts and must not blank the list under it.
+  Future<void> setDefaultHostIds(String runbookId, List<String> hostIds) async {
+    final repo = ref.read(runbooksRepositoryProvider);
+    await repo.setDefaultHostIds(runbookId, hostIds);
+    state = AsyncData(
+      await repo.getRunbooksByWorkspace(ref.read(activeWorkspaceIdProvider)),
+    );
+  }
 }

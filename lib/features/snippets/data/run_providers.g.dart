@@ -114,3 +114,56 @@ final class RunbookRunServiceProvider
 }
 
 String _$runbookRunServiceHash() => r'9a6949d9c94ab65aa23f6dbb75faf4a28b9a2216';
+
+/// Local run history (never synced). Overridable in tests.
+
+@ProviderFor(runHistoryRepository)
+final runHistoryRepositoryProvider = RunHistoryRepositoryProvider._();
+
+/// Local run history (never synced). Overridable in tests.
+
+final class RunHistoryRepositoryProvider
+    extends
+        $FunctionalProvider<
+          RunHistoryRepository,
+          RunHistoryRepository,
+          RunHistoryRepository
+        >
+    with $Provider<RunHistoryRepository> {
+  /// Local run history (never synced). Overridable in tests.
+  RunHistoryRepositoryProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'runHistoryRepositoryProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$runHistoryRepositoryHash();
+
+  @$internal
+  @override
+  $ProviderElement<RunHistoryRepository> $createElement(
+    $ProviderPointer pointer,
+  ) => $ProviderElement(pointer);
+
+  @override
+  RunHistoryRepository create(Ref ref) {
+    return runHistoryRepository(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(RunHistoryRepository value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<RunHistoryRepository>(value),
+    );
+  }
+}
+
+String _$runHistoryRepositoryHash() =>
+    r'436056291f79575e1ffb92f3435cccf586c09cb8';

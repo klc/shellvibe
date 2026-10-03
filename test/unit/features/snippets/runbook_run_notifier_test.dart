@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/features/hosts/domain/models/host_model.dart';
@@ -9,6 +10,8 @@ import 'package:shellvibe/features/snippets/domain/models/runbook_step_model.dar
 import 'package:shellvibe/features/snippets/domain/services/remote_command_session.dart';
 import 'package:shellvibe/features/snippets/domain/services/runbook_run_service.dart';
 import 'package:shellvibe/features/snippets/presentation/notifiers/runbook_run_notifier.dart';
+import 'package:shellvibe/shared/database/app_database.dart';
+import 'package:shellvibe/shared/providers/database_providers.dart';
 
 /// A session whose command only ends when interrupted.
 class _HangingSession implements RemoteCommandSession {
@@ -111,4 +114,67 @@ void main() {
       expect(factory.sessions.single.closes, greaterThanOrEqualTo(1));
     },
   );
+
+  group('history', () {
+    late AppDatabase db;
+
+    setUp(() async {
+      db = AppDatabase(NativeDatabase.memory());
+      await db.workspacesDao.insertWorkspace(
+        WorkspacesCompanion.insert(
+          id: 'w',
+          name: 'w',
+          createdAt: DateTime(2026),
+        ),
+      );
+    });
+
+    tearDown(() => db.close());
+
+    ProviderContainer withDb(_Factory factory) {
+      final container = ProviderContainer(
+        overrides: [
+          remoteCommandSessionFactoryProvider.overrideWithValue(factory),
+          appDatabaseProvider.overrideWithValue(db),
+        ],
+      );
+      addTearDown(container.dispose);
+      return container;
+    }
+
+    test('a cancelled run is recorded once it settles', () async {
+      final factory = _Factory();
+      final container = withDb(factory);
+      final notifier = container.read(runbookRunProvider.notifier);
+
+      final done = notifier.start(runbook, [host]);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      // Nothing is written while the run is in flight.
+      expect(
+        await container.read(runHistoryRepositoryProvider).forRunbook('rb'),
+        isEmpty,
+      );
+
+      await notifier.cancel();
+      await done.timeout(const Duration(seconds: 2));
+
+      final runs = await container
+          .read(runHistoryRepositoryProvider)
+          .forRunbook('rb');
+      expect(runs, hasLength(1));
+      expect(runs.single.status, 'cancelled');
+    });
+
+    test('a history failure does not fail the run', () async {
+      // No database override: saving throws, the run still completes.
+      final factory = _Factory();
+      final container = containerWith(factory);
+      final notifier = container.read(runbookRunProvider.notifier);
+      final done = notifier.start(runbook, [host]);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      await notifier.cancel();
+      await done.timeout(const Duration(seconds: 2));
+      expect(container.read(runbookRunProvider)!.running, isFalse);
+    });
+  });
 }

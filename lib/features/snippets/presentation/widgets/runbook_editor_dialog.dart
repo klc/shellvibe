@@ -121,6 +121,8 @@ class _RunbookEditorDialogState extends State<RunbookEditorDialog> {
                     : _descriptionController.text.trim(),
                 steps: _steps,
                 createdAt: widget.runbook?.createdAt ?? DateTime.now(),
+                // Not edited here: the target sheet owns the default hosts.
+                defaultHostIds: widget.runbook?.defaultHostIds ?? const [],
               );
               Navigator.of(context).pop(result);
             }
@@ -263,6 +265,72 @@ class _RunbookEditorDialogState extends State<RunbookEditorDialog> {
                                           ? null
                                           : val,
                                     );
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child:
+                                    DropdownButtonFormField<StepFailurePolicy>(
+                                      key: ValueKey(
+                                        'step_on_failure_${step.id}',
+                                      ),
+                                      initialValue: step.onFailure,
+                                      isExpanded: true,
+                                      decoration: const InputDecoration(
+                                        labelText: 'On failure',
+                                        isDense: true,
+                                      ),
+                                      items: const [
+                                        DropdownMenuItem(
+                                          value: StepFailurePolicy.stop,
+                                          child: Text('Stop'),
+                                        ),
+                                        DropdownMenuItem(
+                                          value: StepFailurePolicy.continueRun,
+                                          child: Text('Continue'),
+                                        ),
+                                      ],
+                                      onChanged: (val) {
+                                        if (val == null) return;
+                                        setState(() {
+                                          _steps[idx] = _steps[idx].copyWith(
+                                            onFailure: val,
+                                          );
+                                        });
+                                      },
+                                    ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: ShadInputFormField(
+                                  key: ValueKey('step_retries_${step.id}'),
+                                  initialValue: step.retries.toString(),
+                                  keyboardType: TextInputType.number,
+                                  label: const Text('Retries (0-5)'),
+                                  validator: (val) {
+                                    final n = int.tryParse(val.trim());
+                                    if (n == null ||
+                                        n < 0 ||
+                                        n > RunbookStepModel.maxRetries) {
+                                      return '0 to ${RunbookStepModel.maxRetries}';
+                                    }
+                                    return null;
+                                  },
+                                  onChanged: (val) {
+                                    final n = int.tryParse(val.trim());
+                                    if (n != null &&
+                                        n >= 0 &&
+                                        n <= RunbookStepModel.maxRetries) {
+                                      _steps[idx] = _steps[idx].copyWith(
+                                        retries: n,
+                                      );
+                                    }
                                   },
                                 ),
                               ),

@@ -10,7 +10,6 @@ import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../../../shared/providers/workspace_provider.dart';
 import '../../../settings/presentation/notifiers/settings_notifier.dart';
 import '../../../terminal/presentation/notifiers/terminal_tabs_notifier.dart';
-import '../../domain/models/run_target.dart';
 import '../../domain/models/snippet_model.dart';
 import '../../domain/services/runbook_run_service.dart';
 import '../../domain/services/snippet_variable_parser.dart';
@@ -610,19 +609,16 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
   /// Where first, then variables, matching runbooks: cancelling either starts
   /// nothing.
   Future<void> _runSnippet(SnippetModel snippet) async {
-    final targets = await RunTargetSheet.show(
+    final selection = await RunTargetSheet.show(
       context,
       subject: snippet.title,
       allowTerminal: true,
     );
-    if (!mounted || targets == null || targets.isEmpty) return;
+    if (!mounted || selection == null || selection.targets.isEmpty) return;
     final values = await _promptValues(snippet);
     if (!mounted || values == null) return;
 
-    final hosts = [
-      for (final target in targets)
-        if (target is HostRunTarget) target.host,
-    ];
+    final hosts = selection.hosts;
     if (hosts.isNotEmpty) {
       final notifier = ref.read(runbookRunProvider.notifier);
       if (notifier.isRunning) {
@@ -636,6 +632,7 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
           RunbookRunService.runbookForSnippet(snippet),
           hosts,
           variableValues: values,
+          strategy: selection.strategy,
         ),
       );
       await RunResultDialog.show(context);
@@ -649,7 +646,7 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
     final sent = sendToOpenTerminal(
       ref.read(terminalTabsProvider),
       ref.read(terminalTabsProvider.notifier),
-      targets.first,
+      selection.targets.first,
       code,
     );
     _toast(
