@@ -7,9 +7,11 @@ import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../../../core/utils/platform_capabilities.dart';
 import '../../../bookmarks/presentation/notifiers/bookmarks_notifier.dart';
 import '../../../hosts/domain/models/host_model.dart';
+import '../../../hosts/presentation/dialogs/host_form_dialog.dart';
 import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
 import '../../../templates/domain/models/template_model.dart';
 import '../../../templates/presentation/notifiers/templates_notifier.dart';
+import '../../../../shared/providers/workspace_provider.dart';
 
 /// Host picker shown by the "Connect to Host" panel.
 ///
@@ -35,6 +37,19 @@ class SelectHostPanel extends ConsumerStatefulWidget {
 class _SelectHostPanelState extends ConsumerState<SelectHostPanel> {
   String _query = '';
 
+  /// Opens the host form from the empty picker and connects to what it saves,
+  /// as the Hosts screen does: the user came here to connect, not to file a
+  /// host away and come back.
+  Future<void> _addHost() async {
+    final saved = await showDialog<HostModel>(
+      context: context,
+      builder: (_) =>
+          HostFormDialog(workspaceId: ref.read(activeWorkspaceIdProvider)),
+    );
+    if (saved == null || !mounted) return;
+    await widget.onSelected(saved);
+  }
+
   @override
   Widget build(BuildContext context) {
     final tokens = ShellVibeTokens.resolve(context);
@@ -47,9 +62,23 @@ class _SelectHostPanelState extends ConsumerState<SelectHostPanel> {
     return hostsAsync.when(
       data: (hosts) {
         if (hosts.isEmpty && allTemplates.isEmpty) {
-          return const Padding(
-            padding: EdgeInsets.all(24.0),
-            child: Center(child: Text('No hosts available. Create one first.')),
+          return Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('No hosts yet.'),
+                  const SizedBox(height: 12),
+                  ShellVibeButton(
+                    key: const Key('select_host_add_host'),
+                    label: 'Add host',
+                    icon: LucideIcons.plus,
+                    onPressed: _addHost,
+                  ),
+                ],
+              ),
+            ),
           );
         }
 

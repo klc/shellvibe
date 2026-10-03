@@ -126,6 +126,9 @@ class _ConnectCredentialsDialogState extends State<ConnectCredentialsDialog> {
               ShadInputFormField(
                 key: const Key('connect_username_input'),
                 controller: _usernameController,
+                // Not prose: no autocorrect or suggestions.
+                autocorrect: false,
+                enableSuggestions: false,
                 label: const Text('Username'),
                 placeholder: const Text('e.g. root, ubuntu'),
                 leading: const Icon(LucideIcons.user, size: 16),

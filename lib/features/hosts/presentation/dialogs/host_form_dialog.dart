@@ -344,6 +344,9 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                         key: const Key('host_hostname_input'),
                         focusNode: _hostnameFocusNode,
                         controller: _hostnameController,
+                        // Not prose: no autocorrect or suggestions.
+                        autocorrect: false,
+                        enableSuggestions: false,
                         label: const Text('Hostname / IP Address'),
                         placeholder: const Text(
                           'e.g. 192.168.1.10 or root@192.168.1.10',
@@ -359,6 +362,8 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                       child: ShadInputFormField(
                         key: const Key('host_username_input'),
                         controller: _usernameController,
+                        autocorrect: false,
+                        enableSuggestions: false,
                         label: const Text('Username'),
                         placeholder: const Text('e.g. root'),
                         leading: const Icon(LucideIcons.user, size: 16),
@@ -659,11 +664,20 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                       Icon(LucideIcons.route, size: 15, color: tokens.brand),
                       const SizedBox(width: 11),
                       Expanded(
-                        child: Text(
-                          _routeSummary(hostsAsync.value ?? const []),
-                          style: shellvibeMono(
-                            context,
-                            color: tokens.textSecondary,
+                        // Typing changes the controllers without a setState,
+                        // so the summary listens to them itself.
+                        child: ListenableBuilder(
+                          listenable: Listenable.merge([
+                            _hostnameController,
+                            _usernameController,
+                            _portController,
+                          ]),
+                          builder: (context, _) => Text(
+                            _routeSummary(hostsAsync.value ?? const []),
+                            style: shellvibeMono(
+                              context,
+                              color: tokens.textSecondary,
+                            ),
                           ),
                         ),
                       ),
