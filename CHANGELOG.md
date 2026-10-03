@@ -12,6 +12,10 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 - Settings → Account → Delete Account… opens the web panel's danger zone,
   where the account is deleted after the password is asked for again. Hosts
   and keys on the device are not touched.
+- Windows: an MSIX package for the Microsoft Store, which signs it. In that
+  build, Start at Login uses the package's startup task, the MCP bridge is
+  reached through the `shellvibe-mcp.exe` execution alias, and updates come
+  from the Store. The installer and portable zip are unchanged.
 
 ### Changed
 

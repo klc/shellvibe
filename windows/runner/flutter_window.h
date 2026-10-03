@@ -2,8 +2,11 @@
 #define RUNNER_FLUTTER_WINDOW_H_
 
 #include <flutter/dart_project.h>
+#include <flutter/encodable_value.h>
 #include <flutter/flutter_view_controller.h>
+#include <flutter/method_channel.h>
 
+#include <functional>
 #include <memory>
 
 #include "win32_window.h"
@@ -35,6 +38,14 @@ class FlutterWindow : public Win32Window {
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
 
   bool show_fallback_ = true;
+
+  // Start at login for the MSIX build; see package_integration.h. Null when
+  // the app runs unpackaged and the Dart side writes the Run key itself.
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
+      launch_at_login_channel_;
+
+  // Queues |task| to run on this window's thread, the platform thread.
+  void PostToPlatformThread(std::function<void()> task);
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

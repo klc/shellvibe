@@ -87,6 +87,21 @@ void main() {
       );
     });
 
+    testWidgets('leaves updates to the Microsoft Store in its build', (
+      tester,
+    ) async {
+      debugPlatformCapabilitiesOverride = TargetPlatform.windows;
+      debugWindowsStorePackageOverride = true;
+      addTearDown(() {
+        debugPlatformCapabilitiesOverride = null;
+        debugWindowsStorePackageOverride = null;
+      });
+
+      await pumpSection(tester);
+
+      expect(find.byKey(const Key('about_check_for_updates')), findsNothing);
+    });
+
     testWidgets('leaves updates to the store on phones and tablets', (
       tester,
     ) async {
