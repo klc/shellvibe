@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../../../app/theme/shellvibe_tokens.dart';
@@ -11,23 +13,33 @@ import 'host_list_filter.dart';
 /// Column widths shared by the header and every row so they stay aligned.
 const List<int> kHostColumnFlex = [5, 5, 3, 2];
 
-/// Rendered width of the row's trailing controls.
+/// Width of the row's trailing controls, shared by the header so its columns
+/// line up with every row's.
 ///
-/// Measured, not guessed: the two [ShellVibeIconButton]s occupy one control
-/// height each (34px under a pointer) and the [PopupMenuButton] 48px once
-/// Material's minimum tap target is applied, plus the 12px the popup adds
-/// around its icon, plus [kHostStarWidth] for the star.
-const double kHostActionsWidth = 124 + kHostStarWidth;
+/// Built from the controls rather than measured once: every icon control in
+/// the slot, the overflow menu included, is one control height square, and
+/// that height grows to the touch target on a touch host. A width measured
+/// under a pointer overflowed an iPad row by the 12px the touch target adds.
+///
+/// A wide row carries the star, then either Connect and File Transfer or, on
+/// the selected row, the spelled-out Open pill, then the menu. A phone row
+/// carries one icon action and the menu — never the pill, which does not fit
+/// beside an address on a 400px screen.
+double hostActionsWidth(ShellVibeTokens tokens, {required bool compact}) {
+  final side = shellvibeControlHeight(tokens, tokens.controlHeight);
+  if (compact) return 2 * side;
+  return kHostStarWidth + math.max(2 * side, kHostOpenPillWidth) + side;
+}
 
 /// The star's slot. Always reserved, even while the star is invisible: a
 /// control that appears on hover must not push the row's other controls
 /// sideways as the pointer crosses it.
 const double kHostStarWidth = 34;
 
-/// The same measurement for a phone row, which carries one icon action and the
-/// overflow menu — never the spelled-out Open pill, which does not fit beside
-/// an address on a 400px screen.
-const double kHostActionsWidthCompact = 92;
+/// Room for the selected row's Open pill: 14px padding either side, a 16px
+/// icon, an 8px gap and the word, which is 31px in Inter Tight at 13px. A UI
+/// font that sets it wider makes the label ellipsize rather than overflow.
+const double kHostOpenPillWidth = 88;
 
 class HostListHeader extends StatelessWidget {
   final ShellVibeTokens tokens;
@@ -77,9 +89,7 @@ class HostListHeader extends StatelessWidget {
               child: Text('LAST', style: style, maxLines: 1),
             ),
           ],
-          SizedBox(
-            width: compact ? kHostActionsWidthCompact : kHostActionsWidth,
-          ),
+          SizedBox(width: hostActionsWidth(tokens, compact: compact)),
         ],
       ),
     );
