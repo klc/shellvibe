@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/features/hosts/domain/models/host_model.dart';
+import 'package:shellvibe/features/snippets/domain/models/run_strategy.dart';
 import 'package:shellvibe/features/snippets/domain/models/runbook_model.dart';
 import 'package:shellvibe/features/snippets/domain/models/runbook_step_model.dart';
 import 'package:shellvibe/features/snippets/domain/models/snippet_model.dart';
@@ -180,7 +181,7 @@ void main() {
       ).start(runbook(['a']), hosts).result;
 
       expect(results, hasLength(11));
-      expect(factory.maxInFlightOpens, RunbookRunService.maxConcurrentHosts);
+      expect(factory.maxInFlightOpens, RunStrategy.defaultConcurrency);
       expect(factory.sessions.values.every((s) => s.closes == 1), isTrue);
     });
 
@@ -285,6 +286,120 @@ void main() {
         'systemctl restart nginx && echo \${HOME}',
       ]);
       expect(results.single.execution!.stepResults, hasLength(1));
+    });
+
+    test('the parallel concurrency setting is honoured', () async {
+      for (final n in [1, 2, 8]) {
+        final factory = FakeFactory(
+          openDelay: const Duration(milliseconds: 10),
+        );
+        await RunbookRunService(sessionFactory: factory).start(runbook(['a']), [
+          for (var i = 0; i < 12; i++) host('h$i'),
+        ], strategy: RunStrategy.parallel(n)).result;
+        expect(factory.maxInFlightOpens, n, reason: 'concurrency $n');
+      }
+    });
+
+    test('concurrency is clamped to 1..8', () {
+      expect(RunStrategy.parallel(0).concurrency, 1);
+      expect(RunStrategy.parallel(99).concurrency, RunStrategy.maxConcurrency);
+      expect(RunStrategy.parse('rolling').isRolling, isTrue);
+      expect(
+        RunStrategy.parse(RunStrategy.parallel(3).wireName).concurrency,
+        3,
+      );
+      expect(RunStrategy.parse(null), RunStrategy.defaultParallel);
+    });
+
+    test('rolling runs one host at a time in order', () async {
+      final factory = FakeFactory(openDelay: const Duration(milliseconds: 5));
+      final results = await RunbookRunService(sessionFactory: factory).start(
+        runbook(['a']),
+        [host('h1'), host('h2'), host('h3')],
+        strategy: const RunStrategy.rolling(),
+      ).result;
+      expect(factory.maxInFlightOpens, 1);
+      expect(
+        results.map((r) => r.status),
+        everyElement(RunHostStatus.succeeded),
+      );
+    });
+
+    test(
+      'rolling stops at the first failure and skips the rest unopened',
+      () async {
+        final factory = FakeFactory(
+          handler: (hostId, command) async =>
+              hostId == 'h2' ? ('boom', 1) : ('ok', 0),
+        );
+        final events = <RunEvent>[];
+        final results = await RunbookRunService(sessionFactory: factory)
+            .start(
+              runbook(['a']),
+              [host('h1'), host('h2'), host('h3'), host('h4')],
+              strategy: const RunStrategy.rolling(),
+              onEvent: events.add,
+            )
+            .result;
+
+        expect(results.map((r) => r.status), [
+          RunHostStatus.succeeded,
+          RunHostStatus.failed,
+          RunHostStatus.skipped,
+          RunHostStatus.skipped,
+        ]);
+        expect(factory.sessions.keys, ['h1', 'h2']);
+        expect(
+          events.whereType<StepStatusEvent>().where(
+            (e) => e.hostId == 'h3' && e.status == RunStepStatus.skipped,
+          ),
+          hasLength(1),
+        );
+      },
+    );
+
+    test('rolling also stops on a connection failure', () async {
+      final factory = FakeFactory(failing: {'h1'});
+      final results = await RunbookRunService(sessionFactory: factory).start(
+        runbook(['a']),
+        [host('h1'), host('h2')],
+        strategy: const RunStrategy.rolling(),
+      ).result;
+      expect(results.map((r) => r.status), [
+        RunHostStatus.failed,
+        RunHostStatus.skipped,
+      ]);
+      expect(factory.opened, 0);
+    });
+
+    test('parallel does not skip hosts when one fails', () async {
+      final factory = FakeFactory(failing: {'h1'});
+      final results = await RunbookRunService(
+        sessionFactory: factory,
+      ).start(runbook(['a']), [host('h1'), host('h2')]).result;
+      expect(results.last.status, RunHostStatus.succeeded);
+    });
+
+    test('step results are emitted as each step finishes', () async {
+      final factory = FakeFactory(
+        handler: (hostId, command) async => ('out $command', 0),
+      );
+      final events = <RunEvent>[];
+      await RunbookRunService(
+        sessionFactory: factory,
+      ).start(runbook(['a', 'b']), [host('h1')], onEvent: events.add).result;
+      final finished = events.whereType<StepFinishedEvent>().toList();
+      expect(finished.map((e) => e.result.output), ['out a', 'out b']);
+      expect(finished.first.result.attempts, 1);
+      // Before the host's final status event.
+      expect(
+        events.indexOf(finished.last),
+        lessThan(
+          events.lastIndexWhere(
+            (e) => e is HostStatusEvent && e.status == RunHostStatus.succeeded,
+          ),
+        ),
+      );
     });
   });
 }

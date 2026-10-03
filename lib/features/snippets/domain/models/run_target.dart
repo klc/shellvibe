@@ -1,4 +1,5 @@
 import '../../../hosts/domain/models/host_model.dart';
+import 'run_strategy.dart';
 
 /// Where a snippet or runbook is about to run.
 sealed class RunTarget {
@@ -22,4 +23,25 @@ class ActivePaneRunTarget extends RunTarget {
 /// Unverified, snippets only.
 class SelectedPanesRunTarget extends RunTarget {
   const SelectedPanesRunTarget();
+}
+
+/// What the target sheet resolves to.
+class RunTargetSelection {
+  /// One [HostRunTarget] per host, or a single terminal target.
+  final List<RunTarget> targets;
+  final RunStrategy strategy;
+
+  /// The user asked to remember the chosen hosts as the runbook's default.
+  final bool saveAsDefault;
+
+  const RunTargetSelection(
+    this.targets, {
+    this.strategy = RunStrategy.defaultParallel,
+    this.saveAsDefault = false,
+  });
+
+  List<HostModel> get hosts => [
+    for (final target in targets)
+      if (target is HostRunTarget) target.host,
+  ];
 }

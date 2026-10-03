@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/features/snippets/domain/models/runbook_model.dart';
 import 'package:shellvibe/features/snippets/domain/models/runbook_step_model.dart';
@@ -184,6 +186,143 @@ void main() {
         result.stepResults.single.errorMessage,
         contains('Invalid regex pattern'),
       );
+    });
+
+    group('failure policy', () {
+      RunbookModel rb(List<RunbookStepModel> steps) => RunbookModel(
+        id: 'rb',
+        workspaceId: 'w',
+        title: 't',
+        createdAt: DateTime(2026),
+        steps: steps,
+      );
+      RunbookStepModel step(
+        int order, {
+        StepFailurePolicy onFailure = StepFailurePolicy.stop,
+        int retries = 0,
+      }) => RunbookStepModel(
+        id: 's$order',
+        runbookId: 'rb',
+        stepOrder: order,
+        command: 'cmd$order',
+        onFailure: onFailure,
+        retries: retries,
+      );
+      const fast = RunbookExecutor(retryDelay: Duration(milliseconds: 1));
+
+      test('continue records the failure and runs the next step', () async {
+        final ran = <String>[];
+        final finished = <RunbookStepResult>[];
+        final result = await fast.executeRunbook(
+          rb([
+            step(1, onFailure: StepFailurePolicy.continueRun),
+            step(2),
+          ]),
+          (command, timeout) async {
+            ran.add(command);
+            return command == 'cmd1' ? ('bad', 1) : ('ok', 0);
+          },
+          onStepFinished: finished.add,
+        );
+        expect(ran, ['cmd1', 'cmd2']);
+        expect(result.overallSuccess, isFalse);
+        expect(result.failedStep!.id, 's1');
+        expect(result.stepResults.map((r) => r.success), [false, true]);
+        expect(finished, hasLength(2));
+      });
+
+      test('stop (the default) ends the run at the failing step', () async {
+        final ran = <String>[];
+        final result = await fast.executeRunbook(rb([step(1), step(2)]), (
+          command,
+          timeout,
+        ) async {
+          ran.add(command);
+          return ('bad', 1);
+        });
+        expect(ran, ['cmd1']);
+        expect(result.stepResults, hasLength(1));
+      });
+
+      test('retries until success and keeps every attempt', () async {
+        var calls = 0;
+        final result = await fast.executeRunbook(rb([step(1, retries: 3)]), (
+          command,
+          timeout,
+        ) async {
+          calls++;
+          return calls < 3 ? ('try $calls', 1) : ('good', 0);
+        });
+        expect(result.overallSuccess, isTrue);
+        final r = result.stepResults.single;
+        expect(r.attempts, 3);
+        expect(r.attemptLog.map((a) => a.output), ['try 1', 'try 2', 'good']);
+        expect(r.output, 'good');
+      });
+
+      test('gives up after the retries are spent', () async {
+        var calls = 0;
+        final result = await fast.executeRunbook(rb([step(1, retries: 2)]), (
+          command,
+          timeout,
+        ) async {
+          calls++;
+          return ('bad', 1);
+        });
+        expect(calls, 3);
+        expect(result.overallSuccess, isFalse);
+        expect(result.stepResults.single.attempts, 3);
+      });
+
+      test('a thrown error is retried too', () async {
+        var calls = 0;
+        final result = await fast.executeRunbook(rb([step(1, retries: 1)]), (
+          command,
+          timeout,
+        ) async {
+          calls++;
+          if (calls == 1) throw StateError('dropped');
+          return ('ok', 0);
+        });
+        expect(result.overallSuccess, isTrue);
+        expect(result.stepResults.single.attempts, 2);
+      });
+
+      test('cancel during the retry wait ends it at once', () async {
+        final cancel = Completer<void>();
+        var cancelled = false;
+        const slow = RunbookExecutor(retryDelay: Duration(seconds: 30));
+        final statuses = <String>[];
+        final future = slow.executeRunbook(
+          rb([step(1, retries: 3), step(2)]),
+          (command, timeout) async => ('bad', 1),
+          isCancelled: () => cancelled,
+          cancelSignal: cancel.future,
+          onProgress: (step, status) => statuses.add('${step.id}:$status'),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        cancelled = true;
+        cancel.complete();
+        final result = await future.timeout(const Duration(seconds: 2));
+        expect(result.cancelled, isTrue);
+        expect(statuses, containsAll(['s1:cancelled', 's2:cancelled']));
+      });
+
+      test('step results carry the substituted command', () async {
+        final result = await fast.executeRunbook(
+          rb([
+            const RunbookStepModel(
+              id: 's1',
+              runbookId: 'rb',
+              stepOrder: 1,
+              command: r'echo ${INPUT:x} ${HOME}',
+            ),
+          ]),
+          (command, timeout) async => ('', 0),
+          variableValues: {'x': 'hi'},
+        );
+        expect(result.stepResults.single.command, r'echo hi ${HOME}');
+      });
     });
   });
 }

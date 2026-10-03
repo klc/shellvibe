@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../../../hosts/domain/models/host_model.dart';
+import '../models/run_strategy.dart';
 import '../models/runbook_model.dart';
 import '../models/runbook_step_model.dart';
 import '../models/snippet_model.dart';
@@ -8,7 +9,16 @@ import 'remote_command_session.dart';
 import 'runbook_executor.dart';
 
 /// Lifecycle of one step on one host.
-enum RunStepStatus { pending, running, success, failed, cancelled }
+enum RunStepStatus {
+  pending,
+  running,
+  success,
+  failed,
+  cancelled,
+
+  /// The host never started: a rolling run stopped before reaching it.
+  skipped,
+}
 
 /// Lifecycle of one host within a run.
 enum RunHostStatus {
@@ -23,9 +33,13 @@ enum RunHostStatus {
   /// Either the connection failed (no step ran) or a step failed.
   failed,
   cancelled,
+
+  /// Not started because a rolling run stopped after an earlier host failed.
+  /// Distinct from [cancelled], which is the user's doing.
+  skipped,
 }
 
-/// A progress notification from a [RunbookRun].
+/// A progress notification from a [RunHandle].
 sealed class RunEvent {
   final String hostId;
   const RunEvent(this.hostId);
@@ -43,6 +57,13 @@ class StepStatusEvent extends RunEvent {
   final String stepId;
   final RunStepStatus status;
   const StepStatusEvent(super.hostId, this.stepId, this.status);
+}
+
+/// A step on [hostId] settled; [result] carries its output, exit code, error
+/// and attempt count, so they can be read before the host is done.
+class StepFinishedEvent extends RunEvent {
+  final RunbookStepResult result;
+  const StepFinishedEvent(super.hostId, this.result);
 }
 
 /// How one host ended.
@@ -65,11 +86,11 @@ class HostRunResult {
 }
 
 /// A run in flight: await [result], or [cancel] it.
-class RunbookRun {
+class RunHandle {
   final Future<List<HostRunResult>> result;
   final Future<void> Function() _cancel;
 
-  RunbookRun(this.result, this._cancel);
+  RunHandle(this.result, this._cancel);
 
   /// Interrupts and closes every open session and marks unfinished steps
   /// cancelled. [result] still completes (with cancelled hosts); it never
@@ -85,23 +106,25 @@ class RunbookRun {
 /// the executor's stop-at-first-failure rule still holds, because running
 /// step 3 after step 2 failed is how a deploy half-applies.
 class RunbookRunService {
-  /// Hosts running at once. Fixed: every host is a fresh SSH connection (plus
-  /// its jump chain), and a runbook against fifty hosts should not open fifty.
-  static const int maxConcurrentHosts = 4;
-
   final RemoteCommandSessionFactory sessionFactory;
   final RunbookExecutor _executor;
 
   RunbookRunService({required this.sessionFactory, RunbookExecutor? executor})
-    : _executor = executor ?? RunbookExecutor();
+    : _executor = executor ?? const RunbookExecutor();
 
   /// A snippet as the one-step runbook it is, so snippets and runbooks share
   /// one engine instead of two that disagree about exit codes.
+  static const String snippetRunbookPrefix = 'snippet:';
+
+  /// True for a runbook made by [runbookForSnippet].
+  static bool isSnippetRunbook(RunbookModel runbook) =>
+      runbook.id.startsWith(snippetRunbookPrefix);
+
   static RunbookModel runbookForSnippet(
     SnippetModel snippet, {
     int timeoutSeconds = 60,
   }) {
-    final runbookId = 'snippet:${snippet.id}';
+    final runbookId = '$snippetRunbookPrefix${snippet.id}';
     return RunbookModel(
       id: runbookId,
       workspaceId: snippet.workspaceId,
@@ -121,12 +144,17 @@ class RunbookRunService {
 
   /// Starts [runbook] on every host in [hosts] and reports through [onEvent].
   ///
+  /// [strategy] decides how hosts are spread: in parallel up to its
+  /// concurrency, or rolling, where the first host to fail leaves every later
+  /// one `skipped` without ever opening a session to it.
+  ///
   /// Every host and step is announced `queued` / `pending` up front so a UI
   /// can lay the whole grid out before anything has connected.
-  RunbookRun start(
+  RunHandle start(
     RunbookModel runbook,
     List<HostModel> hosts, {
     Map<String, String> variableValues = const {},
+    RunStrategy strategy = RunStrategy.defaultParallel,
     void Function(RunEvent event)? onEvent,
   }) {
     final steps = List<RunbookStepModel>.from(runbook.steps)
@@ -134,6 +162,7 @@ class RunbookRunService {
     final cancelSignal = Completer<void>();
     final openSessions = <RemoteCommandSession>{};
     var cancelled = false;
+    var rollingStopped = false;
 
     void emit(RunEvent event) => onEvent?.call(event);
 
@@ -152,6 +181,13 @@ class RunbookRunService {
     }
 
     Future<HostRunResult> runHost(HostModel host) async {
+      if (rollingStopped) {
+        emit(HostStatusEvent(host.id, RunHostStatus.skipped));
+        for (final step in steps) {
+          emit(StepStatusEvent(host.id, step.id, RunStepStatus.skipped));
+        }
+        return HostRunResult(host: host, status: RunHostStatus.skipped);
+      }
       if (cancelled) {
         cancelRemaining(host, steps);
         return HostRunResult(host: host, status: RunHostStatus.cancelled);
@@ -202,6 +238,8 @@ class RunbookRunService {
           },
           variableValues: variableValues,
           isCancelled: () => cancelled,
+          cancelSignal: cancelSignal.future,
+          onStepFinished: (result) => emit(StepFinishedEvent(host.id, result)),
           onProgress: (step, status) {
             final mapped = switch (status) {
               'running' => RunStepStatus.running,
@@ -233,13 +271,17 @@ class RunbookRunService {
       Future<void> worker() async {
         while (next < hosts.length) {
           final index = next++;
-          results[index] = await runHost(hosts[index]);
+          final result = await runHost(hosts[index]);
+          results[index] = result;
+          if (strategy.isRolling && result.status == RunHostStatus.failed) {
+            rollingStopped = true;
+          }
         }
       }
 
-      final workerCount = hosts.length < maxConcurrentHosts
+      final workerCount = hosts.length < strategy.concurrency
           ? hosts.length
-          : maxConcurrentHosts;
+          : strategy.concurrency;
       await Future.wait([for (var i = 0; i < workerCount; i++) worker()]);
       return results.whereType<HostRunResult>().toList();
     }
@@ -260,7 +302,7 @@ class RunbookRunService {
       }
     }
 
-    return RunbookRun(runAll(), cancel);
+    return RunHandle(runAll(), cancel);
   }
 
   static String _describe(Object error) => switch (error) {
