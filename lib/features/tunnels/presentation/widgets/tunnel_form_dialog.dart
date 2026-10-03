@@ -214,6 +214,9 @@ class _TunnelFormDialogState extends ConsumerState<TunnelFormDialog> {
                   // Remote Host
                   ShadInputFormField(
                     controller: _remoteHostController,
+                    // Not prose: no autocorrect or suggestions.
+                    autocorrect: false,
+                    enableSuggestions: false,
                     label: Text(
                       _ruleType == 'local'
                           ? 'Remote Target Host'

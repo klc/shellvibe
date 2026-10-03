@@ -741,13 +741,19 @@ class ShellVibePageHeader extends StatelessWidget {
           // laid straight into a Row is measured unbounded: it puts every
           // action on one line and overflows rather than running onto a
           // second, which is invisible until an action grows a word.
+          // The Wrap shrinks to its actions inside its share of the row, so
+          // Align carries it to the right edge; WrapAlignment.end only lines
+          // up the runs within the Wrap itself.
           Flexible(
-            child: Wrap(
-              alignment: WrapAlignment.end,
-              spacing: 6,
-              runSpacing: 6,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: actions,
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: Wrap(
+                alignment: WrapAlignment.end,
+                spacing: 6,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: actions,
+              ),
             ),
           ),
         ],
@@ -1278,12 +1284,17 @@ class ShellVibeWorkToolbar extends StatelessWidget {
             Flexible(
               child: Padding(
                 padding: const EdgeInsets.only(left: 8),
-                child: Wrap(
-                  alignment: WrapAlignment.end,
-                  spacing: 8,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [...leading, ...actions],
+                // Right edge of the row, not of the Wrap's shrunk width; see
+                // ShellVibePageHeader.
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: Wrap(
+                    alignment: WrapAlignment.end,
+                    spacing: 8,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [...leading, ...actions],
+                  ),
                 ),
               ),
             ),
