@@ -12,7 +12,8 @@ import '../../data/repositories/run_history_repository.dart';
 import '../../domain/models/runbook_model.dart';
 import '../../domain/models/runbook_step_model.dart';
 import '../../domain/services/runbook_run_service.dart';
-import '../../domain/services/snippet_variable_parser.dart';
+import '../../domain/services/run_variables.dart';
+import '../notifiers/snippets_notifier.dart';
 import '../../data/run_providers.dart';
 import '../../../templates/presentation/template_launch.dart';
 import '../notifiers/run_history_providers.dart';
@@ -255,6 +256,8 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
         title: result.title,
         description: result.description,
         steps: result.steps,
+        variables: result.variables,
+        tags: result.tags,
       );
     } else {
       await notifier.updateRunbook(result);
@@ -312,15 +315,19 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
     final hosts = selection.hosts;
     if (hosts.isEmpty) return;
 
-    final allVars = <String>{};
-    for (final step in runbook.steps) {
-      allVars.addAll(SnippetVariableParser.extractVariables(step.command));
-    }
+    // Snippet steps count too: what they will run is what gets asked for.
+    final snippets = {
+      for (final s in await ref.read(snippetsProvider.future)) s.id: s,
+    };
+    if (!mounted) return;
+    final needed = collectRunVariables(runbook, snippets: snippets);
     var variableValues = <String, String>{};
-    if (allVars.isNotEmpty) {
+    if (!needed.isEmpty) {
       final inputs = await VariableInputDialog.show(
         context,
-        variables: allVars.toList(),
+        variables: needed.names,
+        declarations: needed.declarations,
+        memoryKey: 'runbook:${runbook.id}',
         title: 'Runbook Input Parameters',
       );
       if (!mounted || inputs == null) return;

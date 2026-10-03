@@ -6,6 +6,7 @@ import '../../../../shared/providers/workspace_provider.dart';
 import '../../data/repositories/runbooks_repository.dart';
 import '../../domain/models/runbook_model.dart';
 import '../../domain/models/runbook_step_model.dart';
+import '../../domain/models/variable_declaration.dart';
 
 part 'runbooks_notifier.g.dart';
 
@@ -30,6 +31,8 @@ class RunbooksNotifier extends _$RunbooksNotifier {
     required String title,
     String? description,
     List<RunbookStepModel> steps = const [],
+    List<VariableDeclaration> variables = const [],
+    List<String> tags = const [],
   }) async {
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() async {
@@ -40,6 +43,8 @@ class RunbooksNotifier extends _$RunbooksNotifier {
         title: title,
         description: description,
         steps: steps,
+        variables: variables,
+        tags: tags,
         createdAt: DateTime.now(),
       );
       await repo.addRunbook(runbook);

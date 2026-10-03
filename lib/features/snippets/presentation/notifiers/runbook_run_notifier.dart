@@ -6,6 +6,7 @@ import '../../data/run_providers.dart';
 import '../../domain/models/active_run.dart';
 import '../../domain/models/run_strategy.dart';
 import '../../domain/models/runbook_model.dart';
+import '../../domain/services/run_variables.dart';
 import '../../domain/services/runbook_run_service.dart';
 
 part 'runbook_run_notifier.g.dart';
@@ -65,6 +66,7 @@ class RunbookRunNotifier extends _$RunbookRunNotifier {
           runbook,
           hosts,
           variableValues: variableValues,
+          secretValues: secretValuesOf(runbook.variables, variableValues),
           strategy: strategy,
           onEvent: _apply,
         );

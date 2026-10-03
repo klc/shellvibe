@@ -14,7 +14,8 @@ import '../../domain/models/runbook_model.dart';
 import '../../domain/models/runbook_step_model.dart';
 import '../../domain/services/runbook_executor.dart';
 import '../../domain/services/runbook_run_service.dart';
-import '../../domain/services/snippet_variable_parser.dart';
+import '../../domain/services/run_variables.dart';
+import '../notifiers/snippets_notifier.dart';
 import 'prod_confirmation.dart';
 import '../notifiers/run_history_providers.dart';
 import '../notifiers/runbook_run_notifier.dart';
@@ -156,11 +157,12 @@ Future<bool> rerunOnHosts(
   // A live run keeps its values in memory, so they are reused. A stored run
   // has none (values are never written to disk), so anything the runbook asks
   // for is asked again, with nothing prefilled.
-  final needed = <String>{
-    for (final step in runbook.steps)
-      ...SnippetVariableParser.extractVariables(step.command),
+  final snippets = {
+    for (final s in await ref.read(snippetsProvider.future)) s.id: s,
   };
-  final missing = needed
+  if (!context.mounted) return false;
+  final needed = collectRunVariables(runbook, snippets: snippets);
+  final missing = needed.names
       .where((name) => !source.variableValues.containsKey(name))
       .toList();
   var variableValues = source.variableValues;
@@ -168,6 +170,11 @@ Future<bool> rerunOnHosts(
     final entered = await VariableInputDialog.show(
       context,
       variables: missing,
+      declarations: needed.declarations,
+      // A run read back from history starts from nothing: what was typed then
+      // is not on disk, and what is remembered for the session is not offered
+      // to it either.
+      memoryKey: source.fromHistory ? null : 'runbook:${runbook.id}',
       title: 'Runbook Input Parameters',
     );
     if (entered == null || !context.mounted) return false;

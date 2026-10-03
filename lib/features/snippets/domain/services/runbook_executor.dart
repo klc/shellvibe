@@ -57,6 +57,48 @@ class RunbookStepResult {
   });
 }
 
+/// [result] with every non-empty string in [secrets] replaced by `[redacted]`
+/// in its command, output, error and each attempt, so a secret someone typed
+/// into a prompt is never shown, even where a command echoed it back.
+RunbookStepResult redactStepResult(
+  RunbookStepResult result,
+  Iterable<String> secrets,
+) {
+  final list = secrets.where((s) => s.isNotEmpty).toList()
+    ..sort((a, b) => b.length.compareTo(a.length));
+  if (list.isEmpty) return result;
+  String mask(String text) {
+    var out = text;
+    for (final secret in list) {
+      out = out.replaceAll(secret, '[redacted]');
+    }
+    return out;
+  }
+
+  return RunbookStepResult(
+    step: result.step,
+    success: result.success,
+    exitCode: result.exitCode,
+    output: mask(result.output),
+    errorMessage: result.errorMessage == null
+        ? null
+        : mask(result.errorMessage!),
+    command: mask(result.command),
+    attempts: result.attempts,
+    attemptLog: [
+      for (final a in result.attemptLog)
+        StepAttempt(
+          success: a.success,
+          exitCode: a.exitCode,
+          output: mask(a.output),
+          errorMessage: a.errorMessage == null ? null : mask(a.errorMessage!),
+        ),
+    ],
+    durationMs: result.durationMs,
+    outputTruncated: result.outputTruncated,
+  );
+}
+
 /// Overall execution result for a runbook run.
 class RunbookExecutionResult {
   final String runbookId;
@@ -120,6 +162,7 @@ class RunbookExecutor {
     )
     commandRunner, {
     Map<String, String> variableValues = const {},
+    Map<String, String> builtinValues = const {},
     void Function(RunbookStepModel step, String status)? onProgress,
     void Function(RunbookStepResult result)? onStepFinished,
     bool Function()? isCancelled,
@@ -195,8 +238,10 @@ class RunbookExecutor {
           }
         }
         // Substitute variables in command
+        // The host's own values first, so what a person typed into a prompt
+        // is never read as a placeholder itself.
         commandToRun = SnippetVariableParser.substituteVariables(
-          code,
+          SnippetVariableParser.substituteBuiltins(code, builtinValues),
           variableValues,
         );
 

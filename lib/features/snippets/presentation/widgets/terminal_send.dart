@@ -1,6 +1,8 @@
 import '../../../terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import '../../../hosts/domain/models/host_model.dart';
 import '../../domain/models/run_target.dart';
+import '../../domain/services/run_variables.dart';
+import '../../domain/services/snippet_variable_parser.dart';
 
 /// Types [code] into an open terminal and presses Enter, the way the terminal's
 /// own snippet picker sends one (focused pane, or every selected pane while
@@ -51,4 +53,27 @@ List<HostModel> terminalTargetHosts(TerminalTabsState tabs, RunTarget target) {
     case HostRunTarget(:final host):
       return [host];
   }
+}
+
+/// Fills `${SV:...}` in [code] from the active pane's host, which is the one
+/// a typed-in command will most plainly run on (a broadcast uses it for every
+/// pane). With no pane host the placeholders are left as written and
+/// [FilledCode.unresolved] says so, for the caller to tell the user.
+FilledCode fillPaneBuiltins(TerminalTabsState tabs, String code) {
+  if (SnippetVariableParser.extractBuiltins(code).isEmpty) {
+    return FilledCode(code, unresolved: false);
+  }
+  final pane = tabs.activeTab ?? (tabs.tabs.isEmpty ? null : tabs.tabs.first);
+  final host = pane?.host;
+  if (host == null) return FilledCode(code, unresolved: true);
+  return FilledCode(
+    SnippetVariableParser.substituteBuiltins(code, builtinValuesFor(host)),
+    unresolved: false,
+  );
+}
+
+class FilledCode {
+  final String code;
+  final bool unresolved;
+  const FilledCode(this.code, {required this.unresolved});
 }

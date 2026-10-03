@@ -394,6 +394,8 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
       final entered = await VariableInputDialog.show(
         context,
         variables: variables,
+        declarations: snippet.variables,
+        memoryKey: 'snippet:${snippet.id}',
         title: 'Fill variables for "${snippet.title}"',
       );
       if (entered == null) return;

@@ -524,6 +524,7 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
         title: result.title,
         code: result.code,
         tags: result.tags,
+        variables: result.variables,
       );
     } else {
       await notifier.updateSnippet(result);
@@ -546,6 +547,8 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
           title: result.title,
           description: result.description,
           steps: result.steps,
+          variables: result.variables,
+          tags: result.tags,
         );
   }
 
@@ -587,6 +590,8 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
     return VariableInputDialog.show(
       context,
       variables: vars,
+      declarations: snippet.variables,
+      memoryKey: 'snippet:${snippet.id}',
       title: 'Fill Variables for "${snippet.title}"',
     );
   }
@@ -656,20 +661,21 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
       return;
     }
 
-    final code = SnippetVariableParser.substituteVariables(
-      snippet.code,
-      values,
+    final filled = fillPaneBuiltins(
+      ref.read(terminalTabsProvider),
+      SnippetVariableParser.substituteVariables(snippet.code, values),
     );
     final sent = sendToOpenTerminal(
       ref.read(terminalTabsProvider),
       ref.read(terminalTabsProvider.notifier),
       selection.targets.first,
-      code,
+      filled.code,
     );
     _toast(
       sent
           ? 'Sent "${snippet.title}" to the terminal. Check the pane for the '
-                'result.'
+                'result.${filled.unresolved ? ' It uses \${SV:...} and the '
+                          'pane has no host, so those were left as written.' : ''}'
           : 'No open terminal pane could take "${snippet.title}".',
     );
   }

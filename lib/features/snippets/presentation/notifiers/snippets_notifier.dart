@@ -5,6 +5,7 @@ import '../../../../shared/providers/database_providers.dart';
 import '../../../../shared/providers/workspace_provider.dart';
 import '../../data/repositories/snippets_repository.dart';
 import '../../domain/models/snippet_model.dart';
+import '../../domain/models/variable_declaration.dart';
 
 part 'snippets_notifier.g.dart';
 
@@ -29,6 +30,7 @@ class SnippetsNotifier extends _$SnippetsNotifier {
     required String title,
     required String code,
     List<String> tags = const [],
+    List<VariableDeclaration> variables = const [],
   }) async {
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() async {
@@ -39,6 +41,7 @@ class SnippetsNotifier extends _$SnippetsNotifier {
         title: title,
         code: code,
         tags: tags,
+        variables: variables,
       );
       await repo.addSnippet(snippet);
       return await repo.getSnippetsByWorkspace(

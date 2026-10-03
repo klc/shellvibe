@@ -46,6 +46,15 @@ class VariableDeclaration {
     this.required = true,
   });
 
+  /// Says nothing beyond "required free text", which an undeclared placeholder
+  /// is anyway, so there is nothing to store.
+  bool get isPlain =>
+      type == VariableType.text &&
+      required &&
+      (label?.isEmpty ?? true) &&
+      (description?.isEmpty ?? true) &&
+      (defaultValue?.isEmpty ?? true);
+
   /// What the prompt calls it.
   String get displayLabel =>
       (label?.trim().isNotEmpty ?? false) ? label! : name;

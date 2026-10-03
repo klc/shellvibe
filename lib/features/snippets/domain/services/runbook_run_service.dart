@@ -6,6 +6,7 @@ import '../models/runbook_model.dart';
 import '../models/runbook_step_model.dart';
 import '../models/snippet_model.dart';
 import 'remote_command_session.dart';
+import 'run_variables.dart';
 import 'runbook_executor.dart';
 
 /// Lifecycle of one step on one host.
@@ -145,6 +146,7 @@ class RunbookRunService {
       workspaceId: snippet.workspaceId,
       title: snippet.title,
       createdAt: DateTime.now(),
+      variables: snippet.variables,
       steps: [
         RunbookStepModel(
           id: '$runbookId:1',
@@ -169,6 +171,7 @@ class RunbookRunService {
     RunbookModel runbook,
     List<HostModel> hosts, {
     Map<String, String> variableValues = const {},
+    Set<String> secretValues = const {},
     RunStrategy strategy = RunStrategy.defaultParallel,
     void Function(RunEvent event)? onEvent,
   }) {
@@ -257,6 +260,8 @@ class RunbookRunService {
             return result;
           },
           variableValues: variableValues,
+          // Each host gets its own `${SV:...}` values.
+          builtinValues: builtinValuesFor(host),
           isCancelled: () => cancelled,
           cancelSignal: cancelSignal.future,
           resolveSnippet: lookupSnippet,
@@ -272,7 +277,11 @@ class RunbookRunService {
             ]);
             return approved;
           },
-          onStepFinished: (result) => emit(StepFinishedEvent(host.id, result)),
+          // A secret someone typed is masked before it reaches the screen, even
+          // where the command echoed it back.
+          onStepFinished: (result) => emit(
+            StepFinishedEvent(host.id, redactStepResult(result, secretValues)),
+          ),
           onProgress: (step, status) {
             final mapped = switch (status) {
               'running' => RunStepStatus.running,

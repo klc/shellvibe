@@ -1,6 +1,7 @@
 import '../../../hosts/domain/models/host_model.dart';
 import '../../../snippets/domain/models/runbook_model.dart';
-import '../../../snippets/domain/services/snippet_variable_parser.dart';
+import '../../../snippets/domain/models/snippet_model.dart';
+import '../../../snippets/domain/services/run_variables.dart';
 import '../models/template_model.dart';
 import 'template_hosts.dart';
 
@@ -44,7 +45,7 @@ class TemplateOnOpen {
   /// with an empty list.
   final Future<Map<String, String>?> Function(
     RunbookModel runbook,
-    List<String> variables,
+    RunVariables variables,
   )
   promptVariables;
 
@@ -72,6 +73,7 @@ class TemplateOnOpen {
     TemplateModel template, {
     required List<RunbookModel> runbooks,
     required Map<String, HostModel> hostsById,
+    Map<String, SnippetModel> snippets = const {},
   }) async {
     final runbookId = template.onOpenRunbookId;
     if (runbookId == null) return OnOpenOutcome.notConfigured;
@@ -102,12 +104,9 @@ class TemplateOnOpen {
 
     // Never started with blanks: a runbook that wants input is asked, whatever
     // "ask before running" says.
-    final variables = <String>{
-      for (final step in runbook.steps)
-        ...SnippetVariableParser.extractVariables(step.command),
-    }.toList();
+    final variables = collectRunVariables(runbook, snippets: snippets);
     var values = <String, String>{};
-    if (variables.isNotEmpty) {
+    if (!variables.isEmpty) {
       final entered = await promptVariables(runbook, variables);
       if (entered == null) return OnOpenOutcome.inputCancelled;
       values = entered;

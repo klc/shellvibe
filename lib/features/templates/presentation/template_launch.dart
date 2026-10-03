@@ -12,6 +12,7 @@ import '../../hosts/presentation/notifiers/hosts_notifier.dart';
 import '../../snippets/domain/models/runbook_model.dart';
 import '../../snippets/presentation/notifiers/runbook_run_notifier.dart';
 import '../../snippets/presentation/notifiers/runbooks_notifier.dart';
+import '../../snippets/presentation/notifiers/snippets_notifier.dart';
 import '../../snippets/presentation/widgets/run_progress_view.dart';
 import '../../snippets/presentation/widgets/variable_input_dialog.dart';
 import '../domain/models/template_model.dart';
@@ -78,6 +79,7 @@ Future<OnOpenOutcome> runTemplateOnOpen(
 
   final runbooks = await ref.read(runbooksProvider.future);
   final hosts = await ref.read(hostsProvider.future);
+  final snippets = await ref.read(snippetsProvider.future);
   if (!context.mounted) return OnOpenOutcome.notConfigured;
 
   final notifier = ref.read(runbookRunProvider.notifier);
@@ -89,7 +91,9 @@ Future<OnOpenOutcome> runTemplateOnOpen(
       if (!context.mounted) return Future.value();
       return VariableInputDialog.show(
         context,
-        variables: variables,
+        variables: variables.names,
+        declarations: variables.declarations,
+        memoryKey: 'runbook:${runbook.id}',
         title: 'Input for "${runbook.title}"',
       );
     },
@@ -115,6 +119,7 @@ Future<OnOpenOutcome> runTemplateOnOpen(
     template,
     runbooks: runbooks,
     hostsById: {for (final host in hosts) host.id: host},
+    snippets: {for (final s in snippets) s.id: s},
   );
 }
 

@@ -64,8 +64,8 @@ class Harness {
       confirms.add([for (final h in hosts) h.id]);
       return confirmAnswer;
     },
-    promptVariables: (rb, names) async {
-      prompts.add(names);
+    promptVariables: (rb, variables) async {
+      prompts.add(variables.names);
       duringPrompt?.call();
       return inputAnswer;
     },

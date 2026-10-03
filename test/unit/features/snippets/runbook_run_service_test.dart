@@ -6,6 +6,7 @@ import 'package:shellvibe/features/snippets/domain/models/run_strategy.dart';
 import 'package:shellvibe/features/snippets/domain/models/runbook_model.dart';
 import 'package:shellvibe/features/snippets/domain/models/runbook_step_model.dart';
 import 'package:shellvibe/features/snippets/domain/models/snippet_model.dart';
+import 'package:shellvibe/features/snippets/domain/models/variable_declaration.dart';
 import 'package:shellvibe/features/snippets/domain/services/remote_command_session.dart';
 import 'package:shellvibe/features/snippets/domain/services/runbook_run_service.dart';
 
@@ -580,6 +581,81 @@ void main() {
           expect(factory.sessions['h1']!.ran, isEmpty);
         },
       );
+    });
+
+    group('variables', () {
+      RunbookModel one(String command) => RunbookModel(
+        id: 'rb',
+        workspaceId: 'w',
+        title: 'rb',
+        createdAt: DateTime(2026),
+        variables: const [
+          VariableDeclaration(name: 'token', type: VariableType.secret),
+        ],
+        steps: [
+          RunbookStepModel(
+            id: 's',
+            runbookId: 'rb',
+            stepOrder: 1,
+            command: command,
+          ),
+        ],
+      );
+
+      test('each host gets its own \${SV:...} values', () async {
+        final factory = FakeFactory();
+        final h1 = host(
+          'h1',
+        ).copyWith(label: 'One', hostname: 'one.example.com');
+        final h2 = host('h2').copyWith(
+          label: 'Two',
+          hostname: 'two.example.com',
+          username: 'ops',
+          port: 2200,
+        );
+        await RunbookRunService(sessionFactory: factory).start(
+          one(r'ssh ${SV:USER}@${SV:HOST}:${SV:PORT} # ${SV:HOST_LABEL}'),
+          [h1, h2],
+        ).result;
+        expect(factory.sessions['h1']!.ran, ['ssh @one.example.com:22 # One']);
+        expect(factory.sessions['h2']!.ran, [
+          'ssh ops@two.example.com:2200 # Two',
+        ]);
+      });
+
+      test('a typed value is never read as a placeholder itself', () async {
+        final factory = FakeFactory();
+        await RunbookRunService(sessionFactory: factory)
+            .start(
+              one(r'echo ${INPUT:x}'),
+              [host('h1')],
+              variableValues: {'x': r'${SV:HOST}'},
+            )
+            .result;
+        expect(factory.sessions['h1']!.ran, [r'echo ${SV:HOST}']);
+      });
+
+      test('a secret is masked in what the run view receives', () async {
+        final factory = FakeFactory(
+          handler: (hostId, command) async => ('echo says $command', 0),
+        );
+        final events = <RunEvent>[];
+        await RunbookRunService(sessionFactory: factory)
+            .start(
+              one(r'login ${INPUT:token}'),
+              [host('h1')],
+              variableValues: {'token': 'hunter2'},
+              secretValues: {'hunter2'},
+              onEvent: events.add,
+            )
+            .result;
+        // The session really received it; the view never sees it.
+        expect(factory.sessions['h1']!.ran, ['login hunter2']);
+        final shown = events.whereType<StepFinishedEvent>().single.result;
+        expect(shown.output, isNot(contains('hunter2')));
+        expect(shown.command, 'login [redacted]');
+        expect(shown.output, contains('[redacted]'));
+      });
     });
   });
 }

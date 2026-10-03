@@ -6,6 +6,9 @@ import 'package:uuid/uuid.dart';
 import '../../../../app/widgets/adaptive_modal.dart';
 import '../../domain/models/runbook_model.dart';
 import '../../domain/models/runbook_step_model.dart';
+import '../../domain/models/variable_declaration.dart';
+import '../../domain/services/snippet_variable_parser.dart';
+import 'variables_editor.dart';
 
 /// Form dialog for creating or editing a Runbook and its step sequence.
 class RunbookEditorDialog extends StatefulWidget {
@@ -39,6 +42,14 @@ class _RunbookEditorDialogState extends State<RunbookEditorDialog> {
   late TextEditingController _titleController;
   late TextEditingController _descriptionController;
   final List<RunbookStepModel> _steps = [];
+  List<VariableDeclaration> _declarations = const [];
+
+  /// The `${INPUT:...}` names in the command steps, as typed.
+  List<String> _usedVariableNames() => {
+    for (final step in _steps)
+      if (step.kind == StepKind.command)
+        ...SnippetVariableParser.extractVariables(step.command),
+  }.toList();
 
   @override
   void initState() {
@@ -49,6 +60,7 @@ class _RunbookEditorDialogState extends State<RunbookEditorDialog> {
     );
     if (widget.runbook != null) {
       _steps.addAll(widget.runbook!.steps);
+      _declarations = widget.runbook!.variables;
     }
   }
 
@@ -123,6 +135,12 @@ class _RunbookEditorDialogState extends State<RunbookEditorDialog> {
                 createdAt: widget.runbook?.createdAt ?? DateTime.now(),
                 // Not edited here: the target sheet owns the default hosts.
                 defaultHostIds: widget.runbook?.defaultHostIds ?? const [],
+                tags: widget.runbook?.tags ?? const [],
+                // Only for placeholders still in a step.
+                variables: VariablesEditor.declarationsToSave(
+                  _usedVariableNames(),
+                  _declarations,
+                ),
               );
               Navigator.of(context).pop(result);
             }
@@ -213,7 +231,13 @@ class _RunbookEditorDialogState extends State<RunbookEditorDialog> {
                               // Read the live element: `step` is the build-time
                               // snapshot, so copying from it would silently
                               // revert edits made to the other fields.
-                              _steps[idx] = _steps[idx].copyWith(command: val);
+                              // Rebuilt so the Variables section follows what
+                              // is typed.
+                              setState(() {
+                                _steps[idx] = _steps[idx].copyWith(
+                                  command: val,
+                                );
+                              });
                             },
                           ),
                           const SizedBox(height: 8),
@@ -341,6 +365,24 @@ class _RunbookEditorDialogState extends State<RunbookEditorDialog> {
                     ),
                   );
                 }),
+                const SizedBox(height: 8),
+                const PlaceholderHelp(),
+                const SizedBox(height: 12),
+                const ShellVibeFormSectionHeader(
+                  icon: LucideIcons.variable,
+                  title: 'Variables',
+                ),
+                const SizedBox(height: 4),
+                VariablesEditor(
+                  names: _usedVariableNames(),
+                  declarations: _declarations,
+                  onChanged: (next) => setState(
+                    () => _declarations = VariablesEditor.merge(
+                      _declarations,
+                      next,
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
