@@ -29,6 +29,13 @@ class HostModel {
   /// Snippet sent into this host's terminal when its session first comes up.
   final String? startupSnippetId;
 
+  /// `dev`, `staging` or `prod`. The MCP policy engine reads it, and so does
+  /// anything that runs a command in the background: nothing starts on `prod`
+  /// without the user confirming it.
+  final String environment;
+
+  bool get isProd => environment == 'prod';
+
   const HostModel({
     required this.id,
     required this.workspaceId,
@@ -45,6 +52,7 @@ class HostModel {
     this.jumpHostId,
     required this.createdAt,
     this.startupSnippetId,
+    this.environment = 'dev',
   });
 
   HostModel copyWith({
@@ -63,6 +71,7 @@ class HostModel {
     String? jumpHostId,
     DateTime? createdAt,
     String? startupSnippetId,
+    String? environment,
   }) {
     return HostModel(
       id: id ?? this.id,
@@ -80,6 +89,7 @@ class HostModel {
       jumpHostId: jumpHostId ?? this.jumpHostId,
       createdAt: createdAt ?? this.createdAt,
       startupSnippetId: startupSnippetId ?? this.startupSnippetId,
+      environment: environment ?? this.environment,
     );
   }
 
@@ -102,6 +112,7 @@ class HostModel {
           colorTag == other.colorTag &&
           jumpHostId == other.jumpHostId &&
           startupSnippetId == other.startupSnippetId &&
+          environment == other.environment &&
           createdAt == other.createdAt;
 
   @override
@@ -120,6 +131,7 @@ class HostModel {
       colorTag.hashCode ^
       jumpHostId.hashCode ^
       startupSnippetId.hashCode ^
+      environment.hashCode ^
       createdAt.hashCode;
 }
 

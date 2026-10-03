@@ -19,6 +19,7 @@ import '../notifiers/run_history_providers.dart';
 import '../notifiers/runbook_run_notifier.dart';
 import '../notifiers/runbooks_notifier.dart';
 import '../widgets/automation_section_layout.dart';
+import '../widgets/prod_confirmation.dart';
 import '../widgets/run_progress_view.dart';
 import '../widgets/run_target_sheet.dart';
 import '../widgets/runbook_editor_dialog.dart';
@@ -325,6 +326,15 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
       if (!mounted || inputs == null) return;
       variableValues = inputs;
     }
+
+    if (!await confirmProdRun(
+      context,
+      what: 'runbook "${runbook.title}"',
+      hosts: hosts,
+    )) {
+      return;
+    }
+    if (!mounted) return;
 
     // Saved once the run is certain to start, so backing out of the variables
     // dialog does not rewrite the runbook's defaults.

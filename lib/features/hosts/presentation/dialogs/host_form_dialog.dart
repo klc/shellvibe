@@ -39,6 +39,7 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
   String? _selectedIdentityId;
   String? _selectedJumpHostId;
   String? _selectedStartupSnippetId;
+  late String _environment;
   bool _isLoading = false;
 
   @override
@@ -72,6 +73,7 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
     _selectedIdentityId = init?.identityId;
     _selectedJumpHostId = init?.jumpHostId;
     _selectedStartupSnippetId = init?.startupSnippetId;
+    _environment = init?.environment ?? 'dev';
   }
 
   @override
@@ -165,6 +167,7 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
               : _colorTagController.text.trim(),
           jumpHostId: _selectedJumpHostId,
           startupSnippetId: _selectedStartupSnippetId,
+          environment: _environment,
         );
       } else {
         saved = await notifier.addHost(
@@ -184,6 +187,7 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
               : _colorTagController.text.trim(),
           jumpHostId: _selectedJumpHostId,
           startupSnippetId: _selectedStartupSnippetId,
+          environment: _environment,
         );
       }
 
@@ -692,6 +696,28 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                         text: 'Failed to load snippets',
                       ),
                     ),
+                const SizedBox(height: 12),
+                // What this machine is. Anything that runs a command on it in
+                // the background asks first when it is production.
+                ShadSelectFormField<String>(
+                  key: const Key('host_environment_dropdown'),
+                  initialValue: _environment,
+                  label: const Text('Environment'),
+                  selectedOptionBuilder: (context, value) =>
+                      Text(switch (value) {
+                        'prod' => 'Production',
+                        'staging' => 'Staging',
+                        _ => 'Development',
+                      }),
+                  options: const [
+                    ShadOption(value: 'dev', child: Text('Development')),
+                    ShadOption(value: 'staging', child: Text('Staging')),
+                    ShadOption(value: 'prod', child: Text('Production')),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) setState(() => _environment = val);
+                  },
+                ),
                 const SizedBox(height: 16),
                 // The address the form actually resolves to, spelled out. Two
                 // fields and a jump-host select do not add up to a route in

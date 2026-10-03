@@ -643,4 +643,109 @@ void main() {
       expect(saved.defaultHostIds, '["h2"]');
     });
   });
+
+  group('Production confirmation', () {
+    Future<void> markProd(String id) =>
+        (db.update(db.hosts)..where((h) => h.id.equals(id))).write(
+          const HostsCompanion(environment: Value('prod')),
+        );
+
+    Future<void> startRunbook(WidgetTester tester, List<String> ids) async {
+      await tester.tap(find.byKey(const Key('runbook_execute_rb')));
+      await tester.pumpAndSettle();
+      for (final id in ids) {
+        await tester.tap(find.byKey(Key('run_target_host_$id')));
+        await tester.pump();
+      }
+      await tester.tap(find.byKey(const Key('run_target_confirm')));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('a production host asks first, naming it, and cancel aborts', (
+      tester,
+    ) async {
+      await seedRunbook();
+      await markProd('h2');
+      final factory = _FakeFactory();
+      await pumpScreen(tester, factory);
+
+      await startRunbook(tester, ['h1', 'h2']);
+      expect(find.byKey(const Key('prod_confirm_dialog')), findsOneWidget);
+      expect(find.textContaining('web-2'), findsOneWidget);
+      // Only the production host is named.
+      expect(find.textContaining('web-1'), findsNothing);
+      expect(find.textContaining('Health check'), findsWidgets);
+
+      await tester.tap(find.byKey(const Key('prod_confirm_cancel')));
+      await tester.pumpAndSettle();
+      expect(factory.openedHosts, isEmpty);
+      expect(find.byKey(const Key('run_result_dialog')), findsNothing);
+    });
+
+    testWidgets('confirming runs it', (tester) async {
+      await seedRunbook();
+      await markProd('h2');
+      final factory = _FakeFactory();
+      await pumpScreen(tester, factory);
+
+      await startRunbook(tester, ['h1', 'h2']);
+      await tester.tap(find.byKey(const Key('prod_confirm_run')));
+      await tester.pumpAndSettle();
+      expect(factory.openedHosts.toSet(), {'h1', 'h2'});
+    });
+
+    testWidgets('no production host, no extra dialog', (tester) async {
+      await seedRunbook();
+      final factory = _FakeFactory();
+      await pumpScreen(tester, factory);
+      await startRunbook(tester, ['h1']);
+      expect(find.byKey(const Key('prod_confirm_dialog')), findsNothing);
+      expect(factory.openedHosts, ['h1']);
+    });
+
+    testWidgets('a snippet on a production host asks too', (tester) async {
+      await db.snippetsDao.insertSnippet(
+        SnippetsCompanion.insert(
+          id: 'sn',
+          workspaceId: 'default',
+          title: 'Restart',
+          code: 'systemctl restart app',
+        ),
+      );
+      await markProd('h1');
+      final factory = _FakeFactory();
+      await pumpScreen(tester, factory, section: AutomationSection.snippets);
+
+      await tester.tap(find.byKey(const Key('snippet_run_sn')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('run_target_host_h1')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('run_target_confirm')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('prod_confirm_dialog')), findsOneWidget);
+      expect(find.textContaining('snippet "Restart"'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('prod_confirm_cancel')));
+      await tester.pumpAndSettle();
+      expect(factory.openedHosts, isEmpty);
+    });
+
+    testWidgets('running again from the run view asks again', (tester) async {
+      await seedRunbook();
+      await markProd('h1');
+      final factory = _FakeFactory();
+      await pumpScreen(tester, factory);
+      await startRunbook(tester, ['h1']);
+      await tester.tap(find.byKey(const Key('prod_confirm_run')));
+      await tester.pumpAndSettle();
+      expect(factory.openedHosts, ['h1']);
+
+      await tester.tap(find.byKey(const Key('run_run_again')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('prod_confirm_dialog')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('prod_confirm_cancel')));
+      await tester.pumpAndSettle();
+      expect(factory.openedHosts, ['h1']);
+    });
+  });
 }

@@ -132,7 +132,7 @@ Future<bool> _confirmOnOpen(
       title: Text('Run "${runbook.title}"?'),
       description: Text(
         '"${template.name}" is set to run this runbook on its hosts:\n'
-        '${hosts.map((h) => '• ${h.label}').join('\n')}',
+        '${hosts.map((h) => '• ${h.label}${h.isProd ? ' (production)' : ''}').join('\n')}',
       ),
       actions: adaptiveDialogActions(dialogContext, [
         ShellVibeButton.secondary(
@@ -140,11 +140,19 @@ Future<bool> _confirmOnOpen(
           label: 'Skip',
           onPressed: () => Navigator.of(dialogContext).pop(false),
         ),
-        ShellVibeButton(
-          key: const Key('on_open_confirm_run'),
-          label: 'Run',
-          onPressed: () => Navigator.of(dialogContext).pop(true),
-        ),
+        // Destructive-styled when production is among them.
+        if (hosts.any((h) => h.isProd))
+          ShellVibeButton.danger(
+            key: const Key('on_open_confirm_run'),
+            label: 'Run on production',
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+          )
+        else
+          ShellVibeButton(
+            key: const Key('on_open_confirm_run'),
+            label: 'Run',
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+          ),
       ]),
       actionsAxis: adaptiveDialogActionsAxis(dialogContext),
     ),

@@ -38,6 +38,7 @@ class HostsNotifier extends _$HostsNotifier {
     String? colorTag,
     String? jumpHostId,
     String? startupSnippetId,
+    String environment = 'dev',
   }) async {
     final previousState = state;
     try {
@@ -56,6 +57,7 @@ class HostsNotifier extends _$HostsNotifier {
         colorTag: colorTag,
         jumpHostId: jumpHostId,
         startupSnippetId: startupSnippetId,
+        environment: environment,
       );
       final items = await repo.getHostsByWorkspace(
         ref.read(activeWorkspaceIdProvider),
@@ -85,6 +87,7 @@ class HostsNotifier extends _$HostsNotifier {
     String? colorTag,
     String? jumpHostId,
     String? startupSnippetId,
+    String environment = 'dev',
   }) async {
     final previousState = state;
     try {
@@ -104,6 +107,7 @@ class HostsNotifier extends _$HostsNotifier {
         colorTag: colorTag,
         jumpHostId: jumpHostId,
         startupSnippetId: startupSnippetId,
+        environment: environment,
       );
       final items = await repo.getHostsByWorkspace(
         ref.read(activeWorkspaceIdProvider),

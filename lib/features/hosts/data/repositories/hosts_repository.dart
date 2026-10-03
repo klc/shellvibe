@@ -28,6 +28,7 @@ class HostsRepository {
     String? colorTag,
     String? jumpHostId,
     String? startupSnippetId,
+    String environment = 'dev',
   }) async {
     final hostId = id ?? const Uuid().v4();
     final now = DateTime.now();
@@ -50,6 +51,7 @@ class HostsRepository {
       colorTag: Value<String?>(colorTag),
       jumpHostId: Value<String?>(jumpHostId),
       startupSnippetId: Value<String?>(startupSnippetId),
+      environment: Value(environment),
       // Keep the original creation date on edits.
       createdAt: id == null ? Value(now) : const Value.absent(),
     );
@@ -83,6 +85,7 @@ class HostsRepository {
       jumpHostId: jumpHostId,
       createdAt: now,
       startupSnippetId: startupSnippetId,
+      environment: environment,
     );
   }
 
@@ -236,6 +239,7 @@ class HostsRepository {
       jumpHostId: row.jumpHostId,
       createdAt: row.createdAt,
       startupSnippetId: row.startupSnippetId,
+      environment: row.environment,
     );
   }
 

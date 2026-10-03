@@ -18,6 +18,7 @@ import '../notifiers/runbook_run_notifier.dart';
 import '../notifiers/runbooks_notifier.dart';
 import '../notifiers/snippets_notifier.dart';
 import '../widgets/automation_section_layout.dart';
+import '../widgets/prod_confirmation.dart';
 import '../widgets/run_progress_view.dart';
 import '../widgets/run_target_sheet.dart';
 import '../widgets/runbook_editor_dialog.dart';
@@ -620,6 +621,19 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
     if (!mounted || values == null) return;
 
     final hosts = selection.hosts;
+    // A pane's host counts as much as a background target: typing into a
+    // production shell is running on production.
+    final tabsState = ref.read(terminalTabsProvider);
+    if (!await confirmProdRun(
+      context,
+      what: 'snippet "${snippet.title}"',
+      hosts: hosts.isNotEmpty
+          ? hosts
+          : terminalTargetHosts(tabsState, selection.targets.first),
+    )) {
+      return;
+    }
+    if (!mounted) return;
     if (hosts.isNotEmpty) {
       final notifier = ref.read(runbookRunProvider.notifier);
       if (notifier.isRunning) {

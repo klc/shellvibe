@@ -186,4 +186,32 @@ void main() {
     );
     expect(h.starts, isEmpty);
   });
+
+  test('a production host asks even when ask-first is off', () async {
+    final h = Harness();
+    final prod = host('a').copyWith(environment: 'prod');
+    final outcome = await h.onOpen.run(
+      template(confirm: false),
+      runbooks: [runbook('uptime')],
+      hostsById: {'a': prod, 'b': host('b')},
+    );
+    expect(outcome, OnOpenOutcome.started);
+    expect(h.confirms, [
+      ['a', 'b'],
+    ]);
+  });
+
+  test('and declining that stops it', () async {
+    final h = Harness()..confirmAnswer = false;
+    final outcome = await h.onOpen.run(
+      template(confirm: false),
+      runbooks: [runbook('uptime')],
+      hostsById: {
+        'a': host('a').copyWith(environment: 'prod'),
+        'b': host('b'),
+      },
+    );
+    expect(outcome, OnOpenOutcome.declined);
+    expect(h.starts, isEmpty);
+  });
 }

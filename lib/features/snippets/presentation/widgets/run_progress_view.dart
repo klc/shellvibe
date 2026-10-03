@@ -15,6 +15,7 @@ import '../../domain/models/runbook_step_model.dart';
 import '../../domain/services/runbook_executor.dart';
 import '../../domain/services/runbook_run_service.dart';
 import '../../domain/services/snippet_variable_parser.dart';
+import 'prod_confirmation.dart';
 import '../notifiers/run_history_providers.dart';
 import '../notifiers/runbook_run_notifier.dart';
 import '../notifiers/runbooks_notifier.dart';
@@ -186,6 +187,16 @@ Future<bool> rerunOnHosts(
     );
     if (hosts.isEmpty) return false;
   }
+  if (!await confirmProdRun(
+    context,
+    what:
+        '${RunbookRunService.isSnippetRunbook(runbook) ? 'snippet' : 'runbook'}'
+        ' "${runbook.title}"',
+    hosts: hosts,
+  )) {
+    return false;
+  }
+  if (!context.mounted) return false;
   unawaited(
     notifier.start(
       runbook,

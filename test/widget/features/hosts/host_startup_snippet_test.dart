@@ -111,4 +111,34 @@ void main() {
 
     expect((await db.select(db.hosts).get()).single.startupSnippetId, isNull);
   });
+
+  testWidgets('the environment select saves Production', (tester) async {
+    await pumpForm(tester);
+    await tester.enterText(find.byKey(const Key('host_label_input')), 'db');
+    await tester.enterText(
+      find.byKey(const Key('host_hostname_input')),
+      'db.example.com',
+    );
+    final dropdown = find.byKey(const Key('host_environment_dropdown'));
+    await tester.scrollUntilVisible(
+      dropdown,
+      120,
+      scrollable: find
+          .descendant(
+            of: find.byType(HostFormDialog),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await tester.tap(
+      find.descendant(of: dropdown, matching: find.text('Development')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Production').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('host_save_button')));
+    await tester.pumpAndSettle();
+
+    expect((await db.select(db.hosts).get()).single.environment, 'prod');
+  });
 }

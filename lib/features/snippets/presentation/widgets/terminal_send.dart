@@ -1,4 +1,5 @@
 import '../../../terminal/presentation/notifiers/terminal_tabs_notifier.dart';
+import '../../../hosts/domain/models/host_model.dart';
 import '../../domain/models/run_target.dart';
 
 /// Types [code] into an open terminal and presses Enter, the way the terminal's
@@ -29,5 +30,25 @@ bool sendToOpenTerminal(
       return true;
     case HostRunTarget():
       return false;
+  }
+}
+
+/// The hosts of the panes [target] would type into, for the production check:
+/// the active pane's, or every selected pane's. Panes with no host (local
+/// shells) contribute none.
+List<HostModel> terminalTargetHosts(TerminalTabsState tabs, RunTarget target) {
+  switch (target) {
+    case SelectedPanesRunTarget():
+      return [
+        for (final tab in tabs.tabs)
+          if (tabs.selectedPaneIds.contains(tab.id) && tab.host != null)
+            tab.host!,
+      ];
+    case ActivePaneRunTarget():
+      final pane =
+          tabs.activeTab ?? (tabs.tabs.isEmpty ? null : tabs.tabs.first);
+      return [if (pane?.host != null) pane!.host!];
+    case HostRunTarget(:final host):
+      return [host];
   }
 }
