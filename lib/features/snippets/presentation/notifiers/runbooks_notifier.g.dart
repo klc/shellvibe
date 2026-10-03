@@ -57,48 +57,6 @@ final class RunbooksRepositoryProvider
 String _$runbooksRepositoryHash() =>
     r'd7ba2bcba52eec919e5705e24a718fd1b2cb460e';
 
-@ProviderFor(runbookExecutor)
-final runbookExecutorProvider = RunbookExecutorProvider._();
-
-final class RunbookExecutorProvider
-    extends
-        $FunctionalProvider<RunbookExecutor, RunbookExecutor, RunbookExecutor>
-    with $Provider<RunbookExecutor> {
-  RunbookExecutorProvider._()
-    : super(
-        from: null,
-        argument: null,
-        retry: null,
-        name: r'runbookExecutorProvider',
-        isAutoDispose: true,
-        dependencies: null,
-        $allTransitiveDependencies: null,
-      );
-
-  @override
-  String debugGetCreateSourceHash() => _$runbookExecutorHash();
-
-  @$internal
-  @override
-  $ProviderElement<RunbookExecutor> $createElement($ProviderPointer pointer) =>
-      $ProviderElement(pointer);
-
-  @override
-  RunbookExecutor create(Ref ref) {
-    return runbookExecutor(ref);
-  }
-
-  /// {@macro riverpod.override_with_value}
-  Override overrideWithValue(RunbookExecutor value) {
-    return $ProviderOverride(
-      origin: this,
-      providerOverride: $SyncValueProvider<RunbookExecutor>(value),
-    );
-  }
-}
-
-String _$runbookExecutorHash() => r'd6865abfa4f13e5e948c268e414839138b9065f1';
-
 @ProviderFor(RunbooksNotifier)
 final runbooksProvider = RunbooksNotifierProvider._();
 
@@ -123,7 +81,7 @@ final class RunbooksNotifierProvider
   RunbooksNotifier create() => RunbooksNotifier();
 }
 
-String _$runbooksNotifierHash() => r'a14918aab2ccb0e3b15d6a76915c03c44eb59563';
+String _$runbooksNotifierHash() => r'fe0c0e7eb3f8143e53f87f317bbfbfcf9b9de8c3';
 
 abstract class _$RunbooksNotifier extends $AsyncNotifier<List<RunbookModel>> {
   FutureOr<List<RunbookModel>> build();

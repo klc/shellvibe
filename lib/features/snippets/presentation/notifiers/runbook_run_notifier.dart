@@ -1,4 +1,3 @@
-import 'package:flutter_riverpod/misc.dart' show KeepAliveLink;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../hosts/domain/models/host_model.dart';
@@ -86,14 +85,15 @@ class ActiveRun {
 /// Holds the run the Automation library is showing, so progress and Stop
 /// outlive the widget that started it.
 ///
-/// Auto-dispose, but kept alive while a run is in flight: leaving the screen
-/// must not silently cancel a deploy, and a settled run has nothing left to
-/// protect. Disposing mid-run (the app container going away) cancels it, which
-/// closes every SSH session it opened.
-@riverpod
+/// Kept alive, unlike the session-scoped providers: leaving the screen must
+/// not silently cancel a deploy, and a settled run (a dialog may still be
+/// about to read it) would otherwise vanish the moment nothing watched it.
+/// What it retains once settled is plain data — every SSH session is closed in
+/// the run service's `finally`, and disposing mid-run (the app container going
+/// away) cancels the run, which closes the ones still open.
+@Riverpod(keepAlive: true)
 class RunbookRunNotifier extends _$RunbookRunNotifier {
   RunbookRun? _run;
-  KeepAliveLink? _keepAlive;
 
   @override
   ActiveRun? build() {
@@ -115,7 +115,6 @@ class RunbookRunNotifier extends _$RunbookRunNotifier {
     Map<String, String> variableValues = const {},
   }) async {
     if (isRunning) return;
-    _keepAlive = ref.keepAlive();
     state = ActiveRun(
       runbook: runbook,
       running: true,
@@ -142,8 +141,6 @@ class RunbookRunNotifier extends _$RunbookRunNotifier {
       );
     } finally {
       _run = null;
-      _keepAlive?.close();
-      _keepAlive = null;
     }
   }
 
@@ -162,8 +159,10 @@ class RunbookRunNotifier extends _$RunbookRunNotifier {
   }
 
   void _apply(RunEvent event) {
+    // Events keep arriving while a disposed run unwinds its cancel.
+    if (!ref.mounted) return;
     final current = state;
-    if (current == null || !ref.mounted) return;
+    if (current == null) return;
     state = current.copyWith(
       hosts: [
         for (final h in current.hosts)

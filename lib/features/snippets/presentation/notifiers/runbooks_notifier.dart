@@ -6,7 +6,6 @@ import '../../../../shared/providers/workspace_provider.dart';
 import '../../data/repositories/runbooks_repository.dart';
 import '../../domain/models/runbook_model.dart';
 import '../../domain/models/runbook_step_model.dart';
-import '../../domain/services/runbook_executor.dart';
 
 part 'runbooks_notifier.g.dart';
 
@@ -14,11 +13,6 @@ part 'runbooks_notifier.g.dart';
 RunbooksRepository runbooksRepository(Ref ref) {
   final dao = ref.watch(runbooksDaoProvider);
   return RunbooksRepository(dao);
-}
-
-@riverpod
-RunbookExecutor runbookExecutor(Ref ref) {
-  return RunbookExecutor();
 }
 
 @riverpod
@@ -75,24 +69,5 @@ class RunbooksNotifier extends _$RunbooksNotifier {
         ref.read(activeWorkspaceIdProvider),
       );
     });
-  }
-
-  Future<RunbookExecutionResult> executeRunbook(
-    RunbookModel runbook,
-    Future<(String output, int exitCode)> Function(
-      String command,
-      int timeoutSeconds,
-    )
-    commandRunner, {
-    Map<String, String> variableValues = const {},
-    void Function(RunbookStepModel step, String status)? onProgress,
-  }) async {
-    final executor = ref.read(runbookExecutorProvider);
-    return await executor.executeRunbook(
-      runbook,
-      commandRunner,
-      variableValues: variableValues,
-      onProgress: onProgress,
-    );
   }
 }

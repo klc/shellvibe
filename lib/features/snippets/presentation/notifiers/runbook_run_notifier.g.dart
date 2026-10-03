@@ -11,10 +11,12 @@ part of 'runbook_run_notifier.dart';
 /// Holds the run the Automation library is showing, so progress and Stop
 /// outlive the widget that started it.
 ///
-/// Auto-dispose, but kept alive while a run is in flight: leaving the screen
-/// must not silently cancel a deploy, and a settled run has nothing left to
-/// protect. Disposing mid-run (the app container going away) cancels it, which
-/// closes every SSH session it opened.
+/// Kept alive, unlike the session-scoped providers: leaving the screen must
+/// not silently cancel a deploy, and a settled run (a dialog may still be
+/// about to read it) would otherwise vanish the moment nothing watched it.
+/// What it retains once settled is plain data — every SSH session is closed in
+/// the run service's `finally`, and disposing mid-run (the app container going
+/// away) cancels the run, which closes the ones still open.
 
 @ProviderFor(RunbookRunNotifier)
 final runbookRunProvider = RunbookRunNotifierProvider._();
@@ -22,26 +24,30 @@ final runbookRunProvider = RunbookRunNotifierProvider._();
 /// Holds the run the Automation library is showing, so progress and Stop
 /// outlive the widget that started it.
 ///
-/// Auto-dispose, but kept alive while a run is in flight: leaving the screen
-/// must not silently cancel a deploy, and a settled run has nothing left to
-/// protect. Disposing mid-run (the app container going away) cancels it, which
-/// closes every SSH session it opened.
+/// Kept alive, unlike the session-scoped providers: leaving the screen must
+/// not silently cancel a deploy, and a settled run (a dialog may still be
+/// about to read it) would otherwise vanish the moment nothing watched it.
+/// What it retains once settled is plain data — every SSH session is closed in
+/// the run service's `finally`, and disposing mid-run (the app container going
+/// away) cancels the run, which closes the ones still open.
 final class RunbookRunNotifierProvider
     extends $NotifierProvider<RunbookRunNotifier, ActiveRun?> {
   /// Holds the run the Automation library is showing, so progress and Stop
   /// outlive the widget that started it.
   ///
-  /// Auto-dispose, but kept alive while a run is in flight: leaving the screen
-  /// must not silently cancel a deploy, and a settled run has nothing left to
-  /// protect. Disposing mid-run (the app container going away) cancels it, which
-  /// closes every SSH session it opened.
+  /// Kept alive, unlike the session-scoped providers: leaving the screen must
+  /// not silently cancel a deploy, and a settled run (a dialog may still be
+  /// about to read it) would otherwise vanish the moment nothing watched it.
+  /// What it retains once settled is plain data — every SSH session is closed in
+  /// the run service's `finally`, and disposing mid-run (the app container going
+  /// away) cancels the run, which closes the ones still open.
   RunbookRunNotifierProvider._()
     : super(
         from: null,
         argument: null,
         retry: null,
         name: r'runbookRunProvider',
-        isAutoDispose: true,
+        isAutoDispose: false,
         dependencies: null,
         $allTransitiveDependencies: null,
       );
@@ -63,15 +69,17 @@ final class RunbookRunNotifierProvider
 }
 
 String _$runbookRunNotifierHash() =>
-    r'5360ed29fcf1be3b3e873c3a055cc91572d9b05f';
+    r'286501659ad9bfe307dcab67f312aedb0689fc47';
 
 /// Holds the run the Automation library is showing, so progress and Stop
 /// outlive the widget that started it.
 ///
-/// Auto-dispose, but kept alive while a run is in flight: leaving the screen
-/// must not silently cancel a deploy, and a settled run has nothing left to
-/// protect. Disposing mid-run (the app container going away) cancels it, which
-/// closes every SSH session it opened.
+/// Kept alive, unlike the session-scoped providers: leaving the screen must
+/// not silently cancel a deploy, and a settled run (a dialog may still be
+/// about to read it) would otherwise vanish the moment nothing watched it.
+/// What it retains once settled is plain data — every SSH session is closed in
+/// the run service's `finally`, and disposing mid-run (the app container going
+/// away) cancels the run, which closes the ones still open.
 
 abstract class _$RunbookRunNotifier extends $Notifier<ActiveRun?> {
   ActiveRun? build();
