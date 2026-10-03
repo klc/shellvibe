@@ -737,12 +737,13 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
   }
 
   /// Sends [code] to every selected pane (origin included) — the snippet
-  /// path while broadcasting.
-  void sendTextToSelectedPanes(String code) {
+  /// path while broadcasting. With [submit] the command is also run (Enter).
+  void sendTextToSelectedPanes(String code, {bool submit = false}) {
     _broadcastRouter.sendTextToPanes(
       selectedIds: state.selectedPaneIds,
       tabs: state.tabs,
       text: code,
+      submit: submit,
     );
   }
 

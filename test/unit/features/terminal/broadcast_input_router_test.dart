@@ -109,6 +109,22 @@ void main() {
       expect(c, ['cd /home/xyz\rpwd']);
     });
 
+    test('sendTextToPanes with submit presses Enter after the paste', () {
+      final a = <String>[];
+      final b = <String>[];
+      final tabs = [session('a', captured: a), session('b', captured: b)];
+
+      router.sendTextToPanes(
+        selectedIds: {'a', 'b'},
+        tabs: tabs,
+        text: 'uptime',
+        submit: true,
+      );
+
+      expect(a, ['uptime', '\r']);
+      expect(b, ['uptime', '\r']);
+    });
+
     test('unconnected pane (no onOutput handler) is skipped', () {
       final a = <String>[];
       final tabA = session('a', captured: a);
