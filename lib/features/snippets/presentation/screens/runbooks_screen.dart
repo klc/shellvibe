@@ -21,6 +21,7 @@ import '../notifiers/runbooks_notifier.dart';
 import '../widgets/automation_section_layout.dart';
 import '../widgets/prod_confirmation.dart';
 import '../widgets/run_history_section.dart';
+import '../widgets/runbook_markdown_actions.dart';
 import '../widgets/run_progress_view.dart';
 import '../widgets/run_target_sheet.dart';
 import '../widgets/runbook_editor_dialog.dart';
@@ -128,6 +129,16 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
                   icon: LucideIcons.plus,
                   onPressed: _openEditor,
                 ),
+                ShellVibeButton.secondary(
+                  key: const Key('empty_import_runbook_button'),
+                  label: 'Import',
+                  icon: LucideIcons.fileUp,
+                  onPressed: () => importRunbookMarkdown(
+                    context,
+                    ref,
+                    workspaceId: _workspaceId,
+                  ),
+                ),
               ],
             ),
           );
@@ -186,6 +197,8 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
                       },
                       onRun: () => _executeRunbook(runbook),
                       onEdit: () => _openEditor(runbook: runbook),
+                      onExport: () =>
+                          exportRunbookMarkdown(context, ref, runbook),
                       onDelete: () => _deleteRunbook(runbook),
                     );
                   },
@@ -440,6 +453,7 @@ class _RunbookRow extends StatelessWidget {
   final VoidCallback onRun;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final VoidCallback onExport;
 
   const _RunbookRow({
     super.key,
@@ -452,6 +466,7 @@ class _RunbookRow extends StatelessWidget {
     required this.onRun,
     required this.onEdit,
     required this.onDelete,
+    required this.onExport,
   });
 
   @override
@@ -566,6 +581,7 @@ class _RunbookRow extends StatelessWidget {
                       icon: const Icon(LucideIcons.ellipsis, size: 16),
                       onSelected: (value) {
                         if (value == 'edit') onEdit();
+                        if (value == 'export') onExport();
                         if (value == 'delete') onDelete();
                       },
                       itemBuilder: (context) => [
@@ -576,6 +592,24 @@ class _RunbookRow extends StatelessWidget {
                               Icon(LucideIcons.pencil, size: 16),
                               SizedBox(width: 8),
                               Text('Edit runbook'),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          key: Key('runbook_menu_export'),
+                          value: 'export',
+                          child: Row(
+                            children: [
+                              Icon(LucideIcons.fileDown, size: 16),
+                              SizedBox(width: 8),
+                              // Flexible: the menu is as wide as its widest
+                              // item, and this one is the long one.
+                              Flexible(
+                                child: Text(
+                                  'Export as Markdown',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
                             ],
                           ),
                         ),

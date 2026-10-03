@@ -21,6 +21,7 @@ import '../notifiers/snippets_notifier.dart';
 import '../widgets/automation_section_layout.dart';
 import '../widgets/prod_confirmation.dart';
 import '../widgets/run_history_section.dart';
+import '../widgets/runbook_markdown_actions.dart';
 import '../widgets/run_progress_view.dart';
 import '../widgets/run_target_sheet.dart';
 import '../widgets/runbook_editor_dialog.dart';
@@ -218,6 +219,14 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
             onPressed: _openRunbookEditor,
           ),
         },
+      if (!isSectionEmpty && _section == AutomationSection.runbooks)
+        ShellVibeButton.secondary(
+          key: const Key('import_runbook_button'),
+          label: 'Import',
+          icon: LucideIcons.fileUp,
+          onPressed: () =>
+              importRunbookMarkdown(context, ref, workspaceId: _workspaceId),
+        ),
     ];
 
     final header = Column(
