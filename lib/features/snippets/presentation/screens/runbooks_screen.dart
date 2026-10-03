@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -12,6 +14,7 @@ import '../../domain/models/runbook_step_model.dart';
 import '../../domain/services/runbook_run_service.dart';
 import '../../domain/services/snippet_variable_parser.dart';
 import '../../data/run_providers.dart';
+import '../../../templates/presentation/template_launch.dart';
 import '../notifiers/run_history_providers.dart';
 import '../notifiers/runbook_run_notifier.dart';
 import '../notifiers/runbooks_notifier.dart';
@@ -331,6 +334,11 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
       ]);
       if (!mounted) return;
     }
+
+    // The layout opens alongside the run, not after it: the run is a
+    // background job and the tabs are there to be watched meanwhile.
+    final layout = selection.openLayoutOf;
+    if (layout != null) unawaited(openTemplateLayout(context, ref, layout));
 
     // Selecting the running runbook keeps its progress on screen.
     setState(() => _selectedRunbookId = runbook.id);

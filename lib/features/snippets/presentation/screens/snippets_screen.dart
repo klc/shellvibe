@@ -13,6 +13,7 @@ import '../../../terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import '../../domain/models/snippet_model.dart';
 import '../../domain/services/runbook_run_service.dart';
 import '../../domain/services/snippet_variable_parser.dart';
+import '../../../templates/presentation/template_launch.dart';
 import '../notifiers/runbook_run_notifier.dart';
 import '../notifiers/runbooks_notifier.dart';
 import '../notifiers/snippets_notifier.dart';
@@ -625,6 +626,8 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
         _toast('A run is already in progress.');
         return;
       }
+      final layout = selection.openLayoutOf;
+      if (layout != null) unawaited(openTemplateLayout(context, ref, layout));
       // Opened first: the dialog watches the run, so progress and Stop are on
       // screen from the first connection rather than after the last.
       unawaited(

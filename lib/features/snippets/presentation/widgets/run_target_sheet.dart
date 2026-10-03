@@ -9,6 +9,9 @@ import '../../../../core/utils/platform_capabilities.dart';
 import '../../../hosts/domain/models/host_model.dart';
 import '../../../hosts/presentation/notifiers/host_groups_notifier.dart';
 import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
+import '../../../templates/domain/models/template_model.dart';
+import '../../../templates/domain/services/template_hosts.dart';
+import '../../../templates/presentation/notifiers/templates_notifier.dart';
 import '../../../terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import '../../domain/models/run_strategy.dart';
 import '../../domain/models/run_target.dart';
@@ -73,6 +76,9 @@ class _RunTargetSheetState extends ConsumerState<RunTargetSheet> {
   bool _rolling = false;
   int _concurrency = RunStrategy.defaultConcurrency;
   bool _saveDefault = false;
+  TemplateModel? _template;
+  TemplateHosts? _templateHosts;
+  bool _openLayout = false;
 
   /// Local shells cannot take a background connection yet.
   static bool _selectable(HostModel host) => host.protocol != 'local';
@@ -91,6 +97,91 @@ class _RunTargetSheetState extends ConsumerState<RunTargetSheet> {
         _selectedIds.addAll(ids);
       }
     });
+  }
+
+  /// Selects the hosts of [template]: a shortcut for ticking them one by one,
+  /// so the boxes below stay editable afterwards.
+  void _chooseTemplate(TemplateModel? template, List<HostModel> allHosts) {
+    setState(() {
+      _template = template;
+      _openLayout = false;
+      if (template == null) {
+        _templateHosts = null;
+        return;
+      }
+      final resolved = resolveTemplateHosts(template, {
+        for (final host in allHosts) host.id: host,
+      });
+      _templateHosts = resolved;
+      _selectedIds
+        ..clear()
+        ..addAll([
+          for (final host in resolved.hosts)
+            if (_selectable(host)) host.id,
+        ]);
+    });
+  }
+
+  Widget _templateSection(
+    ShellVibeTokens tokens,
+    List<TemplateModel> templates,
+    List<HostModel> hosts,
+  ) {
+    final resolved = _templateHosts;
+    final skipped = resolved?.skippedPanes ?? 0;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const ShellVibeSectionLabel(label: 'Template'),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: DropdownButton<String?>(
+            key: const Key('run_target_template'),
+            isExpanded: true,
+            isDense: true,
+            value: _template?.id,
+            hint: const Text('Select the hosts of a template'),
+            items: [
+              const DropdownMenuItem<String?>(
+                value: null,
+                child: Text('No template'),
+              ),
+              for (final template in templates)
+                DropdownMenuItem<String?>(
+                  value: template.id,
+                  child: Text(template.name, overflow: TextOverflow.ellipsis),
+                ),
+            ],
+            onChanged: (id) => _chooseTemplate(
+              templates.where((t) => t.id == id).firstOrNull,
+              hosts,
+            ),
+          ),
+        ),
+        if (resolved != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+            child: Text(
+              key: const Key('run_target_template_note'),
+              '${resolved.hosts.length} '
+              '${resolved.hosts.length == 1 ? 'host' : 'hosts'} selected'
+              '${skipped == 0 ? '' : '; $skipped '
+                        '${skipped == 1 ? 'pane' : 'panes'} skipped '
+                        '(local shell or no host)'}.',
+              style: TextStyle(color: tokens.textMuted, fontSize: 11),
+            ),
+          ),
+        if (_template != null)
+          CheckboxListTile(
+            key: const Key('run_target_open_layout'),
+            dense: true,
+            controlAffinity: ListTileControlAffinity.leading,
+            value: _openLayout,
+            onChanged: (on) => setState(() => _openLayout = on == true),
+            title: const Text('Also open the layout'),
+          ),
+      ],
+    );
   }
 
   /// Parallel or rolling, and how wide parallel goes. Only shown for more than
@@ -163,6 +254,8 @@ class _RunTargetSheetState extends ConsumerState<RunTargetSheet> {
   Widget build(BuildContext context) {
     final tokens = ShellVibeTokens.resolve(context);
     final hostsAsync = ref.watch(hostsProvider);
+    final templates =
+        ref.watch(templatesProvider).value ?? const <TemplateModel>[];
     final groups = ref.watch(hostGroupsProvider).value ?? const [];
     final tabs = widget.allowTerminal ? ref.watch(terminalTabsProvider) : null;
     final hasTerminal = tabs != null && tabs.tabs.isNotEmpty;
@@ -225,6 +318,8 @@ class _RunTargetSheetState extends ConsumerState<RunTargetSheet> {
                 ),
               const ShellVibeSectionLabel(label: 'Background on hosts'),
             ],
+            if (templates.isNotEmpty)
+              _templateSection(tokens, templates, hosts),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
               child: ShellVibeSearchField(
@@ -343,6 +438,7 @@ class _RunTargetSheetState extends ConsumerState<RunTargetSheet> {
                                 : RunStrategy.parallel(_concurrency),
                             saveAsDefault:
                                 widget.allowSaveDefault && _saveDefault,
+                            openLayoutOf: _openLayout ? _template : null,
                           ),
                         );
                       },

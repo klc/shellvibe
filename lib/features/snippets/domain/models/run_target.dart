@@ -1,4 +1,5 @@
 import '../../../hosts/domain/models/host_model.dart';
+import '../../../templates/domain/models/template_model.dart';
 import 'run_strategy.dart';
 
 /// Where a snippet or runbook is about to run.
@@ -34,10 +35,15 @@ class RunTargetSelection {
   /// The user asked to remember the chosen hosts as the runbook's default.
   final bool saveAsDefault;
 
+  /// A template whose layout the user also asked to open, in addition to the
+  /// background run. Null when none was chosen or the box was left unticked.
+  final TemplateModel? openLayoutOf;
+
   const RunTargetSelection(
     this.targets, {
     this.strategy = RunStrategy.defaultParallel,
     this.saveAsDefault = false,
+    this.openLayoutOf,
   });
 
   List<HostModel> get hosts => [
