@@ -215,6 +215,10 @@ void main() {
         200,
         scrollable: find.byType(Scrollable).first,
       );
+      // scrollUntilVisible stops as soon as the row enters the viewport, which
+      // can be under the floating tab bar; scroll on so the tap lands on it.
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, -300));
+      await tester.pump();
       await tester.tap(find.byKey(const Key('settings_tool_tunnels')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));

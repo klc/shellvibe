@@ -3,12 +3,14 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:shellvibe/app/keyboard/app_keymap.dart';
 import 'package:shellvibe/core/network/local_pty_manager.dart';
 import 'package:shellvibe/core/network/providers/network_providers.dart';
 import 'package:shellvibe/core/utils/platform_capabilities.dart';
+import 'package:shellvibe/features/settings/presentation/notifiers/settings_notifier.dart';
 import 'package:shellvibe/features/snippets/presentation/widgets/snippet_picker_sheet.dart';
 import 'package:shellvibe/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import 'package:shellvibe/features/terminal/presentation/views/terminal_tab_view.dart';
@@ -31,6 +33,7 @@ void main() {
   late List<String> ptyInput;
 
   setUp(() {
+    FlutterSecureStorage.setMockInitialValues({});
     db = AppDatabase(NativeDatabase.memory());
     paletteOpened = 0;
     ptyInput = [];
@@ -170,6 +173,72 @@ void main() {
       expect(find.byKey(const Key('terminal_search_field')), findsOneWidget);
       expect(ptyInput, isEmpty);
     }, variant: ctrlPlatforms);
+  });
+
+  group('Tabs and zoom', () {
+    String? activeRoot(ProviderContainer container) =>
+        container.read(terminalTabsProvider).activeTabId;
+
+    testWidgets(
+      'Ctrl+Tab and Ctrl+Shift+Tab walk the tabs, wrapping, PTY untouched',
+      (tester) async {
+        final container = await openTerminal(tester);
+        container.read(terminalTabsProvider.notifier).openLocalTab();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 200));
+        final ids = [
+          for (final tab in container.read(terminalTabsProvider).tabs) tab.id,
+        ];
+        expect(ids, hasLength(2));
+        expect(activeRoot(container), ids[1]);
+
+        await chord(tester, LogicalKeyboardKey.tab, control: true);
+        expect(activeRoot(container), ids[0], reason: 'wraps past the end');
+
+        await chord(tester, LogicalKeyboardKey.tab, control: true, shift: true);
+        expect(activeRoot(container), ids[1]);
+
+        if (!usesCommandKey()) {
+          await chord(tester, LogicalKeyboardKey.pageDown, control: true);
+          expect(activeRoot(container), ids[0]);
+          await chord(tester, LogicalKeyboardKey.pageUp, control: true);
+          expect(activeRoot(container), ids[1]);
+        }
+        expect(ptyInput, isEmpty);
+      },
+      variant: TargetPlatformVariant({
+        TargetPlatform.windows,
+        TargetPlatform.linux,
+        TargetPlatform.macOS,
+      }),
+    );
+
+    testWidgets(
+      'Ctrl+Shift+= / - / 0 and the keypad keys zoom the terminal font',
+      (tester) async {
+        final container = await openTerminal(tester);
+        double fontSize() => container.read(settingsProvider).value!.fontSize;
+        await tester.runAsync(() => container.read(settingsProvider.future));
+        final start = fontSize();
+
+        Future<void> press(LogicalKeyboardKey key, {bool shift = true}) async {
+          await chord(tester, key, control: true, shift: shift);
+          await tester.runAsync(() async {});
+          await tester.pump();
+        }
+
+        await press(LogicalKeyboardKey.equal);
+        expect(fontSize(), start + 1);
+        await press(LogicalKeyboardKey.numpadAdd, shift: false);
+        expect(fontSize(), start + 2);
+        await press(LogicalKeyboardKey.minus);
+        expect(fontSize(), start + 1);
+        await press(LogicalKeyboardKey.digit0);
+        expect(fontSize(), start);
+        expect(ptyInput, isEmpty);
+      },
+      variant: ctrlPlatforms,
+    );
   });
 
   group('Command keyboards', () {

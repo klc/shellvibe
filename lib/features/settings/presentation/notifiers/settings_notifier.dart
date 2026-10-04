@@ -148,6 +148,20 @@ class SettingsNotifier extends _$SettingsNotifier {
     await updateSettings(current.copyWith(fontSize: fontSize));
   }
 
+  /// One point bigger or smaller per press of the zoom shortcuts, held to the
+  /// slider's range; a [step] of zero restores the default size.
+  Future<void> stepFontSize(int step) async {
+    final current = _base.fontSize;
+    final next = step == 0
+        ? const AppSettingsModel().fontSize
+        : (current.roundToDouble() + step).clamp(
+            kTerminalFontSizeMin,
+            kTerminalFontSizeMax,
+          );
+    if (next == current) return;
+    await setFontSize(next);
+  }
+
   Future<void> setLineHeightFactor(double lineHeightFactor) async {
     final current = _base;
     await updateSettings(current.copyWith(lineHeightFactor: lineHeightFactor));

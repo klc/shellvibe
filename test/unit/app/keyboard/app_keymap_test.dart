@@ -78,13 +78,17 @@ void main() {
       }
     });
 
-    test('a terminal keeps every plain Ctrl chord for the PTY', () {
+    test('a terminal keeps every plain Ctrl chord that is a control code', () {
       for (final platform in TargetPlatform.values) {
         for (final chord in chords(
           appKeymap(platform: platform, terminalFocused: true),
         )) {
-          if (chord.control) {
-            expect(chord.shift, isTrue, reason: '$platform: $chord');
+          if (chord.control && !chord.shift) {
+            expect(
+              _hasControlCode(chord.trigger),
+              isFalse,
+              reason: '$platform: $chord',
+            );
           }
         }
       }
@@ -102,12 +106,18 @@ void main() {
       }
     });
 
-    test('Apple keyboards bind ⌘ only, so Ctrl stays the shell\'s', () {
+    test('Apple keyboards bind ⌘, and Ctrl only for ⌃Tab', () {
       for (final platform in apple) {
         for (final chord in chords(
           appKeymap(platform: platform, terminalFocused: false),
         )) {
-          expect(chord.control, isFalse, reason: '$platform: $chord');
+          if (chord.control) {
+            expect(
+              chord.trigger,
+              LogicalKeyboardKey.tab,
+              reason: '$platform: $chord',
+            );
+          }
         }
       }
     });
@@ -163,4 +173,103 @@ void main() {
       }
     });
   });
+
+  group('phase 3 commands', () {
+    test('tab cycling and settings use the forms every app uses', () {
+      expect(
+        shortcutLabel(AppCommand.nextTab, platform: TargetPlatform.windows),
+        'Ctrl+Tab',
+      );
+      expect(
+        shortcutLabel(AppCommand.previousTab, platform: TargetPlatform.linux),
+        'Ctrl+Shift+Tab',
+      );
+      expect(
+        shortcutLabel(AppCommand.previousTab, platform: TargetPlatform.macOS),
+        '⌃⇧Tab',
+      );
+      expect(
+        shortcutLabel(AppCommand.openSettings, platform: TargetPlatform.macOS),
+        '⌘,',
+      );
+      expect(
+        shortcutLabel(
+          AppCommand.openSettings,
+          platform: TargetPlatform.windows,
+        ),
+        'Ctrl+,',
+      );
+    });
+
+    test('zoom has a keypad way in off Apple', () {
+      bool binds(AppCommand command, SingleActivator wanted) => shortcutsFor(
+        command,
+        platform: TargetPlatform.windows,
+      ).any((chord) => sameChord(chord, wanted));
+
+      expect(
+        shortcutLabel(AppCommand.zoomIn, platform: TargetPlatform.windows),
+        'Ctrl+Shift+=',
+      );
+      expect(
+        binds(
+          AppCommand.zoomIn,
+          const SingleActivator(LogicalKeyboardKey.numpadAdd, control: true),
+        ),
+        isTrue,
+      );
+      expect(
+        binds(
+          AppCommand.zoomOut,
+          const SingleActivator(
+            LogicalKeyboardKey.numpadSubtract,
+            control: true,
+          ),
+        ),
+        isTrue,
+      );
+      expect(
+        shortcutLabel(AppCommand.zoomReset, platform: TargetPlatform.macOS),
+        '⌘0',
+      );
+    });
+
+    test('the shortcut list names every command bound on the platform', () {
+      for (final platform in TargetPlatform.values) {
+        final listed = {
+          for (final (_, rows) in shortcutReference(platform: platform))
+            for (final row in rows) row.label,
+        };
+        for (final command in AppCommand.values) {
+          if (shortcutFor(command, platform: platform) == null) continue;
+          expect(listed, contains(command.label), reason: '$platform');
+        }
+      }
+      final windows = shortcutReference(platform: TargetPlatform.windows);
+      final terminalRows = windows.firstWhere((g) => g.$1 == 'Terminal').$2;
+      expect(
+        terminalRows.map((row) => (row.label, row.keys)),
+        contains(('Copy', 'Ctrl+Shift+C')),
+      );
+    });
+
+    test('a device with no local shell is not told about local tabs', () {
+      final rows = [
+        for (final (_, rows) in shortcutReference(
+          platform: TargetPlatform.iOS,
+          includeLocalTab: false,
+        ))
+          ...rows,
+      ];
+      expect(rows.map((row) => row.label), isNot(contains('New local tab')));
+    });
+  });
+}
+
+/// Whether Ctrl + [key] is one of the C0 control codes a shell reads:
+/// letters, digits (Ctrl+2…8 in xterm's table), and `@ [ \ ] ^ _ - / space`.
+bool _hasControlCode(LogicalKeyboardKey key) {
+  final label = key.keyLabel;
+  if (label.length != 1) return key == LogicalKeyboardKey.space;
+  return RegExp(r'[A-Za-z0-9@\[\\\]^_\-/ ]').hasMatch(label);
 }

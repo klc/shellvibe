@@ -3,6 +3,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -14,6 +15,7 @@ import 'package:shellvibe/app/window/window_chrome.dart';
 import 'package:shellvibe/core/utils/platform_capabilities.dart';
 import 'package:shellvibe/features/hosts/presentation/screens/hosts_screen.dart';
 import 'package:shellvibe/features/settings/presentation/screens/settings_screen.dart';
+import 'package:shellvibe/features/settings/presentation/widgets/keyboard_shortcuts_settings_section.dart';
 import 'package:shellvibe/features/templates/data/repositories/templates_repository.dart';
 import 'package:shellvibe/features/templates/domain/models/template_model.dart';
 import 'package:shellvibe/features/templates/domain/models/template_pane_model.dart';
@@ -396,6 +398,39 @@ void main() {
       await chord(LogicalKeyboardKey.keyK);
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('command_palette_search')), findsOneWidget);
+    });
+
+    testWidgets('Ctrl+, opens Settings; the palette lists the shortcuts', (
+      tester,
+    ) async {
+      // The section waits on the stored settings before it draws anything.
+      FlutterSecureStorage.setMockInitialValues({});
+      debugPlatformCapabilitiesOverride = TargetPlatform.windows;
+      addTearDown(() => debugPlatformCapabilitiesOverride = null);
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(createTestWidget());
+      await pumpTabTransition(tester);
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.comma);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await pumpTabTransition(tester);
+      expect(find.byType(SettingsScreen), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('command_palette_button')));
+      await pumpTabTransition(tester);
+      await tester.enterText(
+        find.byKey(const Key('command_palette_search')),
+        'keyb',
+      );
+      await pumpTabTransition(tester);
+      await tester.tap(find.byKey(const Key('palette_keyboard_shortcuts')));
+      await pumpTabTransition(tester);
+
+      expect(find.byType(KeyboardShortcutsSettingsSection), findsOneWidget);
     });
 
     testWidgets('Command palette lists bookmarks above the other hosts', (

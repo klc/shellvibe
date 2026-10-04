@@ -272,11 +272,10 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
 
   // ── right-click menu ────────────────────────────────────────────────────
 
-  // Copy, paste and select all are xterm's own bindings
-  // (defaultTerminalShortcuts), which follow the same ⌘ / Ctrl+Shift split.
-  String get _copyShortcut => usesCommandKey() ? '⌘C' : 'Ctrl+Shift+C';
-  String get _pasteShortcut => usesCommandKey() ? '⌘V' : 'Ctrl+Shift+V';
-  String get _selectAllShortcut => usesCommandKey() ? '⌘A' : 'Ctrl+Shift+A';
+  String get _copyShortcut => TerminalBuiltinShortcut.copy.shortcutLabel();
+  String get _pasteShortcut => TerminalBuiltinShortcut.paste.shortcutLabel();
+  String get _selectAllShortcut =>
+      TerminalBuiltinShortcut.selectAll.shortcutLabel();
   String? get _findShortcut => shortcutLabel(AppCommand.find);
 
   /// The selected text of this pane, or null when nothing is selected.
