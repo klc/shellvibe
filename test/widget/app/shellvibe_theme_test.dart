@@ -10,7 +10,10 @@ void main() {
     // Graphite explicitly: the app ships on OLED now, and this test is the
     // contract for the graphite tokens, not for whichever palette is default.
     final theme = AppTheme.buildTheme(
-      const AppSettingsModel(palette: AppPalette.dark),
+      const AppSettingsModel(
+        themeMode: ThemeMode.dark,
+        palette: AppPalette.dark,
+      ),
     );
     final tokens = theme.extension<ShellVibeTokens>();
 
@@ -25,7 +28,9 @@ void main() {
   });
 
   test('The app ships on OLED: true black canvas, no grey lift', () {
-    final theme = AppTheme.buildTheme(const AppSettingsModel());
+    final theme = AppTheme.buildTheme(
+      const AppSettingsModel(themeMode: ThemeMode.dark),
+    );
     final tokens = theme.extension<ShellVibeTokens>();
 
     expect(const AppSettingsModel().palette, AppPalette.oled);
@@ -52,9 +57,11 @@ void main() {
   });
 
   test('Terminal font choice does not change application UI typography', () {
-    final defaultTheme = AppTheme.buildTheme(const AppSettingsModel());
+    final defaultTheme = AppTheme.buildTheme(
+      const AppSettingsModel(themeMode: ThemeMode.dark),
+    );
     final customTerminalFontTheme = AppTheme.buildTheme(
-      const AppSettingsModel(fontFamily: 'FiraCode'),
+      const AppSettingsModel(themeMode: ThemeMode.dark, fontFamily: 'FiraCode'),
     );
 
     expect(customTerminalFontTheme.textTheme, defaultTheme.textTheme);
@@ -65,7 +72,9 @@ void main() {
   });
 
   test('Every ramp step is set in the bundled interface face', () {
-    final theme = AppTheme.buildTheme(const AppSettingsModel());
+    final theme = AppTheme.buildTheme(
+      const AppSettingsModel(themeMode: ThemeMode.dark),
+    );
     final ramp = <String, TextStyle?>{
       'displaySmall': theme.textTheme.displaySmall,
       'headlineSmall': theme.textTheme.headlineSmall,

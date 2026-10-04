@@ -58,7 +58,7 @@ class AppSettingsModel {
   final bool desktopNotifications;
 
   const AppSettingsModel({
-    this.themeMode = ThemeMode.dark,
+    this.themeMode = ThemeMode.system,
     this.palette = AppPalette.oled,
     this.terminalPalette = TerminalPalette.matchApp,
     this.fontFamily = 'RobotoMono',
@@ -187,7 +187,7 @@ class AppSettingsModel {
     return AppSettingsModel(
       themeMode: ThemeMode.values.firstWhere(
         (e) => e.name == json['themeMode'],
-        orElse: () => ThemeMode.dark,
+        orElse: () => ThemeMode.system,
       ),
       // An unreadable or absent palette name lands on the same default a
       // fresh install gets, so the two paths cannot disagree.
