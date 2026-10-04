@@ -18,6 +18,14 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 - On iOS and Android, About no longer offers "Check for updates": those
   builds update through the App Store and Google Play.
 
+### Fixed
+
+- On Windows and Linux, launching ShellVibe while it runs (from the Start
+  menu, a launcher, or with the window hidden in the tray) brings the
+  running copy forward instead of starting a second one on the same
+  database. The release build let go of its single-instance lock seconds
+  after taking it.
+
 ## [1.7.0] - 2026-10-01
 
 ### Added

@@ -25,6 +25,12 @@ import 'package:flutter/foundation.dart';
 class SingleInstance {
   SingleInstance._(this._lock, this._server, this._token);
 
+  /// Holds the claim for as long as the process lives. Nothing reads it but
+  /// [release], which no code path calls, so an AOT build's tree shaker drops
+  /// the field; the handle is then collected, its finalizer closes the file,
+  /// and the lock goes with it within seconds. Every later launch found the
+  /// file unlocked and started a second copy. The pragma keeps the field.
+  @pragma('vm:entry-point')
   final RandomAccessFile _lock;
   final ServerSocket _server;
   final String _token;
