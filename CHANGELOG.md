@@ -25,6 +25,10 @@ and release versions follow [Semantic Versioning](https://semver.org/).
   running copy forward instead of starting a second one on the same
   database. The release build let go of its single-instance lock seconds
   after taking it.
+- On Windows the window opens maximised, as on the other desktops, instead
+  of being restored to 1280x720 a moment after it was maximised. On a
+  machine rendering in software (a VM without a GPU) that double resize
+  also left the window white for half a minute or more.
 
 ## [1.7.0] - 2026-10-01
 

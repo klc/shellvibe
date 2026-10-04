@@ -148,9 +148,9 @@ void main(List<String> args) async {
   runApp(PerfOverlayHost.maybeWrap(const ProviderScope(child: ShellVibeApp())));
 
   if (startHidden) {
-    // The Windows and Linux runners show the window when the first frame is
-    // in; see [keepHostWindowHiddenAtLaunch]. The delayed attempt covers a
-    // runner that shows it a beat after the frame callback.
+    // The Linux runner shows the window when the first frame is in; see
+    // [keepHostWindowHiddenAtLaunch]. The delayed attempt covers a runner
+    // that shows it a beat after the frame callback.
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => unawaited(keepHostWindowHiddenAtLaunch()),
     );

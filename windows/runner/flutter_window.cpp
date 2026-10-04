@@ -4,6 +4,14 @@
 
 #include "flutter/generated_plugin_registrant.h"
 
+namespace {
+
+// Shows the window if the Dart side has not, a while after the first frame.
+constexpr UINT_PTR kShowFallbackTimer = 1;
+constexpr UINT kShowFallbackDelayMs = 3000;
+
+}  // namespace
+
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
 
@@ -27,8 +35,18 @@ bool FlutterWindow::OnCreate() {
   RegisterPlugins(flutter_controller_->engine());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
+  // The Dart side shows the window, maximised, through window_manager
+  // (lib/main.dart). The template's Show() here used SW_SHOWNORMAL, which
+  // restored the window to its normal size a moment after Dart maximised it,
+  // so the app never opened maximised; and on a software renderer the
+  // swapchain did not recover from that second resize, leaving the window
+  // white. Showing here is now only a fallback for a Dart side that failed
+  // before it could show the window.
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
-    this->Show();
+    if (show_fallback_) {
+      ::SetTimer(GetHandle(), kShowFallbackTimer, kShowFallbackDelayMs,
+                 nullptr);
+    }
   });
 
   // Flutter can complete the first frame before the "show window" callback is
@@ -62,6 +80,13 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   }
 
   switch (message) {
+    case WM_TIMER:
+      if (wparam == kShowFallbackTimer) {
+        ::KillTimer(hwnd, kShowFallbackTimer);
+        if (!::IsWindowVisible(hwnd)) this->Show();
+        return 0;
+      }
+      break;
     case WM_FONTCHANGE:
       flutter_controller_->engine()->ReloadSystemFonts();
       break;

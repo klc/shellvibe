@@ -90,10 +90,11 @@ Future<void> hideHostWindowAtLaunch() async {
 
 /// Hides the window again if it is still being held hidden since launch.
 ///
-/// The Windows and Linux runners show the window themselves when the first
-/// frame lands, which is after [hideHostWindowAtLaunch] has run, so the hide
-/// has to be repeated once that frame is in. A no-op once the user has shown
-/// the window.
+/// The Linux runner shows the window itself when the first frame lands,
+/// which is after [hideHostWindowAtLaunch] has run, so the hide has to be
+/// repeated once that frame is in. (The Windows runner leaves showing to the
+/// Dart side, and skips its own fallback for a `--hidden` launch.) A no-op
+/// once the user has shown the window.
 Future<void> keepHostWindowHiddenAtLaunch() async {
   if (!_hiddenAtLaunch) return;
   try {
