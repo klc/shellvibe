@@ -20,7 +20,7 @@ void main() {
   group('SettingsRepository Unit Tests', () {
     test('loadSettings returns default model when storage is empty', () async {
       final settings = await repository.loadSettings();
-      expect(settings.themeMode, equals(ThemeMode.dark));
+      expect(settings.themeMode, equals(ThemeMode.system));
       expect(settings.palette, equals(AppPalette.oled));
     });
 
