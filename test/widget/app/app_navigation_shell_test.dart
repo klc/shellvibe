@@ -11,6 +11,7 @@ import 'package:shellvibe/app/router/app_router.dart';
 import 'package:shellvibe/app/widgets/app_navigation_shell.dart';
 import 'package:shellvibe/app/widgets/window_chrome_frame.dart';
 import 'package:shellvibe/app/window/window_chrome.dart';
+import 'package:shellvibe/core/utils/platform_capabilities.dart';
 import 'package:shellvibe/features/hosts/presentation/screens/hosts_screen.dart';
 import 'package:shellvibe/features/settings/presentation/screens/settings_screen.dart';
 import 'package:shellvibe/features/templates/data/repositories/templates_repository.dart';
@@ -355,6 +356,46 @@ void main() {
 
       expect(find.byKey(const Key('command_palette_search')), findsOneWidget);
       expect(find.byType(Dialog), findsOneWidget);
+    });
+
+    testWidgets('Windows keys: Ctrl+Shift+digit and the plain Ctrl aliases', (
+      tester,
+    ) async {
+      debugPlatformCapabilitiesOverride = TargetPlatform.windows;
+      addTearDown(() => debugPlatformCapabilitiesOverride = null);
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(createTestWidget());
+      await pumpTabTransition(tester);
+
+      // What the rail advertises is what is bound.
+      expect(
+        find.byTooltip('SSH & Remote Hosts (Ctrl+Shift+1)'),
+        findsOneWidget,
+      );
+      expect(find.byTooltip('Jump to… (Ctrl+Shift+K)'), findsOneWidget);
+
+      Future<void> chord(LogicalKeyboardKey key, {bool shift = false}) async {
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+        if (shift) await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+        await tester.sendKeyEvent(key);
+        if (shift) await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+        await pumpTabTransition(tester);
+      }
+
+      await chord(LogicalKeyboardKey.digit1, shift: true);
+      expect(find.byType(HostsScreen), findsOneWidget);
+
+      await chord(LogicalKeyboardKey.digit3);
+      expect(find.byType(VaultScreen), findsOneWidget);
+
+      // No terminal has focus here, so plain Ctrl+K is still the palette.
+      await chord(LogicalKeyboardKey.keyK);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('command_palette_search')), findsOneWidget);
     });
 
     testWidgets('Command palette lists bookmarks above the other hosts', (

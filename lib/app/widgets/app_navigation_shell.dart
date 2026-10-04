@@ -17,7 +17,7 @@ import '../../features/terminal/presentation/notifiers/terminal_tabs_notifier.da
 import '../../features/tunnels/presentation/providers/tunnels_providers.dart';
 import '../../features/tunnels/presentation/tunnel_availability.dart';
 import '../../shared/providers/workspace_provider.dart';
-import '../../core/utils/platform_capabilities.dart';
+import '../keyboard/app_keymap.dart';
 import '../theme/shellvibe_tokens.dart';
 import '../window/window_chrome.dart';
 import 'shellvibe_ui.dart';
@@ -29,21 +29,23 @@ class NavigationItemData {
   final IconData selectedIcon;
   final String path;
 
-  /// The digit that, with the primary modifier, opens this module.
-  final String shortcutKey;
-  final String tooltip;
+  /// What the module is, in a few words: the palette's detail line.
+  final String description;
 
   const NavigationItemData({
     required this.label,
     required this.icon,
     required this.selectedIcon,
     required this.path,
-    required this.shortcutKey,
-    required this.tooltip,
+    required this.description,
   });
 
-  /// `⌘1` or `Ctrl+1`, whichever this platform's keyboard says.
-  String get shortcut => primaryShortcutLabel(shortcutKey);
+  /// `⌘2` or `Ctrl+Shift+2`, whichever this platform's keyboard says. The
+  /// digit is the item's place in [appNavigationItems], which is also what
+  /// [moduleShortcut] binds.
+  String get shortcut => moduleShortcutLabel(appNavigationItems.indexOf(this));
+
+  String get tooltip => '$description ($shortcut)';
 }
 
 /// Declared in router branch order — the index of an entry here *is* its
@@ -56,56 +58,49 @@ const List<NavigationItemData> appNavigationItems = [
     icon: LucideIcons.server,
     selectedIcon: LucideIcons.server,
     path: '/hosts',
-    shortcutKey: '1',
-    tooltip: 'SSH & Remote Hosts (Cmd+1)',
+    description: 'SSH & Remote Hosts',
   ),
   NavigationItemData(
     label: 'Terminal',
     icon: LucideIcons.terminal,
     selectedIcon: LucideIcons.terminal,
     path: '/terminal',
-    shortcutKey: '2',
-    tooltip: 'Terminal Workstation (Cmd+2)',
+    description: 'Terminal Workstation',
   ),
   NavigationItemData(
     label: 'Vault',
     icon: LucideIcons.shieldCheck,
     selectedIcon: LucideIcons.shieldCheck,
     path: '/vault',
-    shortcutKey: '3',
-    tooltip: 'Credentials & Key Vault (Cmd+3)',
+    description: 'Credentials & Key Vault',
   ),
   NavigationItemData(
     label: 'Tunnels',
     icon: LucideIcons.network,
     selectedIcon: LucideIcons.network,
     path: '/tunnels',
-    shortcutKey: '4',
-    tooltip: 'Port Forwarding Tunnels (Cmd+4)',
+    description: 'Port Forwarding Tunnels',
   ),
   NavigationItemData(
     label: 'Snippets',
     icon: LucideIcons.zap,
     selectedIcon: LucideIcons.zap,
     path: '/snippets',
-    shortcutKey: '5',
-    tooltip: 'Snippets & Runbooks (Cmd+5)',
+    description: 'Snippets & Runbooks',
   ),
   NavigationItemData(
     label: 'Workspaces',
     icon: LucideIcons.panelTop,
     selectedIcon: LucideIcons.panelTop,
     path: '/workspaces',
-    shortcutKey: '6',
-    tooltip: 'Workspace Manager (Cmd+6)',
+    description: 'Workspace Manager',
   ),
   NavigationItemData(
     label: 'Settings',
     icon: LucideIcons.settings,
     selectedIcon: LucideIcons.settings,
     path: '/settings',
-    shortcutKey: '7',
-    tooltip: 'Application Settings (Cmd+7)',
+    description: 'Application Settings',
   ),
 ];
 
@@ -177,84 +172,75 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
     final tokens = ShellVibeTokens.resolve(context);
     final tunnelsSupported = tunnelsSupportedFor(context);
 
-    return CallbackShortcuts(
-      bindings: {
-        for (var index = 0; index < appNavigationItems.length; index++)
-          // An iPhone has no Tunnels (see tunnelsSupportedOnThisDevice), and a
-          // hardware keyboard must not reach what the UI does not offer.
-          if (tunnelsSupported ||
-              appNavigationItems[index].path != '/tunnels') ...{
-            SingleActivator(
-              LogicalKeyboardKey.findKeyByKeyId(0x00000031 + index)!,
-              meta: true,
-            ): () =>
-                _onTabSelected(index),
-            SingleActivator(
-              LogicalKeyboardKey.findKeyByKeyId(0x00000031 + index)!,
-              control: true,
-            ): () =>
-                _onTabSelected(index),
+    return Actions(
+      actions: {
+        OpenCommandPaletteIntent: CallbackAction<OpenCommandPaletteIntent>(
+          onInvoke: (_) => _showCommandPalette(),
+        ),
+        GoToModuleIntent: CallbackAction<GoToModuleIntent>(
+          onInvoke: (intent) {
+            // An iPhone has no Tunnels (see tunnelsSupportedOnThisDevice), and
+            // a hardware keyboard must not reach what the UI does not offer.
+            final path = appNavigationItems[intent.index].path;
+            if (path == '/tunnels' && !tunnelsSupported) return null;
+            _onTabSelected(intent.index);
+            return null;
           },
-        const SingleActivator(LogicalKeyboardKey.keyK, meta: true):
-            _showCommandPalette,
-        const SingleActivator(LogicalKeyboardKey.keyK, control: true):
-            _showCommandPalette,
-        const SingleActivator(LogicalKeyboardKey.keyW, meta: true, shift: true):
-            _closeWindow,
-        const SingleActivator(
-          LogicalKeyboardKey.keyW,
-          control: true,
-          shift: true,
-        ): _closeWindow,
+        ),
+        CloseWindowIntent: CallbackAction<CloseWindowIntent>(
+          onInvoke: (_) => _closeWindow(),
+        ),
       },
-      child: Focus(
-        autofocus: true,
-        // The canvas wraps the whole scaffold, not just its body: on phones the
-        // floating tab bar is inset from the screen edge, and the night ground
-        // has to be what shows through around it.
-        child: ShellVibeCanvas(
-          child: Scaffold(
-            backgroundColor: Colors.transparent,
-            // The wireframe skeleton is rail → context column → work with no
-            // application header above it: switching modules must move only the
-            // middle of the screen, never the chrome.
-            //
-            // Nocturne floats that skeleton: the whole shell sits on the night
-            // canvas, inset by one panel gap, and the rail is a slab of its own
-            // separated by whitespace rather than a divider rule.
-            body: SafeArea(
-              top: true,
-              // The phone layout hands the bottom inset to the tab bar, which
-              // pads itself clear of the gesture area. The rail layout has no
-              // bar underneath it, so on a tablet running that layout the work
-              // area would otherwise sit under the home indicator.
-              bottom: isDesktop,
-              child: isDesktop
-                  ? Column(
-                      children: [
-                        // Where the platform title bar used to be; it holds
-                        // the window controls and is the drag handle. See
-                        // WindowCaptionStrip.
-                        const WindowCaptionStrip(),
-                        Expanded(
-                          child: Padding(
-                            padding: EdgeInsets.all(tokens.panelGap),
-                            child: Row(
-                              children: [
-                                _buildRail(context),
-                                SizedBox(width: tokens.panelGap),
-                                Expanded(child: widget.navigationShell),
-                              ],
+      child: AppKeymapShortcuts(
+        child: Focus(
+          autofocus: true,
+          // The canvas wraps the whole scaffold, not just its body: on phones the
+          // floating tab bar is inset from the screen edge, and the night ground
+          // has to be what shows through around it.
+          child: ShellVibeCanvas(
+            child: Scaffold(
+              backgroundColor: Colors.transparent,
+              // The wireframe skeleton is rail → context column → work with no
+              // application header above it: switching modules must move only the
+              // middle of the screen, never the chrome.
+              //
+              // Nocturne floats that skeleton: the whole shell sits on the night
+              // canvas, inset by one panel gap, and the rail is a slab of its own
+              // separated by whitespace rather than a divider rule.
+              body: SafeArea(
+                top: true,
+                // The phone layout hands the bottom inset to the tab bar, which
+                // pads itself clear of the gesture area. The rail layout has no
+                // bar underneath it, so on a tablet running that layout the work
+                // area would otherwise sit under the home indicator.
+                bottom: isDesktop,
+                child: isDesktop
+                    ? Column(
+                        children: [
+                          // Where the platform title bar used to be; it holds
+                          // the window controls and is the drag handle. See
+                          // WindowCaptionStrip.
+                          const WindowCaptionStrip(),
+                          Expanded(
+                            child: Padding(
+                              padding: EdgeInsets.all(tokens.panelGap),
+                              child: Row(
+                                children: [
+                                  _buildRail(context),
+                                  SizedBox(width: tokens.panelGap),
+                                  Expanded(child: widget.navigationShell),
+                                ],
+                              ),
                             ),
                           ),
-                        ),
-                      ],
-                    )
-                  : widget.navigationShell,
+                        ],
+                      )
+                    : widget.navigationShell,
+              ),
+              bottomNavigationBar: isDesktop
+                  ? null
+                  : _buildMobileBottomBar(context),
             ),
-            bottomNavigationBar: isDesktop
-                ? null
-                : _buildMobileBottomBar(context),
           ),
         ),
       ),
@@ -299,7 +285,7 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
           _RailButton(
             buttonKey: const Key('command_palette_button'),
             icon: LucideIcons.search,
-            tooltip: 'Jump to… (Cmd+K)',
+            tooltip: 'Jump to… (${shortcutLabel(AppCommand.commandPalette)})',
             selected: false,
             onPressed: _showCommandPalette,
           ),
@@ -463,7 +449,8 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
     _ => path.substring(1),
   };
 
-  /// Closes the window, since Cmd-W is spoken for by the terminal tab strip.
+  /// Closes the window. ⌘W and Ctrl+Shift+W close the terminal tab, so the
+  /// window has a chord of its own; see [AppCommand.closeWindow].
   void _closeWindow() {
     unawaited(closeHostWindow());
   }
@@ -741,7 +728,7 @@ class _CommandPaletteState extends ConsumerState<_CommandPalette> {
       final item = entry.$2;
       if (item.path == '/tunnels' && !tunnelsSupported) return false;
       return item.label.toLowerCase().contains(value) ||
-          item.tooltip.toLowerCase().contains(value);
+          item.description.toLowerCase().contains(value);
     }).toList();
 
     // The palette is what makes a bookmark reachable from anywhere; without it
@@ -845,7 +832,7 @@ class _CommandPaletteState extends ConsumerState<_CommandPalette> {
             _PaletteEntry(
               icon: item.icon,
               label: item.label,
-              detail: item.tooltip.split(' (').first,
+              detail: item.description,
               trailing: item.shortcut,
               onRun: () => widget.onSelected(index),
             ),
@@ -1003,7 +990,7 @@ class _CommandPaletteState extends ConsumerState<_CommandPalette> {
                       const SizedBox(width: 18),
                       const Text('↵ run'),
                       const Spacer(),
-                      Text(primaryShortcutLabel('K')),
+                      Text(shortcutLabel(AppCommand.commandPalette)!),
                     ],
                   ),
                 ),
