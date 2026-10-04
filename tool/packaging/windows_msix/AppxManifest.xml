@@ -56,6 +56,20 @@
         <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" Square71x71Logo="Assets\SmallTile.png" />
       </uap:VisualElements>
       <Extensions>
+        <!--
+          The MCP stdio bridge. Its install directory holds the package
+          version, so AI clients are pointed at this alias, which Windows
+          keeps at %LOCALAPPDATA%\Microsoft\WindowsApps\shellvibe-mcp.exe across
+          updates. Declared on this application with its own executable, as
+          Windows Terminal does for wt.exe: a separate application would have
+          to be hidden from Start, and the Store refuses a hidden application
+          ("headless app") without a waiver.
+        -->
+        <uap3:Extension Category="windows.appExecutionAlias" Executable="shellvibe-mcp.exe" EntryPoint="Windows.FullTrustApplication">
+          <uap3:AppExecutionAlias>
+            <desktop:ExecutionAlias Alias="shellvibe-mcp.exe" />
+          </uap3:AppExecutionAlias>
+        </uap3:Extension>
         <!-- TaskId must match kStartupTaskId in windows/runner/package_integration.cpp. -->
         <desktop:Extension Category="windows.startupTask" Executable="shellvibe.exe" EntryPoint="Windows.FullTrustApplication">
           <desktop:StartupTask TaskId="ShellVibeStartup" Enabled="false" DisplayName="ShellVibe" />
@@ -77,27 +91,6 @@
       </Extensions>
     </Application>
 
-    <!--
-      The MCP stdio bridge. Its install directory holds the package version, so
-      AI clients are pointed at this alias, which Windows keeps at
-      %LOCALAPPDATA%\Microsoft\WindowsApps\shellvibe-mcp.exe across updates.
-    -->
-    <Application Id="ShellVibeMcp" Executable="shellvibe-mcp.exe" EntryPoint="Windows.FullTrustApplication">
-      <uap:VisualElements
-        DisplayName="ShellVibe MCP bridge"
-        Description="Connects AI clients to a running ShellVibe"
-        BackgroundColor="transparent"
-        Square150x150Logo="Assets\Square150x150Logo.png"
-        Square44x44Logo="Assets\Square44x44Logo.png"
-        AppListEntry="none" />
-      <Extensions>
-        <uap3:Extension Category="windows.appExecutionAlias" Executable="shellvibe-mcp.exe" EntryPoint="Windows.FullTrustApplication">
-          <uap3:AppExecutionAlias>
-            <desktop:ExecutionAlias Alias="shellvibe-mcp.exe" />
-          </uap3:AppExecutionAlias>
-        </uap3:Extension>
-      </Extensions>
-    </Application>
   </Applications>
 
   <Capabilities>
