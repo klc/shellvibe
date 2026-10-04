@@ -110,6 +110,9 @@ dependencies:
   url_launcher: ^6.3.2
   path_provider: ^2.1.6
   path: ^1.9.1
+  # Native memory for the one Win32 call Dart makes itself: whether the app
+  # runs from its MSIX (lib/core/utils/windows_package_identity.dart).
+  ffi: ^2.2.0
   uuid: ^4.6.0
   shadcn_ui: ^0.56.0
   lucide_icons_flutter: ^3.1.15

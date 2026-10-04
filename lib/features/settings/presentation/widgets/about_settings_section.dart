@@ -108,8 +108,9 @@ class _AboutSettingsSectionState extends ConsumerState<AboutSettingsSection> {
           ),
         ),
         // Store builds update through the store. Pointing a phone at GitHub
-        // Releases instead is a review rejection on both App Store and Play.
-        if (!isMobilePlatform) ...[
+        // Releases instead is a review rejection on both App Store and Play,
+        // and the Microsoft Store build is replaced by the Store itself.
+        if (!isMobilePlatform && !isWindowsStorePackage) ...[
           const SizedBox(height: 12),
           ShadCard(
             child: _cardBody(
