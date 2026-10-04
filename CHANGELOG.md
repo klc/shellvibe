@@ -27,6 +27,10 @@ and release versions follow [Semantic Versioning](https://semver.org/).
   already worked. On KDE this replaces the GTK header bar.
 - Shortcut hints read `Ctrl+T`, `Ctrl+K` and `Ctrl+1…7` on Windows and Linux
   instead of the macOS `⌘` labels.
+- macOS: saved secrets (vault key, account session, sync keys, settings)
+  share a single keychain item instead of one each, so a future change in how
+  the app is signed asks for the login password once rather than once per
+  item. Existing items move over the first time the app reads them.
 
 ### Fixed
 
@@ -77,8 +81,9 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 ### Changed
 
 - macOS: because the app is now signed by a different identity than 1.6.0
-  and earlier, the first launch after updating may ask once to allow
-  ShellVibe to use its saved keychain items. Choose **Always Allow**.
+  and earlier, the first launch after updating asks once for each saved
+  keychain item to allow ShellVibe to use it. Choose **Always Allow**; later
+  launches do not ask again.
 - AI Access: `list_hosts` and `describe_host` return `groups` (a sorted list
   of tag names) instead of `group`, and a group-scoped policy rule matches a
   host when any of its tags is that group. Clients that read `group` need
