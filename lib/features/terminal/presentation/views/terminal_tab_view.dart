@@ -1,18 +1,18 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
+import '../../../../app/keyboard/app_keymap.dart';
 import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/widgets/adaptive_modal.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../../../core/network/ssh_session_manager.dart';
 import '../../../../core/utils/platform_capabilities.dart';
 import '../../../hosts/domain/models/host_model.dart';
+import '../../../settings/presentation/notifiers/settings_notifier.dart';
 import '../../../snippets/domain/models/snippet_model.dart';
 import '../../../snippets/domain/services/snippet_variable_parser.dart';
 import '../../../snippets/presentation/widgets/snippet_picker_sheet.dart';
@@ -32,11 +32,6 @@ import '../widgets/terminal_pane_helpers.dart';
 import '../widgets/terminal_session_tree.dart';
 import '../widgets/terminal_tab_strip.dart';
 import '../../../templates/presentation/template_launch.dart';
-
-/// Whether this platform writes shortcuts with ⌘ rather than Ctrl+Shift.
-bool get _isApplePlatform =>
-    defaultTargetPlatform == TargetPlatform.macOS ||
-    defaultTargetPlatform == TargetPlatform.iOS;
 
 /// How far the strip reaches down over the pane below it.
 ///
@@ -100,44 +95,43 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
     return Focus(
       focusNode: _focusNode,
       autofocus: true,
-      child: CallbackShortcuts(
-        bindings: {
-          if (supportsLocalShell) ...{
-            const SingleActivator(LogicalKeyboardKey.keyT, meta: true): () {
-              ref.read(terminalTabsProvider.notifier).openLocalTab();
+      // The chords themselves are bound once, above the whole app (see
+      // AppKeymapShortcuts) and inside each terminal; this is what they do
+      // while the terminal module is on screen.
+      child: Actions(
+        actions: {
+          if (supportsLocalShell)
+            NewLocalTabIntent: CallbackAction<NewLocalTabIntent>(
+              onInvoke: (_) =>
+                  ref.read(terminalTabsProvider.notifier).openLocalTab(),
+            ),
+          CloseTabIntent: CallbackAction<CloseTabIntent>(
+            onInvoke: (_) {
+              if (activeRootTab != null) {
+                ref
+                    .read(terminalTabsProvider.notifier)
+                    .closeTab(activeRootTab.id);
+              }
+              return null;
             },
-            const SingleActivator(LogicalKeyboardKey.keyT, control: true): () {
-              ref.read(terminalTabsProvider.notifier).openLocalTab();
-            },
-          },
-          const SingleActivator(LogicalKeyboardKey.keyW, meta: true): () {
-            if (activeRootTab != null) {
-              ref
-                  .read(terminalTabsProvider.notifier)
-                  .closeTab(activeRootTab.id);
-            }
-          },
-          const SingleActivator(LogicalKeyboardKey.keyW, control: true): () {
-            if (activeRootTab != null) {
-              ref
-                  .read(terminalTabsProvider.notifier)
-                  .closeTab(activeRootTab.id);
-            }
-          },
+          ),
           // Snippets used to sit in a strip pinned under the panes, which cost
           // every session three rows of terminal for something reached once in
           // a while. They are now summoned instead — here, and from the pane's
           // context menu.
-          const SingleActivator(
-            LogicalKeyboardKey.keyS,
-            meta: true,
-            shift: true,
-          ): _openSnippetPicker,
-          const SingleActivator(
-            LogicalKeyboardKey.keyS,
-            control: true,
-            shift: true,
-          ): _openSnippetPicker,
+          OpenSnippetPickerIntent: CallbackAction<OpenSnippetPickerIntent>(
+            onInvoke: (_) => _openSnippetPicker(),
+          ),
+          CycleTabIntent: CallbackAction<CycleTabIntent>(
+            onInvoke: (intent) =>
+                ref.read(terminalTabsProvider.notifier).cycleTab(intent.step),
+          ),
+          // Here rather than app-wide: the size is the terminal's, and a zoom
+          // pressed on the Hosts screen would change something not in view.
+          ZoomTerminalFontIntent: CallbackAction<ZoomTerminalFontIntent>(
+            onInvoke: (intent) =>
+                ref.read(settingsProvider.notifier).stepFontSize(intent.step),
+          ),
         },
         child: Scaffold(
           // The shell already painted the canvas; the terminal contributes the
@@ -291,7 +285,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
         itemKey: const Key('terminal_menu_snippets'),
         icon: LucideIcons.codeXml,
         label: 'Send Snippet…',
-        shortcut: _isApplePlatform ? '⌘⇧S' : 'Ctrl+Shift+S',
+        shortcut: shortcutLabel(AppCommand.openSnippets),
         value: _openSnippetPicker,
       ),
       const AdaptiveMenuDivider(),
@@ -427,7 +421,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
           itemKey: const Key('tab_menu_close'),
           icon: LucideIcons.x,
           label: 'Close Tab',
-          shortcut: _isApplePlatform ? '⌘W' : 'Ctrl+W',
+          shortcut: shortcutLabel(AppCommand.closeTab),
           value: () => unawaited(notifier.closeTab(tab.id)),
         ),
         AdaptiveMenuAction(

@@ -18,6 +18,11 @@ enum AppPalette {
 
 enum AppCursorStyle { block, underline, bar }
 
+/// The terminal font size range: the Settings slider's ends, and where the
+/// zoom shortcuts stop.
+const double kTerminalFontSizeMin = 10;
+const double kTerminalFontSizeMax = 24;
+
 /// Model representing global application settings.
 class AppSettingsModel {
   final ThemeMode themeMode;

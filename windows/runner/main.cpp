@@ -2,7 +2,10 @@
 #include <flutter/flutter_view_controller.h>
 #include <windows.h>
 
+#include <algorithm>
+
 #include "flutter_window.h"
+#include "package_integration.h"
 #include "utils.h"
 
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
@@ -21,10 +24,22 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
 
   std::vector<std::string> command_line_arguments =
       GetCommandLineArguments();
+  // The MSIX StartupTask cannot pass the argument the Run key entry carries,
+  // so a launch it made is marked here and Dart decides the same way for both.
+  if (WasActivatedByStartupTask()) {
+    command_line_arguments.push_back("--hidden");
+  }
+
+  // A launch at login starts hidden in the tray, and the window must then
+  // stay hidden until the user asks for it; see FlutterWindow's fallback.
+  const bool launched_hidden =
+      std::find(command_line_arguments.begin(), command_line_arguments.end(),
+                "--hidden") != command_line_arguments.end();
 
   project.set_dart_entrypoint_arguments(std::move(command_line_arguments));
 
   FlutterWindow window(project);
+  window.SetShowFallback(!launched_hidden);
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(1280, 720);
   if (!window.Create(L"ShellVibe", origin, size)) {

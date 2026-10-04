@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  MSIX manifest for the Microsoft Store build. windows_msix.ps1 fills in the
+  @...@ values: the identity and publisher come from Partner Center
+  (Product management > Product identity), the version from pubspec.yaml.
+
+  The Store re-signs the package, so it is uploaded unsigned.
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
+  xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
+  xmlns:desktop6="http://schemas.microsoft.com/appx/manifest/desktop/windows10/6"
+  xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap uap3 desktop desktop6 com rescap">
+
+  <Identity
+    Name="@IDENTITY_NAME@"
+    Publisher="@PUBLISHER@"
+    Version="@VERSION@"
+    ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>ShellVibe</DisplayName>
+    <PublisherDisplayName>@PUBLISHER_DISPLAY_NAME@</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+    <!--
+      A terminal's child processes are the user's own shells. Left virtualized,
+      what they write under AppData or HKCU (npm -g, git config, a dotfile)
+      would land in the package's private copy and vanish for every program
+      outside it. Needs the unvirtualizedResources capability below.
+    -->
+    <desktop6:FileSystemWriteVirtualization>disabled</desktop6:FileSystemWriteVirtualization>
+    <desktop6:RegistryWriteVirtualization>disabled</desktop6:RegistryWriteVirtualization>
+  </Properties>
+
+  <Dependencies>
+    <!-- 19041 (Windows 10 2004) is the first with the desktop6 switches above. -->
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+
+  <Applications>
+    <Application Id="ShellVibe" Executable="shellvibe.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="ShellVibe"
+        Description="SSH, Mosh and local terminal client"
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png">
+        <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" Square71x71Logo="Assets\SmallTile.png" />
+      </uap:VisualElements>
+      <Extensions>
+        <!--
+          The MCP stdio bridge. Its install directory holds the package
+          version, so AI clients are pointed at this alias, which Windows
+          keeps at %LOCALAPPDATA%\Microsoft\WindowsApps\shellvibe-mcp.exe across
+          updates. Declared on this application with its own executable, as
+          Windows Terminal does for wt.exe: a separate application would have
+          to be hidden from Start, and the Store refuses a hidden application
+          ("headless app") without a waiver.
+        -->
+        <uap3:Extension Category="windows.appExecutionAlias" Executable="shellvibe-mcp.exe" EntryPoint="Windows.FullTrustApplication">
+          <uap3:AppExecutionAlias>
+            <desktop:ExecutionAlias Alias="shellvibe-mcp.exe" />
+          </uap3:AppExecutionAlias>
+        </uap3:Extension>
+        <!-- TaskId must match kStartupTaskId in windows/runner/package_integration.cpp. -->
+        <desktop:Extension Category="windows.startupTask" Executable="shellvibe.exe" EntryPoint="Windows.FullTrustApplication">
+          <desktop:StartupTask TaskId="ShellVibeStartup" Enabled="false" DisplayName="ShellVibe" />
+        </desktop:Extension>
+        <!--
+          Lets a click on a notification start or reach the app. The CLSID is
+          _windowsActivationGuid in lib/app/notifications/notification_presenter.dart.
+        -->
+        <desktop:Extension Category="windows.toastNotificationActivation">
+          <desktop:ToastNotificationActivation ToastActivatorCLSID="35407ec1-dece-4566-8532-af5c80998b47" />
+        </desktop:Extension>
+        <com:Extension Category="windows.comServer">
+          <com:ComServer>
+            <com:ExeServer Executable="shellvibe.exe" Arguments="-ToastActivated" DisplayName="ShellVibe notifications">
+              <com:Class Id="35407ec1-dece-4566-8532-af5c80998b47" DisplayName="ShellVibe notifications" />
+            </com:ExeServer>
+          </com:ComServer>
+        </com:Extension>
+      </Extensions>
+    </Application>
+
+  </Applications>
+
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+    <rescap:Capability Name="unvirtualizedResources" />
+  </Capabilities>
+</Package>

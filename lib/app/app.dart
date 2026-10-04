@@ -21,6 +21,7 @@ import 'quick_actions/quick_actions_host.dart';
 import 'router/app_router.dart';
 import 'theme/app_palette_definitions.dart';
 import 'theme/app_theme.dart';
+import 'widgets/window_caption_strip.dart';
 import 'window/desktop_tray.dart';
 import 'window/window_chrome.dart';
 
@@ -331,7 +332,11 @@ class _ShellVibeAppState extends ConsumerState<ShellVibeApp>
         final host = McpApprovalHost(child: child ?? const SizedBox.shrink());
         return isMobilePlatform
             ? QuickActionsHost(child: _withForegroundService(host))
-            : DesktopTrayHost(child: DesktopNotificationHost(child: host));
+            : WindowResizeEdges(
+                child: DesktopTrayHost(
+                  child: DesktopNotificationHost(child: host),
+                ),
+              );
       },
     );
   }

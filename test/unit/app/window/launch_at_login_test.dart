@@ -1,10 +1,75 @@
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/app/window/launch_at_login.dart';
 import 'package:shellvibe/app/window/start_hidden.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  group('WindowsStartupTaskLaunchAtLogin', () {
+    const channel = MethodChannel('dev.shellvibe.app/launch_at_login');
+    late List<MethodCall> calls;
+    PlatformException? refusal;
+    var taskOn = false;
+
+    setUp(() {
+      calls = [];
+      refusal = null;
+      taskOn = false;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            calls.add(call);
+            switch (call.method) {
+              case 'isSupported':
+                return true;
+              case 'isEnabled':
+                return taskOn;
+              case 'setEnabled':
+                if (refusal != null) throw refusal!;
+                taskOn = call.arguments as bool;
+                return null;
+            }
+            return null;
+          });
+    });
+
+    tearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    test('switches the task through the channel', () async {
+      const login = WindowsStartupTaskLaunchAtLogin();
+      expect(await login.isSupported(), isTrue);
+      expect(await login.isEnabled(), isFalse);
+
+      await login.setEnabled(true);
+
+      expect(await login.isEnabled(), isTrue);
+      expect(calls.map((c) => c.method), contains('setEnabled'));
+    });
+
+    test('a task the user switched off reports where to undo it', () async {
+      refusal = PlatformException(
+        code: 'disabled_by_user',
+        message: 'Turn ShellVibe on in Settings > Apps > Startup.',
+      );
+
+      await expectLater(
+        const WindowsStartupTaskLaunchAtLogin().setEnabled(true),
+        throwsA(
+          isA<LaunchAtLoginBlocked>().having(
+            (e) => '$e',
+            'message',
+            'Turn ShellVibe on in Settings > Apps > Startup.',
+          ),
+        ),
+      );
+    });
+  });
+
   group('WindowsLaunchAtLogin', () {
     late Map<String, String> run;
     late Map<String, String> approved;

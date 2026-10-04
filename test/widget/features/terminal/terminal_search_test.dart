@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xterm3/xterm.dart';
 
 import 'package:shellvibe/app/theme/app_theme.dart';
+import 'package:shellvibe/core/utils/platform_capabilities.dart';
 import 'package:shellvibe/features/settings/domain/models/app_settings_model.dart';
 import 'package:shellvibe/features/terminal/domain/models/terminal_tab_session.dart';
 import 'package:shellvibe/features/terminal/presentation/screens/terminal_screen.dart';
@@ -15,7 +16,12 @@ void main() {
 
   setUp(() {
     FlutterSecureStorage.setMockInitialValues({});
+    // ⌘F is the macOS chord; the Ctrl+Shift+F one is covered with the rest
+    // of the keymap in terminal_shortcuts_test.dart.
+    debugPlatformCapabilitiesOverride = TargetPlatform.macOS;
   });
+
+  tearDown(() => debugPlatformCapabilitiesOverride = null);
 
   Future<TerminalTabSession> pumpTerminal(
     WidgetTester tester, {

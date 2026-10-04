@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
+import '../../../../app/keyboard/app_keymap.dart';
 import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../../../core/utils/platform_capabilities.dart';
@@ -52,14 +53,21 @@ class TerminalEmptyState extends ConsumerWidget {
                   size: 11,
                   color: ShellVibeTokens.resolve(context).textSubtle,
                 ),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                // Wraps rather than overflows: the Ctrl+Shift labels are half
+                // as long again as the ⌘ ones.
+                child: Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 22,
+                  runSpacing: 6,
                   children: [
-                    Text('⌘T new tab'),
-                    SizedBox(width: 22),
-                    Text('⌘K command palette'),
-                    SizedBox(width: 22),
-                    Text('⌘1…7 modules'),
+                    // An iPad has the keyboard but no local shell to open.
+                    if (supportsLocalShell)
+                      Text('${shortcutLabel(AppCommand.newLocalTab)} new tab'),
+                    Text(
+                      '${shortcutLabel(AppCommand.commandPalette)} '
+                      'command palette',
+                    ),
+                    Text('${moduleRangeShortcutLabel()} modules'),
                   ],
                 ),
               ),

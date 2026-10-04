@@ -12,11 +12,33 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 - Settings → Account → Delete Account… opens the web panel's danger zone,
   where the account is deleted after the password is asked for again. Hosts
   and keys on the device are not touched.
+- Windows: an MSIX package for the Microsoft Store, which signs it. In that
+  build, Start at Login uses the package's startup task, the MCP bridge is
+  reached through the `shellvibe-mcp.exe` execution alias, and updates come
+  from the Store. The installer and portable zip are unchanged.
 
 ### Changed
 
 - On iOS and Android, About no longer offers "Check for updates": those
   builds update through the App Store and Google Play.
+- On Windows and Linux the system title bar is gone. Minimise, maximise and
+  close sit at the right of a 32px strip in the app's own colours, the strip
+  drags the window and a double-click maximises it, the way the macOS build
+  already worked. On KDE this replaces the GTK header bar.
+- Shortcut hints read `Ctrl+T`, `Ctrl+K` and `Ctrl+1…7` on Windows and Linux
+  instead of the macOS `⌘` labels.
+
+### Fixed
+
+- On Windows and Linux, launching ShellVibe while it runs (from the Start
+  menu, a launcher, or with the window hidden in the tray) brings the
+  running copy forward instead of starting a second one on the same
+  database. The release build let go of its single-instance lock seconds
+  after taking it.
+- On Windows the window opens maximised, as on the other desktops, instead
+  of being restored to 1280x720 a moment after it was maximised. On a
+  machine rendering in software (a VM without a GPU) that double resize
+  also left the window white for half a minute or more.
 
 ## [1.7.0] - 2026-10-01
 

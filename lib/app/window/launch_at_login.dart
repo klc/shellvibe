@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/utils/platform_capabilities.dart';
 import 'start_hidden.dart';
 
 /// Starts ShellVibe when the user signs in to their computer.
@@ -32,6 +33,7 @@ abstract interface class LaunchAtLogin {
 LaunchAtLogin createLaunchAtLogin() {
   if (Platform.isMacOS) return const MacOsLaunchAtLogin();
   if (Platform.isWindows) {
+    if (isWindowsStorePackage) return const WindowsStartupTaskLaunchAtLogin();
     return WindowsLaunchAtLogin(executable: Platform.resolvedExecutable);
   }
   if (Platform.isLinux) {
@@ -95,6 +97,48 @@ class MacOsLaunchAtLogin implements LaunchAtLogin {
       return false;
     }
   }
+}
+
+/// The MSIX package's StartupTask, for the Microsoft Store build, reached
+/// through the channel `package_integration.cpp` registers.
+///
+/// A Run key would name a path that holds the package version, gone after the
+/// next Store update, and would outlive an uninstall. The task is declared in
+/// the manifest and only switched on and off here; Windows adds the
+/// start-hidden argument's equivalent in `main.cpp`.
+class WindowsStartupTaskLaunchAtLogin implements LaunchAtLogin {
+  const WindowsStartupTaskLaunchAtLogin();
+
+  static const _channel = MethodChannel('dev.shellvibe.app/launch_at_login');
+
+  @override
+  Future<bool> isSupported() async =>
+      await _channel.invokeMethod<bool>('isSupported') ?? false;
+
+  @override
+  Future<bool> isEnabled() async =>
+      await _channel.invokeMethod<bool>('isEnabled') ?? false;
+
+  @override
+  Future<void> setEnabled(bool enabled) async {
+    try {
+      await _channel.invokeMethod<void>('setEnabled', enabled);
+    } on PlatformException catch (e) {
+      // The user or a policy switched the task off, which only they can undo;
+      // the message says where, and reads better without the code around it.
+      throw LaunchAtLoginBlocked(e.message ?? e.code);
+    }
+  }
+}
+
+/// The OS refused to turn the login item on, for a reason the user can act on.
+class LaunchAtLoginBlocked implements Exception {
+  const LaunchAtLoginBlocked(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
 }
 
 /// Runs a process; injected so tests read and write no registry.

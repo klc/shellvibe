@@ -3,6 +3,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -11,8 +12,10 @@ import 'package:shellvibe/app/router/app_router.dart';
 import 'package:shellvibe/app/widgets/app_navigation_shell.dart';
 import 'package:shellvibe/app/widgets/window_chrome_frame.dart';
 import 'package:shellvibe/app/window/window_chrome.dart';
+import 'package:shellvibe/core/utils/platform_capabilities.dart';
 import 'package:shellvibe/features/hosts/presentation/screens/hosts_screen.dart';
 import 'package:shellvibe/features/settings/presentation/screens/settings_screen.dart';
+import 'package:shellvibe/features/settings/presentation/widgets/keyboard_shortcuts_settings_section.dart';
 import 'package:shellvibe/features/templates/data/repositories/templates_repository.dart';
 import 'package:shellvibe/features/templates/domain/models/template_model.dart';
 import 'package:shellvibe/features/templates/domain/models/template_pane_model.dart';
@@ -128,10 +131,47 @@ void main() {
       );
     });
 
-    testWidgets('Platforms that keep their title bar get no strip', (
+    for (final platform in [TargetPlatform.windows, TargetPlatform.linux]) {
+      testWidgets('$platform draws its own caption buttons in the strip', (
+        tester,
+      ) async {
+        debugWindowChromeOverride = platform;
+        addTearDown(() => debugWindowChromeOverride = null);
+        tester.view.physicalSize = const Size(1440, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() => tester.view.resetPhysicalSize());
+
+        await tester.pumpWidget(createTestWidget());
+        await pumpTabTransition(tester);
+
+        // The native caption is hidden, so the strip replaces it: a drag
+        // handle across the top with minimise, maximise and close at its right.
+        final strip = find.byType(DragToMoveArea);
+        expect(strip, findsOneWidget);
+        expect(tester.getSize(strip).height, kCaptionStripHeight);
+        expect(tester.getTopLeft(strip).dy, 0);
+        final close = find.byKey(const Key('window_caption_close'));
+        expect(close, findsOneWidget);
+        expect(tester.getTopRight(close).dx, 1440);
+        expect(
+          find.byKey(const Key('window_caption_minimize')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('window_caption_maximize')),
+          findsOneWidget,
+        );
+        expect(
+          tester.getTopLeft(find.byKey(const Key('header_brand_logo'))).dy,
+          greaterThanOrEqualTo(kCaptionStripHeight),
+        );
+      });
+    }
+
+    testWidgets('macOS leaves the window buttons to the traffic lights', (
       tester,
     ) async {
-      debugWindowChromeOverride = TargetPlatform.windows;
+      debugWindowChromeOverride = TargetPlatform.macOS;
       addTearDown(() => debugWindowChromeOverride = null);
       tester.view.physicalSize = const Size(1440, 900);
       tester.view.devicePixelRatio = 1.0;
@@ -140,8 +180,7 @@ void main() {
       await tester.pumpWidget(createTestWidget());
       await pumpTabTransition(tester);
 
-      expect(windowChromeTopInset, 0);
-      expect(find.byType(DragToMoveArea), findsNothing);
+      expect(find.byKey(const Key('window_caption_close')), findsNothing);
     });
 
     testWidgets('Rail status badges are dots, never empty pills', (
@@ -319,6 +358,79 @@ void main() {
 
       expect(find.byKey(const Key('command_palette_search')), findsOneWidget);
       expect(find.byType(Dialog), findsOneWidget);
+    });
+
+    testWidgets('Windows keys: Ctrl+Shift+digit and the plain Ctrl aliases', (
+      tester,
+    ) async {
+      debugPlatformCapabilitiesOverride = TargetPlatform.windows;
+      addTearDown(() => debugPlatformCapabilitiesOverride = null);
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(createTestWidget());
+      await pumpTabTransition(tester);
+
+      // What the rail advertises is what is bound.
+      expect(
+        find.byTooltip('SSH & Remote Hosts (Ctrl+Shift+1)'),
+        findsOneWidget,
+      );
+      expect(find.byTooltip('Jump to… (Ctrl+Shift+K)'), findsOneWidget);
+
+      Future<void> chord(LogicalKeyboardKey key, {bool shift = false}) async {
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+        if (shift) await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+        await tester.sendKeyEvent(key);
+        if (shift) await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+        await pumpTabTransition(tester);
+      }
+
+      await chord(LogicalKeyboardKey.digit1, shift: true);
+      expect(find.byType(HostsScreen), findsOneWidget);
+
+      await chord(LogicalKeyboardKey.digit3);
+      expect(find.byType(VaultScreen), findsOneWidget);
+
+      // No terminal has focus here, so plain Ctrl+K is still the palette.
+      await chord(LogicalKeyboardKey.keyK);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('command_palette_search')), findsOneWidget);
+    });
+
+    testWidgets('Ctrl+, opens Settings; the palette lists the shortcuts', (
+      tester,
+    ) async {
+      // The section waits on the stored settings before it draws anything.
+      FlutterSecureStorage.setMockInitialValues({});
+      debugPlatformCapabilitiesOverride = TargetPlatform.windows;
+      addTearDown(() => debugPlatformCapabilitiesOverride = null);
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(createTestWidget());
+      await pumpTabTransition(tester);
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.comma);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await pumpTabTransition(tester);
+      expect(find.byType(SettingsScreen), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('command_palette_button')));
+      await pumpTabTransition(tester);
+      await tester.enterText(
+        find.byKey(const Key('command_palette_search')),
+        'keyb',
+      );
+      await pumpTabTransition(tester);
+      await tester.tap(find.byKey(const Key('palette_keyboard_shortcuts')));
+      await pumpTabTransition(tester);
+
+      expect(find.byType(KeyboardShortcutsSettingsSection), findsOneWidget);
     });
 
     testWidgets('Command palette lists bookmarks above the other hosts', (

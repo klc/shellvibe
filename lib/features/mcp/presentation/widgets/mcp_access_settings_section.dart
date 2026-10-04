@@ -10,6 +10,7 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/widgets/adaptive_modal.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
+import '../../../../core/utils/platform_capabilities.dart';
 import '../../../../shared/database/app_database.dart';
 import '../../../../shared/providers/workspace_provider.dart';
 import '../../data/mcp_server_controller.dart';
@@ -578,21 +579,18 @@ final class McpAccessSettingsSection extends ConsumerWidget {
   ///   is where the plan says a from-inside-AppImage bridge gets installed
   ///   separately.
   ///
+  /// See [mcpBridgeCandidates] for the Microsoft Store build.
+  ///
   /// If nothing exists at any candidate path, a clearly-marked placeholder
   /// is returned instead of guessing — see [_BridgeCommand.isPlaceholder].
   _BridgeCommand _detectBridgeCommand() {
-    final bridgeName = Platform.isWindows
-        ? 'shellvibe-mcp.exe'
-        : 'shellvibe-mcp';
-    final candidates = <String>[
-      p.join(p.dirname(Platform.resolvedExecutable), bridgeName),
-    ];
-    if (Platform.isLinux) {
-      final home = Platform.environment['HOME'];
-      if (home != null && home.isNotEmpty) {
-        candidates.add(p.join(home, '.local', 'bin', bridgeName));
-      }
-    }
+    final candidates = mcpBridgeCandidates(
+      resolvedExecutable: Platform.resolvedExecutable,
+      environment: Platform.environment,
+      isWindows: Platform.isWindows,
+      isLinux: Platform.isLinux,
+      isWindowsStorePackage: isWindowsStorePackage,
+    );
 
     for (final candidate in candidates) {
       if (File(candidate).existsSync()) {
@@ -698,4 +696,39 @@ class _CopyableBlock extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Where the `shellvibe-mcp` bridge may be, most likely first.
+///
+/// The Microsoft Store build installs into a directory named after the package
+/// version, so a client configured with that path breaks on the next Store
+/// update. Its manifest declares an execution alias instead, which Windows
+/// keeps at one path across updates; that is what a client is given.
+@visibleForTesting
+List<String> mcpBridgeCandidates({
+  required String resolvedExecutable,
+  required Map<String, String> environment,
+  required bool isWindows,
+  required bool isLinux,
+  required bool isWindowsStorePackage,
+}) {
+  final bridgeName = isWindows ? 'shellvibe-mcp.exe' : 'shellvibe-mcp';
+  final path = isWindows ? p.windows : p.posix;
+  final candidates = <String>[];
+  if (isWindowsStorePackage) {
+    final localAppData = environment['LOCALAPPDATA'];
+    if (localAppData != null && localAppData.isNotEmpty) {
+      candidates.add(
+        path.join(localAppData, 'Microsoft', 'WindowsApps', bridgeName),
+      );
+    }
+  }
+  candidates.add(path.join(path.dirname(resolvedExecutable), bridgeName));
+  if (isLinux) {
+    final home = environment['HOME'];
+    if (home != null && home.isNotEmpty) {
+      candidates.add(path.join(home, '.local', 'bin', bridgeName));
+    }
+  }
+  return candidates;
 }

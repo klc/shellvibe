@@ -16,6 +16,11 @@ enum SettingsSection {
     'Font, palette and cursor behaviour. Applies to open sessions '
         'immediately.',
   ),
+  keyboard(
+    'Keyboard',
+    LucideIcons.keyboard,
+    'Every shortcut, as this keyboard writes it.',
+  ),
   security(
     'Security',
     LucideIcons.shieldCheck,
@@ -92,7 +97,11 @@ enum SettingsSection {
 /// only shorter; the groups are what let someone look for "the cloud one"
 /// without reading all ten labels.
 enum SettingsSectionGroup {
-  general('General', [SettingsSection.appearance, SettingsSection.terminal]),
+  general('General', [
+    SettingsSection.appearance,
+    SettingsSection.terminal,
+    SettingsSection.keyboard,
+  ]),
   security('Security', [SettingsSection.security, SettingsSection.vault]),
   connections('Connections', [
     SettingsSection.deviceLink,

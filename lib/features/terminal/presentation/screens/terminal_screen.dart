@@ -7,6 +7,7 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:xterm3/xterm.dart';
 
+import '../../../../app/keyboard/app_keymap.dart';
 import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/widgets/adaptive_modal.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
@@ -65,6 +66,21 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
   final _searchController = TextEditingController();
   final _searchFocus = FocusNode();
 
+  /// The app's shortcuts ahead of xterm's own (copy, paste, scrolling).
+  ///
+  /// A focused terminal encodes every Ctrl chord it is handed for the PTY and
+  /// reports it handled, so nothing it sees ever bubbles up to the app's
+  /// `Shortcuts`. Handing it the app keymap is what lets ⌘K / Ctrl+Shift+K
+  /// reach the palette from inside a terminal; the matched intent is resolved
+  /// against the `Actions` above this pane, and a chord with no action there
+  /// still goes to the PTY. App chords come first: a terminal shortcut map
+  /// matches its first entry, and none of them collide anyway (see the
+  /// keymap tests). Built once: the platform does not change under a pane.
+  late final Map<ShortcutActivator, Intent> _terminalShortcuts = {
+    ...appKeymap(terminalFocused: true),
+    ...defaultTerminalShortcuts,
+  };
+
   bool _searchOpen = false;
   bool _searchCaseSensitive = false;
   List<TerminalSearchMatch> _searchMatches = const [];
@@ -113,27 +129,6 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
   }
 
   // ---------------------------------------------------------------- search
-
-  /// ⌘F on macOS, Ctrl+Shift+F elsewhere.
-  ///
-  /// Plain Ctrl+F is not bound: it is `forward-char` in readline and a page
-  /// forward in vi, and a terminal that swallows it is a terminal that has
-  /// broken the program running inside it. macOS has ⌘ free for exactly this.
-  bool _isFindShortcut(KeyEvent event) {
-    if (event.logicalKey != LogicalKeyboardKey.keyF) return false;
-    final keyboard = HardwareKeyboard.instance;
-    if (keyboard.isMetaPressed) return true;
-    return keyboard.isControlPressed && keyboard.isShiftPressed;
-  }
-
-  /// Runs before [TerminalView]'s own handling, so the shortcut never reaches
-  /// the PTY.
-  KeyEventResult _handleTerminalKey(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    if (!_isFindShortcut(event)) return KeyEventResult.ignored;
-    _openSearch();
-    return KeyEventResult.handled;
-  }
 
   void _openSearch() {
     setState(() => _searchOpen = true);
@@ -277,15 +272,11 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
 
   // ── right-click menu ────────────────────────────────────────────────────
 
-  /// Whether this platform writes shortcuts with ⌘ rather than Ctrl+Shift.
-  bool get _isApple =>
-      defaultTargetPlatform == TargetPlatform.macOS ||
-      defaultTargetPlatform == TargetPlatform.iOS;
-
-  String get _copyShortcut => _isApple ? '⌘C' : 'Ctrl+Shift+C';
-  String get _pasteShortcut => _isApple ? '⌘V' : 'Ctrl+Shift+V';
-  String get _selectAllShortcut => _isApple ? '⌘A' : 'Ctrl+Shift+A';
-  String get _findShortcut => _isApple ? '⌘F' : 'Ctrl+F';
+  String get _copyShortcut => TerminalBuiltinShortcut.copy.shortcutLabel();
+  String get _pasteShortcut => TerminalBuiltinShortcut.paste.shortcutLabel();
+  String get _selectAllShortcut =>
+      TerminalBuiltinShortcut.selectAll.shortcutLabel();
+  String? get _findShortcut => shortcutLabel(AppCommand.find);
 
   /// The selected text of this pane, or null when nothing is selected.
   ///
@@ -519,120 +510,128 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
 
     final tokens = ShellVibeTokens.resolve(context);
 
-    final terminalBody = Column(
-      children: [
-        // A 3px hairline rather than a full progress bar: the pane already
-        // carries a warning-coloured ring while it connects, so this only has
-        // to show that something is still moving.
-        if (session.isConnecting)
-          SizedBox(
-            height: 3,
-            child: LinearProgressIndicator(
-              minHeight: 3,
-              backgroundColor: tokens.warning.withValues(alpha: 0.12),
-              color: tokens.warning,
+    final terminalBody = Actions(
+      actions: {
+        FindInTerminalIntent: CallbackAction<FindInTerminalIntent>(
+          onInvoke: (_) => _openSearch(),
+        ),
+      },
+      child: Column(
+        children: [
+          // A 3px hairline rather than a full progress bar: the pane already
+          // carries a warning-coloured ring while it connects, so this only has
+          // to show that something is still moving.
+          if (session.isConnecting)
+            SizedBox(
+              height: 3,
+              child: LinearProgressIndicator(
+                minHeight: 3,
+                backgroundColor: tokens.warning.withValues(alpha: 0.12),
+                color: tokens.warning,
+              ),
             ),
-          ),
-        // A finished or failed SSH session (one with a host to reconnect to)
-        // shows the banner with a Reconnect action. Local panes and idle
-        // connecting state are excluded. A remote shell that simply exited is
-        // not a failure, so it gets a muted banner rather than the red one.
-        if (!session.isConnecting &&
-            session.sessionType == TerminalSessionType.ssh &&
-            session.host != null &&
-            !session.isConnected)
-          _SessionBanner(
-            session: session,
-            cleanExit: _isCleanExit(session),
-            message: _bannerMessage(session),
-            onReconnect: () => ref
-                .read(terminalTabsProvider.notifier)
-                .reconnectTab(session.id),
-          ),
-        Expanded(
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: Container(
-                  // The pane's ring lives on the slab in the session tree; here the
-                  // fill is flat and opaque so terminal text is never read through a
-                  // gradient.
-                  color: theme.background,
-                  child: StreamBuilder<void>(
-                    stream: session.moshPredictionChanges,
-                    builder: (context, _) => TerminalView(
-                      session.terminal,
-                      key: _terminalViewKey,
-                      theme: theme,
-                      controller: _terminalController,
-                      scrollController: _terminalScroll,
-                      onKeyEvent: _handleTerminalKey,
-                      // Keeps the grid off the pane's ring on every side. The view
-                      // insets inside its own background fill, so the gap reads as
-                      // terminal rather than as a seam of the pane behind it, and
-                      // the columns and rows are measured against the inset box.
-                      padding: const EdgeInsets.all(3),
-                      focusNode: _terminalFocus,
-                      autofocus: true,
-                      deleteDetection: shouldShowExtraKeys && !widget.readOnly,
-                      readOnly: widget.readOnly,
-                      onTapUp: _handleTapUp,
-                      // Desktop only: a long press on a phone is how xterm
-                      // starts a text selection, and the pane header and tab
-                      // bar already carry these actions there.
-                      onSecondaryTapDown: _showContextMenu,
-                      onHyperlinkTap: _handleHyperlinkTap,
-                      predictionText: session.isMosh
-                          ? session.moshPredictionEngine.visibleText
-                          : null,
-                      cursorType: switch (settings.cursorStyle) {
-                        AppCursorStyle.block => TerminalCursorType.block,
-                        AppCursorStyle.underline =>
-                          TerminalCursorType.underline,
-                        AppCursorStyle.bar => TerminalCursorType.verticalBar,
-                      },
-                      textStyle: TerminalStyle(
-                        fontSize: settings.fontSize,
-                        fontFamily: resolveTerminalFontFamily(
-                          settings.fontFamily,
+          // A finished or failed SSH session (one with a host to reconnect to)
+          // shows the banner with a Reconnect action. Local panes and idle
+          // connecting state are excluded. A remote shell that simply exited is
+          // not a failure, so it gets a muted banner rather than the red one.
+          if (!session.isConnecting &&
+              session.sessionType == TerminalSessionType.ssh &&
+              session.host != null &&
+              !session.isConnected)
+            _SessionBanner(
+              session: session,
+              cleanExit: _isCleanExit(session),
+              message: _bannerMessage(session),
+              onReconnect: () => ref
+                  .read(terminalTabsProvider.notifier)
+                  .reconnectTab(session.id),
+            ),
+          Expanded(
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: Container(
+                    // The pane's ring lives on the slab in the session tree; here the
+                    // fill is flat and opaque so terminal text is never read through a
+                    // gradient.
+                    color: theme.background,
+                    child: StreamBuilder<void>(
+                      stream: session.moshPredictionChanges,
+                      builder: (context, _) => TerminalView(
+                        session.terminal,
+                        key: _terminalViewKey,
+                        theme: theme,
+                        controller: _terminalController,
+                        scrollController: _terminalScroll,
+                        shortcuts: _terminalShortcuts,
+                        // Keeps the grid off the pane's ring on every side. The view
+                        // insets inside its own background fill, so the gap reads as
+                        // terminal rather than as a seam of the pane behind it, and
+                        // the columns and rows are measured against the inset box.
+                        padding: const EdgeInsets.all(3),
+                        focusNode: _terminalFocus,
+                        autofocus: true,
+                        deleteDetection:
+                            shouldShowExtraKeys && !widget.readOnly,
+                        readOnly: widget.readOnly,
+                        onTapUp: _handleTapUp,
+                        // Desktop only: a long press on a phone is how xterm
+                        // starts a text selection, and the pane header and tab
+                        // bar already carry these actions there.
+                        onSecondaryTapDown: _showContextMenu,
+                        onHyperlinkTap: _handleHyperlinkTap,
+                        predictionText: session.isMosh
+                            ? session.moshPredictionEngine.visibleText
+                            : null,
+                        cursorType: switch (settings.cursorStyle) {
+                          AppCursorStyle.block => TerminalCursorType.block,
+                          AppCursorStyle.underline =>
+                            TerminalCursorType.underline,
+                          AppCursorStyle.bar => TerminalCursorType.verticalBar,
+                        },
+                        textStyle: TerminalStyle(
+                          fontSize: settings.fontSize,
+                          fontFamily: resolveTerminalFontFamily(
+                            settings.fontFamily,
+                          ),
+                          fontFamilyFallback: kTerminalFontFamilyFallback,
+                          enableLigatures: settings.enableLigatures,
+                          // Configurable in Settings; 1.4 lands on the same 18px pitch
+                          // reference terminals use at the default 14px font.
+                          height: settings.lineHeightFactor,
+                          // Configurable in Settings. Most palettes ship distinct bright
+                          // variants, so remapping bold runs from 0-7 onto 8-15 is what
+                          // the schemes were authored for; palettes whose brights mirror
+                          // the base colors (Rosé Pine, Snazzy, One Light) are unaffected.
+                          drawBoldTextWithBrightColors:
+                              settings.drawBoldTextWithBrightColors,
                         ),
-                        fontFamilyFallback: kTerminalFontFamilyFallback,
-                        enableLigatures: settings.enableLigatures,
-                        // Configurable in Settings; 1.4 lands on the same 18px pitch
-                        // reference terminals use at the default 14px font.
-                        height: settings.lineHeightFactor,
-                        // Configurable in Settings. Most palettes ship distinct bright
-                        // variants, so remapping bold runs from 0-7 onto 8-15 is what
-                        // the schemes were authored for; palettes whose brights mirror
-                        // the base colors (Rosé Pine, Snazzy, One Light) are unaffected.
-                        drawBoldTextWithBrightColors:
-                            settings.drawBoldTextWithBrightColors,
                       ),
                     ),
                   ),
                 ),
-              ),
-              if (_searchOpen)
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: TerminalSearchBar(
-                    controller: _searchController,
-                    focusNode: _searchFocus,
-                    matchCount: _searchMatches.length,
-                    currentMatch: _searchIndex,
-                    caseSensitive: _searchCaseSensitive,
-                    onQueryChanged: _runSearch,
-                    onNext: () => _stepSearch(1),
-                    onPrevious: () => _stepSearch(-1),
-                    onToggleCaseSensitive: _toggleSearchCase,
-                    onClose: _closeSearch,
+                if (_searchOpen)
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: TerminalSearchBar(
+                      controller: _searchController,
+                      focusNode: _searchFocus,
+                      matchCount: _searchMatches.length,
+                      currentMatch: _searchIndex,
+                      caseSensitive: _searchCaseSensitive,
+                      onQueryChanged: _runSearch,
+                      onNext: () => _stepSearch(1),
+                      onPrevious: () => _stepSearch(-1),
+                      onToggleCaseSensitive: _toggleSearchCase,
+                      onClose: _closeSearch,
+                    ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
 
     if (!widget.keepTerminalSizeWhenKeyboardOpens ||

@@ -80,4 +80,20 @@ void main() {
     expect(second, isNotNull);
     await second!.release();
   });
+
+  test('the lock handle survives an AOT build', () {
+    // A test runs under the JIT, which keeps every field, so it cannot see
+    // the failure this guards: in a release build the tree shaker dropped
+    // the never-read lock field, the handle was collected and closed, and
+    // the claim fell away seconds after it was made. The pragma is the fix.
+    final source = File(
+      'lib/app/window/single_instance.dart',
+    ).readAsStringSync();
+    expect(
+      source,
+      matches(
+        RegExp(r"@pragma\('vm:entry-point'\)\s+final RandomAccessFile _lock;"),
+      ),
+    );
+  });
 }

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:shadcn_ui/shadcn_ui.dart';
+import 'package:shellvibe/app/keyboard/app_keymap.dart';
 import 'package:shellvibe/core/utils/platform_capabilities.dart';
 import 'package:shellvibe/features/bookmarks/presentation/notifiers/bookmarks_notifier.dart';
 import 'package:shellvibe/features/hosts/domain/models/host_model.dart';
@@ -84,7 +85,9 @@ void main() {
               colorScheme: const ShadSlateColorScheme.dark(),
               brightness: Brightness.dark,
             ),
-            child: const MaterialApp(home: TerminalTabView()),
+            child: const MaterialApp(
+              home: AppKeymapShortcuts(child: TerminalTabView()),
+            ),
           ),
         ),
       );
@@ -101,7 +104,9 @@ void main() {
       );
 
       await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
       await tester.sendKeyEvent(LogicalKeyboardKey.keyT);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
       await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
       await tester.pump();
 

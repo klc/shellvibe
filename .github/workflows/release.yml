@@ -252,6 +252,28 @@ jobs:
           tool/packaging/windows_package.ps1 -Version $env:SHELLVIBE_VERSION
           if ($env:WINDOWS_CERT_PATH) { Remove-Item -Force $env:WINDOWS_CERT_PATH }
 
+      - name: Package for the Microsoft Store
+        if: matrix.target == 'windows'
+        shell: pwsh
+        env:
+          SHELLVIBE_VERSION: ${{ needs.metadata.outputs.version }}
+          # Partner Center values, not secrets: they are printed in every copy
+          # of the package. Placeholders are used until they are set.
+          MSIX_IDENTITY_NAME: ${{ vars.MSIX_IDENTITY_NAME }}
+          MSIX_PUBLISHER: ${{ vars.MSIX_PUBLISHER }}
+          MSIX_PUBLISHER_DISPLAY_NAME: ${{ vars.MSIX_PUBLISHER_DISPLAY_NAME }}
+        run: tool/packaging/windows_msix.ps1 -Version $env:SHELLVIBE_VERSION
+
+      # Its own artifact, outside dist/: the package installs only from the
+      # Store, so it is uploaded to Partner Center, not to the release.
+      - name: Upload Store package
+        if: matrix.target == 'windows'
+        uses: actions/upload-artifact@v7
+        with:
+          name: store-windows-msix
+          path: dist-store/*
+          if-no-files-found: error
+
       - name: Upload portable artifact
         uses: actions/upload-artifact@v7
         with:
@@ -352,6 +374,8 @@ jobs:
         uses: actions/download-artifact@v7
         with:
           path: artifacts
+          # Not store-*: those go to the stores, not into the release.
+          pattern: shellvibe-*
           merge-multiple: true
 
       - name: Checksum everything
