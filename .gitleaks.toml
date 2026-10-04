@@ -29,10 +29,15 @@ string, and AKIAIOSFODNN7EXAMPLE, which is AWS's own documentation placeholder.
 The two SSH fixtures store PEM headers with a literal body — 'abc', 'xyz', or no
 body at all — because the code under test only has to recognise the envelope.
 
+runbook_tools_test.dart checks that the MCP runbook tools mask secrets in
+commands and step output; its only credential is AKIAABCDEFGHIJKLMNOP, an
+alphabet run shaped like an AWS key, once inside a curl Authorization header.
+
 Podfile.lock records a checksum per pod, which reads as an API key.
 """
 paths = [
   '''^test/unit/features/mcp/output_redactor_test\.dart$''',
+  '''^test/unit/features/mcp/runbook_tools_test\.dart$''',
   '''^test/unit/features/vault/identities_notifier_test\.dart$''',
   '''^test/unit/features/hosts/ssh_config_import_service_test\.dart$''',
   '''^(macos|ios)/Podfile\.lock$''',
