@@ -48,9 +48,38 @@ abstract class SecureStorageKeys {
 /// Secure Storage Service leveraging hardware-backed secure storage
 /// (iOS Keychain, Android KeyStore, Windows Credential Manager, macOS Keychain, Linux Secret Service)
 /// with in-memory fallback for un-entitled macOS environment (-34018).
+///
+/// On macOS every secret lives in one keychain item, [bundleKey], holding a
+/// JSON map of key to value. The file-based keychain ([macOsOptions]) ties
+/// each item's ACL to the signature that created it, so when the signature
+/// changes — 1.7.0 moved from ad-hoc to Developer ID — macOS asks for the login
+/// password once per item, and the app keeps around twenty of them. With one
+/// item that is one prompt.
+///
+/// Items written by earlier versions are moved into the bundle one key at a
+/// time, the first time this process touches that key: read (or, when the key
+/// is about to be overwritten or removed, skipped), copied into the bundle,
+/// then deleted. Nothing is copied wholesale, so a prompt the user denies fails
+/// that one read exactly as it did before and loses nothing.
 class SecureStorageService {
+  /// The keychain item that holds every other secret on macOS.
+  static const String bundleKey = 'shellvibe_secret_bundle';
+
   final FlutterSecureStorage _storage;
   final Map<String, String> _inMemoryFallback = {};
+
+  /// Whether secrets are packed into [bundleKey] instead of one item each.
+  final bool _bundled;
+
+  /// The decoded contents of [bundleKey], once read.
+  Map<String, String>? _bundle;
+
+  /// Keys whose item from before the bundle has been dealt with this session.
+  final Set<String> _settled = {};
+
+  /// Tail of the queue every bundle operation runs on, so two writes cannot
+  /// each start from the same map and drop the other's change.
+  Future<void> _queue = Future.value();
 
   /// Platform options the app stores secrets under.
   ///
@@ -84,14 +113,18 @@ class SecureStorageService {
     migrateWithBackup: true,
   );
 
-  SecureStorageService({FlutterSecureStorage? storage})
+  /// [bundled] defaults to on for macOS only. `flutter test` reports Android
+  /// as the platform, so tests keep one mock entry per key unless they ask.
+  SecureStorageService({FlutterSecureStorage? storage, bool? bundled})
     : _storage =
           storage ??
           const FlutterSecureStorage(
             aOptions: androidOptions,
             iOptions: iosOptions,
             mOptions: macOsOptions,
-          );
+          ),
+      _bundled =
+          bundled ?? (!kIsWeb && defaultTargetPlatform == TargetPlatform.macOS);
 
   bool _isEntitlementError(Object e) {
     // In release builds an entitlement failure means provisioning is broken:
@@ -166,10 +199,88 @@ class SecureStorageService {
     await delete(key: fullKey);
   }
 
+  Future<T> _locked<T>(Future<T> Function() action) {
+    final result = _queue.then((_) => action());
+    _queue = result.then((_) {}, onError: (_) {});
+    return result;
+  }
+
+  Future<Map<String, String>> _loadBundle() async {
+    final cached = _bundle;
+    if (cached != null) return cached;
+    final raw = await _storage.read(key: bundleKey);
+    final decoded = raw == null
+        ? <String, String>{}
+        : (jsonDecode(raw) as Map<String, dynamic>).cast<String, String>();
+    return _bundle = decoded;
+  }
+
+  Future<Map<String, String>> _saveBundle(Map<String, String> next) async {
+    await _storage.write(key: bundleKey, value: jsonEncode(next));
+    return _bundle = next;
+  }
+
+  /// Folds [key]'s own pre-bundle item, if any, into the bundle and deletes it.
+  ///
+  /// [keepValue] is false when the caller is about to overwrite or remove the
+  /// key: the old item is then deleted unread, which spares a prompt for a
+  /// value nobody needs.
+  Future<Map<String, String>> _settle(
+    String key, {
+    required bool keepValue,
+  }) async {
+    var bundle = await _loadBundle();
+    if (_settled.contains(key)) return bundle;
+    if (keepValue && !bundle.containsKey(key)) {
+      final legacy = await _storage.read(key: key);
+      if (legacy != null) bundle = await _saveBundle({...bundle, key: legacy});
+    }
+    // Only after the value is safe in the bundle. A missing item is not an
+    // error, so this costs one keychain call per key per launch.
+    await _storage.delete(key: key);
+    _settled.add(key);
+    return bundle;
+  }
+
+  Future<String?> _storeRead(String key) => _bundled
+      ? _locked(() async => (await _settle(key, keepValue: true))[key])
+      : _storage.read(key: key);
+
+  Future<void> _storeWrite(String key, String value) => _bundled
+      ? _locked(() async {
+          final bundle = await _settle(key, keepValue: false);
+          if (bundle[key] != value) await _saveBundle({...bundle, key: value});
+        })
+      : _storage.write(key: key, value: value);
+
+  Future<void> _storeDelete(String key) => _bundled
+      ? _locked(() async {
+          final bundle = await _settle(key, keepValue: false);
+          if (bundle.containsKey(key)) {
+            await _saveBundle(Map.of(bundle)..remove(key));
+          }
+        })
+      : _storage.delete(key: key);
+
+  Future<bool> _storeContains(String key) => _bundled
+      ? _locked(
+          () async => (await _settle(key, keepValue: true)).containsKey(key),
+        )
+      : _storage.containsKey(key: key);
+
+  Future<void> _storeDeleteAll() => _bundled
+      ? _locked(() async {
+          // Removes the bundle and every pre-bundle item in one call.
+          await _storage.deleteAll();
+          _bundle = {};
+          _settled.clear();
+        })
+      : _storage.deleteAll();
+
   /// Writes an arbitrary key-value pair to secure storage.
   Future<void> write({required String key, required String value}) async {
     try {
-      await _storage.write(key: key, value: value);
+      await _storeWrite(key, value);
     } catch (e) {
       if (_isEntitlementError(e)) {
         _inMemoryFallback[key] = value;
@@ -182,12 +293,12 @@ class SecureStorageService {
   /// Reads an arbitrary key from secure storage.
   Future<String?> read({required String key}) async {
     try {
-      final value = await _storage.read(key: key) ?? _inMemoryFallback[key];
+      final value = await _storeRead(key) ?? _inMemoryFallback[key];
       if (value != null) return value;
       if (key.startsWith('shellvibe_')) {
         final legacyKey = 'terly2_${key.substring('shellvibe_'.length)}';
         final legacyValue =
-            await _storage.read(key: legacyKey) ?? _inMemoryFallback[legacyKey];
+            await _storeRead(legacyKey) ?? _inMemoryFallback[legacyKey];
         if (legacyValue != null) {
           await write(key: key, value: legacyValue);
           return legacyValue;
@@ -205,7 +316,7 @@ class SecureStorageService {
   /// Deletes an arbitrary key from secure storage.
   Future<void> delete({required String key}) async {
     try {
-      await _storage.delete(key: key);
+      await _storeDelete(key);
       _inMemoryFallback.remove(key);
     } catch (e) {
       if (_isEntitlementError(e)) {
@@ -219,7 +330,7 @@ class SecureStorageService {
   /// Clears all stored key-value pairs in secure storage.
   Future<void> deleteAll() async {
     try {
-      await _storage.deleteAll();
+      await _storeDeleteAll();
       _inMemoryFallback.clear();
     } catch (e) {
       if (_isEntitlementError(e)) {
@@ -233,11 +344,11 @@ class SecureStorageService {
   /// Checks if a key exists in secure storage.
   Future<bool> containsKey({required String key}) async {
     try {
-      final exists = await _storage.containsKey(key: key);
+      final exists = await _storeContains(key);
       if (exists || _inMemoryFallback.containsKey(key)) return true;
       if (key.startsWith('shellvibe_')) {
         final legacyKey = 'terly2_${key.substring('shellvibe_'.length)}';
-        return await _storage.containsKey(key: legacyKey) ||
+        return await _storeContains(legacyKey) ||
             _inMemoryFallback.containsKey(legacyKey);
       }
       return false;
