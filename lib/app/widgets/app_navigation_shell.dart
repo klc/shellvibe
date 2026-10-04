@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
-import 'package:window_manager/window_manager.dart';
 
 import '../../features/bookmarks/presentation/notifiers/bookmarks_notifier.dart';
 import '../../features/hosts/domain/models/host_model.dart';
@@ -18,16 +17,20 @@ import '../../features/terminal/presentation/notifiers/terminal_tabs_notifier.da
 import '../../features/tunnels/presentation/providers/tunnels_providers.dart';
 import '../../features/tunnels/presentation/tunnel_availability.dart';
 import '../../shared/providers/workspace_provider.dart';
+import '../../core/utils/platform_capabilities.dart';
 import '../theme/shellvibe_tokens.dart';
 import '../window/window_chrome.dart';
 import 'shellvibe_ui.dart';
+import 'window_caption_strip.dart';
 
 class NavigationItemData {
   final String label;
   final IconData icon;
   final IconData selectedIcon;
   final String path;
-  final String shortcut;
+
+  /// The digit that, with the primary modifier, opens this module.
+  final String shortcutKey;
   final String tooltip;
 
   const NavigationItemData({
@@ -35,9 +38,12 @@ class NavigationItemData {
     required this.icon,
     required this.selectedIcon,
     required this.path,
-    required this.shortcut,
+    required this.shortcutKey,
     required this.tooltip,
   });
+
+  /// `⌘1` or `Ctrl+1`, whichever this platform's keyboard says.
+  String get shortcut => primaryShortcutLabel(shortcutKey);
 }
 
 /// Declared in router branch order — the index of an entry here *is* its
@@ -50,7 +56,7 @@ const List<NavigationItemData> appNavigationItems = [
     icon: LucideIcons.server,
     selectedIcon: LucideIcons.server,
     path: '/hosts',
-    shortcut: '⌘1',
+    shortcutKey: '1',
     tooltip: 'SSH & Remote Hosts (Cmd+1)',
   ),
   NavigationItemData(
@@ -58,7 +64,7 @@ const List<NavigationItemData> appNavigationItems = [
     icon: LucideIcons.terminal,
     selectedIcon: LucideIcons.terminal,
     path: '/terminal',
-    shortcut: '⌘2',
+    shortcutKey: '2',
     tooltip: 'Terminal Workstation (Cmd+2)',
   ),
   NavigationItemData(
@@ -66,7 +72,7 @@ const List<NavigationItemData> appNavigationItems = [
     icon: LucideIcons.shieldCheck,
     selectedIcon: LucideIcons.shieldCheck,
     path: '/vault',
-    shortcut: '⌘3',
+    shortcutKey: '3',
     tooltip: 'Credentials & Key Vault (Cmd+3)',
   ),
   NavigationItemData(
@@ -74,7 +80,7 @@ const List<NavigationItemData> appNavigationItems = [
     icon: LucideIcons.network,
     selectedIcon: LucideIcons.network,
     path: '/tunnels',
-    shortcut: '⌘4',
+    shortcutKey: '4',
     tooltip: 'Port Forwarding Tunnels (Cmd+4)',
   ),
   NavigationItemData(
@@ -82,7 +88,7 @@ const List<NavigationItemData> appNavigationItems = [
     icon: LucideIcons.zap,
     selectedIcon: LucideIcons.zap,
     path: '/snippets',
-    shortcut: '⌘5',
+    shortcutKey: '5',
     tooltip: 'Snippets & Runbooks (Cmd+5)',
   ),
   NavigationItemData(
@@ -90,7 +96,7 @@ const List<NavigationItemData> appNavigationItems = [
     icon: LucideIcons.panelTop,
     selectedIcon: LucideIcons.panelTop,
     path: '/workspaces',
-    shortcut: '⌘6',
+    shortcutKey: '6',
     tooltip: 'Workspace Manager (Cmd+6)',
   ),
   NavigationItemData(
@@ -98,7 +104,7 @@ const List<NavigationItemData> appNavigationItems = [
     icon: LucideIcons.settings,
     selectedIcon: LucideIcons.settings,
     path: '/settings',
-    shortcut: '⌘7',
+    shortcutKey: '7',
     tooltip: 'Application Settings (Cmd+7)',
   ),
 ];
@@ -226,21 +232,10 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
               child: isDesktop
                   ? Column(
                       children: [
-                        // Where the platform title bar used to be. It carries no
-                        // fill of its own, so the night canvas simply reaches the
-                        // window's top edge and the macOS traffic lights float on
-                        // it — the strip spans the shell rather than insetting the
-                        // rail because three buttons need about 70px and the rail
-                        // is 56. It is also the window's drag handle now that the
-                        // bar it used to live on is gone; a double-click still
-                        // zooms, which DragToMoveArea wires for us.
-                        if (windowChromeTopInset > 0)
-                          DragToMoveArea(
-                            child: SizedBox(
-                              height: windowChromeTopInset,
-                              width: double.infinity,
-                            ),
-                          ),
+                        // Where the platform title bar used to be; it holds
+                        // the window controls and is the drag handle. See
+                        // WindowCaptionStrip.
+                        const WindowCaptionStrip(),
                         Expanded(
                           child: Padding(
                             padding: EdgeInsets.all(tokens.panelGap),
@@ -1002,13 +997,13 @@ class _CommandPaletteState extends ConsumerState<_CommandPalette> {
                     size: 10.5,
                     color: tokens.textSubtle,
                   ),
-                  child: const Row(
+                  child: Row(
                     children: [
-                      Text('↑↓ move'),
-                      SizedBox(width: 18),
-                      Text('↵ run'),
-                      Spacer(),
-                      Text('⌘K'),
+                      const Text('↑↓ move'),
+                      const SizedBox(width: 18),
+                      const Text('↵ run'),
+                      const Spacer(),
+                      Text(primaryShortcutLabel('K')),
                     ],
                   ),
                 ),

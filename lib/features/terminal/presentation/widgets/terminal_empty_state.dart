@@ -52,14 +52,14 @@ class TerminalEmptyState extends ConsumerWidget {
                   size: 11,
                   color: ShellVibeTokens.resolve(context).textSubtle,
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text('⌘T new tab'),
-                    SizedBox(width: 22),
-                    Text('⌘K command palette'),
-                    SizedBox(width: 22),
-                    Text('⌘1…7 modules'),
+                    Text('${primaryShortcutLabel('T')} new tab'),
+                    const SizedBox(width: 22),
+                    Text('${primaryShortcutLabel('K')} command palette'),
+                    const SizedBox(width: 22),
+                    Text('${primaryShortcutLabel('1…7')} modules'),
                   ],
                 ),
               ),

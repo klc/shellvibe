@@ -128,10 +128,47 @@ void main() {
       );
     });
 
-    testWidgets('Platforms that keep their title bar get no strip', (
+    for (final platform in [TargetPlatform.windows, TargetPlatform.linux]) {
+      testWidgets('$platform draws its own caption buttons in the strip', (
+        tester,
+      ) async {
+        debugWindowChromeOverride = platform;
+        addTearDown(() => debugWindowChromeOverride = null);
+        tester.view.physicalSize = const Size(1440, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() => tester.view.resetPhysicalSize());
+
+        await tester.pumpWidget(createTestWidget());
+        await pumpTabTransition(tester);
+
+        // The native caption is hidden, so the strip replaces it: a drag
+        // handle across the top with minimise, maximise and close at its right.
+        final strip = find.byType(DragToMoveArea);
+        expect(strip, findsOneWidget);
+        expect(tester.getSize(strip).height, kCaptionStripHeight);
+        expect(tester.getTopLeft(strip).dy, 0);
+        final close = find.byKey(const Key('window_caption_close'));
+        expect(close, findsOneWidget);
+        expect(tester.getTopRight(close).dx, 1440);
+        expect(
+          find.byKey(const Key('window_caption_minimize')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('window_caption_maximize')),
+          findsOneWidget,
+        );
+        expect(
+          tester.getTopLeft(find.byKey(const Key('header_brand_logo'))).dy,
+          greaterThanOrEqualTo(kCaptionStripHeight),
+        );
+      });
+    }
+
+    testWidgets('macOS leaves the window buttons to the traffic lights', (
       tester,
     ) async {
-      debugWindowChromeOverride = TargetPlatform.windows;
+      debugWindowChromeOverride = TargetPlatform.macOS;
       addTearDown(() => debugWindowChromeOverride = null);
       tester.view.physicalSize = const Size(1440, 900);
       tester.view.devicePixelRatio = 1.0;
@@ -140,8 +177,7 @@ void main() {
       await tester.pumpWidget(createTestWidget());
       await pumpTabTransition(tester);
 
-      expect(windowChromeTopInset, 0);
-      expect(find.byType(DragToMoveArea), findsNothing);
+      expect(find.byKey(const Key('window_caption_close')), findsNothing);
     });
 
     testWidgets('Rail status badges are dots, never empty pills', (

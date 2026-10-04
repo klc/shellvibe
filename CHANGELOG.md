@@ -21,6 +21,12 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 
 - On iOS and Android, About no longer offers "Check for updates": those
   builds update through the App Store and Google Play.
+- On Windows and Linux the system title bar is gone. Minimise, maximise and
+  close sit at the right of a 32px strip in the app's own colours, the strip
+  drags the window and a double-click maximises it, the way the macOS build
+  already worked. On KDE this replaces the GTK header bar.
+- Shortcut hints read `Ctrl+T`, `Ctrl+K` and `Ctrl+1…7` on Windows and Linux
+  instead of the macOS `⌘` labels.
 
 ### Fixed
 

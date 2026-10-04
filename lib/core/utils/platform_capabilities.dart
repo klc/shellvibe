@@ -54,3 +54,13 @@ bool _readPackageIdentity() {
     return false;
   }
 }
+
+/// The label for a shortcut on the primary modifier: `⌘K` where that is
+/// Command (macOS, and an iPad's hardware keyboard), `Ctrl+K` elsewhere.
+///
+/// The bindings themselves accept both modifiers on every platform; only what
+/// the UI tells the user to press differs.
+String primaryShortcutLabel(String key) => switch (runtimeTargetPlatform) {
+  TargetPlatform.macOS || TargetPlatform.iOS => '⌘$key',
+  _ => 'Ctrl+$key',
+};
