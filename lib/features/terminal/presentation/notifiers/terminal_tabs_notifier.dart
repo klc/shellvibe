@@ -648,6 +648,22 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     }
   }
 
+  /// Activates the tab [step] places from the active one along the strip,
+  /// wrapping at either end — Ctrl+Tab and Ctrl+Shift+Tab.
+  ///
+  /// Lands on the tab's root pane, the same pane a click on the tab focuses.
+  void cycleTab(int step) {
+    final roots = [
+      for (final tab in state.tabs)
+        if (tab.splitParentId == null) tab.id,
+    ];
+    final active = state.activeTab;
+    if (roots.length < 2 || active == null) return;
+    final index = roots.indexOf(_paneLayout.rootIdOf(active, state.tabs));
+    if (index == -1) return;
+    setActiveTab(roots[(index + step) % roots.length]);
+  }
+
   /// Moves the tab rooted at [tabId] so it becomes the [toIndex]th tab of the
   /// strip, counting root tabs only. See [TerminalPaneLayout.reorderRoots].
   void moveTab(String tabId, int toIndex) {

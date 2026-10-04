@@ -12,6 +12,7 @@ import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../../../core/network/ssh_session_manager.dart';
 import '../../../../core/utils/platform_capabilities.dart';
 import '../../../hosts/domain/models/host_model.dart';
+import '../../../settings/presentation/notifiers/settings_notifier.dart';
 import '../../../snippets/domain/models/snippet_model.dart';
 import '../../../snippets/domain/services/snippet_variable_parser.dart';
 import '../../../snippets/presentation/widgets/snippet_picker_sheet.dart';
@@ -110,6 +111,16 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
           // context menu.
           OpenSnippetPickerIntent: CallbackAction<OpenSnippetPickerIntent>(
             onInvoke: (_) => _openSnippetPicker(),
+          ),
+          CycleTabIntent: CallbackAction<CycleTabIntent>(
+            onInvoke: (intent) =>
+                ref.read(terminalTabsProvider.notifier).cycleTab(intent.step),
+          ),
+          // Here rather than app-wide: the size is the terminal's, and a zoom
+          // pressed on the Hosts screen would change something not in view.
+          ZoomTerminalFontIntent: CallbackAction<ZoomTerminalFontIntent>(
+            onInvoke: (intent) =>
+                ref.read(settingsProvider.notifier).stepFontSize(intent.step),
           ),
         },
         child: Scaffold(

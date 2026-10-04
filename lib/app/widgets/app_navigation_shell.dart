@@ -190,6 +190,9 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
         CloseWindowIntent: CallbackAction<CloseWindowIntent>(
           onInvoke: (_) => _closeWindow(),
         ),
+        OpenSettingsIntent: CallbackAction<OpenSettingsIntent>(
+          onInvoke: (_) => _goToPath('/settings'),
+        ),
       },
       child: AppKeymapShortcuts(
         child: Focus(
@@ -475,6 +478,10 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
           Navigator.of(dialogContext).pop();
           unawaited(_runTemplateFromPalette(template));
         },
+        onShowShortcuts: () {
+          Navigator.of(dialogContext).pop();
+          GoRouter.maybeOf(context)?.go('/settings/keyboard');
+        },
       ),
     );
   }
@@ -656,11 +663,13 @@ class _CommandPalette extends ConsumerStatefulWidget {
   final ValueChanged<int> onSelected;
   final ValueChanged<HostModel> onHostSelected;
   final ValueChanged<TemplateModel> onTemplateSelected;
+  final VoidCallback onShowShortcuts;
 
   const _CommandPalette({
     required this.onSelected,
     required this.onHostSelected,
     required this.onTemplateSelected,
+    required this.onShowShortcuts,
   });
 
   @override
@@ -835,6 +844,21 @@ class _CommandPaletteState extends ConsumerState<_CommandPalette> {
               detail: item.description,
               trailing: item.shortcut,
               onRun: () => widget.onSelected(index),
+            ),
+        ],
+      ),
+      (
+        'Help',
+        [
+          // The palette is where someone who does not know a key goes looking
+          // for one, so the list of them is a row here.
+          if ('keyboard shortcuts keys'.contains(value))
+            _PaletteEntry(
+              key: const Key('palette_keyboard_shortcuts'),
+              icon: LucideIcons.keyboard,
+              label: 'Keyboard Shortcuts',
+              detail: 'Every shortcut on this keyboard',
+              onRun: widget.onShowShortcuts,
             ),
         ],
       ),

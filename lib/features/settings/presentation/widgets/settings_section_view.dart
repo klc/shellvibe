@@ -33,6 +33,7 @@ import '../../domain/services/backup_file_service.dart';
 import '../notifiers/settings_notifier.dart';
 import 'about_settings_section.dart';
 import 'backup_scope_picker.dart';
+import 'keyboard_shortcuts_settings_section.dart';
 import 'known_hosts_settings_section.dart';
 import 'launch_at_login_tile.dart';
 
@@ -674,9 +675,10 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
                   title: const Text('Font Size'),
                   subtitle: Slider(
                     key: const Key('settings_font_size_slider'),
-                    min: 10,
-                    max: 24,
-                    divisions: 14,
+                    min: kTerminalFontSizeMin,
+                    max: kTerminalFontSizeMax,
+                    divisions: (kTerminalFontSizeMax - kTerminalFontSizeMin)
+                        .toInt(),
                     value: settings.fontSize,
                     label: '${settings.fontSize.toInt()} px',
                     onChanged: (val) => notifier.setFontSize(val),
@@ -835,6 +837,11 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
           const SizedBox(height: 24),
           _buildSectionHeader('Known Host Keys', LucideIcons.fingerprint),
           const KnownHostsSettingsSection(),
+        ];
+      case SettingsSection.keyboard:
+        return [
+          _buildSectionHeader('Keyboard Shortcuts', LucideIcons.keyboard),
+          const KeyboardShortcutsSettingsSection(),
         ];
       case SettingsSection.vault:
         return [
