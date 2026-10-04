@@ -6,7 +6,7 @@ import '../../../../shared/providers/workspace_provider.dart';
 import '../../data/repositories/runbooks_repository.dart';
 import '../../domain/models/runbook_model.dart';
 import '../../domain/models/runbook_step_model.dart';
-import '../../domain/services/runbook_executor.dart';
+import '../../domain/models/variable_declaration.dart';
 
 part 'runbooks_notifier.g.dart';
 
@@ -14,11 +14,6 @@ part 'runbooks_notifier.g.dart';
 RunbooksRepository runbooksRepository(Ref ref) {
   final dao = ref.watch(runbooksDaoProvider);
   return RunbooksRepository(dao);
-}
-
-@riverpod
-RunbookExecutor runbookExecutor(Ref ref) {
-  return RunbookExecutor();
 }
 
 @riverpod
@@ -36,6 +31,8 @@ class RunbooksNotifier extends _$RunbooksNotifier {
     required String title,
     String? description,
     List<RunbookStepModel> steps = const [],
+    List<VariableDeclaration> variables = const [],
+    List<String> tags = const [],
   }) async {
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() async {
@@ -46,6 +43,8 @@ class RunbooksNotifier extends _$RunbooksNotifier {
         title: title,
         description: description,
         steps: steps,
+        variables: variables,
+        tags: tags,
         createdAt: DateTime.now(),
       );
       await repo.addRunbook(runbook);
@@ -77,22 +76,14 @@ class RunbooksNotifier extends _$RunbooksNotifier {
     });
   }
 
-  Future<RunbookExecutionResult> executeRunbook(
-    RunbookModel runbook,
-    Future<(String output, int exitCode)> Function(
-      String command,
-      int timeoutSeconds,
-    )
-    commandRunner, {
-    Map<String, String> variableValues = const {},
-    void Function(RunbookStepModel step, String status)? onProgress,
-  }) async {
-    final executor = ref.read(runbookExecutorProvider);
-    return await executor.executeRunbook(
-      runbook,
-      commandRunner,
-      variableValues: variableValues,
-      onProgress: onProgress,
+  /// Saves the hosts the target sheet preselects for [runbookId]. Reloads in
+  /// place, without the loading state the editor's writes pass through: this
+  /// happens as a run starts and must not blank the list under it.
+  Future<void> setDefaultHostIds(String runbookId, List<String> hostIds) async {
+    final repo = ref.read(runbooksRepositoryProvider);
+    await repo.setDefaultHostIds(runbookId, hostIds);
+    state = AsyncData(
+      await repo.getRunbooksByWorkspace(ref.read(activeWorkspaceIdProvider)),
     );
   }
 }

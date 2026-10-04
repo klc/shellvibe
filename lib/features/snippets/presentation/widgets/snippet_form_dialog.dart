@@ -4,6 +4,9 @@ import 'package:shellvibe/app/widgets/shellvibe_ui.dart';
 
 import '../../../../app/widgets/adaptive_modal.dart';
 import '../../domain/models/snippet_model.dart';
+import '../../domain/models/variable_declaration.dart';
+import '../../domain/services/snippet_variable_parser.dart';
+import 'variables_editor.dart';
 
 /// Form dialog for creating or editing a Snippet.
 class SnippetFormDialog extends StatefulWidget {
@@ -33,10 +36,12 @@ class _SnippetFormDialogState extends State<SnippetFormDialog> {
   late TextEditingController _titleController;
   late TextEditingController _codeController;
   late TextEditingController _tagsController;
+  List<VariableDeclaration> _declarations = const [];
 
   @override
   void initState() {
     super.initState();
+    _declarations = widget.snippet?.variables ?? const [];
     _titleController = TextEditingController(text: widget.snippet?.title ?? '');
     _codeController = TextEditingController(text: widget.snippet?.code ?? '');
     _tagsController = TextEditingController(
@@ -92,6 +97,11 @@ class _SnippetFormDialogState extends State<SnippetFormDialog> {
                 title: _titleController.text.trim(),
                 code: _codeController.text,
                 tags: tags,
+                // Only for placeholders still in the code.
+                variables: VariablesEditor.declarationsToSave(
+                  SnippetVariableParser.extractVariables(_codeController.text),
+                  _declarations,
+                ),
               );
               Navigator.of(context).pop(result);
             }
@@ -136,6 +146,29 @@ class _SnippetFormDialogState extends State<SnippetFormDialog> {
                   ),
                   validator: (val) =>
                       val.trim().isEmpty ? 'Code is required' : null,
+                ),
+                const PlaceholderHelp(),
+                const SizedBox(height: 12),
+                const ShellVibeFormSectionHeader(
+                  icon: LucideIcons.variable,
+                  title: 'Variables',
+                ),
+                const SizedBox(height: 4),
+                // Follows the code as it is typed.
+                ListenableBuilder(
+                  listenable: _codeController,
+                  builder: (context, _) => VariablesEditor(
+                    names: SnippetVariableParser.extractVariables(
+                      _codeController.text,
+                    ),
+                    declarations: _declarations,
+                    onChanged: (next) => setState(
+                      () => _declarations = VariablesEditor.merge(
+                        _declarations,
+                        next,
+                      ),
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 12),
                 ShadInputFormField(

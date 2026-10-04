@@ -31,6 +31,7 @@ import '../widgets/terminal_empty_state.dart';
 import '../widgets/terminal_pane_helpers.dart';
 import '../widgets/terminal_session_tree.dart';
 import '../widgets/terminal_tab_strip.dart';
+import '../../../templates/presentation/template_launch.dart';
 
 /// How far the strip reaches down over the pane below it.
 ///
@@ -81,6 +82,15 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
   Widget build(BuildContext context) {
     final tabsState = ref.watch(terminalTabsProvider);
     final activeRootTab = _resolveRootTab(tabsState);
+
+    // Notices the notifier cannot toast itself (a startup snippet that needs
+    // input).
+    ref.listen(terminalNoticeProvider, (_, notice) {
+      if (notice == null) return;
+      ShadToaster.maybeOf(
+        context,
+      )?.show(ShadToast(description: Text(notice.message)));
+    });
 
     return Focus(
       focusNode: _focusNode,
@@ -378,6 +388,8 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
       final entered = await VariableInputDialog.show(
         context,
         variables: variables,
+        declarations: snippet.variables,
+        memoryKey: 'snippet:${snippet.id}',
         title: 'Fill variables for "${snippet.title}"',
       );
       if (entered == null) return;
@@ -662,6 +674,9 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
           onHostKeyPrompt: _promptHostKey,
         );
     if (!mounted) return;
+    if (result.openedPanes > 0) {
+      unawaited(runTemplateOnOpen(context, ref, template));
+    }
 
     if (result.isComplete) {
       ShadToaster.of(context).show(

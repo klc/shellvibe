@@ -10,9 +10,12 @@ import '../../../../core/utils/platform_capabilities.dart';
 import '../../../hosts/domain/models/host_model.dart';
 import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
 import '../../../terminal/domain/models/terminal_tab_session.dart';
+import '../../../snippets/domain/models/snippet_model.dart';
 import '../../domain/models/template_model.dart';
 import '../../domain/models/template_pane_model.dart';
 import '../../domain/services/template_editing.dart';
+import '../../../snippets/presentation/notifiers/runbooks_notifier.dart';
+import '../../../snippets/presentation/notifiers/snippets_notifier.dart';
 import '../notifiers/templates_notifier.dart';
 
 /// Shows what a saved layout opens, and lets it be changed without running it.
@@ -87,6 +90,8 @@ class _TemplateEditorPanelState extends ConsumerState<TemplateEditorPanel> {
             panes: _draft.panes,
             activePaneId: _draft.activePaneId,
             createdAt: _draft.createdAt,
+            onOpenRunbookId: _draft.onOpenRunbookId,
+            onOpenConfirm: _draft.onOpenConfirm,
           ),
         );
     if (mounted) Navigator.of(context).pop();
@@ -161,6 +166,14 @@ class _TemplateEditorPanelState extends ConsumerState<TemplateEditorPanel> {
     final hostsById = {for (final host in hosts) host.id: host};
     final roots = _draft.orderedRoots;
     final desktop = usesDesktopModals(context);
+    final runbooks = ref.watch(runbooksProvider).value ?? const [];
+    final snippets = ref.watch(snippetsProvider).value ?? const [];
+    final snippetTitles = {for (final s in snippets) s.id: s.title};
+    // A draft that names a runbook that is gone shows as "none" rather than
+    // as a dropdown value with no item.
+    final onOpenId = runbooks.any((r) => r.id == _draft.onOpenRunbookId)
+        ? _draft.onOpenRunbookId
+        : null;
 
     final body = Column(
       mainAxisSize: MainAxisSize.min,
@@ -197,6 +210,45 @@ class _TemplateEditorPanelState extends ConsumerState<TemplateEditorPanel> {
                   labelText: 'Description (optional)',
                 ),
               ),
+              const ShellVibeSectionLabel(
+                label: 'On open',
+                padding: EdgeInsets.fromLTRB(0, 14, 0, 4),
+              ),
+              DropdownButton<String?>(
+                key: const Key('template_editor_on_open_runbook'),
+                isExpanded: true,
+                isDense: true,
+                value: onOpenId,
+                items: [
+                  const DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text('Run no runbook'),
+                  ),
+                  for (final runbook in runbooks)
+                    DropdownMenuItem<String?>(
+                      value: runbook.id,
+                      child: Text(
+                        'Run "${runbook.title}" on its hosts',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                ],
+                onChanged: (id) => _edit(
+                  (draft) => id == null
+                      ? draft.copyWith(clearOnOpenRunbook: true)
+                      : draft.copyWith(onOpenRunbookId: id),
+                ),
+              ),
+              if (onOpenId != null)
+                SwitchListTile(
+                  key: const Key('template_editor_on_open_confirm'),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Ask before running'),
+                  value: _draft.onOpenConfirm,
+                  onChanged: (on) =>
+                      _edit((draft) => draft.copyWith(onOpenConfirm: on)),
+                ),
             ],
           ),
         ),
@@ -241,6 +293,13 @@ class _TemplateEditorPanelState extends ConsumerState<TemplateEditorPanel> {
                         pane: entry.pane,
                         depth: entry.depth,
                         host: hostsById[entry.pane.hostId],
+                        snippets: snippets,
+                        startupSnippetTitle:
+                            snippetTitles[entry.pane.startupSnippetId],
+                        onStartupSnippet: (id) => _edit(
+                          (draft) =>
+                              draft.withPaneStartupSnippet(entry.pane.id, id),
+                        ),
                         problem: _draft.problemWith(
                           entry.pane,
                           hostsById: hostsById,
@@ -426,6 +485,9 @@ class _PaneRow extends StatelessWidget {
     required this.pane,
     required this.depth,
     required this.host,
+    required this.snippets,
+    required this.startupSnippetTitle,
+    required this.onStartupSnippet,
     required this.problem,
     required this.onChangeHost,
     required this.onSplit,
@@ -436,6 +498,15 @@ class _PaneRow extends StatelessWidget {
   final TemplatePaneModel pane;
   final int depth;
   final HostModel? host;
+
+  /// Snippets a pane can be given as its startup snippet.
+  final List<SnippetModel> snippets;
+
+  /// Title of this pane's own startup snippet, when it has one.
+  final String? startupSnippetTitle;
+
+  /// Picks this pane's startup snippet; null hands it back to the host's.
+  final ValueChanged<String?> onStartupSnippet;
   final String? problem;
   final VoidCallback onChangeHost;
   final ValueChanged<Axis> onSplit;
@@ -493,7 +564,10 @@ class _PaneRow extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  problem ?? detail,
+                  problem ??
+                      (startupSnippetTitle == null
+                          ? detail
+                          : '$detail · startup: $startupSnippetTitle'),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: shellvibeMono(
@@ -505,6 +579,35 @@ class _PaneRow extends StatelessWidget {
               ],
             ),
           ),
+          // Local shells have no connection coming up to hook into.
+          if (!isLocal)
+            PopupMenuButton<String>(
+              key: Key('template_pane_startup_${pane.id}'),
+              tooltip: 'Startup snippet',
+              icon: Icon(
+                LucideIcons.squareTerminal,
+                size: 16,
+                color: startupSnippetTitle == null
+                    ? tokens.textMuted
+                    : tokens.brand,
+              ),
+              // The empty string is "use the host's own": a null value would
+              // read as the menu being dismissed.
+              onSelected: (id) => onStartupSnippet(id.isEmpty ? null : id),
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  key: Key('template_startup_host_default'),
+                  value: '',
+                  child: Text('Use host default'),
+                ),
+                for (final snippet in snippets)
+                  PopupMenuItem(
+                    key: Key('template_startup_${snippet.id}'),
+                    value: snippet.id,
+                    child: Text(snippet.title, overflow: TextOverflow.ellipsis),
+                  ),
+              ],
+            ),
           ShellVibeIconButton(
             buttonKey: Key('template_pane_host_${pane.id}'),
             icon: LucideIcons.server,

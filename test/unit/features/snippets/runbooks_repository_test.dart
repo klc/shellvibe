@@ -26,6 +26,49 @@ void main() {
   });
 
   group('RunbooksRepository Unit Tests', () {
+    test('step policy and default targets round-trip', () async {
+      await repository.addRunbook(
+        RunbookModel(
+          id: 'rb_p',
+          workspaceId: 'ws_1',
+          title: 'Policy',
+          createdAt: DateTime.now(),
+          defaultHostIds: const ['h1', 'h2'],
+          steps: const [
+            RunbookStepModel(
+              id: 's1',
+              runbookId: 'rb_p',
+              stepOrder: 1,
+              command: 'a',
+              onFailure: StepFailurePolicy.continueRun,
+              retries: 4,
+            ),
+            RunbookStepModel(
+              id: 's2',
+              runbookId: 'rb_p',
+              stepOrder: 2,
+              command: 'b',
+            ),
+          ],
+        ),
+      );
+      var loaded = (await repository.getAllRunbooks()).single;
+      expect(loaded.defaultHostIds, ['h1', 'h2']);
+      expect(loaded.steps[0].onFailure, StepFailurePolicy.continueRun);
+      expect(loaded.steps[0].retries, 4);
+      expect(loaded.steps[1].onFailure, StepFailurePolicy.stop);
+      expect(loaded.steps[1].retries, 0);
+
+      await repository.setDefaultHostIds('rb_p', ['h3']);
+      loaded = (await repository.getAllRunbooks()).single;
+      expect(loaded.defaultHostIds, ['h3']);
+      // Only the defaults changed.
+      expect(loaded.steps, hasLength(2));
+
+      await repository.setDefaultHostIds('rb_p', []);
+      expect((await repository.getAllRunbooks()).single.defaultHostIds, isEmpty);
+    });
+
     test('Initial runbooks list is empty', () async {
       final runbooks = await repository.getAllRunbooks();
       expect(runbooks, isEmpty);

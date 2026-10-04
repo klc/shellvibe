@@ -31,7 +31,14 @@ abstract class TemplateRunnerTarget {
 
   /// Opens a tab for [host]. The returned future completes once the
   /// connection attempt settles, however it went.
-  Future<void> openTabForHost(HostModel host, {IdentityModel? identity});
+  ///
+  /// [startupSnippetId] is the pane's own startup snippet, taking precedence
+  /// over the host's.
+  Future<void> openTabForHost(
+    HostModel host, {
+    IdentityModel? identity,
+    String? startupSnippetId,
+  });
 
   void openLocalTab({String? title});
 
@@ -40,6 +47,7 @@ abstract class TemplateRunnerTarget {
     required Axis direction,
     HostModel? host,
     IdentityModel? identity,
+    String? startupSnippetId,
   });
 
   void setSplitRatio(String tabId, double ratio);
@@ -158,7 +166,13 @@ class TemplateRunner {
 
       if (pane.parentPaneId == null) {
         if (host != null) {
-          track(target.openTabForHost(host, identity: identity));
+          track(
+            target.openTabForHost(
+              host,
+              identity: identity,
+              startupSnippetId: pane.startupSnippetId,
+            ),
+          );
         } else {
           target.openLocalTab(title: pane.title);
         }
@@ -169,6 +183,7 @@ class TemplateRunner {
             direction: pane.splitDirection ?? Axis.horizontal,
             host: host,
             identity: identity,
+            startupSnippetId: pane.startupSnippetId,
           ),
         );
       }

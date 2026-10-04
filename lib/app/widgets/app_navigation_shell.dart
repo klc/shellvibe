@@ -21,6 +21,7 @@ import '../keyboard/app_keymap.dart';
 import '../theme/shellvibe_tokens.dart';
 import '../window/window_chrome.dart';
 import 'shellvibe_ui.dart';
+import '../../features/templates/presentation/template_launch.dart';
 import 'window_caption_strip.dart';
 
 class NavigationItemData {
@@ -498,6 +499,9 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
         );
     if (!mounted) return;
     GoRouter.maybeOf(context)?.go('/terminal');
+    if (result.openedPanes > 0) {
+      unawaited(runTemplateOnOpen(context, ref, template));
+    }
     if (!result.isComplete) {
       ShadToaster.of(context).show(
         ShadToast.destructive(

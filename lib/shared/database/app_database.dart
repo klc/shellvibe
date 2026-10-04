@@ -13,6 +13,7 @@ import 'daos/identities_dao.dart';
 import 'daos/known_hosts_dao.dart';
 import 'daos/mcp_dao.dart';
 import 'daos/paired_devices_dao.dart';
+import 'daos/run_history_dao.dart';
 import 'daos/runbooks_dao.dart';
 import 'daos/snippets_dao.dart';
 import 'daos/templates_dao.dart';
@@ -48,6 +49,9 @@ part 'app_database.g.dart';
     SyncState,
     SyncEntityVersions,
     VaultEnvVars,
+    RunbookRuns,
+    RunbookRunHosts,
+    RunbookRunSteps,
   ],
   daos: [
     HostsDao,
@@ -62,6 +66,7 @@ part 'app_database.g.dart';
     McpDao,
     BookmarksDao,
     VaultEnvVarsDao,
+    RunHistoryDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -111,7 +116,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 15;
+  int get schemaVersion => 19;
 
   @override
   MigrationStrategy get migration {
@@ -234,8 +239,172 @@ class AppDatabase extends _$AppDatabase {
             await customStatement('UPDATE hosts SET group_id = NULL');
           }
         }
+        if (from < 16) {
+          // Run history (local only) plus the runbook policy columns, which
+          // sync. The columns are added only where the table exists: a
+          // database old enough to lack `runbooks` gets it, columns included,
+          // from an earlier step's `createTable`, which builds the current
+          // definition.
+          await m.createTable(runbookRuns);
+          await m.createTable(runbookRunHosts);
+          await m.createTable(runbookRunSteps);
+          if (await _needsColumn(
+            runbooks.actualTableName,
+            'default_host_ids',
+          )) {
+            await m.addColumn(runbooks, runbooks.defaultHostIds);
+          }
+          if (await _needsColumn(runbookSteps.actualTableName, 'on_failure')) {
+            await m.addColumn(runbookSteps, runbookSteps.onFailure);
+            await m.addColumn(runbookSteps, runbookSteps.retries);
+          }
+        }
+        if (from < 17) {
+          // Run history stored the values typed into `${INPUT:...}` prompts,
+          // in a file that is not encrypted. Rewrite what is there to names
+          // only, and mask the values where they were echoed into commands,
+          // output and errors.
+          await _scrubRunHistoryValues();
+
+          // Startup snippets and template "on open" runbooks. Nullable
+          // references, so every existing row simply has none. Only where the
+          // table exists, for the same reason as v16. The two tables they
+          // point at are created first if somehow absent: SQLite refuses to
+          // write a row whose foreign key names a table that is not there.
+          await _ensureTable(snippets);
+          await _ensureTable(runbooks);
+          if (await _needsColumn(hosts.actualTableName, 'startup_snippet_id')) {
+            await m.addColumn(hosts, hosts.startupSnippetId);
+          }
+          if (await _needsColumn(
+            templates.actualTableName,
+            'on_open_runbook_id',
+          )) {
+            await m.addColumn(templates, templates.onOpenRunbookId);
+            await m.addColumn(templates, templates.onOpenConfirm);
+          }
+          if (await _needsColumn(
+            templatePanes.actualTableName,
+            'startup_snippet_id',
+          )) {
+            await m.addColumn(templatePanes, templatePanes.startupSnippetId);
+          }
+        }
+        if (from < 18) {
+          // Step kinds, typed variables, runbook tags and a snippet's own run
+          // history. Every column is nullable or defaulted, so existing rows
+          // keep meaning what they meant. Where the table exists, as before.
+          await _ensureTable(snippets);
+          if (await _needsColumn(snippets.actualTableName, 'variables')) {
+            await m.addColumn(snippets, snippets.variables);
+          }
+          if (await _needsColumn(runbooks.actualTableName, 'variables')) {
+            await m.addColumn(runbooks, runbooks.variables);
+          }
+          if (await _needsColumn(runbooks.actualTableName, 'tags')) {
+            await m.addColumn(runbooks, runbooks.tags);
+          }
+          if (await _needsColumn(runbookSteps.actualTableName, 'kind')) {
+            await m.addColumn(runbookSteps, runbookSteps.kind);
+            await m.addColumn(runbookSteps, runbookSteps.snippetId);
+          }
+          if (await _needsColumn(runbookRuns.actualTableName, 'snippet_id')) {
+            await m.addColumn(runbookRuns, runbookRuns.snippetId);
+          }
+          if (await _needsColumn(runbookRunSteps.actualTableName, 'kind')) {
+            await m.addColumn(runbookRunSteps, runbookRunSteps.kind);
+          }
+        }
+        if (from < 19) {
+          // Runs an MCP agent started remember which one. Local history only.
+          if (await _needsColumn(
+            runbookRuns.actualTableName,
+            'triggered_by_client_id',
+          )) {
+            await m.addColumn(runbookRuns, runbookRuns.triggeredByClientId);
+            await m.addColumn(runbookRuns, runbookRuns.triggeredByClientName);
+          }
+        }
       },
     );
+  }
+
+  /// Rewrites every history row that holds input values (a JSON object) to
+  /// hold only their names, replacing each value found in the stored commands
+  /// with its `${INPUT:name}` placeholder and in output / errors with
+  /// `[redacted]`. Exact matches only; rows already in the name-array form
+  /// are left alone.
+  Future<void> _scrubRunHistoryValues() async {
+    final tables = await customSelect(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN "
+      "('runbook_runs', 'runbook_run_hosts', 'runbook_run_steps')",
+    ).get();
+    if (tables.length < 3) return;
+
+    final runs = await customSelect(
+      'SELECT id, variable_values FROM runbook_runs',
+    ).get();
+    for (final run in runs) {
+      final runId = run.read<String>('id');
+      Object? decoded;
+      try {
+        decoded = jsonDecode(run.read<String>('variable_values'));
+      } catch (_) {
+        decoded = null;
+      }
+      if (decoded is List) continue;
+
+      final values = <String, String>{
+        if (decoded is Map)
+          for (final e in decoded.entries) '${e.key}': '${e.value}',
+      };
+      await customStatement(
+        'UPDATE runbook_runs SET variable_values = ? WHERE id = ?',
+        [jsonEncode(values.keys.toList()..sort()), runId],
+      );
+      final secrets = values.entries.where((e) => e.value.isNotEmpty).toList()
+        ..sort((a, b) => b.value.length.compareTo(a.value.length));
+      if (secrets.isEmpty) continue;
+
+      final steps = await customSelect(
+        'SELECT s.id, s.command, s.output, s.error FROM runbook_run_steps s '
+        'JOIN runbook_run_hosts h ON h.id = s.run_host_id WHERE h.run_id = ?',
+        variables: [Variable.withString(runId)],
+      ).get();
+      for (final step in steps) {
+        var command = step.read<String>('command');
+        var output = step.read<String>('output');
+        var error = step.read<String?>('error');
+        for (final secret in secrets) {
+          command = command.replaceAll(secret.value, '\${INPUT:${secret.key}}');
+          output = output.replaceAll(secret.value, '[redacted]');
+          error = error?.replaceAll(secret.value, '[redacted]');
+        }
+        await customStatement(
+          'UPDATE runbook_run_steps SET command = ?, output = ?, error = ? '
+          'WHERE id = ?',
+          [command, output, error, step.read<String>('id')],
+        );
+      }
+    }
+  }
+
+  /// Creates [table] when the database does not have it. Only an install old
+  /// enough to predate it can lack one, and it then gets the current shape.
+  Future<void> _ensureTable(TableInfo<Table, dynamic> table) async {
+    final found = await customSelect(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+      variables: [Variable.withString(table.actualTableName)],
+    ).get();
+    if (found.isEmpty) await createMigrator().createTable(table);
+  }
+
+  /// True when [table] exists but has no [column] yet: the one case where the
+  /// v16 `addColumn` is both possible and needed.
+  Future<bool> _needsColumn(String table, String column) async {
+    final info = await customSelect('PRAGMA table_info("$table")').get();
+    return info.isNotEmpty &&
+        !info.any((r) => r.read<String>('name') == column);
   }
 
   /// Rewrites identities stored with the removed `'agent'` auth type to

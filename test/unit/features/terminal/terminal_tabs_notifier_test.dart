@@ -968,6 +968,32 @@ void main() {
       },
     );
 
+    test(
+      'a tab carries its pane startup snippet, unsent until it is live',
+      () async {
+        final notifier = container.read(terminalTabsProvider.notifier);
+        final host = HostModel(
+          id: 'host-startup',
+          workspaceId: 'ws-1',
+          label: 'Startup Host',
+          hostname: '127.0.0.1',
+          port: 1,
+          startupSnippetId: 'host-default',
+          createdAt: DateTime.now(),
+        );
+
+        await notifier.openTabForHost(host, startupSnippetId: 'pane-override');
+
+        // Port 1 is unreachable: the session never came up, so nothing was
+        // sent and the first live moment is still to come.
+        final tab = container.read(terminalTabsProvider).tabs.single;
+        expect(tab.isConnected, isFalse);
+        expect(tab.startupSnippetOverrideId, 'pane-override');
+        expect(tab.startupSnippetHandled, isFalse);
+        expect(tab.host!.startupSnippetId, 'host-default');
+      },
+    );
+
     test('reconnectTab re-attempts connection on a failed SSH tab', () async {
       final notifier = container.read(terminalTabsProvider.notifier);
       final host = HostModel(

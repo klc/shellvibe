@@ -58,6 +58,15 @@ extension TemplateEditing on TemplateModel {
     ]);
   }
 
+  /// Gives [paneId] its own startup snippet, or hands it back to its host's
+  /// when [snippetId] is null.
+  TemplateModel withPaneStartupSnippet(String paneId, String? snippetId) {
+    return _withPanes([
+      for (final pane in orderedPanes)
+        pane.id == paneId ? _pane(pane, startupSnippetId: snippetId) : pane,
+    ]);
+  }
+
   /// Turns split pane [paneId] to split its parent along [direction].
   TemplateModel withSplitDirection(String paneId, Axis direction) {
     return _withPanes([
@@ -213,6 +222,8 @@ extension TemplateEditing on TemplateModel {
       ],
       activePaneId: active,
       createdAt: createdAt,
+      onOpenRunbookId: onOpenRunbookId,
+      onOpenConfirm: onOpenConfirm,
     );
   }
 }
@@ -232,6 +243,7 @@ TemplatePaneModel _pane(
   TerminalSessionType? sessionType,
   Object? hostId = _keep,
   Object? title = _keep,
+  Object? startupSnippetId = _keep,
 }) {
   return TemplatePaneModel(
     id: pane.id,
@@ -245,5 +257,8 @@ TemplatePaneModel _pane(
     sessionType: sessionType ?? pane.sessionType,
     hostId: identical(hostId, _keep) ? pane.hostId : hostId as String?,
     title: identical(title, _keep) ? pane.title : title as String?,
+    startupSnippetId: identical(startupSnippetId, _keep)
+        ? pane.startupSnippetId
+        : startupSnippetId as String?,
   );
 }

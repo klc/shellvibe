@@ -49,6 +49,8 @@ class TemplatesRepository {
         description: Value(template.description),
         activePaneId: Value(template.activePaneId),
         createdAt: template.createdAt,
+        onOpenRunbookId: Value(template.onOpenRunbookId),
+        onOpenConfirm: Value(template.onOpenConfirm),
       ),
     );
     await _dao.replacePanes(template.id, _paneCompanions(template));
@@ -63,6 +65,8 @@ class TemplatesRepository {
         description: Value(template.description),
         activePaneId: Value(template.activePaneId),
         createdAt: Value(template.createdAt),
+        onOpenRunbookId: Value(template.onOpenRunbookId),
+        onOpenConfirm: Value(template.onOpenConfirm),
       ),
     );
     await _dao.replacePanes(template.id, _paneCompanions(template));
@@ -85,6 +89,7 @@ class TemplatesRepository {
             sessionType: encodeSessionType(pane.sessionType),
             hostId: Value(pane.hostId),
             title: Value(pane.title),
+            startupSnippetId: Value(pane.startupSnippetId),
           ),
         )
         .toList();
@@ -98,6 +103,8 @@ class TemplatesRepository {
       description: row.description,
       activePaneId: row.activePaneId,
       createdAt: row.createdAt,
+      onOpenRunbookId: row.onOpenRunbookId,
+      onOpenConfirm: row.onOpenConfirm,
       panes: panes
           .map(
             (pane) => TemplatePaneModel(
@@ -110,6 +117,7 @@ class TemplatesRepository {
               sessionType: decodeSessionType(pane.sessionType),
               hostId: pane.hostId,
               title: pane.title,
+              startupSnippetId: pane.startupSnippetId,
             ),
           )
           .toList(),

@@ -18,6 +18,13 @@ class TemplateModel {
 
   final DateTime createdAt;
 
+  /// Runbook started in the background on the template's SSH hosts after the
+  /// layout has opened, or null.
+  final String? onOpenRunbookId;
+
+  /// Whether to ask before running [onOpenRunbookId].
+  final bool onOpenConfirm;
+
   const TemplateModel({
     required this.id,
     required this.workspaceId,
@@ -26,6 +33,8 @@ class TemplateModel {
     this.panes = const [],
     this.activePaneId,
     required this.createdAt,
+    this.onOpenRunbookId,
+    this.onOpenConfirm = true,
   });
 
   /// Root tabs, in capture order.
@@ -42,6 +51,9 @@ class TemplateModel {
     List<TemplatePaneModel>? panes,
     String? activePaneId,
     DateTime? createdAt,
+    String? onOpenRunbookId,
+    bool clearOnOpenRunbook = false,
+    bool? onOpenConfirm,
   }) {
     return TemplateModel(
       id: id ?? this.id,
@@ -51,6 +63,10 @@ class TemplateModel {
       panes: panes ?? this.panes,
       activePaneId: activePaneId ?? this.activePaneId,
       createdAt: createdAt ?? this.createdAt,
+      onOpenRunbookId: clearOnOpenRunbook
+          ? null
+          : (onOpenRunbookId ?? this.onOpenRunbookId),
+      onOpenConfirm: onOpenConfirm ?? this.onOpenConfirm,
     );
   }
 
@@ -62,6 +78,8 @@ class TemplateModel {
         'panes': panes.map((p) => p.toJson()).toList(),
         'activePaneId': activePaneId,
         'createdAt': createdAt.toIso8601String(),
+        'onOpenRunbookId': onOpenRunbookId,
+        'onOpenConfirm': onOpenConfirm,
       };
 
   factory TemplateModel.fromJson(Map<String, dynamic> json) => TemplateModel(
@@ -76,6 +94,8 @@ class TemplateModel {
             const [],
         activePaneId: json['activePaneId'] as String?,
         createdAt: DateTime.parse(json['createdAt'] as String),
+        onOpenRunbookId: json['onOpenRunbookId'] as String?,
+        onOpenConfirm: json['onOpenConfirm'] as bool? ?? true,
       );
 }
 

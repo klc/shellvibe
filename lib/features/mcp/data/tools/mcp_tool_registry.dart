@@ -9,9 +9,14 @@ import '../../domain/services/mcp_service_providers.dart';
 import '../../domain/services/output_redactor.dart';
 import '../mcp_providers.dart';
 import '../repositories/mcp_repository_providers.dart';
+import '../runbook_run_gateway.dart';
+import '../../../snippets/data/run_providers.dart';
+import '../../../snippets/presentation/notifiers/runbooks_notifier.dart';
+import '../../../snippets/presentation/notifiers/snippets_notifier.dart';
 import 'command_tools.dart';
 import 'discovery_tools.dart';
 import 'mcp_tool_handler.dart';
+import 'runbook_tools.dart';
 import 'session_tools.dart';
 
 part 'mcp_tool_registry.g.dart';
@@ -73,6 +78,10 @@ McpToolRegistry mcpToolRegistry(Ref ref) {
   final policyEngine = ref.watch(policyEngineProvider);
   final approvalCoordinator = ref.watch(approvalCoordinatorProvider);
   const redactor = OutputRedactor();
+  final runbooksRepository = ref.watch(runbooksRepositoryProvider);
+  final snippetsRepository = ref.watch(snippetsRepositoryProvider);
+  final runGateway = NotifierRunbookRunGateway(ref);
+  final runTracker = RunbookRunTracker();
 
   return McpToolRegistry([
     ListHostsTool(
@@ -108,6 +117,36 @@ McpToolRegistry mcpToolRegistry(Ref ref) {
       auditRepository: auditRepository,
       policyEngine: policyEngine,
       approvalCoordinator: approvalCoordinator,
+      redactor: redactor,
+    ),
+    ListRunbooksTool(
+      runbooksRepository: runbooksRepository,
+      snippetsRepository: snippetsRepository,
+      hostsDao: hostsDao,
+      redactor: redactor,
+    ),
+    RunRunbookTool(
+      runbooksRepository: runbooksRepository,
+      snippetsRepository: snippetsRepository,
+      hostsRepository: hostsRepository,
+      hostsDao: hostsDao,
+      grantRepository: grantRepository,
+      auditRepository: auditRepository,
+      approvalCoordinator: approvalCoordinator,
+      gateway: runGateway,
+      tracker: runTracker,
+      redactor: redactor,
+    ),
+    GetRunbookRunTool(
+      gateway: runGateway,
+      tracker: runTracker,
+      historyRepository: ref.watch(runHistoryRepositoryProvider),
+      redactor: redactor,
+    ),
+    CancelRunbookRunTool(
+      gateway: runGateway,
+      tracker: runTracker,
+      auditRepository: auditRepository,
       redactor: redactor,
     ),
   ]);

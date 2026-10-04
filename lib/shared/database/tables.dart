@@ -81,6 +81,14 @@ class Hosts extends Table {
       text().nullable().references(Hosts, #id, onDelete: KeyAction.setNull)();
   DateTimeColumn get createdAt => dateTime()();
 
+  /// Snippet typed into this host's terminal once the session first comes up.
+  /// Cleared (not cascaded) when the snippet is deleted.
+  TextColumn get startupSnippetId => text().nullable().references(
+    Snippets,
+    #id,
+    onDelete: KeyAction.setNull,
+  )();
+
   /// 'dev' | 'staging' | 'prod' — the policy engine's criticality signal.
   TextColumn get environment => text().withDefault(const Constant('dev'))();
 
@@ -166,6 +174,11 @@ class Snippets extends Table {
   TextColumn get code => text()();
   TextColumn get tags => text().nullable()(); // JSON Array of strings
 
+  /// JSON array of variable declarations (`VariableDeclaration`): type,
+  /// default, options, description. Null means every `${INPUT:...}` is plain
+  /// required text.
+  TextColumn get variables => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -178,6 +191,17 @@ class Runbooks extends Table {
   TextColumn get title => text()();
   TextColumn get description => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
+
+  /// JSON array of host ids the run-target sheet preselects. Null when the
+  /// runbook has no default. Ids of hosts deleted since are tolerated by the
+  /// reader, not cleaned up here.
+  TextColumn get defaultHostIds => text().nullable()();
+
+  /// JSON array of variable declarations, as on [Snippets].
+  TextColumn get variables => text().nullable()();
+
+  /// JSON array of strings, as on [Snippets].
+  TextColumn get tags => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -193,6 +217,116 @@ class RunbookSteps extends Table {
   IntColumn get expectedExitCode => integer().withDefault(const Constant(0))();
   TextColumn get expectedOutputPattern => text().nullable()();
   IntColumn get timeoutSeconds => integer().withDefault(const Constant(30))();
+
+  /// `stop` (the run ends here on this host) or `continue`.
+  TextColumn get onFailure => text().withDefault(const Constant('stop'))();
+
+  /// Extra attempts after the first failure, 0-5.
+  IntColumn get retries => integer().withDefault(const Constant(0))();
+
+  /// `command`, `snippet` or `approval`. Only `command` existed before, and
+  /// it stays the default.
+  TextColumn get kind => text().withDefault(const Constant('command'))();
+
+  /// The snippet a `snippet` step runs; its current code is used at run time.
+  /// Cleared when the snippet is deleted, which makes the step fail with a
+  /// clear message rather than vanish.
+  TextColumn get snippetId => text().nullable().references(
+    Snippets,
+    #id,
+    onDelete: KeyAction.setNull,
+  )();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// Local run history. NEVER synced or backed up: it carries command output,
+/// which can hold secrets, and the database file is not encrypted. It is
+/// deliberately absent from `SyncRowCodec.syncableTypes`, the sync journal's
+/// cascade map and every backup payload; a test pins that.
+class RunbookRuns extends Table {
+  TextColumn get id => text()();
+  TextColumn get workspaceId =>
+      text().references(Workspaces, #id, onDelete: KeyAction.cascade)();
+
+  /// Null for a snippet run, and survives the runbook being deleted: history
+  /// is a snapshot, not a view of the live runbook.
+  TextColumn get runbookId => text().nullable()();
+
+  /// `runbook` or `snippet`.
+  TextColumn get kind => text()();
+
+  /// The MCP client that started this run, when one did: its id (to scope what
+  /// a client can read back) and its name as it was then, so the history still
+  /// says "via Claude Code" after the client is revoked. Null for runs started
+  /// in the app. Local only, like the rest of the table.
+  TextColumn get triggeredByClientId => text().nullable()();
+  TextColumn get triggeredByClientName => text().nullable()();
+
+  /// The snippet a snippet run was of, so a snippet can list its own runs. Null
+  /// for a runbook run and for rows from before v18. Plain text: the snippet
+  /// may be deleted later.
+  TextColumn get snippetId => text().nullable()();
+  TextColumn get title => text()();
+
+  /// `parallel:<n>` or `rolling`.
+  TextColumn get strategy => text()();
+  DateTimeColumn get startedAt => dateTime()();
+  DateTimeColumn get finishedAt => dateTime()();
+
+  /// `succeeded`, `failed` or `cancelled`.
+  TextColumn get status => text()();
+
+  /// JSON array of the NAMES of the `${INPUT:...}` variables the run was given.
+  /// Never the values: they can be passwords or tokens, and this file is not
+  /// encrypted. (Before v17 this held a name-to-value object; the v17 migration
+  /// rewrites those rows, and readers still accept the old shape.)
+  TextColumn get variableValues => text().withDefault(const Constant('[]'))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class RunbookRunHosts extends Table {
+  TextColumn get id => text()();
+  TextColumn get runId =>
+      text().references(RunbookRuns, #id, onDelete: KeyAction.cascade)();
+  IntColumn get position => integer()();
+
+  /// Plain text, no foreign key: the host may be deleted later.
+  TextColumn get hostId => text()();
+  TextColumn get hostLabel => text()();
+  TextColumn get status => text()();
+  TextColumn get error => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class RunbookRunSteps extends Table {
+  TextColumn get id => text()();
+  TextColumn get runHostId =>
+      text().references(RunbookRunHosts, #id, onDelete: KeyAction.cascade)();
+  TextColumn get stepId => text()();
+  IntColumn get stepOrder => integer()();
+
+  /// `command`, `snippet` or `approval`, so a stored approval still reads as
+  /// one. Local only, like the rest.
+  TextColumn get kind => text().withDefault(const Constant('command'))();
+
+  /// The command as sent, after `${INPUT:...}` substitution.
+  TextColumn get command => text()();
+  TextColumn get status => text()();
+  IntColumn get exitCode => integer().nullable()();
+  IntColumn get attempts => integer().withDefault(const Constant(1))();
+
+  /// At most the last 16 KiB of output.
+  TextColumn get output => text().withDefault(const Constant(''))();
+  BoolColumn get outputTruncated =>
+      boolean().withDefault(const Constant(false))();
+  TextColumn get error => text().nullable()();
+  IntColumn get durationMs => integer().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -211,6 +345,17 @@ class Templates extends Table {
   /// had no focused pane.
   TextColumn get activePaneId => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
+
+  /// Runbook started in the background on the template's hosts once the
+  /// template has been opened. Cleared when the runbook is deleted.
+  TextColumn get onOpenRunbookId => text().nullable().references(
+    Runbooks,
+    #id,
+    onDelete: KeyAction.setNull,
+  )();
+
+  /// Ask before running [onOpenRunbookId] rather than running it unprompted.
+  BoolColumn get onOpenConfirm => boolean().withDefault(const Constant(true))();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -246,6 +391,14 @@ class TemplatePanes extends Table {
   /// exists is skipped with a warning when the template runs.
   TextColumn get hostId => text().nullable()();
   TextColumn get title => text().nullable()();
+
+  /// Startup snippet for this pane, overriding its host's. Null means use the
+  /// host's own. Cleared when the snippet is deleted.
+  TextColumn get startupSnippetId => text().nullable().references(
+    Snippets,
+    #id,
+    onDelete: KeyAction.setNull,
+  )();
 
   @override
   Set<Column> get primaryKey => {id};

@@ -7,6 +7,7 @@ import 'package:shellvibe/core/utils/platform_capabilities.dart';
 import 'package:shellvibe/features/vault/presentation/notifiers/identities_notifier.dart';
 
 import '../../../../shared/providers/workspace_provider.dart';
+import '../../../snippets/presentation/notifiers/snippets_notifier.dart';
 import '../../domain/models/host_model.dart';
 import '../notifiers/host_groups_notifier.dart';
 import '../notifiers/hosts_notifier.dart';
@@ -37,6 +38,8 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
   Set<String> _selectedGroupIds = {};
   String? _selectedIdentityId;
   String? _selectedJumpHostId;
+  String? _selectedStartupSnippetId;
+  late String _environment;
   bool _isLoading = false;
 
   @override
@@ -69,6 +72,8 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
     _selectedGroupIds = {...?init?.groupIds};
     _selectedIdentityId = init?.identityId;
     _selectedJumpHostId = init?.jumpHostId;
+    _selectedStartupSnippetId = init?.startupSnippetId;
+    _environment = init?.environment ?? 'dev';
   }
 
   @override
@@ -161,6 +166,8 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
               ? null
               : _colorTagController.text.trim(),
           jumpHostId: _selectedJumpHostId,
+          startupSnippetId: _selectedStartupSnippetId,
+          environment: _environment,
         );
       } else {
         saved = await notifier.addHost(
@@ -179,6 +186,8 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
               ? null
               : _colorTagController.text.trim(),
           jumpHostId: _selectedJumpHostId,
+          startupSnippetId: _selectedStartupSnippetId,
+          environment: _environment,
         );
       }
 
@@ -643,6 +652,72 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                       text: 'Failed to load jump hosts',
                     ),
                   ),
+                const SizedBox(height: 12),
+                // Typed into the host's terminal once its session first comes
+                // up. A template pane can override it for that pane.
+                ref
+                    .watch(snippetsProvider)
+                    .when(
+                      data: (snippets) => ShadSelectFormField<String?>(
+                        key: const Key('host_startup_snippet_dropdown'),
+                        initialValue:
+                            snippets.any(
+                              (s) => s.id == _selectedStartupSnippetId,
+                            )
+                            ? _selectedStartupSnippetId
+                            : null,
+                        label: const Text('Startup snippet'),
+                        selectedOptionBuilder: (context, value) {
+                          final snippet = snippets
+                              .where((item) => item.id == value)
+                              .firstOrNull;
+                          return Text(snippet?.title ?? '(None)');
+                        },
+                        options: [
+                          const ShadOption<String?>(
+                            value: null,
+                            child: Text('(None)'),
+                          ),
+                          for (final snippet in snippets)
+                            ShadOption<String?>(
+                              value: snippet.id,
+                              child: Text(snippet.title),
+                            ),
+                        ],
+                        onChanged: (val) =>
+                            setState(() => _selectedStartupSnippetId = val),
+                      ),
+                      loading: () => const _SelectStatus(
+                        icon: LucideIcons.loaderCircle,
+                        text: 'Loading snippets…',
+                      ),
+                      error: (e, s) => const _SelectStatus(
+                        icon: LucideIcons.triangleAlert,
+                        text: 'Failed to load snippets',
+                      ),
+                    ),
+                const SizedBox(height: 12),
+                // What this machine is. Anything that runs a command on it in
+                // the background asks first when it is production.
+                ShadSelectFormField<String>(
+                  key: const Key('host_environment_dropdown'),
+                  initialValue: _environment,
+                  label: const Text('Environment'),
+                  selectedOptionBuilder: (context, value) =>
+                      Text(switch (value) {
+                        'prod' => 'Production',
+                        'staging' => 'Staging',
+                        _ => 'Development',
+                      }),
+                  options: const [
+                    ShadOption(value: 'dev', child: Text('Development')),
+                    ShadOption(value: 'staging', child: Text('Staging')),
+                    ShadOption(value: 'prod', child: Text('Production')),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) setState(() => _environment = val);
+                  },
+                ),
                 const SizedBox(height: 16),
                 // The address the form actually resolves to, spelled out. Two
                 // fields and a jump-host select do not add up to a route in

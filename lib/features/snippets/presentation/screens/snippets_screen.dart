@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -7,13 +9,24 @@ import '../../../../app/widgets/adaptive_modal.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../../../shared/providers/workspace_provider.dart';
 import '../../../settings/presentation/notifiers/settings_notifier.dart';
+import '../../../terminal/presentation/notifiers/terminal_tabs_notifier.dart';
+import '../../domain/models/runbook_model.dart';
 import '../../domain/models/snippet_model.dart';
+import '../../domain/services/runbook_run_service.dart';
 import '../../domain/services/snippet_variable_parser.dart';
+import '../../../templates/presentation/template_launch.dart';
+import '../notifiers/runbook_run_notifier.dart';
 import '../notifiers/runbooks_notifier.dart';
 import '../notifiers/snippets_notifier.dart';
 import '../widgets/automation_section_layout.dart';
+import '../widgets/prod_confirmation.dart';
+import '../widgets/run_history_section.dart';
+import '../widgets/runbook_markdown_actions.dart';
+import '../widgets/run_progress_view.dart';
+import '../widgets/run_target_sheet.dart';
 import '../widgets/runbook_editor_dialog.dart';
 import '../widgets/snippet_form_dialog.dart';
+import '../widgets/terminal_send.dart';
 import '../widgets/variable_input_dialog.dart';
 import 'runbooks_screen.dart';
 
@@ -37,13 +50,11 @@ enum AutomationSection { snippets, runbooks }
 
 class SnippetsScreen extends ConsumerStatefulWidget {
   final String? workspaceId;
-  final void Function(String command)? onExecuteCommand;
   final AutomationSection initialSection;
 
   const SnippetsScreen({
     super.key,
     this.workspaceId,
-    this.onExecuteCommand,
     this.initialSection = AutomationSection.snippets,
   });
 
@@ -97,7 +108,8 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
   Widget _buildContextColumn(BuildContext context) {
     final snippets =
         ref.watch(snippetsProvider).value ?? const <SnippetModel>[];
-    final runbookCount = ref.watch(runbooksProvider).value?.length ?? 0;
+    final runbooks =
+        ref.watch(runbooksProvider).value ?? const <RunbookModel>[];
 
     return ShellVibeContextColumn(
       head: _SectionSwitcher(section: _section, onChanged: _selectSection),
@@ -124,14 +136,24 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
             ),
         ],
         AutomationSection.runbooks => [
-          const ShellVibeSectionLabel(label: 'Library'),
+          const ShellVibeSectionLabel(label: 'Tags'),
           ShellVibeNavItem(
             itemKey: const Key('runbooks_filter_all'),
             icon: LucideIcons.listChecks,
             label: 'All runbooks',
-            count: runbookCount,
-            selected: true,
+            count: runbooks.length,
+            selected: _selectedTag == null,
+            onTap: () => setState(() => _selectedTag = null),
           ),
+          for (final tag in _tagsOf(runbooks.map((r) => r.tags)))
+            ShellVibeNavItem(
+              itemKey: Key('runbooks_filter_$tag'),
+              icon: LucideIcons.hash,
+              label: tag,
+              count: runbooks.where((r) => r.tags.contains(tag)).length,
+              selected: _selectedTag == tag,
+              onTap: () => setState(() => _selectedTag = tag),
+            ),
         ],
       },
     );
@@ -197,6 +219,14 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
             onPressed: _openRunbookEditor,
           ),
         },
+      if (!isSectionEmpty && _section == AutomationSection.runbooks)
+        ShellVibeButton.secondary(
+          key: const Key('import_runbook_button'),
+          label: 'Import',
+          icon: LucideIcons.fileUp,
+          onPressed: () =>
+              importRunbookMarkdown(context, ref, workspaceId: _workspaceId),
+        ),
     ];
 
     final header = Column(
@@ -246,6 +276,7 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
         workspaceId: _workspaceId,
         header: header,
         searchQuery: _searchQuery,
+        selectedTag: _selectedTag,
         compact: !showContextColumn,
         showDetailDrawer: showDetailDrawer,
       ),
@@ -259,7 +290,14 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
     final tokens = ShellVibeTokens.resolve(context);
     final tags = _section == AutomationSection.snippets
         ? _allTags(snippets)
-        : const <String>[];
+        : _tagsOf(
+            (ref.watch(runbooksProvider).value ?? const <RunbookModel>[]).map(
+              (r) => r.tags,
+            ),
+          );
+    final chipPrefix = _section == AutomationSection.snippets
+        ? 'snippets'
+        : 'runbooks';
 
     return Container(
       padding: EdgeInsets.fromLTRB(
@@ -299,7 +337,7 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
                   ),
                   for (final tag in tags)
                     _FilterChip(
-                      chipKey: Key('snippets_chip_$tag'),
+                      chipKey: Key('${chipPrefix}_chip_$tag'),
                       label: '#$tag',
                       selected: _selectedTag == tag,
                       onTap: () => setState(() => _selectedTag = tag),
@@ -380,10 +418,8 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
               ? ShellVibeDetailDrawer(
                   child: _SnippetDetailPanel(
                     snippet: selected,
-                    canRun: widget.onExecuteCommand != null,
-                    onCopy: () =>
-                        _handleExecuteOrCopy(selected, copyOnly: true),
-                    onRun: () => _handleExecuteOrCopy(selected),
+                    onCopy: () => _copySnippet(selected),
+                    onRun: () => _runSnippet(selected),
                     onEdit: () => _openSnippetForm(snippet: selected),
                     onDelete: () => _deleteSnippet(selected),
                     onClose: () => setState(() => _selectedSnippetId = null),
@@ -412,9 +448,8 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
                           _showSnippetDetailSheet(snippet);
                         }
                       },
-                      onCopy: () =>
-                          _handleExecuteOrCopy(snippet, copyOnly: true),
-                      onRun: () => _handleExecuteOrCopy(snippet),
+                      onCopy: () => _copySnippet(snippet),
+                      onRun: () => _runSnippet(snippet),
                       onEdit: () => _openSnippetForm(snippet: snippet),
                       onDelete: () => _deleteSnippet(snippet),
                     );
@@ -441,14 +476,13 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
           height: MediaQuery.sizeOf(sheetContext).height * 0.72,
           child: _SnippetDetailPanel(
             snippet: snippet,
-            canRun: widget.onExecuteCommand != null,
             onCopy: () {
               Navigator.of(sheetContext).pop();
-              _handleExecuteOrCopy(snippet, copyOnly: true);
+              _copySnippet(snippet);
             },
             onRun: () {
               Navigator.of(sheetContext).pop();
-              _handleExecuteOrCopy(snippet);
+              _runSnippet(snippet);
             },
             onEdit: () {
               Navigator.of(sheetContext).pop();
@@ -467,13 +501,13 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
 
   // ── data helpers ────────────────────────────────────────────────────────
 
-  List<String> _allTags(List<SnippetModel> snippets) {
-    final tags = <String>{};
-    for (final snippet in snippets) {
-      tags.addAll(snippet.tags);
-    }
-    final sorted = tags.toList()..sort();
-    return sorted;
+  List<String> _allTags(List<SnippetModel> snippets) =>
+      _tagsOf(snippets.map((s) => s.tags));
+
+  /// The distinct tags across [tagLists], sorted.
+  List<String> _tagsOf(Iterable<List<String>> tagLists) {
+    final tags = <String>{for (final list in tagLists) ...list};
+    return tags.toList()..sort();
   }
 
   List<SnippetModel> _visibleSnippets(List<SnippetModel> snippets) {
@@ -520,6 +554,7 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
         title: result.title,
         code: result.code,
         tags: result.tags,
+        variables: result.variables,
       );
     } else {
       await notifier.updateSnippet(result);
@@ -542,6 +577,8 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
           title: result.title,
           description: result.description,
           steps: result.steps,
+          variables: result.variables,
+          tags: result.tags,
         );
   }
 
@@ -575,52 +612,106 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
     await ref.read(snippetsProvider.notifier).deleteSnippet(snippet.id);
   }
 
-  Future<void> _handleExecuteOrCopy(
-    SnippetModel snippet, {
-    bool copyOnly = false,
-  }) async {
+  /// Asks for the snippet's `${INPUT:…}` values, or returns an empty map when
+  /// it has none. Null means the user cancelled.
+  Future<Map<String, String>?> _promptValues(SnippetModel snippet) async {
     final vars = SnippetVariableParser.extractVariables(snippet.code);
-    Map<String, String> values = {};
+    if (vars.isEmpty) return const {};
+    return VariableInputDialog.show(
+      context,
+      variables: vars,
+      declarations: snippet.variables,
+      memoryKey: 'snippet:${snippet.id}',
+      title: 'Fill Variables for "${snippet.title}"',
+    );
+  }
 
-    if (vars.isNotEmpty) {
-      final inputValues = await VariableInputDialog.show(
-        context,
-        variables: vars,
-        title: 'Fill Variables for "${snippet.title}"',
-      );
-      if (!mounted) return;
-      if (inputValues == null) return; // User cancelled
-      values = inputValues;
-    }
-
+  Future<void> _copySnippet(SnippetModel snippet) async {
+    final values = await _promptValues(snippet);
+    if (!mounted || values == null) return;
     final finalCode = SnippetVariableParser.substituteVariables(
       snippet.code,
       values,
     );
+    final settings = ref.read(settingsProvider).value;
+    final clearSeconds = settings?.clipboardAutoClearSeconds ?? 30;
+    final autoClearService = ref.read(clipboardAutoClearServiceProvider);
+    await autoClearService.copyAndScheduleClear(
+      finalCode,
+      duration: Duration(seconds: clearSeconds),
+    );
+    if (mounted) _toast('Copied snippet "${snippet.title}" to clipboard');
+  }
 
-    if (copyOnly || widget.onExecuteCommand == null) {
-      final settings = ref.read(settingsProvider).value;
-      final clearSeconds = settings?.clipboardAutoClearSeconds ?? 30;
-      final autoClearService = ref.read(clipboardAutoClearServiceProvider);
-      await autoClearService.copyAndScheduleClear(
-        finalCode,
-        duration: Duration(seconds: clearSeconds),
-      );
-      if (mounted) {
-        ShadToaster.of(context).show(
-          ShadToast(
-            description: Text('Copied snippet "${snippet.title}" to clipboard'),
-          ),
-        );
-      }
-    } else {
-      widget.onExecuteCommand!(finalCode);
-      if (mounted) {
-        ShadToaster.of(context).show(
-          ShadToast(description: Text('Executed snippet "${snippet.title}"')),
-        );
-      }
+  /// Where first, then variables, matching runbooks: cancelling either starts
+  /// nothing.
+  Future<void> _runSnippet(SnippetModel snippet) async {
+    final selection = await RunTargetSheet.show(
+      context,
+      subject: snippet.title,
+      allowTerminal: true,
+    );
+    if (!mounted || selection == null || selection.targets.isEmpty) return;
+    final values = await _promptValues(snippet);
+    if (!mounted || values == null) return;
+
+    final hosts = selection.hosts;
+    // A pane's host counts as much as a background target: typing into a
+    // production shell is running on production.
+    final tabsState = ref.read(terminalTabsProvider);
+    if (!await confirmProdRun(
+      context,
+      what: 'snippet "${snippet.title}"',
+      hosts: hosts.isNotEmpty
+          ? hosts
+          : terminalTargetHosts(tabsState, selection.targets.first),
+    )) {
+      return;
     }
+    if (!mounted) return;
+    if (hosts.isNotEmpty) {
+      final notifier = ref.read(runbookRunProvider.notifier);
+      if (notifier.isRunning) {
+        _toast('A run is already in progress.');
+        return;
+      }
+      final layout = selection.openLayoutOf;
+      if (layout != null) unawaited(openTemplateLayout(context, ref, layout));
+      // Opened first: the dialog watches the run, so progress and Stop are on
+      // screen from the first connection rather than after the last.
+      unawaited(
+        notifier.start(
+          RunbookRunService.runbookForSnippet(snippet),
+          hosts,
+          variableValues: values,
+          strategy: selection.strategy,
+        ),
+      );
+      await RunResultDialog.show(context);
+      return;
+    }
+
+    final filled = fillPaneBuiltins(
+      ref.read(terminalTabsProvider),
+      SnippetVariableParser.substituteVariables(snippet.code, values),
+    );
+    final sent = sendToOpenTerminal(
+      ref.read(terminalTabsProvider),
+      ref.read(terminalTabsProvider.notifier),
+      selection.targets.first,
+      filled.code,
+    );
+    _toast(
+      sent
+          ? 'Sent "${snippet.title}" to the terminal. Check the pane for the '
+                'result.${filled.unresolved ? ' It uses \${SV:...} and the '
+                          'pane has no host, so those were left as written.' : ''}'
+          : 'No open terminal pane could take "${snippet.title}".',
+    );
+  }
+
+  void _toast(String message) {
+    ShadToaster.of(context).show(ShadToast(description: Text(message)));
   }
 }
 
@@ -923,7 +1014,7 @@ class _SnippetRow extends StatelessWidget {
                     ShellVibeIconButton(
                       key: Key('snippet_run_${snippet.id}'),
                       icon: LucideIcons.play,
-                      tooltip: 'Execute in terminal',
+                      tooltip: 'Run…',
                       onPressed: onRun,
                     ),
                     PopupMenuButton<String>(
@@ -979,7 +1070,6 @@ class _SnippetRow extends StatelessWidget {
 /// Inline right-hand detail panel for a snippet.
 class _SnippetDetailPanel extends StatelessWidget {
   final SnippetModel snippet;
-  final bool canRun;
   final VoidCallback onCopy;
   final VoidCallback onRun;
   final VoidCallback onEdit;
@@ -988,7 +1078,6 @@ class _SnippetDetailPanel extends StatelessWidget {
 
   const _SnippetDetailPanel({
     required this.snippet,
-    required this.canRun,
     required this.onCopy,
     required this.onRun,
     required this.onEdit,
@@ -1036,13 +1125,11 @@ class _SnippetDetailPanel extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 12),
-        // Without a terminal to run in, the primary action is the one that
-        // actually happens rather than a button that silently copies.
         ShellVibeButton(
           key: const Key('snippet_detail_run'),
-          label: canRun ? 'Run in terminal' : 'Copy command',
+          label: 'Run…',
           icon: LucideIcons.play,
-          onPressed: canRun ? onRun : onCopy,
+          onPressed: onRun,
           expand: true,
         ),
         const SizedBox(height: 8),
@@ -1091,6 +1178,8 @@ class _SnippetDetailPanel extends StatelessWidget {
           label: 'tags',
           value: snippet.tags.isEmpty ? 'none' : '${snippet.tags.length}',
         ),
+        const SizedBox(height: 14),
+        SnippetHistorySection(snippet: snippet),
         const SizedBox(height: 14),
         ShellVibeButton.danger(
           key: const Key('snippet_detail_delete'),

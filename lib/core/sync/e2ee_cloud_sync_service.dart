@@ -577,6 +577,9 @@ class E2EECloudSyncService {
                   moshPortRange: Value(item['moshPortRange'] as String?),
                   colorTag: Value(item['colorTag'] as String?),
                   jumpHostId: Value(item['jumpHostId'] as String?),
+                  // Snippets are restored after hosts: the reference is filled
+                  // in once they are there (step 7b), as a foreign key cannot
+                  // point at a row that does not exist yet.
                   environment: Value(item['environment'] as String? ?? 'dev'),
                   mcpVisible: Value(item['mcpVisible'] as bool? ?? true),
                   mcpDefaultMode: Value(
@@ -717,8 +720,26 @@ class E2EECloudSyncService {
                   title: item['title'] as String,
                   code: item['code'] as String,
                   tags: Value(item['tags'] as String?),
+                  variables: Value(item['variables'] as String?),
                 ),
               );
+        }
+      }
+
+      final snippetIds = await idsOf('snippets');
+
+      // 7b. Host startup snippets
+      //
+      // Written now that the snippets exist. A host whose snippet is not in
+      // the backup simply has none, as it would after deleting the snippet.
+      if (data['hosts'] is List) {
+        for (final item in data['hosts'] as List) {
+          final snippetId = item['startupSnippetId'] as String?;
+          if (snippetId == null || !snippetIds.contains(snippetId)) continue;
+          if (!hostIds.contains(item['id'])) continue;
+          await (db.update(db.hosts)
+                ..where((h) => h.id.equals(item['id'] as String)))
+              .write(HostsCompanion(startupSnippetId: Value(snippetId)));
         }
       }
 
@@ -738,6 +759,9 @@ class E2EECloudSyncService {
                   title: item['title'] as String,
                   description: Value(item['description'] as String?),
                   createdAt: DateTime.parse(item['createdAt'] as String),
+                  defaultHostIds: Value(item['defaultHostIds'] as String?),
+                  variables: Value(item['variables'] as String?),
+                  tags: Value(item['tags'] as String?),
                 ),
               );
         }
@@ -766,6 +790,14 @@ class E2EECloudSyncService {
                     item['expectedOutputPattern'] as String?,
                   ),
                   timeoutSeconds: Value(item['timeoutSeconds'] as int? ?? 30),
+                  onFailure: Value(item['onFailure'] as String? ?? 'stop'),
+                  retries: Value(item['retries'] as int? ?? 0),
+                  kind: Value(item['kind'] as String? ?? 'command'),
+                  snippetId: Value(
+                    snippetIds.contains(item['snippetId'])
+                        ? item['snippetId'] as String?
+                        : null,
+                  ),
                 ),
               );
         }
@@ -788,6 +820,12 @@ class E2EECloudSyncService {
                   description: Value(item['description'] as String?),
                   activePaneId: Value(item['activePaneId'] as String?),
                   createdAt: DateTime.parse(item['createdAt'] as String),
+                  onOpenRunbookId: Value(
+                    runbookIds.contains(item['onOpenRunbookId'])
+                        ? item['onOpenRunbookId'] as String?
+                        : null,
+                  ),
+                  onOpenConfirm: Value(item['onOpenConfirm'] as bool? ?? true),
                 ),
               );
         }
@@ -821,6 +859,11 @@ class E2EECloudSyncService {
                   sessionType: item['sessionType'] as String,
                   hostId: Value(item['hostId'] as String?),
                   title: Value(item['title'] as String?),
+                  startupSnippetId: Value(
+                    snippetIds.contains(item['startupSnippetId'])
+                        ? item['startupSnippetId'] as String?
+                        : null,
+                  ),
                 ),
               );
         }

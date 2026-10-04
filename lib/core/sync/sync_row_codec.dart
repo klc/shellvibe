@@ -22,11 +22,11 @@ final class SyncRowCodec {
     'workspaces',
     'identities',
     'vault_env_vars',
+    'snippets',
     'host_groups',
     'hosts',
     'host_group_members',
     'port_forward_rules',
-    'snippets',
     'runbooks',
     'runbook_steps',
     'templates',
@@ -109,6 +109,7 @@ final class SyncRowCodec {
     'mcpVisible': h.mcpVisible,
     'mcpDefaultMode': h.mcpDefaultMode,
     'createdAt': h.createdAt.toIso8601String(),
+    'startupSnippetId': h.startupSnippetId,
   };
 
   static Map<String, dynamic> hostGroupMember(HostGroupMember m) => {
@@ -142,6 +143,7 @@ final class SyncRowCodec {
     'title': s.title,
     'code': s.code,
     'tags': s.tags,
+    'variables': s.variables,
   };
 
   static Map<String, dynamic> runbook(Runbook r) => {
@@ -150,6 +152,9 @@ final class SyncRowCodec {
     'title': r.title,
     'description': r.description,
     'createdAt': r.createdAt.toIso8601String(),
+    'defaultHostIds': r.defaultHostIds,
+    'variables': r.variables,
+    'tags': r.tags,
   };
 
   static Map<String, dynamic> runbookStep(RunbookStep rs) => {
@@ -160,6 +165,10 @@ final class SyncRowCodec {
     'expectedExitCode': rs.expectedExitCode,
     'expectedOutputPattern': rs.expectedOutputPattern,
     'timeoutSeconds': rs.timeoutSeconds,
+    'onFailure': rs.onFailure,
+    'retries': rs.retries,
+    'kind': rs.kind,
+    'snippetId': rs.snippetId,
   };
 
   static Map<String, dynamic> template(Template t) => {
@@ -169,6 +178,8 @@ final class SyncRowCodec {
     'description': t.description,
     'activePaneId': t.activePaneId,
     'createdAt': t.createdAt.toIso8601String(),
+    'onOpenRunbookId': t.onOpenRunbookId,
+    'onOpenConfirm': t.onOpenConfirm,
   };
 
   static Map<String, dynamic> templatePane(TemplatePane tp) => {
@@ -181,6 +192,7 @@ final class SyncRowCodec {
     'sessionType': tp.sessionType,
     'hostId': tp.hostId,
     'title': tp.title,
+    'startupSnippetId': tp.startupSnippetId,
   };
 
   static Map<String, dynamic> bookmark(Bookmark b) => {

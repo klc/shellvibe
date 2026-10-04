@@ -196,4 +196,51 @@ void main() {
       expect(problem('local-under-ssh'), contains('split out of an SSH pane'));
     });
   });
+
+  group('startup snippets and on-open settings survive layout edits', () {
+    TemplateModel withSettings() => _template().copyWith(
+      onOpenRunbookId: 'rb',
+      onOpenConfirm: false,
+      panes: [
+        for (final pane in _template().panes)
+          pane.id == 'a1' ? pane.copyWith(startupSnippetId: 'sn') : pane,
+      ],
+    );
+
+    test('a pane gets its own startup snippet and can hand it back', () {
+      final set = withSettings().withPaneStartupSnippet('b', 'sn2');
+      expect(set.panes.firstWhere((p) => p.id == 'b').startupSnippetId, 'sn2');
+      final cleared = set.withPaneStartupSnippet('b', null);
+      expect(
+        cleared.panes.firstWhere((p) => p.id == 'b').startupSnippetId,
+        isNull,
+      );
+      // The other pane's override is untouched.
+      expect(
+        cleared.panes.firstWhere((p) => p.id == 'a1').startupSnippetId,
+        'sn',
+      );
+    });
+
+    test('moving, splitting and re-pointing keep every setting', () {
+      var edited = withSettings()
+          .withPaneHost('b', 'other')
+          .moveTab('b', 0)
+          .addSplit(
+            'a',
+            newPaneId: 'new',
+            direction: Axis.vertical,
+            hostId: 'web',
+          )
+          .removePane('a2');
+      expect(edited.onOpenRunbookId, 'rb');
+      expect(edited.onOpenConfirm, isFalse);
+      expect(
+        edited.panes.firstWhere((p) => p.id == 'a1').startupSnippetId,
+        'sn',
+      );
+      edited = edited.withSplitDirection('a1', Axis.vertical);
+      expect(edited.onOpenRunbookId, 'rb');
+    });
+  });
 }

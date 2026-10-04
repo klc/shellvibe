@@ -1,9 +1,12 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 
 import '../../../../shared/database/app_database.dart';
 import '../../../../shared/database/daos/runbooks_dao.dart';
 import '../../domain/models/runbook_model.dart';
 import '../../domain/models/runbook_step_model.dart';
+import '../../domain/models/variable_declaration.dart';
 
 class RunbooksRepository {
   final RunbooksDao _dao;
@@ -47,6 +50,9 @@ class RunbooksRepository {
       title: runbook.title,
       description: Value(runbook.description),
       createdAt: runbook.createdAt,
+      defaultHostIds: Value(encodeHostIds(runbook.defaultHostIds)),
+      variables: Value(VariableDeclaration.encodeList(runbook.variables)),
+      tags: Value(runbook.tags.isEmpty ? null : jsonEncode(runbook.tags)),
     );
     await _dao.insertRunbook(companion);
 
@@ -60,10 +66,34 @@ class RunbooksRepository {
             expectedExitCode: Value(s.expectedExitCode),
             expectedOutputPattern: Value(s.expectedOutputPattern),
             timeoutSeconds: Value(s.timeoutSeconds),
+            onFailure: Value(s.onFailure.wireName),
+            retries: Value(s.retries),
+            kind: Value(s.kind.name),
+            snippetId: Value(s.snippetId),
           ),
         )
         .toList();
     await _dao.replaceSteps(runbook.id, stepCompanions);
+  }
+
+  /// Stores only the default targets, leaving title and steps alone: the
+  /// run-target sheet saves them without owning the rest of the runbook.
+  Future<void> setDefaultHostIds(String runbookId, List<String> hostIds) async {
+    await _dao.setDefaultHostIds(runbookId, encodeHostIds(hostIds));
+  }
+
+  /// Null for an empty list, so "no default" stays the column's null.
+  static String? encodeHostIds(List<String> ids) =>
+      ids.isEmpty ? null : jsonEncode(ids);
+
+  static List<String> decodeHostIds(String? raw) {
+    if (raw == null || raw.isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(raw);
+      return decoded is List ? decoded.whereType<String>().toList() : const [];
+    } catch (_) {
+      return const [];
+    }
   }
 
   Future<void> updateRunbook(RunbookModel runbook) async {
@@ -73,6 +103,9 @@ class RunbooksRepository {
       title: Value(runbook.title),
       description: Value(runbook.description),
       createdAt: Value(runbook.createdAt),
+      defaultHostIds: Value(encodeHostIds(runbook.defaultHostIds)),
+      variables: Value(VariableDeclaration.encodeList(runbook.variables)),
+      tags: Value(runbook.tags.isEmpty ? null : jsonEncode(runbook.tags)),
     );
     await _dao.updateRunbook(companion);
 
@@ -86,6 +119,10 @@ class RunbooksRepository {
             expectedExitCode: Value(s.expectedExitCode),
             expectedOutputPattern: Value(s.expectedOutputPattern),
             timeoutSeconds: Value(s.timeoutSeconds),
+            onFailure: Value(s.onFailure.wireName),
+            retries: Value(s.retries),
+            kind: Value(s.kind.name),
+            snippetId: Value(s.snippetId),
           ),
         )
         .toList();
@@ -103,6 +140,9 @@ class RunbooksRepository {
       title: r.title,
       description: r.description,
       createdAt: r.createdAt,
+      defaultHostIds: decodeHostIds(r.defaultHostIds),
+      variables: VariableDeclaration.decodeList(r.variables),
+      tags: decodeHostIds(r.tags),
       steps: steps
           .map(
             (s) => RunbookStepModel(
@@ -113,6 +153,10 @@ class RunbooksRepository {
               expectedExitCode: s.expectedExitCode,
               expectedOutputPattern: s.expectedOutputPattern,
               timeoutSeconds: s.timeoutSeconds,
+              onFailure: StepFailurePolicy.parse(s.onFailure),
+              retries: s.retries.clamp(0, RunbookStepModel.maxRetries),
+              kind: StepKind.parse(s.kind),
+              snippetId: s.snippetId,
             ),
           )
           .toList(),

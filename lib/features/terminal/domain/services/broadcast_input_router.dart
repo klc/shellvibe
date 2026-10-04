@@ -73,19 +73,28 @@ class BroadcastInputRouter {
   /// paste, so the paste never re-enters broadcasting and no pane receives the
   /// text twice.
   ///
+  /// With [submit], each pane then receives a carriage return as typed input
+  /// (not as part of the paste): a bracketed paste ends with its newline
+  /// inside the paste markers, which a shell takes as text rather than Enter,
+  /// so the command would be left sitting on the prompt.
+  ///
   /// Returns the number of panes that received the text. Panes without a live
   /// session (still connecting, or disconnected) are skipped.
   int sendTextToPanes({
     required Set<String> selectedIds,
     required List<TerminalTabSession> tabs,
     required String text,
+    bool submit = false,
   }) {
     final tabsById = {for (final tab in tabs) tab.id: tab};
     var sent = 0;
     for (final id in selectedIds) {
       final tab = tabsById[id];
       if (tab == null || tab.outputChain.base == null) continue;
-      tab.outputChain.without(_key(id), () => tab.terminal.paste(text));
+      tab.outputChain.without(_key(id), () {
+        tab.terminal.paste(text);
+        if (submit) tab.terminal.textInput('\r');
+      });
       sent++;
     }
     return sent;

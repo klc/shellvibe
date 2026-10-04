@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -6,12 +8,22 @@ import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/widgets/adaptive_modal.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../../../shared/providers/workspace_provider.dart';
+import '../../data/repositories/run_history_repository.dart';
 import '../../domain/models/runbook_model.dart';
 import '../../domain/models/runbook_step_model.dart';
-import '../../domain/services/runbook_executor.dart';
-import '../../domain/services/snippet_variable_parser.dart';
+import '../../domain/services/runbook_run_service.dart';
+import '../../domain/services/run_variables.dart';
+import '../notifiers/snippets_notifier.dart';
+import '../../../templates/presentation/template_launch.dart';
+import '../notifiers/run_history_providers.dart';
+import '../notifiers/runbook_run_notifier.dart';
 import '../notifiers/runbooks_notifier.dart';
 import '../widgets/automation_section_layout.dart';
+import '../widgets/prod_confirmation.dart';
+import '../widgets/run_history_section.dart';
+import '../widgets/runbook_markdown_actions.dart';
+import '../widgets/run_progress_view.dart';
+import '../widgets/run_target_sheet.dart';
 import '../widgets/runbook_editor_dialog.dart';
 import '../widgets/variable_input_dialog.dart';
 
@@ -33,11 +45,6 @@ const double _kRunbookActionsWidth = 94;
 /// carrying two different page chromes.
 class RunbooksScreen extends ConsumerStatefulWidget {
   final String? workspaceId;
-  final Future<(String output, int exitCode)> Function(
-    String command,
-    int timeoutSeconds,
-  )?
-  customCommandRunner;
 
   /// The toolbar `SnippetsScreen` shares between its sections, laid out in
   /// this section's slab so the detail drawer can sit beside it.
@@ -45,6 +52,9 @@ class RunbooksScreen extends ConsumerStatefulWidget {
 
   /// Lower-cased query owned by the shell's search field.
   final String searchQuery;
+
+  /// The tag the shell is filtering to, or null for every runbook.
+  final String? selectedTag;
 
   /// True when the viewport is too narrow for the context column.
   final bool compact;
@@ -55,9 +65,9 @@ class RunbooksScreen extends ConsumerStatefulWidget {
   const RunbooksScreen({
     super.key,
     this.workspaceId,
-    this.customCommandRunner,
     this.header = const SizedBox.shrink(),
     this.searchQuery = '',
+    this.selectedTag,
     this.compact = true,
     this.showDetailDrawer = false,
   });
@@ -67,9 +77,6 @@ class RunbooksScreen extends ConsumerStatefulWidget {
 }
 
 class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
-  final Map<String, String> _stepStatuses = {};
-  bool _isExecuting = false;
-  String? _executingRunbookId;
   String? _selectedRunbookId;
 
   String get _workspaceId =>
@@ -79,6 +86,14 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
   Widget build(BuildContext context) {
     final runbooksAsync = ref.watch(runbooksProvider);
     final tokens = ShellVibeTokens.resolve(context);
+    final activeRun = ref.watch(runbookRunProvider);
+    final lastRuns =
+        ref.watch(latestRunbookRunsProvider).value ??
+        const <String, RunHistorySummary>{};
+    bool isRunning(RunbookModel runbook) =>
+        activeRun != null &&
+        activeRun.running &&
+        activeRun.runbook.id == runbook.id;
 
     Widget layout(Widget body, {Widget? drawer}) => AutomationSectionLayout(
       header: widget.header,
@@ -114,6 +129,16 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
                   icon: LucideIcons.plus,
                   onPressed: _openEditor,
                 ),
+                ShellVibeButton.secondary(
+                  key: const Key('empty_import_runbook_button'),
+                  label: 'Import',
+                  icon: LucideIcons.fileUp,
+                  onPressed: () => importRunbookMarkdown(
+                    context,
+                    ref,
+                    workspaceId: _workspaceId,
+                  ),
+                ),
               ],
             ),
           );
@@ -139,9 +164,6 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
               ? ShellVibeDetailDrawer(
                   child: _RunbookDetailPanel(
                     runbook: selected,
-                    stepStatuses: _stepStatuses,
-                    isExecuting:
-                        _isExecuting && _executingRunbookId == selected.id,
                     onRun: () => _executeRunbook(selected),
                     onEdit: () => _openEditor(runbook: selected),
                     onDelete: () => _deleteRunbook(selected),
@@ -162,8 +184,8 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
                       runbook: runbook,
                       compact: widget.compact,
                       selected: runbook.id == _selectedRunbookId,
-                      isExecuting:
-                          _isExecuting && _executingRunbookId == runbook.id,
+                      isExecuting: isRunning(runbook),
+                      lastRun: lastRuns[runbook.id],
                       onSelect: () {
                         setState(() => _selectedRunbookId = runbook.id);
                         // Too narrow for the inline drawer, so the step
@@ -175,6 +197,8 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
                       },
                       onRun: () => _executeRunbook(runbook),
                       onEdit: () => _openEditor(runbook: runbook),
+                      onExport: () =>
+                          exportRunbookMarkdown(context, ref, runbook),
                       onDelete: () => _deleteRunbook(runbook),
                     );
                   },
@@ -188,9 +212,16 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
   }
 
   List<RunbookModel> _visibleRunbooks(List<RunbookModel> runbooks) {
-    if (widget.searchQuery.isEmpty) return runbooks;
-    return runbooks.where((runbook) {
+    final tag = widget.selectedTag;
+    final tagged = tag == null
+        ? runbooks
+        : runbooks.where((r) => r.tags.contains(tag)).toList();
+    if (widget.searchQuery.isEmpty) return tagged;
+    return tagged.where((runbook) {
       return runbook.title.toLowerCase().contains(widget.searchQuery) ||
+          runbook.tags.any(
+            (t) => t.toLowerCase().contains(widget.searchQuery),
+          ) ||
           (runbook.description ?? '').toLowerCase().contains(
             widget.searchQuery,
           ) ||
@@ -213,8 +244,6 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
           height: MediaQuery.sizeOf(sheetContext).height * 0.72,
           child: _RunbookDetailPanel(
             runbook: runbook,
-            stepStatuses: _stepStatuses,
-            isExecuting: _isExecuting && _executingRunbookId == runbook.id,
             onRun: () {
               Navigator.of(sheetContext).pop();
               _executeRunbook(runbook);
@@ -251,6 +280,8 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
         title: result.title,
         description: result.description,
         steps: result.steps,
+        variables: result.variables,
+        tags: result.tags,
       );
     } else {
       await notifier.updateRunbook(result);
@@ -287,155 +318,85 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
     await ref.read(runbooksProvider.notifier).deleteRunbook(runbook.id);
   }
 
+  /// Target first, then variables: choosing where is the bigger decision, and
+  /// nobody should type parameters for a run they then back out of. Cancelling
+  /// either step starts nothing.
   Future<void> _executeRunbook(RunbookModel runbook) async {
-    // 1. Gather all unique variables across all steps
-    final allVars = <String>{};
-    for (final step in runbook.steps) {
-      allVars.addAll(SnippetVariableParser.extractVariables(step.command));
+    if (ref.read(runbookRunProvider.notifier).isRunning) {
+      ShadToaster.of(context).show(
+        const ShadToast(description: Text('A run is already in progress.')),
+      );
+      return;
     }
 
-    Map<String, String> variableValues = {};
-    if (allVars.isNotEmpty) {
+    final selection = await RunTargetSheet.show(
+      context,
+      subject: runbook.title,
+      defaultHostIds: runbook.defaultHostIds,
+      allowSaveDefault: true,
+    );
+    if (!mounted || selection == null) return;
+    final hosts = selection.hosts;
+    if (hosts.isEmpty) return;
+
+    // Snippet steps count too: what they will run is what gets asked for.
+    final snippets = {
+      for (final s in await ref.read(snippetsProvider.future)) s.id: s,
+    };
+    if (!mounted) return;
+    final needed = collectRunVariables(runbook, snippets: snippets);
+    var variableValues = <String, String>{};
+    if (!needed.isEmpty) {
       final inputs = await VariableInputDialog.show(
         context,
-        variables: allVars.toList(),
+        variables: needed.names,
+        declarations: needed.declarations,
+        memoryKey: 'runbook:${runbook.id}',
         title: 'Runbook Input Parameters',
       );
-      if (!mounted) return;
-      if (inputs == null) return; // User cancelled
+      if (!mounted || inputs == null) return;
       variableValues = inputs;
     }
 
-    setState(() {
-      _isExecuting = true;
-      _executingRunbookId = runbook.id;
-      // Selecting the running runbook keeps its step progress on screen.
-      _selectedRunbookId = runbook.id;
-      _stepStatuses.clear();
-    });
-
-    final commandRunner =
-        widget.customCommandRunner ??
-        (String command, int timeoutSeconds) async {
-          // Default fallback runner simulation if no active terminal runner passed
-          await Future.delayed(const Duration(milliseconds: 500));
-          return ('Executed: $command\nStatus: OK', 0);
-        };
-
-    final result = await ref
-        .read(runbooksProvider.notifier)
-        .executeRunbook(
-          runbook,
-          commandRunner,
-          variableValues: variableValues,
-          onProgress: (RunbookStepModel step, String status) {
-            if (mounted) {
-              setState(() {
-                _stepStatuses[step.id] = status;
-              });
-            }
-          },
-        );
-
-    if (mounted) {
-      setState(() {
-        _isExecuting = false;
-        _executingRunbookId = null;
-      });
-
-      _showResultDialog(result);
+    if (!await confirmProdRun(
+      context,
+      what: 'runbook "${runbook.title}"',
+      hosts: hosts,
+    )) {
+      return;
     }
-  }
+    if (!mounted) return;
 
-  void _showResultDialog(RunbookExecutionResult result) {
-    final tokens = ShellVibeTokens.resolve(context);
-    showDialog(
-      context: context,
-      builder: (context) => ShadDialog(
-        title: Row(
-          children: [
-            Icon(
-              result.overallSuccess
-                  ? LucideIcons.circleCheck
-                  : LucideIcons.circleX,
-              color: result.overallSuccess ? tokens.success : tokens.danger,
-            ),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                result.overallSuccess ? 'Runbook Succeeded' : 'Runbook Failed',
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-        description: SizedBox(
-          width: 500,
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: result.stepResults.map((sr) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6.0),
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: sr.success
-                          ? tokens.success.withValues(alpha: 0.1)
-                          : tokens.danger.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(tokens.radiusSmall),
-                      border: Border.all(
-                        color: sr.success ? tokens.success : tokens.danger,
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Step ${sr.step.stepOrder}: ${sr.step.command}',
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 4),
-                        Text('Status: ${sr.success ? "SUCCESS" : "FAILED"}'),
-                        if (sr.output.isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            sr.output,
-                            style: const TextStyle(
-                              fontFamily: 'monospace',
-                              fontSize: 11,
-                            ),
-                          ),
-                        ],
-                        if (sr.errorMessage != null) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            sr.errorMessage!,
-                            style: TextStyle(
-                              color: tokens.danger,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
+    // Saved once the run is certain to start, so backing out of the variables
+    // dialog does not rewrite the runbook's defaults.
+    if (selection.saveAsDefault) {
+      await ref.read(runbooksProvider.notifier).setDefaultHostIds(runbook.id, [
+        for (final host in hosts) host.id,
+      ]);
+      if (!mounted) return;
+    }
+
+    // The layout opens alongside the run, not after it: the run is a
+    // background job and the tabs are there to be watched meanwhile.
+    final layout = selection.openLayoutOf;
+    if (layout != null) unawaited(openTemplateLayout(context, ref, layout));
+
+    // Selecting the running runbook keeps its progress on screen.
+    setState(() => _selectedRunbookId = runbook.id);
+    // The run view opens at once rather than when the run ends: a run can
+    // stop at an approval step, and the person who has to continue it needs to
+    // see that while it is waiting.
+    unawaited(
+      ref
+          .read(runbookRunProvider.notifier)
+          .start(
+            runbook,
+            hosts,
+            variableValues: variableValues,
+            strategy: selection.strategy,
           ),
-        ),
-        actions: adaptiveDialogActions(context, [
-          ShellVibeButton.secondary(
-            label: 'Close',
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-        ]),
-        actionsAxis: adaptiveDialogActionsAxis(context),
-      ),
     );
+    await RunResultDialog.show(context);
   }
 }
 
@@ -485,10 +446,14 @@ class _RunbookRow extends StatelessWidget {
   final bool compact;
   final bool selected;
   final bool isExecuting;
+
+  /// The runbook's most recent stored run, for the last-run badge.
+  final RunHistorySummary? lastRun;
   final VoidCallback onSelect;
   final VoidCallback onRun;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final VoidCallback onExport;
 
   const _RunbookRow({
     super.key,
@@ -496,10 +461,12 @@ class _RunbookRow extends StatelessWidget {
     required this.compact,
     required this.selected,
     required this.isExecuting,
+    this.lastRun,
     required this.onSelect,
     required this.onRun,
     required this.onEdit,
     required this.onDelete,
+    required this.onExport,
   });
 
   @override
@@ -508,9 +475,16 @@ class _RunbookRow extends StatelessWidget {
     final mutedStyle = Theme.of(
       context,
     ).textTheme.bodySmall?.copyWith(color: tokens.textMuted, fontSize: 12);
-    final stepLabel = runbook.steps.length == 1
+    final stepCount = runbook.steps.length == 1
         ? '1 step'
         : '${runbook.steps.length} steps';
+    // ✓ / ✗ and a time: the outcome is a glyph, not only a colour.
+    final last = lastRun;
+    final lastText = last == null
+        ? null
+        : '${last.status == 'succeeded' ? '✓' : '✗'} '
+              '${relativeTime(last.finishedAt, DateTime.now())}';
+    final stepLabel = lastText == null ? stepCount : '$stepCount · $lastText';
 
     return Semantics(
       button: true,
@@ -607,6 +581,7 @@ class _RunbookRow extends StatelessWidget {
                       icon: const Icon(LucideIcons.ellipsis, size: 16),
                       onSelected: (value) {
                         if (value == 'edit') onEdit();
+                        if (value == 'export') onExport();
                         if (value == 'delete') onDelete();
                       },
                       itemBuilder: (context) => [
@@ -617,6 +592,24 @@ class _RunbookRow extends StatelessWidget {
                               Icon(LucideIcons.pencil, size: 16),
                               SizedBox(width: 8),
                               Text('Edit runbook'),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          key: Key('runbook_menu_export'),
+                          value: 'export',
+                          child: Row(
+                            children: [
+                              Icon(LucideIcons.fileDown, size: 16),
+                              SizedBox(width: 8),
+                              // Flexible: the menu is as wide as its widest
+                              // item, and this one is the long one.
+                              Flexible(
+                                child: Text(
+                                  'Export as Markdown',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -654,10 +647,8 @@ class _RunbookRow extends StatelessWidget {
 ///
 /// This is also where a run reports itself: the step list carries the live
 /// per-step status instead of an expanding card in the list.
-class _RunbookDetailPanel extends StatelessWidget {
+class _RunbookDetailPanel extends ConsumerWidget {
   final RunbookModel runbook;
-  final Map<String, String> stepStatuses;
-  final bool isExecuting;
   final VoidCallback onRun;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
@@ -665,8 +656,6 @@ class _RunbookDetailPanel extends StatelessWidget {
 
   const _RunbookDetailPanel({
     required this.runbook,
-    required this.stepStatuses,
-    required this.isExecuting,
     required this.onRun,
     required this.onEdit,
     required this.onDelete,
@@ -674,8 +663,13 @@ class _RunbookDetailPanel extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final tokens = ShellVibeTokens.resolve(context);
+    // A run belongs to the runbook it started from; another runbook's panel
+    // must not show it.
+    final watched = ref.watch(runbookRunProvider);
+    final run = watched?.runbook.id == runbook.id ? watched : null;
+    final isExecuting = run?.running ?? false;
 
     return ListView(
       key: const Key('runbook_detail_drawer'),
@@ -713,6 +707,17 @@ class _RunbookDetailPanel extends StatelessWidget {
             ),
           ],
         ),
+        if (runbook.tags.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 4,
+            runSpacing: 4,
+            children: [
+              for (final tag in runbook.tags)
+                ShellVibeStatusChip(label: '#$tag'),
+            ],
+          ),
+        ],
         const SizedBox(height: 6),
         ShellVibeStatusChip(
           label: isExecuting ? 'running' : 'idle',
@@ -740,11 +745,23 @@ class _RunbookDetailPanel extends StatelessWidget {
         const ShellVibeSectionLabel(label: 'Steps', padding: EdgeInsets.zero),
         const SizedBox(height: 6),
         for (final step in runbook.steps)
-          _RunbookStepTile(
-            step: step,
-            status: stepStatuses[step.id],
-            tokens: tokens,
+          _RunbookStepTile(step: step, status: null, tokens: tokens),
+        if (run != null) ...[
+          const SizedBox(height: 8),
+          const ShellVibeSectionLabel(label: 'Run', padding: EdgeInsets.zero),
+          const SizedBox(height: 6),
+          LiveRunView(run: run),
+          const SizedBox(height: 6),
+          ShellVibeButton.secondary(
+            key: const Key('runbook_open_run'),
+            label: 'Open run view',
+            icon: LucideIcons.layoutGrid,
+            onPressed: () => RunResultDialog.show(context),
+            expand: true,
           ),
+        ],
+        const SizedBox(height: 8),
+        RunbookHistorySection(runbook: runbook),
         const SizedBox(height: 14),
         ShellVibeButton.danger(
           key: const Key('runbook_detail_delete'),
@@ -759,7 +776,7 @@ class _RunbookDetailPanel extends StatelessWidget {
 
 class _RunbookStepTile extends StatelessWidget {
   final RunbookStepModel step;
-  final String? status;
+  final RunStepStatus? status;
   final ShellVibeTokens tokens;
 
   const _RunbookStepTile({
@@ -770,12 +787,7 @@ class _RunbookStepTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (statusIcon, statusColor) = switch (status) {
-      'running' => (LucideIcons.hourglass, tokens.warning),
-      'success' => (LucideIcons.circleCheck, tokens.success),
-      'failed' => (LucideIcons.circleX, tokens.danger),
-      _ => (LucideIcons.chevronRight, tokens.textMuted),
-    };
+    final (statusIcon, statusColor) = runStepStatusVisual(status, tokens);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
@@ -791,14 +803,54 @@ class _RunbookStepTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  step.command,
-                  style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-                ),
+                if (step.kind == StepKind.approval)
+                  Row(
+                    children: [
+                      Icon(
+                        LucideIcons.userCheck,
+                        size: 13,
+                        color: tokens.warning,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Approval: ${step.command}',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  )
+                else
+                  Text(
+                    step.command,
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 12,
+                    ),
+                  ),
                 if (step.expectedOutputPattern != null) ...[
                   const SizedBox(height: 4),
                   ShellVibeStatusChip(
                     label: 'expects ${step.expectedOutputPattern}',
+                  ),
+                ],
+                if (step.onFailure == StepFailurePolicy.continueRun ||
+                    step.retries > 0) ...[
+                  const SizedBox(height: 4),
+                  Wrap(
+                    spacing: 4,
+                    runSpacing: 4,
+                    children: [
+                      if (step.onFailure == StepFailurePolicy.continueRun)
+                        const ShellVibeStatusChip(
+                          label: 'continues on failure',
+                        ),
+                      if (step.retries > 0)
+                        ShellVibeStatusChip(
+                          label:
+                              '${step.retries} ${step.retries == 1 ? 'retry' : 'retries'}',
+                        ),
+                    ],
                   ),
                 ],
               ],

@@ -20,7 +20,8 @@ TemplateModel _template({
     description: 'Layout for the morning check',
     activePaneId: activePaneId,
     createdAt: DateTime(2026, 8, 4),
-    panes: panes ??
+    panes:
+        panes ??
         [
           TemplatePaneModel(
             id: 'pane_root',
@@ -92,61 +93,65 @@ void main() {
       expect(split.hostId, isNull);
     });
 
-    test('panes come back in capture order regardless of insert order',
-        () async {
-      await repository.addTemplate(
-        _template(
-          panes: [
-            TemplatePaneModel(
-              id: 'pane_c',
-              templateId: 'tpl_1',
-              paneOrder: 2,
-              sessionType: TerminalSessionType.local,
-            ),
-            TemplatePaneModel(
-              id: 'pane_a',
-              templateId: 'tpl_1',
-              paneOrder: 0,
-              sessionType: TerminalSessionType.local,
-            ),
-            TemplatePaneModel(
-              id: 'pane_b',
-              templateId: 'tpl_1',
-              paneOrder: 1,
-              sessionType: TerminalSessionType.local,
-            ),
-          ],
-        ),
-      );
+    test(
+      'panes come back in capture order regardless of insert order',
+      () async {
+        await repository.addTemplate(
+          _template(
+            panes: [
+              TemplatePaneModel(
+                id: 'pane_c',
+                templateId: 'tpl_1',
+                paneOrder: 2,
+                sessionType: TerminalSessionType.local,
+              ),
+              TemplatePaneModel(
+                id: 'pane_a',
+                templateId: 'tpl_1',
+                paneOrder: 0,
+                sessionType: TerminalSessionType.local,
+              ),
+              TemplatePaneModel(
+                id: 'pane_b',
+                templateId: 'tpl_1',
+                paneOrder: 1,
+                sessionType: TerminalSessionType.local,
+              ),
+            ],
+          ),
+        );
 
-      final loaded = (await repository.getAllTemplates()).single;
-      expect(loaded.panes.map((p) => p.id), ['pane_a', 'pane_b', 'pane_c']);
-    });
+        final loaded = (await repository.getAllTemplates()).single;
+        expect(loaded.panes.map((p) => p.id), ['pane_a', 'pane_b', 'pane_c']);
+      },
+    );
 
-    test('updateTemplate replaces the pane set rather than appending it',
-        () async {
-      await repository.addTemplate(_template());
+    test(
+      'updateTemplate replaces the pane set rather than appending it',
+      () async {
+        await repository.addTemplate(_template());
 
-      final loaded = (await repository.getAllTemplates()).single;
-      await repository.updateTemplate(
-        loaded.copyWith(
-          name: 'Renamed',
-          panes: [
-            TemplatePaneModel(
-              id: 'pane_only',
-              templateId: 'tpl_1',
-              paneOrder: 0,
-              sessionType: TerminalSessionType.local,
-              title: 'Just one',
-            ),
-          ],
-        ),
-      );
+        final loaded = (await repository.getAllTemplates()).single;
+        await repository.updateTemplate(
+          loaded.copyWith(
+            name: 'Renamed',
+            panes: [
+              TemplatePaneModel(
+                id: 'pane_only',
+                templateId: 'tpl_1',
+                paneOrder: 0,
+                sessionType: TerminalSessionType.local,
+                title: 'Just one',
+              ),
+            ],
+          ),
+        );
 
-      final updated = (await repository.getAllTemplates()).single;
-      expect(updated.name, equals('Renamed'));
-      expect(updated.panes.map((p) => p.id), ['pane_only']);
-    });
+        final updated = (await repository.getAllTemplates()).single;
+        expect(updated.name, equals('Renamed'));
+        expect(updated.panes.map((p) => p.id), ['pane_only']);
+      },
+    );
 
     test('deleteTemplate removes the template and its panes', () async {
       await repository.addTemplate(_template());
@@ -188,4 +193,68 @@ void main() {
       expect(loaded.panes.first.hostId, equals('host_1'));
     });
   });
+
+  test(
+    'on-open runbook, confirm flag and pane startup snippet round-trip',
+    () async {
+      await db.snippetsDao.insertSnippet(
+        SnippetsCompanion.insert(
+          id: 'sn',
+          workspaceId: 'ws_1',
+          title: 'Greet',
+          code: 'echo hi',
+        ),
+      );
+      await db.runbooksDao.insertRunbook(
+        RunbooksCompanion.insert(
+          id: 'rb',
+          workspaceId: 'ws_1',
+          title: 'Check',
+          createdAt: DateTime(2026),
+        ),
+      );
+      final base = _template();
+      await repository.addTemplate(
+        base.copyWith(
+          onOpenRunbookId: 'rb',
+          onOpenConfirm: false,
+          panes: [
+            base.panes.first.copyWith(startupSnippetId: 'sn'),
+            base.panes.last,
+          ],
+        ),
+      );
+
+      var loaded = (await repository.getAllTemplates()).single;
+      expect(loaded.onOpenRunbookId, 'rb');
+      expect(loaded.onOpenConfirm, isFalse);
+      expect(loaded.panes.first.startupSnippetId, 'sn');
+      expect(loaded.panes.last.startupSnippetId, isNull);
+
+      // Clearing both is an edit like any other.
+      await repository.updateTemplate(
+        loaded.copyWith(
+          clearOnOpenRunbook: true,
+          panes: [
+            loaded.panes.first.copyWith(clearStartupSnippet: true),
+            loaded.panes.last,
+          ],
+        ),
+      );
+      loaded = (await repository.getAllTemplates()).single;
+      expect(loaded.onOpenRunbookId, isNull);
+      expect(loaded.onOpenConfirm, isFalse);
+      expect(loaded.panes.first.startupSnippetId, isNull);
+    },
+  );
+
+  test(
+    'a template defaults to asking before its on-open runbook runs',
+    () async {
+      await repository.addTemplate(_template());
+      final loaded = (await repository.getAllTemplates()).single;
+      expect(loaded.onOpenRunbookId, isNull);
+      expect(loaded.onOpenConfirm, isTrue);
+    },
+  );
 }

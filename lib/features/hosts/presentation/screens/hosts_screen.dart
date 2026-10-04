@@ -38,6 +38,7 @@ import '../widgets/host_list_header.dart';
 import '../widgets/host_row.dart';
 import '../widgets/host_tag_nav_item.dart';
 import '../widgets/template_nav_item.dart';
+import '../../../templates/presentation/template_launch.dart';
 
 class HostsScreen extends ConsumerStatefulWidget {
   final void Function(HostModel host)? onConnectHost;
@@ -798,6 +799,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
 
     if (result.openedPanes > 0) {
       GoRouter.maybeOf(context)?.go('/terminal');
+      unawaited(runTemplateOnOpen(context, ref, template));
     }
     if (!result.isComplete) {
       ShadToaster.of(context).show(

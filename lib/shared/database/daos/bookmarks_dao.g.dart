@@ -7,7 +7,9 @@ mixin _$BookmarksDaoMixin on DatabaseAccessor<AppDatabase> {
   $WorkspacesTable get workspaces => attachedDatabase.workspaces;
   $HostGroupsTable get hostGroups => attachedDatabase.hostGroups;
   $IdentitiesTable get identities => attachedDatabase.identities;
+  $SnippetsTable get snippets => attachedDatabase.snippets;
   $HostsTable get hosts => attachedDatabase.hosts;
+  $RunbooksTable get runbooks => attachedDatabase.runbooks;
   $TemplatesTable get templates => attachedDatabase.templates;
   $BookmarksTable get bookmarks => attachedDatabase.bookmarks;
   BookmarksDaoManager get managers => BookmarksDaoManager(this);
@@ -22,8 +24,12 @@ class BookmarksDaoManager {
       $$HostGroupsTableTableManager(_db.attachedDatabase, _db.hostGroups);
   $$IdentitiesTableTableManager get identities =>
       $$IdentitiesTableTableManager(_db.attachedDatabase, _db.identities);
+  $$SnippetsTableTableManager get snippets =>
+      $$SnippetsTableTableManager(_db.attachedDatabase, _db.snippets);
   $$HostsTableTableManager get hosts =>
       $$HostsTableTableManager(_db.attachedDatabase, _db.hosts);
+  $$RunbooksTableTableManager get runbooks =>
+      $$RunbooksTableTableManager(_db.attachedDatabase, _db.runbooks);
   $$TemplatesTableTableManager get templates =>
       $$TemplatesTableTableManager(_db.attachedDatabase, _db.templates);
   $$BookmarksTableTableManager get bookmarks =>

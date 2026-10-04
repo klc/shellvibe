@@ -42,7 +42,7 @@ final class TerminalTabsNotifierProvider
 }
 
 String _$terminalTabsNotifierHash() =>
-    r'cd9526a58e87489445bb98386e906512b03af58d';
+    r'937ae3657e9b6b8aaf85e1dd568517f98a7853b7';
 
 abstract class _$TerminalTabsNotifier extends $Notifier<TerminalTabsState> {
   TerminalTabsState build();
@@ -55,6 +55,85 @@ abstract class _$TerminalTabsNotifier extends $Notifier<TerminalTabsState> {
             as $ClassProviderElement<
               AnyNotifier<TerminalTabsState, TerminalTabsState>,
               TerminalTabsState,
+              Object?,
+              Object?
+            >;
+    return element.handleCreate(ref, build);
+  }
+}
+
+/// A one-line notice from the terminal layer for the screen that is showing
+/// it: there is no `BuildContext` down in the notifier to toast from.
+///
+/// The id changes on every post, so the same message twice in a row is still
+/// two events to a listener.
+
+@ProviderFor(TerminalNotice)
+final terminalNoticeProvider = TerminalNoticeProvider._();
+
+/// A one-line notice from the terminal layer for the screen that is showing
+/// it: there is no `BuildContext` down in the notifier to toast from.
+///
+/// The id changes on every post, so the same message twice in a row is still
+/// two events to a listener.
+final class TerminalNoticeProvider
+    extends $NotifierProvider<TerminalNotice, ({int id, String message})?> {
+  /// A one-line notice from the terminal layer for the screen that is showing
+  /// it: there is no `BuildContext` down in the notifier to toast from.
+  ///
+  /// The id changes on every post, so the same message twice in a row is still
+  /// two events to a listener.
+  TerminalNoticeProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'terminalNoticeProvider',
+        isAutoDispose: false,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$terminalNoticeHash();
+
+  @$internal
+  @override
+  TerminalNotice create() => TerminalNotice();
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(({int id, String message})? value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<({int id, String message})?>(value),
+    );
+  }
+}
+
+String _$terminalNoticeHash() => r'ab2478b704249b17d5751444c91b1af73a93f6e9';
+
+/// A one-line notice from the terminal layer for the screen that is showing
+/// it: there is no `BuildContext` down in the notifier to toast from.
+///
+/// The id changes on every post, so the same message twice in a row is still
+/// two events to a listener.
+
+abstract class _$TerminalNotice extends $Notifier<({int id, String message})?> {
+  ({int id, String message})? build();
+  @$mustCallSuper
+  @override
+  WhenComplete runBuild() {
+    final ref =
+        this.ref
+            as $Ref<({int id, String message})?, ({int id, String message})?>;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<
+                ({int id, String message})?,
+                ({int id, String message})?
+              >,
+              ({int id, String message})?,
               Object?,
               Object?
             >;

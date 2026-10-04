@@ -26,11 +26,16 @@ class LiveTemplateRunnerTarget implements TemplateRunnerTarget {
   String? get activeTabId => readActiveTabId();
 
   @override
-  Future<void> openTabForHost(HostModel host, {IdentityModel? identity}) {
+  Future<void> openTabForHost(
+    HostModel host, {
+    IdentityModel? identity,
+    String? startupSnippetId,
+  }) {
     return notifier.openTabForHost(
       host,
       identity: identity,
       onHostKeyPrompt: onHostKeyPrompt,
+      startupSnippetId: startupSnippetId,
     );
   }
 
@@ -43,6 +48,7 @@ class LiveTemplateRunnerTarget implements TemplateRunnerTarget {
     required Axis direction,
     HostModel? host,
     IdentityModel? identity,
+    String? startupSnippetId,
   }) {
     // `splitTab` returns null for a local pane, which needs no awaiting: the
     // PTY is already wired by the time it returns.
@@ -52,6 +58,7 @@ class LiveTemplateRunnerTarget implements TemplateRunnerTarget {
           host: host,
           identity: identity,
           onHostKeyPrompt: onHostKeyPrompt,
+          startupSnippetId: startupSnippetId,
         ) ??
         Future.value();
   }

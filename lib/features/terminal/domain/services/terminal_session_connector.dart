@@ -37,6 +37,7 @@ class TerminalSessionConnector {
     required this.notifyChanged,
     required this.syncBroadcast,
     required this.watchConnectivity,
+    this.onSessionLive,
   });
 
   final KnownHostsDao Function() knownHostsDao;
@@ -64,6 +65,10 @@ class TerminalSessionConnector {
 
   /// Starts watching for network changes, for the first Mosh session.
   final void Function() watchConnectivity;
+
+  /// Called each time a tab's SSH or Mosh session comes up, a reconnect
+  /// included. The listener decides whether that is a first connect.
+  final void Function(TerminalTabSession tab)? onSessionLive;
 
   /// The planner that turns a stored host into a jump chain and a connect
   /// config, built fresh off the current [hostsRepository] on every access —
@@ -193,6 +198,7 @@ class TerminalSessionConnector {
         notifyChanged();
         // Wire broadcast if this pane is already part of the selection.
         syncBroadcast();
+        onSessionLive?.call(tab);
       } catch (e) {
         // A failure after a successful connect (e.g. server refuses a PTY)
         // must tear the client down; otherwise the socket and keep-alive

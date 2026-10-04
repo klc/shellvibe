@@ -13,6 +13,7 @@ import '../../domain/services/approval_coordinator.dart';
 import '../../domain/services/mcp_service_providers.dart';
 import '../dialogs/mcp_command_approval_dialog.dart';
 import '../dialogs/mcp_host_access_dialog.dart';
+import '../dialogs/mcp_runbook_approval_dialog.dart';
 
 /// Brings the app window to the front on desktop, no-op everywhere else.
 ///
@@ -80,9 +81,11 @@ class McpApprovalHost extends ConsumerStatefulWidget {
 class _McpApprovalHostState extends ConsumerState<McpApprovalHost> {
   StreamSubscription<List<PendingCommandApproval>>? _commandSub;
   StreamSubscription<List<PendingHostAccessApproval>>? _hostAccessSub;
+  StreamSubscription<List<PendingRunbookApproval>>? _runbookSub;
 
   List<PendingCommandApproval> _commands = const [];
   List<PendingHostAccessApproval> _hostAccess = const [];
+  List<PendingRunbookApproval> _runbooks = const [];
 
   /// id of the request whose dialog is currently on screen, or null between
   /// dialogs. Guards against showing a second dialog while one is already up.
@@ -94,6 +97,8 @@ class _McpApprovalHostState extends ConsumerState<McpApprovalHost> {
     final coordinator = ref.read(approvalCoordinatorProvider);
     _commands = coordinator.currentCommands;
     _hostAccess = coordinator.currentHostAccess;
+    _runbooks = coordinator.currentRunbooks;
+    _runbookSub = coordinator.pendingRunbooks.listen(_onRunbooksChanged);
     _commandSub = coordinator.pendingCommands.listen(_onCommandsChanged);
     _hostAccessSub = coordinator.pendingHostAccess.listen(_onHostAccessChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) => _maybeShowNext());
@@ -103,12 +108,20 @@ class _McpApprovalHostState extends ConsumerState<McpApprovalHost> {
   void dispose() {
     _commandSub?.cancel();
     _hostAccessSub?.cancel();
+    _runbookSub?.cancel();
     super.dispose();
   }
 
   void _onCommandsChanged(List<PendingCommandApproval> list) {
     if (!mounted) return;
     setState(() => _commands = list);
+    _closeActiveIfAbandoned();
+    _maybeShowNext();
+  }
+
+  void _onRunbooksChanged(List<PendingRunbookApproval> list) {
+    if (!mounted) return;
+    setState(() => _runbooks = list);
     _closeActiveIfAbandoned();
     _maybeShowNext();
   }
@@ -132,7 +145,8 @@ class _McpApprovalHostState extends ConsumerState<McpApprovalHost> {
     if (activeId == null) return;
     final stillPending =
         _commands.any((c) => c.id == activeId) ||
-        _hostAccess.any((h) => h.id == activeId);
+        _hostAccess.any((h) => h.id == activeId) ||
+        _runbooks.any((r) => r.id == activeId);
     if (stillPending) return;
     // Same reason as in [_maybeShowNext]: this widget sits above the
     // Navigator, so it can only reach it through the router's key.
@@ -142,24 +156,46 @@ class _McpApprovalHostState extends ConsumerState<McpApprovalHost> {
 
   Future<void> _maybeShowNext() async {
     if (_activeId != null) return;
-    if (_commands.isEmpty && _hostAccess.isEmpty) return;
+    if (_commands.isEmpty && _hostAccess.isEmpty && _runbooks.isEmpty) return;
 
-    final nextCommand = _oldest(_commands, (c) => c.requestedAt);
-    final nextHostAccess = _oldest(_hostAccess, (h) => h.requestedAt);
+    var nextCommand = _oldest(_commands, (c) => c.requestedAt);
+    var nextHostAccess = _oldest(_hostAccess, (h) => h.requestedAt);
+    var nextRunbook = _oldest(_runbooks, (r) => r.requestedAt);
 
-    final showCommandFirst =
-        nextHostAccess == null ||
-        (nextCommand != null &&
-            nextCommand.requestedAt.isBefore(nextHostAccess.requestedAt));
+    // The oldest of the three kinds goes first; the others wait their turn.
+    final times = <DateTime>[
+      ?nextCommand?.requestedAt,
+      ?nextHostAccess?.requestedAt,
+      ?nextRunbook?.requestedAt,
+    ]..sort();
+    final oldest = times.first;
+    if (nextCommand != null && nextCommand.requestedAt != oldest) {
+      nextCommand = null;
+    }
+    if (nextHostAccess != null && nextHostAccess.requestedAt != oldest) {
+      nextHostAccess = null;
+    }
+    if (nextRunbook != null && nextRunbook.requestedAt != oldest) {
+      nextRunbook = null;
+    }
+    // A tie goes to the first of command, host access, runbook.
+    if (nextCommand != null) {
+      nextHostAccess = null;
+      nextRunbook = null;
+    } else if (nextHostAccess != null) {
+      nextRunbook = null;
+    }
 
     // Claim the slot synchronously, before any `await`, so a stream event
     // that fires while `bringMcpApprovalWindowForward` is in flight sees
     // `_activeId` already set and does not race a second dialog open.
     final String claimedId;
-    if (showCommandFirst && nextCommand != null) {
+    if (nextCommand != null) {
       claimedId = nextCommand.id;
     } else if (nextHostAccess != null) {
       claimedId = nextHostAccess.id;
+    } else if (nextRunbook != null) {
+      claimedId = nextRunbook.id;
     } else {
       return;
     }
@@ -185,7 +221,7 @@ class _McpApprovalHostState extends ConsumerState<McpApprovalHost> {
       return;
     }
 
-    if (showCommandFirst && nextCommand != null) {
+    if (nextCommand != null) {
       final decision = await McpCommandApprovalDialog.show(
         navigatorContext,
         request: nextCommand.request,
@@ -194,6 +230,16 @@ class _McpApprovalHostState extends ConsumerState<McpApprovalHost> {
       coordinator.resolveCommand(
         nextCommand.id,
         decision ?? ApprovalDecision.denied,
+      );
+    } else if (nextRunbook != null) {
+      final decision = await McpRunbookApprovalDialog.show(
+        navigatorContext,
+        request: nextRunbook.request,
+        expiresAt: nextRunbook.expiresAt,
+      );
+      coordinator.resolveRunbook(
+        nextRunbook.id,
+        decision ?? RunbookApprovalDecision.denied,
       );
     } else if (nextHostAccess != null) {
       final outcome = await McpHostAccessDialog.show(
@@ -221,6 +267,7 @@ class _McpApprovalHostState extends ConsumerState<McpApprovalHost> {
     // the prompt stays up until it is dismissed a second time.
     _commands = _commands.where((c) => c.id != claimedId).toList();
     _hostAccess = _hostAccess.where((h) => h.id != claimedId).toList();
+    _runbooks = _runbooks.where((r) => r.id != claimedId).toList();
     _dialogsOnScreen.remove(claimedId);
     _activeId = null;
     if (mounted) unawaited(_maybeShowNext());

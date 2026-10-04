@@ -7,10 +7,10 @@ mixin _$WorkspacesDaoMixin on DatabaseAccessor<AppDatabase> {
   $WorkspacesTable get workspaces => attachedDatabase.workspaces;
   $IdentitiesTable get identities => attachedDatabase.identities;
   $HostGroupsTable get hostGroups => attachedDatabase.hostGroups;
+  $SnippetsTable get snippets => attachedDatabase.snippets;
   $HostsTable get hosts => attachedDatabase.hosts;
   $PortForwardRulesTable get portForwardRules =>
       attachedDatabase.portForwardRules;
-  $SnippetsTable get snippets => attachedDatabase.snippets;
   $RunbooksTable get runbooks => attachedDatabase.runbooks;
   WorkspacesDaoManager get managers => WorkspacesDaoManager(this);
 }
@@ -24,6 +24,8 @@ class WorkspacesDaoManager {
       $$IdentitiesTableTableManager(_db.attachedDatabase, _db.identities);
   $$HostGroupsTableTableManager get hostGroups =>
       $$HostGroupsTableTableManager(_db.attachedDatabase, _db.hostGroups);
+  $$SnippetsTableTableManager get snippets =>
+      $$SnippetsTableTableManager(_db.attachedDatabase, _db.snippets);
   $$HostsTableTableManager get hosts =>
       $$HostsTableTableManager(_db.attachedDatabase, _db.hosts);
   $$PortForwardRulesTableTableManager get portForwardRules =>
@@ -31,8 +33,6 @@ class WorkspacesDaoManager {
         _db.attachedDatabase,
         _db.portForwardRules,
       );
-  $$SnippetsTableTableManager get snippets =>
-      $$SnippetsTableTableManager(_db.attachedDatabase, _db.snippets);
   $$RunbooksTableTableManager get runbooks =>
       $$RunbooksTableTableManager(_db.attachedDatabase, _db.runbooks);
 }

@@ -4,16 +4,14 @@ import '../models/runbook_model.dart';
 import '../models/runbook_step_model.dart';
 import 'snippet_variable_parser.dart';
 
-/// Result of executing a single runbook step.
-class RunbookStepResult {
-  final RunbookStepModel step;
+/// One try at a step. A step with retries keeps one per attempt.
+class StepAttempt {
   final bool success;
   final int? exitCode;
   final String output;
   final String? errorMessage;
 
-  const RunbookStepResult({
-    required this.step,
+  const StepAttempt({
     required this.success,
     this.exitCode,
     required this.output,
@@ -21,23 +19,117 @@ class RunbookStepResult {
   });
 }
 
+/// Result of executing a single runbook step.
+///
+/// The top-level fields are those of the last attempt, which is the one that
+/// decided the step; [attemptLog] keeps every attempt.
+class RunbookStepResult {
+  final RunbookStepModel step;
+  final bool success;
+  final int? exitCode;
+  final String output;
+  final String? errorMessage;
+
+  /// The command as sent, after `${INPUT:...}` substitution.
+  final String command;
+
+  /// Attempts made: 1 plus the retries that were used.
+  final int attempts;
+  final List<StepAttempt> attemptLog;
+
+  /// Wall time across every attempt and the waits between them.
+  final int? durationMs;
+
+  /// Only the tail of the output was kept (history storage caps it).
+  final bool outputTruncated;
+
+  const RunbookStepResult({
+    required this.step,
+    required this.success,
+    this.exitCode,
+    required this.output,
+    this.errorMessage,
+    this.command = '',
+    this.attempts = 1,
+    this.attemptLog = const [],
+    this.durationMs,
+    this.outputTruncated = false,
+  });
+}
+
+/// [result] with every non-empty string in [secrets] replaced by `[redacted]`
+/// in its command, output, error and each attempt, so a secret someone typed
+/// into a prompt is never shown, even where a command echoed it back.
+RunbookStepResult redactStepResult(
+  RunbookStepResult result,
+  Iterable<String> secrets,
+) {
+  final list = secrets.where((s) => s.isNotEmpty).toList()
+    ..sort((a, b) => b.length.compareTo(a.length));
+  if (list.isEmpty) return result;
+  String mask(String text) {
+    var out = text;
+    for (final secret in list) {
+      out = out.replaceAll(secret, '[redacted]');
+    }
+    return out;
+  }
+
+  return RunbookStepResult(
+    step: result.step,
+    success: result.success,
+    exitCode: result.exitCode,
+    output: mask(result.output),
+    errorMessage: result.errorMessage == null
+        ? null
+        : mask(result.errorMessage!),
+    command: mask(result.command),
+    attempts: result.attempts,
+    attemptLog: [
+      for (final a in result.attemptLog)
+        StepAttempt(
+          success: a.success,
+          exitCode: a.exitCode,
+          output: mask(a.output),
+          errorMessage: a.errorMessage == null ? null : mask(a.errorMessage!),
+        ),
+    ],
+    durationMs: result.durationMs,
+    outputTruncated: result.outputTruncated,
+  );
+}
+
 /// Overall execution result for a runbook run.
 class RunbookExecutionResult {
   final String runbookId;
   final bool overallSuccess;
   final List<RunbookStepResult> stepResults;
+
+  /// The first step that failed, whether or not the run went on past it.
   final RunbookStepModel? failedStep;
+
+  /// True when the run was stopped by the caller. Distinct from a failure:
+  /// [failedStep] is null and the steps that never ran were reported
+  /// `cancelled`, not `failed`.
+  final bool cancelled;
 
   const RunbookExecutionResult({
     required this.runbookId,
     required this.overallSuccess,
     required this.stepResults,
     this.failedStep,
+    this.cancelled = false,
   });
 }
 
 /// Execution engine for multi-step automation scripts across terminal sessions.
 class RunbookExecutor {
+  /// Pause between attempts of a step with retries. Fixed and short: it is a
+  /// breath for a service that is restarting, not a back-off policy.
+  final Duration retryDelay;
+
+  const RunbookExecutor({this.retryDelay = const Duration(seconds: 2)});
+
   /// Executes a [runbook] sequentially using [commandRunner].
   ///
   /// [commandRunner] is a callback receiving the command string and returning
@@ -45,94 +137,223 @@ class RunbookExecutor {
   /// so [RunbookStepModel.expectedExitCode] can be enforced for real.
   /// [variableValues] optional map of variable inputs to substitute into command templates.
   /// [onProgress] optional callback invoked before each step starts.
+  /// [onStepFinished] is called with a step's result as soon as it settles
+  /// (success or failure, after its retries), so output can be shown before
+  /// the run ends. A cancelled step has no result.
+  /// [isCancelled] is polled before each step and again once a step's runner
+  /// returns or throws; once true the in-flight step and every later one are
+  /// reported `cancelled` and the run ends. It cannot stop a runner by itself —
+  /// the caller interrupts that. [cancelSignal] completes at the same moment,
+  /// so a wait between retries ends at once instead of out the full delay.
+  ///
+  /// A failing step ends the run unless its [RunbookStepModel.onFailure] is
+  /// `continue`; either way the run's overall result is then a failure.
+  ///
+  /// [resolveSnippet] gives a snippet step the snippet's current code, or null
+  /// when it no longer exists, which fails the step with a clear message.
+  /// [awaitApproval] holds an approval step until a person continues it: true
+  /// to go on, false when the run is stopped instead. Without one an approval
+  /// step fails, rather than being waved through.
   Future<RunbookExecutionResult> executeRunbook(
     RunbookModel runbook,
-    Future<(String output, int exitCode)> Function(String command, int timeoutSeconds)
-        commandRunner, {
+    Future<(String output, int exitCode)> Function(
+      String command,
+      int timeoutSeconds,
+    )
+    commandRunner, {
     Map<String, String> variableValues = const {},
+    Map<String, String> builtinValues = const {},
     void Function(RunbookStepModel step, String status)? onProgress,
+    void Function(RunbookStepResult result)? onStepFinished,
+    bool Function()? isCancelled,
+    Future<void>? cancelSignal,
+    Future<String?> Function(String snippetId)? resolveSnippet,
+    Future<bool> Function(RunbookStepModel step)? awaitApproval,
   }) async {
     final results = <RunbookStepResult>[];
+    RunbookStepModel? firstFailure;
 
     // Sort steps by stepOrder
     final sortedSteps = List<RunbookStepModel>.from(runbook.steps)
       ..sort((a, b) => a.stepOrder.compareTo(b.stepOrder));
 
-    for (final step in sortedSteps) {
-      if (onProgress != null) {
-        onProgress(step, 'running');
+    bool cancelled() => isCancelled?.call() ?? false;
+
+    RunbookExecutionResult cancelledFrom(int index) {
+      for (final rest in sortedSteps.skip(index)) {
+        onProgress?.call(rest, 'cancelled');
       }
+      return RunbookExecutionResult(
+        runbookId: runbook.id,
+        overallSuccess: false,
+        stepResults: results,
+        failedStep: firstFailure,
+        cancelled: true,
+      );
+    }
 
-      // Substitute variables in command
-      final commandToRun = SnippetVariableParser.substituteVariables(step.command, variableValues);
+    for (var i = 0; i < sortedSteps.length; i++) {
+      final step = sortedSteps[i];
+      if (cancelled()) return cancelledFrom(i);
+      onProgress?.call(step, 'running');
 
-      try {
-        final (output, exitCode) = await commandRunner(commandToRun, step.timeoutSeconds);
+      final stopwatch = Stopwatch()..start();
+      final attempts = <StepAttempt>[];
+      var commandToRun = step.command;
 
-        // Check output verification pattern if specified
-        bool patternMatches = true;
-        String? patternError;
-        if (step.expectedOutputPattern != null && step.expectedOutputPattern!.isNotEmpty) {
-          try {
-            final regex = RegExp(step.expectedOutputPattern!);
-            patternMatches = regex.hasMatch(output);
-          } catch (e) {
-            patternMatches = false;
-            patternError = 'Invalid regex pattern "${step.expectedOutputPattern}": $e';
+      if (step.kind == StepKind.approval) {
+        // The gate, not a command: held until someone continues the run. The
+        // gate reports `waiting` itself, since only it knows whether anyone
+        // will actually have to wait.
+        final approved = awaitApproval == null
+            ? null
+            : await awaitApproval(step);
+        if (cancelled()) return cancelledFrom(i);
+        attempts.add(
+          StepAttempt(
+            success: approved == true,
+            output: '',
+            errorMessage: approved == true
+                ? null
+                : (awaitApproval == null
+                      ? 'Nobody is set up to approve this step.'
+                      : 'Not approved.'),
+          ),
+        );
+      } else {
+        // The snippet as it is now, not as it was when the step was saved.
+        var code = step.command;
+        String? missing;
+        if (step.kind == StepKind.snippet) {
+          final id = step.snippetId;
+          final resolved = id == null || resolveSnippet == null
+              ? null
+              : await resolveSnippet(id);
+          if (resolved == null) {
+            missing =
+                'The snippet this step runs was deleted. Pick another '
+                'snippet for it.';
+          } else {
+            code = resolved;
           }
         }
-
-        final exitCodeMatches = exitCode == step.expectedExitCode;
-        final stepSuccess = patternMatches && exitCodeMatches;
-        final stepResult = RunbookStepResult(
-          step: step,
-          success: stepSuccess,
-          exitCode: exitCode,
-          output: output,
-          errorMessage: stepSuccess
-              ? null
-              : (patternError ??
-                  (exitCodeMatches
-                      ? 'Output verification failed for pattern: "${step.expectedOutputPattern}"'
-                      : 'Exit code $exitCode does not match expected ${step.expectedExitCode}')),
+        // Substitute variables in command
+        // The host's own values first, so what a person typed into a prompt
+        // is never read as a placeholder itself.
+        commandToRun = SnippetVariableParser.substituteVariables(
+          SnippetVariableParser.substituteBuiltins(code, builtinValues),
+          variableValues,
         );
 
-        results.add(stepResult);
-
-        if (!stepSuccess) {
-          if (onProgress != null) onProgress(step, 'failed');
-          return RunbookExecutionResult(
-            runbookId: runbook.id,
-            overallSuccess: false,
-            stepResults: results,
-            failedStep: step,
+        if (missing != null) {
+          attempts.add(
+            StepAttempt(success: false, output: '', errorMessage: missing),
           );
+        } else {
+          final maxAttempts =
+              1 + step.retries.clamp(0, RunbookStepModel.maxRetries);
+          for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+            final outcome = await _attempt(step, commandToRun, commandRunner);
+            if (cancelled()) return cancelledFrom(i);
+            attempts.add(outcome);
+            if (outcome.success || attempt == maxAttempts) break;
+            await Future.any<void>([
+              Future<void>.delayed(retryDelay),
+              ?cancelSignal,
+            ]);
+            if (cancelled()) return cancelledFrom(i);
+          }
         }
+      }
 
-        if (onProgress != null) onProgress(step, 'success');
-      } catch (e) {
-        final stepResult = RunbookStepResult(
-          step: step,
-          success: false,
-          output: '',
-          errorMessage: e.toString(),
-        );
-        results.add(stepResult);
-        if (onProgress != null) onProgress(step, 'failed');
+      final last = attempts.last;
+      final result = RunbookStepResult(
+        step: step,
+        success: last.success,
+        exitCode: last.exitCode,
+        output: last.output,
+        errorMessage: last.errorMessage,
+        command: commandToRun,
+        attempts: attempts.length,
+        attemptLog: attempts,
+        durationMs: stopwatch.elapsedMilliseconds,
+      );
+      results.add(result);
+      onStepFinished?.call(result);
 
+      if (last.success) {
+        onProgress?.call(step, 'success');
+        continue;
+      }
+      onProgress?.call(step, 'failed');
+      firstFailure ??= step;
+      if (step.onFailure == StepFailurePolicy.stop) {
         return RunbookExecutionResult(
           runbookId: runbook.id,
           overallSuccess: false,
           stepResults: results,
-          failedStep: step,
+          failedStep: firstFailure,
         );
       }
     }
 
     return RunbookExecutionResult(
       runbookId: runbook.id,
-      overallSuccess: true,
+      overallSuccess: firstFailure == null,
       stepResults: results,
+      failedStep: firstFailure,
     );
+  }
+
+  /// Runs the step's command once and judges it against its expectations.
+  Future<StepAttempt> _attempt(
+    RunbookStepModel step,
+    String command,
+    Future<(String output, int exitCode)> Function(
+      String command,
+      int timeoutSeconds,
+    )
+    commandRunner,
+  ) async {
+    try {
+      final (output, exitCode) = await commandRunner(
+        command,
+        step.timeoutSeconds,
+      );
+
+      // Check output verification pattern if specified
+      bool patternMatches = true;
+      String? patternError;
+      if (step.expectedOutputPattern != null &&
+          step.expectedOutputPattern!.isNotEmpty) {
+        try {
+          patternMatches = RegExp(step.expectedOutputPattern!).hasMatch(output);
+        } catch (e) {
+          patternMatches = false;
+          patternError =
+              'Invalid regex pattern "${step.expectedOutputPattern}": $e';
+        }
+      }
+
+      final exitCodeMatches = exitCode == step.expectedExitCode;
+      final success = patternMatches && exitCodeMatches;
+      return StepAttempt(
+        success: success,
+        exitCode: exitCode,
+        output: output,
+        errorMessage: success
+            ? null
+            : (patternError ??
+                  (exitCodeMatches
+                      ? 'Output verification failed for pattern: "${step.expectedOutputPattern}"'
+                      : 'Exit code $exitCode does not match expected ${step.expectedExitCode}')),
+      );
+    } catch (e) {
+      return StepAttempt(
+        success: false,
+        output: '',
+        errorMessage: e.toString(),
+      );
+    }
   }
 }

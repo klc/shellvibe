@@ -35,6 +35,10 @@ class TemplatePaneModel {
   /// after the host it resolves to).
   final String? title;
 
+  /// Startup snippet for this pane, overriding its host's. Null means "use the
+  /// host's own".
+  final String? startupSnippetId;
+
   const TemplatePaneModel({
     required this.id,
     required this.templateId,
@@ -45,6 +49,7 @@ class TemplatePaneModel {
     required this.sessionType,
     this.hostId,
     this.title,
+    this.startupSnippetId,
   });
 
   bool get isRoot => parentPaneId == null;
@@ -59,6 +64,8 @@ class TemplatePaneModel {
     TerminalSessionType? sessionType,
     String? hostId,
     String? title,
+    String? startupSnippetId,
+    bool clearStartupSnippet = false,
   }) {
     return TemplatePaneModel(
       id: id ?? this.id,
@@ -70,6 +77,9 @@ class TemplatePaneModel {
       sessionType: sessionType ?? this.sessionType,
       hostId: hostId ?? this.hostId,
       title: title ?? this.title,
+      startupSnippetId: clearStartupSnippet
+          ? null
+          : (startupSnippetId ?? this.startupSnippetId),
     );
   }
 
@@ -83,6 +93,7 @@ class TemplatePaneModel {
         'sessionType': encodeSessionType(sessionType),
         'hostId': hostId,
         'title': title,
+        'startupSnippetId': startupSnippetId,
       };
 
   factory TemplatePaneModel.fromJson(Map<String, dynamic> json) =>
@@ -96,6 +107,7 @@ class TemplatePaneModel {
         sessionType: decodeSessionType(json['sessionType'] as String?),
         hostId: json['hostId'] as String?,
         title: json['title'] as String?,
+        startupSnippetId: json['startupSnippetId'] as String?,
       );
 }
 
