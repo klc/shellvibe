@@ -61,6 +61,10 @@ and release versions follow [Semantic Versioning](https://semver.org/).
   over from any other workspace.
 - AI Access: hiding a server from agents also stops new sessions and
   commands on it, even where access had been granted.
+- AI Access: a private key cut in half by the command output limit is now
+  masked like a whole one before the output reaches the agent.
+- AI Access: searching runbooks no longer matches against secrets the
+  runbook listing masks.
 
 ## [1.7.0] - 2026-10-01
 
