@@ -153,11 +153,14 @@ class ListRunbooksTool with McpArgReaders implements McpToolHandler {
     for (final runbook in runbooks) {
       if (tag != null && !runbook.tags.contains(tag)) continue;
       if (query != null && query.isNotEmpty) {
+        // Search the same redacted text the agent is shown. Matching on the
+        // raw command would let the query probe a masked secret one guess
+        // at a time through which runbooks come back.
         final haystack = [
           runbook.title,
           runbook.description ?? '',
           ...runbook.tags,
-          for (final s in runbook.steps) s.command,
+          for (final s in runbook.steps) redactor.redact(s.command).text,
         ].join('\n').toLowerCase();
         if (!haystack.contains(query)) continue;
       }

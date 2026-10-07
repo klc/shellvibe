@@ -380,6 +380,28 @@ void main() {
       expect(jsonEncode(result), isNot(contains('AKIAABCDEFGHIJKLMNOP')));
     });
 
+    test('query only searches the masked text, never the secret', () async {
+      await runbook(
+        steps: [
+          RunbookStepsCompanion.insert(
+            id: 's1',
+            runbookId: 'rb',
+            stepOrder: 1,
+            command: 'curl -H "Authorization: token=AKIAABCDEFGHIJKLMNOP" x',
+          ),
+        ],
+      );
+      Future<int> hits(String query) async {
+        final result =
+            await list.execute(_ctx, {'query': query}) as Map<String, Object?>;
+        return (result['runbooks']! as List).length;
+      }
+
+      expect(await hits('akiaabcdefghijklmnop'), 0);
+      expect(await hits('akiaa'), 0);
+      expect(await hits('curl'), 1);
+    });
+
     test('only this workspace, filtered by tag and query', () async {
       await runbook(id: 'a', title: 'Deploy API', tags: '["ops"]');
       await runbook(id: 'b', title: 'Rotate logs', tags: '["ops","logs"]');
