@@ -8,6 +8,8 @@ import '../../../../app/widgets/adaptive_modal.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../domain/models/mcp_enums.dart';
 import '../../domain/models/mcp_models.dart';
+import 'mcp_command_approval_dialog.dart'
+    show mcpApprovalArmDelay, visibleControlChars;
 
 /// How long a batch of host grants should last before the agent has to ask
 /// again.
@@ -118,10 +120,15 @@ class _McpHostAccessDialogState extends State<McpHostAccessDialog> {
   late Timer _ticker;
   late Duration _remaining;
   bool _resolved = false;
+  bool _armed = false;
+  late final Timer _armTimer;
 
   @override
   void initState() {
     super.initState();
+    _armTimer = Timer(mcpApprovalArmDelay, () {
+      if (mounted) setState(() => _armed = true);
+    });
     // Pre-checked: the agent asked for these hosts and each row starts at
     // the host's own safe default mode, so accepting the defaults outright
     // is a reasonable action — the user's job is to narrow, not to build the
@@ -137,6 +144,7 @@ class _McpHostAccessDialogState extends State<McpHostAccessDialog> {
   @override
   void dispose() {
     _ticker.cancel();
+    _armTimer.cancel();
     super.dispose();
   }
 
@@ -232,7 +240,7 @@ class _McpHostAccessDialogState extends State<McpHostAccessDialog> {
         description: Padding(
           padding: const EdgeInsets.only(top: 4),
           child: Text(
-            'Reason: ${request.reason}',
+            'Reason: ${visibleControlChars(request.reason)}',
             style: Theme.of(
               context,
             ).textTheme.bodySmall?.copyWith(color: tokens.textSecondary),
@@ -252,7 +260,7 @@ class _McpHostAccessDialogState extends State<McpHostAccessDialog> {
           ShellVibeButton(
             key: const Key('mcp_host_access_approve_button'),
             label: 'Approve',
-            onPressed: _approve,
+            onPressed: _armed ? _approve : null,
           ),
         ]),
         actionsAxis: adaptiveDialogActionsAxis(context),
