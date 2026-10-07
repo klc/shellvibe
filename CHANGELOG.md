@@ -65,6 +65,12 @@ and release versions follow [Semantic Versioning](https://semver.org/).
   masked like a whole one before the output reaches the agent.
 - AI Access: searching runbooks no longer matches against secrets the
   runbook listing masks.
+- AI Access: the command approval window shows the whole command, every line
+  of it, with line breaks and hidden characters made visible, and warns when
+  a command has several lines. Agent-supplied reasons and runbook values
+  show hidden characters too.
+- AI Access: Approve stays disabled for a moment when an approval window
+  appears, so a double-click on one request cannot approve the next.
 
 ## [1.7.0] - 2026-10-01
 
