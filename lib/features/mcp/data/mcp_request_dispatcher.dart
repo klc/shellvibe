@@ -195,10 +195,12 @@ McpRequestDispatcher mcpRequestDispatcher(Ref ref) {
   final registry = ref.watch(mcpToolRegistryProvider);
   final dao = ref.watch(mcpDaoProvider);
   final approvals = ref.watch(mcpApprovalRepositoryProvider);
+  final grants = ref.watch(mcpGrantRepositoryProvider);
 
   // A new dispatcher is a new server: no connection from before it is still
   // open, so nothing scoped to one of them may keep answering.
   unawaited(approvals.revokeSessionScoped());
+  unawaited(grants.revokeSessionScoped());
 
   return McpRequestDispatcher(
     registry: registry,
@@ -207,7 +209,9 @@ McpRequestDispatcher mcpRequestDispatcher(Ref ref) {
       if (row == null) return null;
       return (name: row.name, workspaceId: row.workspaceId);
     },
-    onScopeEnded: (scope) =>
-        unawaited(approvals.revokeByConnectionScope(scope)),
+    onScopeEnded: (scope) {
+      unawaited(approvals.revokeByConnectionScope(scope));
+      unawaited(grants.revokeByConnectionScope(scope));
+    },
   );
 }

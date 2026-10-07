@@ -49,6 +49,19 @@ class McpDao extends DatabaseAccessor<AppDatabase> with _$McpDaoMixin {
     return (delete(mcpClients)..where((t) => t.id.equals(id))).go();
   }
 
+  /// The client row holding [tokenHash], revoked or not.
+  Future<McpClient?> getClientByTokenHash(String tokenHash) {
+    return (select(mcpClients)
+          ..where((t) => t.tokenHash.equals(tokenHash))
+          ..limit(1))
+        .getSingleOrNull();
+  }
+
+  /// Every client row named [name], across all workspaces.
+  Future<List<McpClient>> getClientsNamed(String name) {
+    return (select(mcpClients)..where((t) => t.name.equals(name))).get();
+  }
+
   /// Clients that can still authenticate: not revoked, and either permanent
   /// or not yet past [McpClients.expiresAt].
   Future<List<McpClient>> getAllActiveClients() {
@@ -111,6 +124,13 @@ class McpDao extends DatabaseAccessor<AppDatabase> with _$McpDaoMixin {
     return (delete(
       mcpHostGrants,
     )..where((t) => t.connectionScopeId.equals(connectionScopeId))).go();
+  }
+
+  /// Drops every grant scoped to a connection, whichever one it was.
+  Future<int> deleteSessionGrants() {
+    return (delete(
+      mcpHostGrants,
+    )..where((t) => t.connectionScopeId.isNotNull())).go();
   }
 
   Future<int> setGrantCooldown(String clientId, String hostId, DateTime until) {
