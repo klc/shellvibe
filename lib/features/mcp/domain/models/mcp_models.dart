@@ -201,10 +201,15 @@ class HostAccessGrant {
   final McpAccessMode mode;
   final DateTime? expiresAt;
 
+  /// True for a "This session" grant: it ends with the MCP connection it was
+  /// granted on, not on a clock, so [expiresAt] alone cannot express it.
+  final bool sessionScoped;
+
   const HostAccessGrant({
     required this.hostId,
     required this.mode,
     this.expiresAt,
+    this.sessionScoped = false,
   });
 
   Map<String, Object?> toJson() => {

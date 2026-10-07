@@ -73,7 +73,7 @@ final class McpActivityNotifierProvider
 }
 
 String _$mcpActivityNotifierHash() =>
-    r'8f158b1e541a99fdf2e76b5d556181a9f1b024c2';
+    r'e767ea06b1c6597104a7d9976da1aa251c4e7283';
 
 /// Live view behind the AI Activity panel: connected clients, their open
 /// sessions, what each one currently holds, what it is waiting on right now,

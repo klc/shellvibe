@@ -347,6 +347,7 @@ class RequestHostAccessTool with McpArgReaders implements McpToolHandler {
           hostId: grant.hostId,
           mode: grant.mode,
           expiresAt: grant.expiresAt,
+          connectionScopeId: grant.sessionScoped ? ctx.connectionScopeId : null,
         );
         granted.add(grant);
       }

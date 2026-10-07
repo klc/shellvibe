@@ -64,6 +64,17 @@ class McpRequestDispatcher {
   String connectionScopeFor(String clientId) =>
       _connectionScopes.putIfAbsent(clientId, const Uuid().v4);
 
+  /// Ends every client's current connection scope. Called when the server
+  /// stops: no connection survives that, so nothing scoped to "this session"
+  /// may answer for whatever connects after a restart.
+  void endAllScopes() {
+    final ended = _connectionScopes.values.toList();
+    _connectionScopes.clear();
+    for (final scope in ended) {
+      onScopeEnded?.call(scope);
+    }
+  }
+
   Future<Object?> handle(String clientId, JsonRpcRequest request) async {
     switch (request.method) {
       case McpMethod.ping:
@@ -195,10 +206,12 @@ McpRequestDispatcher mcpRequestDispatcher(Ref ref) {
   final registry = ref.watch(mcpToolRegistryProvider);
   final dao = ref.watch(mcpDaoProvider);
   final approvals = ref.watch(mcpApprovalRepositoryProvider);
+  final grants = ref.watch(mcpGrantRepositoryProvider);
 
   // A new dispatcher is a new server: no connection from before it is still
   // open, so nothing scoped to one of them may keep answering.
   unawaited(approvals.revokeSessionScoped());
+  unawaited(grants.revokeSessionScoped());
 
   return McpRequestDispatcher(
     registry: registry,
@@ -207,7 +220,9 @@ McpRequestDispatcher mcpRequestDispatcher(Ref ref) {
       if (row == null) return null;
       return (name: row.name, workspaceId: row.workspaceId);
     },
-    onScopeEnded: (scope) =>
-        unawaited(approvals.revokeByConnectionScope(scope)),
+    onScopeEnded: (scope) {
+      unawaited(approvals.revokeByConnectionScope(scope));
+      unawaited(grants.revokeByConnectionScope(scope));
+    },
   );
 }

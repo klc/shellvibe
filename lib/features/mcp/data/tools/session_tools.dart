@@ -1,4 +1,5 @@
 import '../../../../core/mcp/mcp_protocol.dart';
+import '../../../../shared/database/daos/hosts_dao.dart';
 import '../../../hosts/data/repositories/hosts_repository.dart';
 import '../../domain/models/mcp_enums.dart';
 import '../../domain/models/mcp_models.dart';
@@ -37,11 +38,13 @@ McpSession _requireOwnedSession(
 class OpenSessionTool with McpArgReaders implements McpToolHandler {
   final McpSessionPool sessionPool;
   final HostsRepository hostsRepository;
+  final HostsDao hostsDao;
   final McpGrantRepository grantRepository;
 
   const OpenSessionTool({
     required this.sessionPool,
     required this.hostsRepository,
+    required this.hostsDao,
     required this.grantRepository,
   });
 
@@ -88,7 +91,13 @@ class OpenSessionTool with McpArgReaders implements McpToolHandler {
     }
 
     final host = await hostsRepository.getHostById(hostId);
-    if (host == null || host.workspaceId != ctx.workspaceId) {
+    // Hiding a host from agents must also stop new sessions on it, not just
+    // drop it from listings: an existing grant is not a way around it.
+    final row = await hostsDao.getHostById(hostId);
+    if (host == null ||
+        host.workspaceId != ctx.workspaceId ||
+        row == null ||
+        !row.mcpVisible) {
       throw McpToolException(
         McpErrorCode.hostNotVisible,
         'No host with id "$hostId" is visible to this client.',

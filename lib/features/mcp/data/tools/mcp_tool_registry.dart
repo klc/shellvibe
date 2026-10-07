@@ -104,6 +104,7 @@ McpToolRegistry mcpToolRegistry(Ref ref) {
     OpenSessionTool(
       sessionPool: sessionPool,
       hostsRepository: hostsRepository,
+      hostsDao: hostsDao,
       grantRepository: grantRepository,
     ),
     ListSessionsTool(sessionPool: sessionPool),
