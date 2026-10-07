@@ -9,6 +9,8 @@ import 'package:shellvibe/features/mcp/domain/models/mcp_enums.dart';
 import 'package:shellvibe/features/mcp/domain/models/mcp_models.dart';
 import 'package:shellvibe/features/mcp/domain/services/approval_coordinator.dart';
 import 'package:shellvibe/features/mcp/domain/services/mcp_service_providers.dart';
+import 'package:shellvibe/features/mcp/presentation/dialogs/mcp_command_approval_dialog.dart'
+    show mcpApprovalArmDelay;
 import 'package:shellvibe/features/mcp/presentation/widgets/mcp_approval_host.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:shellvibe/app/widgets/shellvibe_ui.dart';
@@ -98,6 +100,8 @@ void main() {
     // button outside the dialog's own bounds, so a hit test at its centre
     // lands on the barrier instead. What this test is about is what the host
     // does *after* the dialog is answered.
+    expect(tester.widget<ShellVibeButton>(approveButton).onPressed, isNull);
+    await tester.pump(mcpApprovalArmDelay);
     tester.widget<ShellVibeButton>(approveButton).onPressed!();
     await _pumpFrames(tester);
 

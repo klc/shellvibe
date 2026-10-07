@@ -9,6 +9,41 @@ import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../domain/models/mcp_enums.dart';
 import '../../domain/models/mcp_models.dart';
 
+/// How long a freshly shown approval dialog keeps its approve action off.
+/// Dialogs queue back to back, so without it a double-click or a quick
+/// second click meant for one request could land on the next one, unread.
+const mcpApprovalArmDelay = Duration(milliseconds: 700);
+
+/// [text] with everything a reader could miss made visible, for showing
+/// agent-supplied text in an approval dialog: each line break ends in `⏎`,
+/// a tab shows as `⇥`, and control or invisible formatting characters (bidi
+/// overrides, zero-width marks, line separators) show as `⟨U+XXXX⟩`.
+String visibleControlChars(String text) {
+  final out = StringBuffer();
+  for (final rune in text.runes) {
+    if (rune == 0x0A) {
+      out.write('⏎\n');
+    } else if (rune == 0x09) {
+      out.write('⇥');
+    } else if (rune < 0x20 ||
+        (rune >= 0x7F && rune < 0xA0) ||
+        _isInvisibleFormat(rune)) {
+      final hex = rune.toRadixString(16).toUpperCase().padLeft(4, '0');
+      out.write('⟨U+$hex⟩');
+    } else {
+      out.writeCharCode(rune);
+    }
+  }
+  return out.toString();
+}
+
+bool _isInvisibleFormat(int rune) =>
+    rune == 0xAD ||
+    (rune >= 0x200B && rune <= 0x200F) ||
+    (rune >= 0x2028 && rune <= 0x202E) ||
+    (rune >= 0x2060 && rune <= 0x2069) ||
+    rune == 0xFEFF;
+
 /// Human-readable label for one [RiskCategory], for the approval dialog and
 /// nowhere else — [RiskCategory.wireName] stays the machine-facing name used
 /// in the audit log and the agent's error payloads.
@@ -98,17 +133,25 @@ class _McpCommandApprovalDialogState extends State<McpCommandApprovalDialog> {
   late Timer _ticker;
   late Duration _remaining;
   bool _resolved = false;
+  bool _armed = false;
+  late final Timer _armTimer;
+  final _commandScroll = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _remaining = widget.expiresAt.difference(DateTime.now().toUtc());
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
+    _armTimer = Timer(mcpApprovalArmDelay, () {
+      if (mounted) setState(() => _armed = true);
+    });
   }
 
   @override
   void dispose() {
     _ticker.cancel();
+    _armTimer.cancel();
+    _commandScroll.dispose();
     super.dispose();
   }
 
@@ -166,12 +209,14 @@ class _McpCommandApprovalDialogState extends State<McpCommandApprovalDialog> {
           ShellVibeButton(
             key: const Key('mcp_command_approve_button'),
             label: 'Approve',
-            onPressed: () => _resolve(
-              ApprovalDecision(
-                approved: true,
-                scope: request.canRemember ? _scope : ApprovalScope.once,
-              ),
-            ),
+            onPressed: _armed
+                ? () => _resolve(
+                    ApprovalDecision(
+                      approved: true,
+                      scope: request.canRemember ? _scope : ApprovalScope.once,
+                    ),
+                  )
+                : null,
           ),
         ]),
         actionsAxis: adaptiveDialogActionsAxis(context),
@@ -231,22 +276,40 @@ class _McpCommandApprovalDialogState extends State<McpCommandApprovalDialog> {
                   borderRadius: BorderRadius.circular(tokens.radiusMedium),
                   border: Border.all(color: tokens.border),
                 ),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: SelectableText(
-                    request.command,
-                    // Never soft-wrapped: a wrapped shell command reads as a
-                    // different command wherever the break lands mid-flag or
-                    // mid-path, so a long one scrolls horizontally instead.
-                    maxLines: 1,
-                    style: shellvibeMono(
-                      context,
-                      size: 13,
-                      color: tokens.textPrimary,
+                // The whole command, always: every line and every character
+                // the shell will run must be on screen before approval.
+                // Real line breaks are marked with `⏎`, so a soft wrap can
+                // be told apart from a second command; anything longer than
+                // the box scrolls with a visible scrollbar.
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 220),
+                  child: Scrollbar(
+                    controller: _commandScroll,
+                    thumbVisibility: true,
+                    child: SingleChildScrollView(
+                      controller: _commandScroll,
+                      child: SelectableText(
+                        visibleControlChars(request.command),
+                        key: const Key('mcp_command_text'),
+                        style: shellvibeMono(
+                          context,
+                          size: 13,
+                          color: tokens.textPrimary,
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ),
+              if (request.command.contains('\n')) ...[
+                const SizedBox(height: 6),
+                Text(
+                  '${'\n'.allMatches(request.command).length + 1} lines — '
+                  'every line runs',
+                  key: const Key('mcp_command_multiline_warning'),
+                  style: bodyStyle?.copyWith(color: tokens.warning),
+                ),
+              ],
               const SizedBox(height: 16),
               Text(
                 'Remember this decision',

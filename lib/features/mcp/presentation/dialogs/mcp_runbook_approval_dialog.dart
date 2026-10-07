@@ -54,12 +54,17 @@ class _McpRunbookApprovalDialogState extends State<McpRunbookApprovalDialog> {
   late Timer _ticker;
   late Duration _remaining;
   bool _resolved = false;
+  bool _armed = false;
+  late final Timer _armTimer;
   final Map<String, TextEditingController> _secrets = {};
   final Set<String> _missing = {};
 
   @override
   void initState() {
     super.initState();
+    _armTimer = Timer(mcpApprovalArmDelay, () {
+      if (mounted) setState(() => _armed = true);
+    });
     for (final field in widget.request.secretFields) {
       _secrets[field.name] = TextEditingController();
     }
@@ -70,6 +75,7 @@ class _McpRunbookApprovalDialogState extends State<McpRunbookApprovalDialog> {
   @override
   void dispose() {
     _ticker.cancel();
+    _armTimer.cancel();
     for (final c in _secrets.values) {
       c.dispose();
     }
@@ -160,13 +166,13 @@ class _McpRunbookApprovalDialogState extends State<McpRunbookApprovalDialog> {
             ShellVibeButton.danger(
               key: const Key('mcp_runbook_approve_button'),
               label: 'Run on production',
-              onPressed: _approve,
+              onPressed: _armed ? _approve : null,
             )
           else
             ShellVibeButton(
               key: const Key('mcp_runbook_approve_button'),
               label: 'Approve',
-              onPressed: _approve,
+              onPressed: _armed ? _approve : null,
             ),
         ]),
         actionsAxis: adaptiveDialogActionsAxis(context),
@@ -292,7 +298,7 @@ class _McpRunbookApprovalDialogState extends State<McpRunbookApprovalDialog> {
                     const SizedBox(height: 4),
                     for (final entry in request.variables.entries)
                       Text(
-                        '${entry.key} = ${entry.value}',
+                        '${entry.key} = ${visibleControlChars(entry.value)}',
                         key: Key('mcp_runbook_value_${entry.key}'),
                         style: shellvibeMono(
                           context,
