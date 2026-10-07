@@ -30,6 +30,20 @@ class OutputRedactor {
     dotAll: true,
   );
 
+  // Halves of a PEM private key whose other half is missing, e.g. because
+  // run_command's output cap cut through the block before redaction ran.
+  // A header with the base64 (and optional `Proc-Type:` style header) lines
+  // after it, or base64 lines ending in a footer. Each runs after the
+  // whole-block pattern, so a complete key is still matched as one block.
+  static final RegExp _orphanKeyHeadPattern = RegExp(
+    r'-----BEGIN [A-Z ]*PRIVATE KEY-----'
+    r'(?:\r?\n(?:[A-Za-z0-9+/=]+|[A-Za-z-]+: [^\r\n]*)?)*',
+  );
+  static final RegExp _orphanKeyTailPattern = RegExp(
+    r'(?:^[A-Za-z0-9+/=]+\r?\n)*-----END [A-Z ]*PRIVATE KEY-----',
+    multiLine: true,
+  );
+
   static final RegExp _awsKeyPattern = RegExp(r'AKIA[0-9A-Z]{16}');
 
   static final RegExp _githubTokenPattern = RegExp(
@@ -95,6 +109,8 @@ class OutputRedactor {
 
     for (final step in <(RegExp, String)>[
       (_privateKeyPattern, 'private_key'),
+      (_orphanKeyHeadPattern, 'private_key'),
+      (_orphanKeyTailPattern, 'private_key'),
       (_awsKeyPattern, 'aws_key'),
       (_githubTokenPattern, 'github_token'),
       (_apiKeyPattern, 'api_key'),

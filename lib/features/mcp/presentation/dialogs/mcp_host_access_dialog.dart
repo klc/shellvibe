@@ -193,6 +193,7 @@ class _McpHostAccessDialogState extends State<McpHostAccessDialog> {
             hostId: candidate.hostId,
             mode: _modes[candidate.hostId] ?? candidate.suggestedMode,
             expiresAt: expiresAt,
+            sessionScoped: _duration == HostAccessDuration.session,
           ),
         );
       } else {

@@ -132,6 +132,12 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
     }
 
     final hostRow = await hostsDao.getHostById(session.hostId);
+    if (hostRow != null && !hostRow.mcpVisible) {
+      throw McpToolException(
+        McpErrorCode.hostNotVisible,
+        'Host "${session.hostId}" has been hidden from agents.',
+      );
+    }
     // A host row that vanished mid-session (deleted, or a workspace swapped
     // underneath) is treated as production, not as dev. `dev` is the loosest
     // environment there is, so guessing it here would quietly drop the one

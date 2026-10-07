@@ -44,6 +44,28 @@ and release versions follow [Semantic Versioning](https://semver.org/).
   machine rendering in software (a VM without a GPU) that double resize
   also left the window white for half a minute or more.
 
+### Security
+
+- AI Access: denying (or not answering) an agent's request for a server no
+  longer turns into read-only access to that server once the 10-minute
+  cooldown ends.
+- AI Access: locking the vault, turning AI Access off or quitting now ends
+  everything an agent had in flight: pending approval prompts are refused,
+  its terminal sessions close, a runbook it started is cancelled and "This
+  session" approvals end. Cut all agent access goes through the same path.
+- AI Access: a server approved for "This session" is now granted only for
+  that agent connection, as the dialog says, instead of permanently.
+- AI Access: "Deny and suspend client" now holds until AI Access restarts;
+  the suspended agent no longer gets a fresh identity on its next request.
+- AI Access: starting AI Access retires the built-in connection token left
+  over from any other workspace.
+- AI Access: hiding a server from agents also stops new sessions and
+  commands on it, even where access had been granted.
+- AI Access: a private key cut in half by the command output limit is now
+  masked like a whole one before the output reaches the agent.
+- AI Access: searching runbooks no longer matches against secrets the
+  runbook listing masks.
+
 ## [1.7.0] - 2026-10-01
 
 ### Added
