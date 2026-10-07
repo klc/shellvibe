@@ -71,4 +71,4 @@ final class McpRequestDispatcherProvider
 }
 
 String _$mcpRequestDispatcherHash() =>
-    r'd28b4fc9c1603b52707a3fea6e30d605d2ac3af9';
+    r'31b0a0d8bf5556b1bfc53945af4e2592938ab484';
