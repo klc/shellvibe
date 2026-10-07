@@ -64,6 +64,17 @@ class McpRequestDispatcher {
   String connectionScopeFor(String clientId) =>
       _connectionScopes.putIfAbsent(clientId, const Uuid().v4);
 
+  /// Ends every client's current connection scope. Called when the server
+  /// stops: no connection survives that, so nothing scoped to "this session"
+  /// may answer for whatever connects after a restart.
+  void endAllScopes() {
+    final ended = _connectionScopes.values.toList();
+    _connectionScopes.clear();
+    for (final scope in ended) {
+      onScopeEnded?.call(scope);
+    }
+  }
+
   Future<Object?> handle(String clientId, JsonRpcRequest request) async {
     switch (request.method) {
       case McpMethod.ping:

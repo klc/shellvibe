@@ -7,7 +7,10 @@ import '../../../core/mcp/mcp_endpoint_file.dart';
 import '../../../core/mcp/mcp_http_transport.dart';
 import '../../../core/mcp/mcp_protocol.dart';
 import '../../../shared/providers/workspace_provider.dart';
+import '../../snippets/presentation/notifiers/runbook_run_notifier.dart';
 import '../../vault/presentation/notifiers/vault_notifier.dart';
+import '../domain/services/mcp_service_providers.dart';
+import 'mcp_providers.dart';
 import 'mcp_request_dispatcher.dart';
 import 'repositories/mcp_client_repository.dart';
 import 'repositories/mcp_repository_providers.dart';
@@ -112,6 +115,12 @@ class McpServerController {
   /// "token is invalid" — with nothing on screen explaining why.
   static const String systemClientName = 'ShellVibe (this device)';
 
+  /// Ends all agent activity that outlives the transport: pending approvals,
+  /// open sessions, an agent-started runbook run and "this session" state.
+  /// Runs at the end of every [stop], so vault lock, the master switch, panic
+  /// and app shutdown all leave nothing half-alive behind.
+  final Future<void> Function()? onStopped;
+
   McpHttpTransport? _transport;
   Future<void>? _startFuture;
 
@@ -121,6 +130,7 @@ class McpServerController {
     required this.onRequest,
     required this.isVaultAvailable,
     required this.activeWorkspaceId,
+    this.onStopped,
   });
 
   bool get isRunning => _transport?.isRunning ?? false;
@@ -208,6 +218,7 @@ class McpServerController {
     _transport = null;
     await McpEndpointFile.delete();
     if (transport != null) await transport.stop();
+    await onStopped?.call();
   }
 
   Future<String?> _authenticate(String bearerToken) async {
@@ -317,14 +328,33 @@ class McpServerController {
 @Riverpod(keepAlive: true)
 McpServerController mcpServerController(Ref ref) {
   final repository = ref.watch(mcpClientRepositoryProvider);
+  final dispatcher = ref.watch(mcpRequestDispatcherProvider);
+
+  // Read lazily, not watched: these are keepAlive services this controller
+  // only reaches for when it stops, so build order cannot form a cycle.
+  var disposed = false;
+  Future<void> endAgentActivity() async {
+    // On app exit the container is going away with everything in it.
+    if (disposed) return;
+    // Pending prompts first, so every handler waiting on one resumes with a
+    // refusal before its session disappears under it.
+    ref.read(approvalCoordinatorProvider).cancelAll();
+    await ref.read(mcpSessionPoolProvider).closeAll();
+    if (ref.read(runbookRunProvider)?.triggeredBy != null) {
+      await ref.read(runbookRunProvider.notifier).cancel();
+    }
+    dispatcher.endAllScopes();
+    await ref.read(mcpApprovalRepositoryProvider).revokeSessionScoped();
+  }
 
   final controller = McpServerController(
     transportFactory: ({required onRequest, required authenticate}) =>
         McpHttpTransport(onRequest: onRequest, authenticate: authenticate),
     clients: repository,
-    onRequest: ref.watch(mcpRequestDispatcherProvider).handle,
+    onRequest: dispatcher.handle,
     isVaultAvailable: () => _vaultAllowsMcp(ref.read(vaultProvider)),
     activeWorkspaceId: () => ref.read(activeWorkspaceIdProvider),
+    onStopped: endAgentActivity,
   );
 
   // Mirrors `TerminalTabsNotifier`'s `ref.listen(vaultProvider, ...)` for
@@ -337,6 +367,7 @@ McpServerController mcpServerController(Ref ref) {
   });
 
   ref.onDispose(() {
+    disposed = true;
     unawaited(controller.stop());
   });
 

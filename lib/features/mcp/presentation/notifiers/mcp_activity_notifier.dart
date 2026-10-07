@@ -9,6 +9,7 @@ import '../../../../shared/providers/workspace_provider.dart';
 import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
 import '../../data/mcp_providers.dart';
 import '../../data/mcp_session_pool.dart';
+import '../../data/repositories/mcp_grant_repository.dart';
 import '../../data/repositories/mcp_repository_providers.dart';
 import '../../domain/services/approval_coordinator.dart';
 import '../../domain/services/mcp_service_providers.dart';
@@ -249,6 +250,7 @@ class McpActivityNotifier extends _$McpActivityNotifier {
       // applied across a whole list.
       final grants = await dao.getGrantsForClient(client.id);
       final activeGrants = grants.where((g) {
+        if (g.mode == McpGrantRepository.deniedMode) return false;
         if (g.expiresAt != null && !g.expiresAt!.isAfter(now)) return false;
         if (g.cooldownUntil != null && g.cooldownUntil!.isAfter(now)) {
           return false;
