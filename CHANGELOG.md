@@ -53,6 +53,14 @@ and release versions follow [Semantic Versioning](https://semver.org/).
   everything an agent had in flight: pending approval prompts are refused,
   its terminal sessions close, a runbook it started is cancelled and "This
   session" approvals end. Cut all agent access goes through the same path.
+- AI Access: a server approved for "This session" is now granted only for
+  that agent connection, as the dialog says, instead of permanently.
+- AI Access: "Deny and suspend client" now holds until AI Access restarts;
+  the suspended agent no longer gets a fresh identity on its next request.
+- AI Access: starting AI Access retires the built-in connection token left
+  over from any other workspace.
+- AI Access: hiding a server from agents also stops new sessions and
+  commands on it, even where access had been granted.
 
 ## [1.7.0] - 2026-10-01
 

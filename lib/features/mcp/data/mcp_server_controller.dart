@@ -239,6 +239,11 @@ class McpServerController {
     final endpoint = await McpEndpointFile.read();
     if (endpoint == null || endpoint.token != bearerToken) return null;
 
+    // A row the user revoked ("Deny and suspend client") is a decision, not
+    // drift: re-minting here would hand the suspended agent a fresh identity
+    // on its very next request. It stays suspended until the server restarts.
+    if (await clients.isRevoked(bearerToken)) return null;
+
     final boundPort = _transport?.port;
     if (boundPort == null) return null;
 
@@ -289,7 +294,10 @@ class McpServerController {
   /// user pick for their own registered agents — are never touched.
   Future<({String clientId, String rawToken})> _resolveActiveClient() async {
     final workspaceId = activeWorkspaceId();
-    final existing = await clients.listClients(workspaceId);
+    // Every workspace, not just the active one: a system row left behind in
+    // the workspace the server last ran for would keep its token valid (and
+    // hidden from Settings) after the server moved to another workspace.
+    final existing = await clients.listClientsNamed(systemClientName);
     // Delete rather than revoke. A revoked row is kept around so a *user's*
     // token fails cleanly and stays visible in Settings as something they
     // once issued; neither applies to this one. It is minted fresh on every

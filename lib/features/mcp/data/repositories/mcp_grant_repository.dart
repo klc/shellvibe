@@ -131,6 +131,10 @@ class McpGrantRepository {
   Future<void> revokeByConnectionScope(String connectionScopeId) =>
       dao.deleteGrantsByConnectionScope(connectionScopeId);
 
+  /// Drops every "this session" grant, whichever connection it belonged to.
+  /// Used when the server starts: no connection from before it is still open.
+  Future<void> revokeSessionScoped() => dao.deleteSessionGrants();
+
   /// The panic button: drops every grant for every client on every host.
   /// Deliberately unconditional — no dialog, no partial revoke.
   Future<void> revokeEverything() => dao.deleteAllGrants();

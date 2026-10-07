@@ -95,4 +95,16 @@ class McpClientRepository {
 
   Future<List<McpClient>> listClients(String workspaceId) =>
       dao.getClientsByWorkspace(workspaceId);
+
+  /// Every client named [name] in any workspace.
+  Future<List<McpClient>> listClientsNamed(String name) =>
+      dao.getClientsNamed(name);
+
+  /// True when [rawToken] belongs to a row the user revoked. Unlike
+  /// [authenticate] this sees revoked rows: it exists so a deliberate
+  /// revocation can be told apart from a row that simply went missing.
+  Future<bool> isRevoked(String rawToken) async {
+    final row = await dao.getClientByTokenHash(McpToken.hash(rawToken));
+    return row?.revokedAt != null;
+  }
 }
