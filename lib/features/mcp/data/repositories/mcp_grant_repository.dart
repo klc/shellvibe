@@ -18,6 +18,11 @@ class McpGrantRepository {
 
   const McpGrantRepository(this.dao);
 
+  /// `mode` value of a cooldown-only placeholder row written by
+  /// [denyWithCooldown] for a pair that was never granted. Not an
+  /// [McpAccessMode]: such a row must never read as a grant.
+  static const deniedMode = 'denied';
+
   /// The mode a client currently holds on a host, or null if it holds none
   /// usable right now.
   ///
@@ -33,7 +38,7 @@ class McpGrantRepository {
     DateTime? now,
   }) async {
     final grant = await dao.findGrant(clientId, hostId);
-    if (grant == null) return null;
+    if (grant == null || grant.mode == deniedMode) return null;
     final at = now ?? DateTime.now().toUtc();
     if (grant.expiresAt != null && !grant.expiresAt!.isAfter(at)) return null;
     if (grant.cooldownUntil != null && grant.cooldownUntil!.isAfter(at)) {
@@ -88,15 +93,15 @@ class McpGrantRepository {
     final existing = await dao.findGrant(clientId, hostId);
     if (existing == null) {
       // No grant has ever existed for this pair: create a cooldown-only
-      // placeholder row so the next request still sees the cooldown. `mode`
-      // is meaningless while there is no real grant; readonly is the
-      // least-privileged filler value.
+      // placeholder row so the next request still sees the cooldown. It is
+      // marked [deniedMode] so it never reads as a grant once the cooldown
+      // lapses: a refusal must not turn into access.
       await dao.upsertGrant(
         McpHostGrantsCompanion.insert(
           id: const Uuid().v4(),
           clientId: clientId,
           hostId: hostId,
-          mode: McpAccessMode.readonly.name,
+          mode: deniedMode,
           grantedAt: DateTime.now().toUtc(),
           cooldownUntil: Value(until),
         ),
