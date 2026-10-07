@@ -44,6 +44,12 @@ and release versions follow [Semantic Versioning](https://semver.org/).
   machine rendering in software (a VM without a GPU) that double resize
   also left the window white for half a minute or more.
 
+### Security
+
+- AI Access: denying (or not answering) an agent's request for a server no
+  longer turns into read-only access to that server once the 10-minute
+  cooldown ends.
+
 ## [1.7.0] - 2026-10-01
 
 ### Added
