@@ -49,6 +49,10 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 - AI Access: denying (or not answering) an agent's request for a server no
   longer turns into read-only access to that server once the 10-minute
   cooldown ends.
+- AI Access: locking the vault, turning AI Access off or quitting now ends
+  everything an agent had in flight: pending approval prompts are refused,
+  its terminal sessions close, a runbook it started is cancelled and "This
+  session" approvals end. Cut all agent access goes through the same path.
 
 ## [1.7.0] - 2026-10-01
 
