@@ -380,12 +380,19 @@ class E2EECloudSyncService {
   /// and leaves it empty, which loses every tie -- the conservative reading,
   /// because an operation made at the same clock is at least as current as a
   /// file of unknown age.
+  ///
+  /// [allowed] is what the caller lets this restore touch, whatever the
+  /// payload carries. A sync ground is applied in the background and passes
+  /// [BackupScope.syncGround]: the envelope does not say which vault it came
+  /// from, so a full backup served in its place must not bring host-key trust
+  /// or settings with it.
   Future<BackupImportResult> importEncryptedBackup({
     required String backupPackageJson,
     required AppDatabase db,
     required String masterPassword,
     BackupUnlockMethod unlockWith = BackupUnlockMethod.passphrase,
     String snapshotDeviceId = '',
+    BackupScope allowed = BackupScope.full,
   }) async {
     final opened = await _envelope.open(
       envelopeJson: backupPackageJson,
@@ -644,7 +651,8 @@ class E2EECloudSyncService {
       // upsert throws a UNIQUE constraint violation and rolls back the whole
       // restore. Look the row up by (hostname, port) first and update it in
       // place when it already exists.
-      if (data['known_hosts'] is List) {
+      if (allowed.contains(BackupCategory.knownHosts) &&
+          data['known_hosts'] is List) {
         for (final item in data['known_hosts'] as List) {
           final hostname = item['hostname'] as String;
           final port = item['port'] as int;
@@ -1011,7 +1019,9 @@ class E2EECloudSyncService {
       }
     });
 
-    final settings = included.contains(BackupCategory.settings)
+    final settings =
+        included.contains(BackupCategory.settings) &&
+            allowed.contains(BackupCategory.settings)
         ? data['settings'] as Map<String, dynamic>?
         : null;
 

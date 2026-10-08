@@ -46,6 +46,12 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+- Sync: joining automatic sync no longer changes SSH host-key pins. The
+  server could answer the join with a full manual backup instead of a sync
+  snapshot, and the device then replaced its known-host fingerprints and
+  added ones it had never approved, without asking. The join now applies only
+  what a sync snapshot carries; restoring a backup yourself still restores
+  known hosts.
 - AI Access: denying (or not answering) an agent's request for a server no
   longer turns into read-only access to that server once the 10-minute
   cooldown ends.

@@ -134,6 +134,71 @@ void main() {
     });
   });
 
+  group('host-key trust', () {
+    // Pins are a decision made on one device. The envelope does not say which
+    // vault it came from, so a full manual backup served as the sync ground
+    // must not carry them into a background join.
+    Future<String> fullBackupWithPins(_Device source) async {
+      await source.pin('h.example', 'OLD-PIN');
+      await source.pin('new.example', 'NEVER-APPROVED');
+
+      return source.join.ground.backups.sync.exportEncryptedBackup(
+        db: source.db,
+        masterPassword: passphrase,
+        syncKey: syncKey,
+        syncClock: 1,
+      );
+    }
+
+    test('a join never writes known hosts, even from a full backup', () async {
+      final source = await device('backup-device');
+      await vault.upload(
+        baseRevision: 0,
+        uploadId: 'served-backup',
+        deviceId: 'backup-device',
+        schemaVersion: 4,
+        encryptionVersion: 2,
+        ciphertext: await fullBackupWithPins(source),
+        ciphertextSha256: '',
+      );
+
+      final phone = await device('phone');
+      await phone.pin('h.example', 'PHONE-PIN');
+
+      final result = await phone.joinSync(syncKey, passphrase);
+
+      expect(result.succeeded, isTrue);
+      expect(
+        (await phone.db.knownHostsDao.findKnownHost(
+          'h.example',
+          22,
+        ))!.fingerprintSha256,
+        'PHONE-PIN',
+      );
+      expect(
+        await phone.db.knownHostsDao.findKnownHost('new.example', 22),
+        isNull,
+      );
+    });
+
+    test('a restore the user asks for still brings them', () async {
+      final source = await device('backup-device');
+      final envelope = await fullBackupWithPins(source);
+
+      final phone = await device('phone');
+      await phone.join.ground.backups.sync.importEncryptedBackup(
+        backupPackageJson: envelope,
+        db: phone.db,
+        masterPassword: passphrase,
+      );
+
+      expect(
+        await phone.db.knownHostsDao.findKnownHost('new.example', 22),
+        isNotNull,
+      );
+    });
+  });
+
   group('joining an account that already has data', () {
     test('an empty device takes what is there', () async {
       final desktop = await device('desktop');
@@ -443,6 +508,19 @@ final class _Device {
       );
 
   Future<int> hostCount() async => (await db.select(db.hosts).get()).length;
+
+  Future<void> pin(String hostname, String fingerprint) => db
+      .into(db.knownHosts)
+      .insert(
+        KnownHostsCompanion.insert(
+          id: '$hostname-$fingerprint',
+          hostname: hostname,
+          port: 22,
+          keyType: 'ssh-ed25519',
+          fingerprintSha256: fingerprint,
+          firstSeenAt: DateTime.now(),
+        ),
+      );
 
   /// An identity carrying a secret, which is what needs the vault key to go
   /// out.
