@@ -35,6 +35,8 @@ final class McpAccessSettingsSection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        _ExperimentalBanner(tokens: tokens),
+        const SizedBox(height: 12),
         Text(
           'Lets an AI agent (Claude Desktop, Claude Code, or another MCP '
           'client) reach your registered hosts through this app, under '
@@ -635,6 +637,54 @@ final class McpAccessSettingsSection extends ConsumerWidget {
 
   String _formatDateOrNever(DateTime? date) =>
       date == null ? 'never' : _formatDate(date);
+}
+
+/// Marks AI Access as experimental, so a rough edge reads as known rather than
+/// as a broken feature.
+class _ExperimentalBanner extends StatelessWidget {
+  const _ExperimentalBanner({required this.tokens});
+
+  final ShellVibeTokens tokens;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const Key('mcp_experimental_banner'),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: tokens.warning.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(tokens.radiusSmall),
+        border: Border.all(color: tokens.warning.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(LucideIcons.flaskConical, size: 16, color: tokens.warning),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text.rich(
+              TextSpan(
+                children: [
+                  const TextSpan(
+                    text: 'Experimental. ',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  TextSpan(
+                    text:
+                        'AI Access is still being developed. Tools, approvals '
+                        'and behavior may change between releases, and some '
+                        'agent workflows may not work reliably yet.',
+                    style: TextStyle(color: tokens.textMuted),
+                  ),
+                ],
+              ),
+              style: const TextStyle(fontSize: 13),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// Result of [McpAccessSettingsSection._detectBridgeCommand]: the command to
