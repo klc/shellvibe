@@ -31,10 +31,9 @@ dependencies:
   flutter:
     sdk: flutter
 
-  cupertino_icons: ^1.0.9
+  cupertino_icons: ^2.0.0
 
   # State management
-  # Flutter's current flutter_test pins require the analyzer <13 generation line.
   flutter_riverpod: ^3.3.1
   riverpod_annotation: ^4.0.3
 
@@ -114,7 +113,7 @@ dependencies:
   # runs from its MSIX (lib/core/utils/windows_package_identity.dart).
   ffi: ^2.2.0
   uuid: ^4.6.0
-  shadcn_ui: ^0.56.0
+  shadcn_ui: ^0.57.1
   lucide_icons_flutter: ^3.1.15
   file_selector: ^1.1.0
   quick_actions: ^1.1.1
@@ -140,7 +139,6 @@ dev_dependencies:
   flutter_launcher_icons: ^0.14.4
 
   # Code generation
-  # 2.16.x requires meta ^1.18.3, while flutter_test pins meta 1.18.0.
   build_runner: ^2.15.0
   riverpod_generator: ^4.0.4
   drift_dev: ^2.34.0
