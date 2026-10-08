@@ -395,9 +395,7 @@ final class SyncRowWriter {
                 sessionType: row['sessionType'] as String,
                 hostId: Value(str('hostId')),
                 title: Value(str('title')),
-                startupSnippetId: Value(
-                  keepPaneSnippet ? paneSnippetId : null,
-                ),
+                startupSnippetId: Value(keepPaneSnippet ? paneSnippetId : null),
               ),
             );
 
@@ -445,6 +443,23 @@ final class SyncRowWriter {
           'Not a writable table',
         );
     }
+  }
+
+  /// Whether this device holds the row.
+  static Future<bool> exists(
+    AppDatabase db,
+    String entityType,
+    String entityId,
+  ) async {
+    final rows = await db
+        .customSelect(
+          'SELECT 1 FROM ${_tableOf(db, entityType).actualTableName} '
+          'WHERE id = ? LIMIT 1',
+          variables: [Variable<String>(entityId)],
+        )
+        .get();
+
+    return rows.isNotEmpty;
   }
 
   /// Deletes one row. Foreign keys cascade from here as they would anywhere.
