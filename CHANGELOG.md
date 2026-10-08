@@ -7,6 +7,8 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-10-08
+
 ### Added
 
 - Settings → Account → Delete Account… opens the web panel's danger zone,
@@ -45,6 +47,11 @@ and release versions follow [Semantic Versioning](https://semver.org/).
   of being restored to 1280x720 a moment after it was maximised. On a
   machine rendering in software (a VM without a GPU) that double resize
   also left the window white for half a minute or more.
+- macOS: Korean, Japanese and Chinese input methods compose in the
+  terminal. A key carrying a character was taken before the input method saw
+  it, so 2-Set Korean typed loose jamo instead of syllables.
+- Dragging a selection near the top of a terminal no longer scrolls up on its
+  own when the terminal sits below a tab bar.
 
 ### Security
 
