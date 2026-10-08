@@ -13,6 +13,7 @@ import 'package:shellvibe/features/cloud_backup/presentation/notifiers/cloud_bac
 import 'package:shellvibe/shared/database/app_database.dart';
 import 'package:shellvibe/shared/storage/secure_storage_service.dart';
 
+import '../../../support/cloud_backup_store.dart';
 import '../../../support/fake_sync_server.dart';
 import '../../../support/signed_in_container.dart';
 
@@ -31,7 +32,7 @@ void main() {
 
   const passphrase = 'a long enough passphrase';
 
-  CloudBackupStore store() => CloudBackupStore(storage: SecureStorageService());
+  CloudBackupStore store() => testCloudBackupStore();
 
   setUp(() {
     FlutterSecureStorage.setMockInitialValues({});

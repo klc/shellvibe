@@ -46,6 +46,13 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+- Cloud backup: the sync passphrase, the recovery code and the sync key are
+  now stored encrypted under the vault key instead of as plain keychain
+  values. With a master password set, reading the keychain was enough to open
+  a cloud backup and recover the vault key and every saved SSH secret without
+  the master password. Behind a locked vault, sync now waits ("Unlock the
+  vault to sync") and a backup asks for the vault to be unlocked. Values an
+  earlier build stored are moved on the first read with the vault open.
 - Sync: joining automatic sync no longer changes SSH host-key pins. The
   server could answer the join with a full manual backup instead of a sync
   snapshot, and the device then replaced its known-host fingerprints and

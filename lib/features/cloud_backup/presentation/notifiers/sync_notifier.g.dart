@@ -54,7 +54,7 @@ final class SyncNotifierProvider
   SyncNotifier create() => SyncNotifier();
 }
 
-String _$syncNotifierHash() => r'fd77f19fecea9854453904db15f900cfd7f92801';
+String _$syncNotifierHash() => r'3b56a708a316dbc6f7ba97255e1cdf6b8c5ed97e';
 
 /// Runs automatic sync.
 ///

@@ -7,12 +7,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/core/api/api_client.dart';
 import 'package:shellvibe/core/sync/e2ee_cloud_sync_service.dart';
 import 'package:shellvibe/features/cloud_backup/data/cloud_backup_api.dart';
-import 'package:shellvibe/features/cloud_backup/data/cloud_backup_store.dart';
 import 'package:shellvibe/features/cloud_backup/domain/cloud_backup_service.dart';
 import 'package:shellvibe/features/vault/data/vault_key_service.dart';
 import 'package:shellvibe/shared/database/app_database.dart';
 import 'package:shellvibe/shared/storage/secure_storage_service.dart';
 
+import '../../../support/cloud_backup_store.dart';
 import '../../../support/fast_crypto.dart';
 import '../../../support/fake_api_transport.dart';
 
@@ -171,7 +171,7 @@ void main() {
       // It used to be passed to `configure()` and dropped, so only the very
       // first backup carried a recovery path and every later one silently did
       // not.
-      final store = CloudBackupStore(storage: SecureStorageService());
+      final store = testCloudBackupStore();
 
       expect(await store.readRecoveryCode(), isNull);
 
@@ -181,7 +181,7 @@ void main() {
     });
 
     test('clearing the device forgets it with everything else', () async {
-      final store = CloudBackupStore(storage: SecureStorageService());
+      final store = testCloudBackupStore();
 
       await store.writePassphrase('p');
       await store.writeRecoveryCode('ABCDE-FGHJK');

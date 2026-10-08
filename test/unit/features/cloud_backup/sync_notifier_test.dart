@@ -12,9 +12,12 @@ import 'package:shellvibe/features/cloud_backup/data/cloud_backup_store.dart';
 import 'package:shellvibe/features/cloud_backup/presentation/notifiers/sync_notifier.dart';
 import 'package:shellvibe/features/settings/presentation/notifiers/backup_scope_notifier.dart';
 import 'package:shellvibe/features/vault/data/vault_key_service.dart';
+import 'package:shellvibe/features/vault/presentation/notifiers/identities_notifier.dart';
+import 'package:shellvibe/features/vault/presentation/notifiers/vault_notifier.dart';
 import 'package:shellvibe/shared/database/app_database.dart';
 import 'package:shellvibe/shared/storage/secure_storage_service.dart';
 
+import '../../../support/cloud_backup_store.dart';
 import '../../../support/fast_crypto.dart';
 import '../../../support/fake_sync_server.dart';
 import '../../../support/signed_in_container.dart';
@@ -34,7 +37,7 @@ void main() {
 
   const passphrase = 'a long enough passphrase';
 
-  CloudBackupStore store() => CloudBackupStore(storage: SecureStorageService());
+  CloudBackupStore store() => testCloudBackupStore();
 
   setUp(() async {
     FlutterSecureStorage.setMockInitialValues({});
@@ -152,6 +155,33 @@ void main() {
 
       expect(current().blocker, SyncBlocker.disabled);
       expect(pushes(), hasLength(before));
+    });
+  });
+
+  group('a locked vault', () {
+    test('holds sync until it is unlocked, then starts it', () async {
+      // The passphrase and the sync key are sealed under the vault key, so
+      // behind a master password there is nothing to sync with until then.
+      final keys = container.read(vaultKeyServiceProvider);
+      await keys.configureMasterPassword('dummy-master-password');
+      await container.read(vaultProvider.notifier).lock();
+
+      await container.read(syncProvider.future);
+      expect(current().blocker, SyncBlocker.vaultLocked);
+      expect(
+        server.vaults['sync'] ?? const [],
+        isEmpty,
+        reason: 'nothing was sent',
+      );
+
+      await container
+          .read(vaultProvider.notifier)
+          .unlock('dummy-master-password');
+      final notifier = await started();
+      await joined(notifier);
+
+      expect(current().blocker, isNull);
+      expect(server.vaults['sync'], hasLength(1));
     });
   });
 

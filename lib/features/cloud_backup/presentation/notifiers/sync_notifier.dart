@@ -50,6 +50,10 @@ enum SyncBlocker {
 
   /// The stored passphrase does not open this account's sync snapshot.
   wrongPassphrase,
+
+  /// A master password keeps the vault locked, and the passphrase and sync key
+  /// are sealed under the vault key. Unlocking it starts sync.
+  vaultLocked,
 }
 
 /// What automatic sync is doing.
@@ -208,15 +212,21 @@ class SyncNotifier extends _$SyncNotifier {
 
     final store = CloudBackupStore(
       storage: ref.watch(secureStorageServiceProvider),
+      vaultKey: ref.watch(vaultKeyServiceProvider).getDek,
     );
 
-    if (await store.readPassphrase() == null) {
+    if (!await store.isConfigured()) {
       _stop();
 
       return const SyncState(blocker: SyncBlocker.notConfigured);
     }
 
-    final passphrase = (await store.readPassphrase())!;
+    final String passphrase;
+    try {
+      passphrase = (await store.readPassphrase())!;
+    } on VaultLockedException {
+      return _heldByLockedVault();
+    }
     final client = ref.watch(accountProvider.notifier).apiClient;
 
     final ground = SyncSnapshotService.over(
@@ -250,6 +260,8 @@ class SyncNotifier extends _$SyncNotifier {
       _stop();
 
       return const SyncState(blocker: SyncBlocker.wrongPassphrase);
+    } on VaultLockedException {
+      return _heldByLockedVault();
     }
 
     _deviceId = account.session!.deviceId;
@@ -460,6 +472,15 @@ class SyncNotifier extends _$SyncNotifier {
     // them that way. A conflict here means another got there first.
     unawaited(_refreshGround(force: _reKeyed));
     _reKeyed = false;
+  }
+
+  /// Stops until the vault is unlocked. Watching it is what brings the
+  /// rebuild that reads the secrets once they can be opened.
+  SyncState _heldByLockedVault() {
+    _stop();
+    ref.watch(vaultProvider);
+
+    return const SyncState(blocker: SyncBlocker.vaultLocked);
   }
 
   /// Picks up what a locked vault stopped: the join, if that is where it

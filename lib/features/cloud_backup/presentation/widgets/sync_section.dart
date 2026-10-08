@@ -158,6 +158,11 @@ final class _SyncStatus extends ConsumerWidget {
         'The passphrase on this device does not open this account\'s sync '
             'snapshot. Use the one from a device that is already syncing.',
       ),
+      SyncBlocker.vaultLocked => (
+        LucideIcons.lock,
+        tokens.warning,
+        'Unlock the vault to sync.',
+      ),
       null when value.running => (
         LucideIcons.refreshCw,
         tokens.textSubtle,

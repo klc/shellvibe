@@ -13,6 +13,7 @@ import '../../../../shared/providers/database_providers.dart';
 import '../../../account/presentation/notifiers/account_notifier.dart';
 import '../../../billing/presentation/notifiers/entitlement_notifier.dart';
 import '../../../settings/presentation/notifiers/settings_notifier.dart';
+import '../../../vault/data/vault_key_service.dart';
 import '../../../vault/presentation/notifiers/identities_notifier.dart';
 import '../../../vault/presentation/notifiers/vault_notifier.dart';
 import '../../data/cloud_backup_api.dart';
@@ -174,8 +175,10 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
   /// Resolved on each use rather than assigned in [build]: a method reached
   /// before the first build finished -- which a test override or a fast tap
   /// both produce -- would otherwise hit an uninitialised field.
-  CloudBackupStore get _store =>
-      CloudBackupStore(storage: ref.read(secureStorageServiceProvider));
+  CloudBackupStore get _store => CloudBackupStore(
+    storage: ref.read(secureStorageServiceProvider),
+    vaultKey: ref.read(vaultKeyServiceProvider).getDek,
+  );
 
   /// The backup scope is a device preference rather than account state, so it
   /// has its own store and survives signing out.
@@ -217,8 +220,7 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
     final autoMark = await _store.readAutoBackupMark();
 
     _startSchedule(frequency);
-    final recoveryCodeMissing =
-        configured && await _store.readRecoveryCode() == null;
+    final recoveryCodeMissing = configured && !await _store.hasRecoveryCode();
 
     if (configured) {
       // A device that has been closed longer than the interval is due the
@@ -471,7 +473,38 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
     final deviceId = _deviceId;
     if (service == null || deviceId == null) return;
 
-    final passphrase = await _store.readPassphrase();
+    final scope = await _scopeStore.read(BackupTarget.cloud);
+    final autoSyncEnabled = await _scopeStore.readAutoSyncEnabled();
+
+    final String? passphrase;
+    final String? recoveryCode;
+    final Uint8List? syncKey;
+    try {
+      passphrase = await _store.readPassphrase();
+
+      // Every upload carries the recovery code this device knows, not just
+      // the first one. Sealing it into the setup backup alone made the
+      // recovery path cover exactly one revision and then quietly stop.
+      recoveryCode = await _store.readRecoveryCode();
+
+      // Automatic sync needs a key that outlives the passphrase, and a backup
+      // is the only place it can live. The first device to switch sync on
+      // mints it; every other device learns it by opening a backup that
+      // carries it, which is why sync cannot start before one exists.
+      syncKey = await _store.syncKeyForUpload(autoSyncEnabled: autoSyncEnabled);
+    } on VaultLockedException {
+      // The secrets are sealed under the vault key, and so is everything a
+      // backup carries. Nothing to do until it is open.
+      _publish(
+        (s) => s.copyWith(
+          message: 'Unlock the vault to back up.',
+          messageIsError: true,
+        ),
+      );
+
+      return;
+    }
+
     if (passphrase == null) {
       _publish(
         (s) => s.copyWith(
@@ -484,20 +517,7 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
       return;
     }
 
-    // Every upload carries the recovery code this device knows, not just the
-    // first one. Sealing it into the setup backup alone made the recovery path
-    // cover exactly one revision and then quietly stop.
-    final recoveryCode = await _store.readRecoveryCode();
-    final scope = await _scopeStore.read(BackupTarget.cloud);
-
-    // Automatic sync needs a key that outlives the passphrase, and a backup is
-    // the only place it can live. The first device to switch sync on mints it;
-    // every other device learns it by opening a backup that carries it, which
-    // is why sync cannot start before one exists.
-    final autoSyncEnabled = await _scopeStore.readAutoSyncEnabled();
-    final syncKey = await _store.syncKeyForUpload(
-      autoSyncEnabled: autoSyncEnabled,
-    );
+    final String secret = passphrase;
 
     // Where this snapshot sits in the operation log. A device that restores it
     // resumes pulling from here instead of replaying a log that reaches back
@@ -527,7 +547,7 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
     await _run((state) async {
       final result = await service.upload(
         db: ref.read(appDatabaseProvider),
-        passphrase: passphrase,
+        passphrase: secret,
         deviceId: deviceId,
         maxSizeBytes: _maxSizeBytes,
         recoveryCode: recoveryCode,
@@ -733,7 +753,7 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
     if (interval == null) return;
 
     if (_service == null || _deviceId == null) return;
-    if (await _store.readPassphrase() == null) return;
+    if (!await _store.isConfigured()) return;
 
     // A conflict waits for the user: restore the other device's backup or
     // overwrite it. Retrying on the next tick cannot settle it, and each try

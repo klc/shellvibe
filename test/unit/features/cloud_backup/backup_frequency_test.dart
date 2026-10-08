@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/features/cloud_backup/data/cloud_backup_store.dart';
 import 'package:shellvibe/shared/storage/secure_storage_service.dart';
 
+import '../../../support/cloud_backup_store.dart';
+
 /// The schedule a backup runs on, and the mark that decides whether one is
 /// due.
 ///
@@ -18,7 +20,7 @@ void main() {
 
   setUp(() {
     FlutterSecureStorage.setMockInitialValues({});
-    store = CloudBackupStore(storage: SecureStorageService());
+    store = testCloudBackupStore();
   });
 
   group('the schedule', () {
