@@ -307,6 +307,7 @@ final class SyncSnapshotService {
       masterPassword: secret,
       unlockWith: unlockWith,
       snapshotDeviceId: ground.deviceId,
+      allowed: BackupScope.syncGround,
     );
 
     // This device now stands on this ground, so staleness is measured from

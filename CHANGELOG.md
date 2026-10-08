@@ -53,6 +53,12 @@ and release versions follow [Semantic Versioning](https://semver.org/).
   the master password. Behind a locked vault, sync now waits ("Unlock the
   vault to sync") and a backup asks for the vault to be unlocked. Values an
   earlier build stored are moved on the first read with the vault open.
+- Sync: joining automatic sync no longer changes SSH host-key pins. The
+  server could answer the join with a full manual backup instead of a sync
+  snapshot, and the device then replaced its known-host fingerprints and
+  added ones it had never approved, without asking. The join now applies only
+  what a sync snapshot carries; restoring a backup yourself still restores
+  known hosts.
 - Sync: the server could still rewrite operations sent by builds before
   1.6.0, which did not seal their kind, device and clock: serve one as a
   delete to remove a row on every other device, or with a raised clock to
