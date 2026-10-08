@@ -31,6 +31,8 @@ and release versions follow [Semantic Versioning](https://semver.org/).
   share a single keychain item instead of one each, so a future change in how
   the app is signed asks for the login password once rather than once per
   item. Existing items move over the first time the app reads them.
+- Settings → AI Access is marked Experimental: tools, approvals and
+  behaviour may still change between releases.
 
 ### Fixed
 
