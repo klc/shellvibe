@@ -46,6 +46,13 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+- Cloud backup: the sync passphrase, the recovery code and the sync key are
+  now stored encrypted under the vault key instead of as plain keychain
+  values. With a master password set, reading the keychain was enough to open
+  a cloud backup and recover the vault key and every saved SSH secret without
+  the master password. Behind a locked vault, sync now waits ("Unlock the
+  vault to sync") and a backup asks for the vault to be unlocked. Values an
+  earlier build stored are moved on the first read with the vault open.
 - AI Access: denying (or not answering) an agent's request for a server no
   longer turns into read-only access to that server once the 10-minute
   cooldown ends.

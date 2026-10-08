@@ -3,8 +3,10 @@ import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 
+import '../../../core/crypto/encryption_engine.dart';
 import '../../../core/sync/backup_envelope.dart';
 import '../../../shared/storage/secure_storage_service.dart';
+import '../../vault/data/vault_key_service.dart';
 
 /// How often a backup runs without being asked.
 ///
@@ -56,12 +58,18 @@ enum BackupFrequency {
 
 /// Durable state for cloud backup on this device.
 ///
-/// The sync passphrase is kept in the same hardware-backed keychain the vault
-/// DEK already lives in. That is a deliberate trade: an attacker who can read
-/// this keychain can already read the vault key and therefore the secrets
-/// themselves, so storing the passphrase beside it gives up nothing new -- and
-/// not storing it would mean prompting on every upload, which is how automatic
-/// backup stops happening.
+/// The passphrase, the recovery code and the sync key are kept in the
+/// keychain, sealed under the vault key. Each of them opens every envelope or
+/// operation this account writes, and those carry the vault key and the
+/// identity secrets -- so stored in the clear they would be the vault key in
+/// all but name. With a master password set that was a way around it: the
+/// vault key is kept wrapped precisely so that reading the keychain is not
+/// enough, and these three handed a keychain reader everything anyway.
+/// Sealed, they are exactly as readable as the vault key itself: with no
+/// master password, as before; with one, only while the vault is unlocked.
+///
+/// Not storing them at all would mean prompting on every upload, which is how
+/// automatic backup stops happening.
 ///
 /// The recovery code is kept here too. Not storing it was the original
 /// intention, and it was wrong: the code is sealed into each envelope at
@@ -72,34 +80,42 @@ enum BackupFrequency {
 final class CloudBackupStore {
   final SecureStorageService storage;
 
-  const CloudBackupStore({required this.storage});
+  /// The vault key the secrets are sealed under. Throws
+  /// [VaultLockedException] while a master password keeps the vault locked,
+  /// and so does every read or write of a secret.
+  final Future<SecretKey> Function() vaultKey;
+
+  final EncryptionEngine _crypto;
+
+  CloudBackupStore({
+    required this.storage,
+    required this.vaultKey,
+    EncryptionEngine? crypto,
+  }) : _crypto = crypto ?? EncryptionEngine();
 
   /// The sync passphrase, or null when cloud backup has not been set up.
-  Future<String?> readPassphrase() async {
-    final value = await storage.read(key: _passphraseKey);
-
-    return (value == null || value.isEmpty) ? null : value;
-  }
+  Future<String?> readPassphrase() => _readSecret(_passphraseKey);
 
   Future<void> writePassphrase(String passphrase) =>
-      storage.write(key: _passphraseKey, value: passphrase);
+      _writeSecret(_passphraseKey, passphrase);
 
   /// The recovery code, when this device knows it.
   ///
   /// Null on a device that adopted an existing passphrase without being given
   /// the code. Backups written there carry no recovery path, and the UI says
   /// so rather than letting the user believe otherwise.
-  Future<String?> readRecoveryCode() async {
-    final value = await storage.read(key: _recoveryCodeKey);
-
-    return (value == null || value.isEmpty) ? null : value;
-  }
+  Future<String?> readRecoveryCode() => _readSecret(_recoveryCodeKey);
 
   Future<void> writeRecoveryCode(String recoveryCode) =>
-      storage.write(key: _recoveryCodeKey, value: recoveryCode);
+      _writeSecret(_recoveryCodeKey, recoveryCode);
 
-  /// Whether cloud backup has been configured on this device.
-  Future<bool> isConfigured() async => await readPassphrase() != null;
+  /// Whether this device knows the recovery code. Answers behind a locked
+  /// vault: it looks for the code, it does not open it.
+  Future<bool> hasRecoveryCode() => _hasSecret(_recoveryCodeKey);
+
+  /// Whether cloud backup has been configured on this device. Answers behind
+  /// a locked vault, for the same reason.
+  Future<bool> isConfigured() => _hasSecret(_passphraseKey);
 
   /// The idempotency key of an upload that was started and never confirmed.
   ///
@@ -147,18 +163,12 @@ final class CloudBackupStore {
   /// Base64. The design note kept this in memory only, recovered by opening
   /// the newest envelope at every start. In practice that means a network
   /// round trip and an Argon2id derivation before sync can do anything, on
-  /// every launch, for a key the passphrase beside it already unlocks. The
-  /// trade is the same one the passphrase itself made: an attacker who can
-  /// read this keychain can already read the vault key and therefore the
-  /// secrets, so storing the sync key here gives up nothing new.
-  Future<String?> readSyncKey() async {
-    final value = await storage.read(key: _syncKeyKey);
-
-    return (value == null || value.isEmpty) ? null : value;
-  }
+  /// every launch, for a key the passphrase beside it already unlocks. Stored
+  /// sealed under the vault key, like the passphrase.
+  Future<String?> readSyncKey() => _readSecret(_syncKeyKey);
 
   Future<void> writeSyncKey(String base64Key) =>
-      storage.write(key: _syncKeyKey, value: base64Key);
+      _writeSecret(_syncKeyKey, base64Key);
 
   /// Keeps the vault's sync key, when a backup handed one over.
   ///
@@ -303,8 +313,10 @@ final class CloudBackupStore {
   /// signed out: a passphrase left behind would be offered against the next
   /// account's vault, which it cannot open.
   Future<void> clear() async {
-    await storage.delete(key: _passphraseKey);
-    await storage.delete(key: _recoveryCodeKey);
+    for (final key in const [_passphraseKey, _recoveryCodeKey, _syncKeyKey]) {
+      await storage.delete(key: key);
+      await storage.delete(key: _sealed(key));
+    }
     await storage.delete(key: _pendingUploadKey);
     await storage.delete(key: _pendingSyncUploadKey);
     await storage.delete(key: _lastRevisionKey);
@@ -312,12 +324,61 @@ final class CloudBackupStore {
     await storage.delete(key: _lastFullBackupKey);
     await storage.delete(key: _groundMarkKey);
     await storage.delete(key: _autoBackupMarkKey);
-    await storage.delete(key: _syncKeyKey);
     // The schedule goes too. Left behind, a device whose vault was deleted
     // still believes it backs up hourly, and the first passphrase set on it
     // afterwards silently starts a schedule nobody asked for.
     await storage.delete(key: _frequencyKey);
   }
+
+  /// A secret, opened with the vault key.
+  ///
+  /// A value written by an earlier build sits in the clear under the old
+  /// key. It is returned as it is -- refusing it would stop backup on every
+  /// device that has one -- and moved under the vault key on the way, unless
+  /// the vault is locked, in which case the next read moves it.
+  Future<String?> _readSecret(String key) async {
+    final sealed = await storage.read(key: _sealed(key));
+    if (sealed != null && sealed.isNotEmpty) {
+      return _crypto.decrypt(
+        encryptedBase64: sealed,
+        secretKey: await vaultKey(),
+      );
+    }
+
+    final legacy = await storage.read(key: key);
+    if (legacy == null || legacy.isEmpty) return null;
+
+    try {
+      await _writeSecret(key, legacy);
+    } on VaultLockedException {
+      // Moved on the next read with the vault open.
+    }
+
+    return legacy;
+  }
+
+  Future<void> _writeSecret(String key, String value) async {
+    final sealed = await _crypto.encrypt(
+      plaintext: value,
+      secretKey: await vaultKey(),
+    );
+    await storage.write(key: _sealed(key), value: sealed);
+    await storage.delete(key: key);
+  }
+
+  Future<bool> _hasSecret(String key) async {
+    for (final k in [_sealed(key), key]) {
+      final value = await storage.read(key: k);
+      if (value != null && value.isNotEmpty) return true;
+    }
+
+    return false;
+  }
+
+  /// Where the sealed copy of [key] lives. A key of its own rather than a
+  /// marker inside the value: a passphrase can be any string, including one
+  /// that looks like a marker.
+  static String _sealed(String key) => '${key}_sealed';
 
   static const String _passphraseKey = 'shellvibe_sync_passphrase';
   static const String _recoveryCodeKey = 'shellvibe_sync_recovery_code';
