@@ -306,6 +306,19 @@ final class SyncEngine {
       await db.customStatement('PRAGMA defer_foreign_keys = ON;');
 
       for (final incoming in decoded) {
+        // An unsealed operation only ever brings a row this device does not
+        // have. Against one it holds -- versioned or not -- its contents are
+        // whatever older copy the server chose to serve.
+        if (!incoming.sealed &&
+            await SyncRowWriter.exists(
+              db,
+              incoming.entityType,
+              incoming.entityId,
+            )) {
+          skipped++;
+          continue;
+        }
+
         if (await _loses(incoming)) {
           skipped++;
           continue;
@@ -512,7 +525,10 @@ final class SyncEngine {
       final key = await vaultKey.key;
       final String plaintext;
       try {
-        plaintext = await crypto.decrypt(encryptedBase64: value, secretKey: key);
+        plaintext = await crypto.decrypt(
+          encryptedBase64: value,
+          secretKey: key,
+        );
       } on Object {
         continue;
       }
@@ -600,8 +616,15 @@ final class SyncEngine {
     if (expectedId != operation.entityId) return null;
 
     // The copies the server could have rewritten must match the sealed ones.
-    // Operations from builds that did not seal them carry none of the three
-    // and are taken as they come, as they always were.
+    // Operations from builds that did not seal them (before 1.6.0) carry none
+    // of the three, so for them the server's copies are all there is -- and
+    // the server picks which stored ciphertext to serve, so it can present any
+    // operation that way. They are kept to what cannot be turned against the
+    // account: never a delete, and at clock zero, which loses to every version
+    // and tombstone this device holds. An unsealed operation can still bring a
+    // row this device has never seen, which is what a device still on an
+    // older build is sending; it can no longer remove a row or put back an
+    // older copy of one.
     final sealedOperation = body['o'];
     final sealedDevice = body['d'];
     final sealedClock = body['c'];
@@ -613,6 +636,7 @@ final class SyncEngine {
             sealedClock != operation.logicalClock)) {
       return null;
     }
+    if (!isSealed && operation.isDelete) return null;
 
     final rawRow = body['r'];
     if (rawRow != null && rawRow is! Map<String, Object?>) return null;
@@ -631,9 +655,10 @@ final class SyncEngine {
       entityType: entityType,
       entityId: entityId,
       deviceId: operation.deviceId,
-      logicalClock: operation.logicalClock,
+      logicalClock: isSealed ? operation.logicalClock : 0,
       isDelete: operation.isDelete,
       row: row,
+      sealed: isSealed,
     );
   }
 }
@@ -647,6 +672,9 @@ final class _IncomingOperation implements Comparable<_IncomingOperation> {
   final bool isDelete;
   final Map<String, Object?>? row;
 
+  /// Whether its kind, device and clock came sealed inside the ciphertext.
+  final bool sealed;
+
   const _IncomingOperation({
     required this.entityType,
     required this.entityId,
@@ -654,6 +682,7 @@ final class _IncomingOperation implements Comparable<_IncomingOperation> {
     required this.logicalClock,
     required this.isDelete,
     required this.row,
+    required this.sealed,
   });
 
   @override
