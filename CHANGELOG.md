@@ -53,6 +53,12 @@ and release versions follow [Semantic Versioning](https://semver.org/).
   the master password. Behind a locked vault, sync now waits ("Unlock the
   vault to sync") and a backup asks for the vault to be unlocked. Values an
   earlier build stored are moved on the first read with the vault open.
+- Sync: the server could still rewrite operations sent by builds before
+  1.6.0, which did not seal their kind, device and clock: serve one as a
+  delete to remove a row on every other device, or with a raised clock to
+  put back an older copy of it. Such operations are now never applied as a
+  delete, never change a row the device already has, and never set its
+  version, so they can only bring a row the device has not seen yet.
 - AI Access: denying (or not answering) an agent's request for a server no
   longer turns into read-only access to that server once the 10-minute
   cooldown ends.

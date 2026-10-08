@@ -476,32 +476,32 @@ void main() {
     test(
       'operations this device cannot open are counted, not hidden',
       () async {
-      final a = await device('device-a');
+        final a = await device('device-a');
 
-      await a.writeHost('h1');
-      await a.writeHost('h2');
-      await a.engine.push();
+        await a.writeHost('h1');
+        await a.writeHost('h2');
+        await a.engine.push();
 
-      final other = AppDatabase(NativeDatabase.memory());
-      addTearDown(other.close);
-      final otherJournal = SyncJournal(db: other, deviceId: 'device-c');
-      other.syncJournal = otherJournal;
+        final other = AppDatabase(NativeDatabase.memory());
+        addTearDown(other.close);
+        final otherJournal = SyncJournal(db: other, deviceId: 'device-c');
+        other.syncJournal = otherJournal;
 
-      final stranger = SyncEngine(
-        db: other,
-        journal: otherJournal,
-        api: log,
-        syncKey: SecretKey(BackupEnvelope().generateSyncKey()),
-      );
+        final stranger = SyncEngine(
+          db: other,
+          journal: otherJournal,
+          api: log,
+          syncKey: SecretKey(BackupEnvelope().generateSyncKey()),
+        );
 
-      final result = await stranger.pull();
+        final result = await stranger.pull();
 
         // Skipped rather than fatal -- a rotated key or an operation that does
         // not belong to this account must not stop the pass -- and counted,
         // because silence here is a device that syncs forever and never sees
         // anything.
-      expect(result.unreadable, 2);
-      expect(result.pulled, 0);
+        expect(result.unreadable, 2);
+        expect(result.pulled, 0);
         expect(await other.select(other.hosts).get(), isEmpty);
       },
     );
@@ -547,6 +547,111 @@ void main() {
 
       expect(result.unreadable, 2);
       expect((await b.host('h1'))!.label, 'from b');
+    });
+
+    group('operations from builds that did not seal them', () {
+      /// [sealed] as a pre-1.6.0 build sent it: the same authentic body,
+      /// without the sealed kind, device and clock.
+      Future<String> unsealed(SyncOperationDto sealed) async {
+        final crypto = EncryptionEngine();
+        final body =
+            jsonDecode(
+                    await crypto.decrypt(
+                      encryptedBase64: sealed.encryptedPayload,
+                      secretKey: syncKey,
+                    ),
+                  )
+                  as Map<String, dynamic>
+              ..remove('o')
+              ..remove('d')
+              ..remove('c');
+
+        return crypto.encrypt(plaintext: jsonEncode(body), secretKey: syncKey);
+      }
+
+      test('cannot be served as a delete', () async {
+        final a = await device('device-a');
+        final b = await device('device-b');
+
+        await a.writeHost('h1', label: 'live');
+        await a.engine.syncOnce();
+        await b.engine.syncOnce();
+
+        final sent = log.operations.last;
+        log.operations.add(
+          rewritten(
+            sent,
+            operation: 'delete',
+            deviceId: 'device-old',
+            logicalClock: 1 << 40,
+            encryptedPayload: await unsealed(sent),
+          ),
+        );
+
+        final result = await b.engine.pull();
+
+        expect(result.unreadable, 1);
+        expect((await b.host('h1'))!.label, 'live');
+      });
+
+      test('cannot put back an older copy of a row', () async {
+        final a = await device('device-a');
+        final b = await device('device-b');
+
+        await a.writeHost('h1', label: 'old');
+        await a.engine.push();
+        final old = log.operations.last;
+
+        await a.writeHost('h1', label: 'new');
+        await a.engine.syncOnce();
+        await b.engine.syncOnce();
+
+        log.operations.add(
+          rewritten(
+            old,
+            deviceId: 'device-old',
+            logicalClock: 1 << 40,
+            encryptedPayload: await unsealed(old),
+          ),
+        );
+
+        await b.engine.pull();
+
+        expect((await b.host('h1'))!.label, 'new');
+      });
+
+      test('still bring a row this device has not seen, and lose to the next '
+          'edit', () async {
+        // What a device still on an older build sends, and the reason they
+        // are not refused outright.
+        final a = await device('device-a');
+        final b = await device('device-b');
+
+        await a.writeHost('h1', label: 'from an old build');
+        await a.engine.push();
+        final sent = log.operations.removeLast();
+        log.operations.add(
+          rewritten(
+            sent,
+            deviceId: 'device-old',
+            logicalClock: 1 << 40,
+            encryptedPayload: await unsealed(sent),
+          ),
+        );
+
+        await b.engine.pull();
+        expect((await b.host('h1'))!.label, 'from an old build');
+
+        await a.writeHost('h1', label: 'edited since');
+        await a.engine.push();
+        await b.engine.pull();
+
+        expect(
+          (await b.host('h1'))!.label,
+          'edited since',
+          reason: 'the server\'s clock was not taken as the row\'s version',
+        );
+      });
     });
 
     test('an upsert that carries no row is skipped, not fatal', () async {
