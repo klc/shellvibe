@@ -157,6 +157,17 @@ anywhere. Where that file then goes — an external disk, a synced folder, a clo
 drive — is your decision, and that destination's privacy terms apply to it
 rather than ours.
 
+## Mobile beta sign-up
+
+The form at shellvibe.dev/#beta collects the email address you enter, the
+platform you pick (Android or iPhone/iPad) and, if you give one, your name. We
+store them on our server only to invite you to test builds: for Android we
+enter your email in Google Play Console's closed-test tester list, and for
+iPhone and iPad we enter it in App Store Connect to send a TestFlight invite, so
+Google or Apple receive it under their own privacy terms. Nothing else is
+shared, and your IP address is not stored with it. We delete the list when the
+beta ends, or sooner if you ask at info@shellvibe.dev.
+
 ## Crashes
 
 If ShellVibe crashes it appends the error and stack trace to a log file on your
