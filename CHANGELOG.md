@@ -7,6 +7,13 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- On iPhone and iPad, a snippet row no longer runs 8px past its edge, which
+  clipped its "…" menu.
+- On Android phones, a port-forwarding rule card no longer runs off the
+  screen: the route moves under the host and state line on a narrow screen.
+
 ## [1.8.0] - 2026-10-08
 
 ### Added

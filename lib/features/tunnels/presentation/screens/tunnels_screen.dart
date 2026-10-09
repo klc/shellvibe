@@ -271,6 +271,135 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
         ? 'opening an SSH session'
         : 'not running';
 
+    final iconBox = Container(
+      width: 44,
+      height: 44,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: hasError || isActive ? 0.13 : 0.04),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Icon(
+        hasError ? LucideIcons.triangleAlert : LucideIcons.network,
+        size: 20,
+        color: accent,
+      ),
+    );
+
+    final hostColumn = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          host?.label ?? 'Host ${rule.hostId}',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            letterSpacing: -0.2,
+            color: isActive ? tokens.textPrimary : tokens.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          '$kindLabel · ${host?.hostname ?? rule.hostId}',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: shellvibeMono(context, size: 11, color: tokens.textSubtle),
+        ),
+      ],
+    );
+
+    final route = _TunnelRoute(
+      from: '127.0.0.1:${rule.localPort}',
+      to: isDynamic ? 'socks5 bridge' : '${rule.remoteHost}:${rule.remotePort}',
+      accent: accent,
+      lit: isActive || hasError,
+    );
+
+    final statusColumn = Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          stateLabel,
+          style: TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w600,
+            color: accent,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          detailLabel,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.right,
+          style: shellvibeMono(context, size: 11, color: tokens.textSubtle),
+        ),
+      ],
+    );
+
+    final toggle = isStarting
+        ? const SizedBox(
+            width: 34,
+            height: 34,
+            child: Center(
+              child: SizedBox(
+                width: 15,
+                height: 15,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          )
+        : ShellVibeIconButton(
+            icon: hasError
+                ? LucideIcons.refreshCw
+                : isActive
+                ? LucideIcons.square
+                : LucideIcons.play,
+            tooltip: isActive ? 'Stop tunnel' : 'Start tunnel',
+            ringed: true,
+            onPressed: () => unawaited(_toggleRule(rule, start: !isActive)),
+          );
+
+    final menu = PopupMenuButton<String>(
+      padding: EdgeInsets.zero,
+      iconSize: 16,
+      tooltip: 'Tunnel actions',
+      style: shellvibeMenuTriggerStyle(tokens),
+      icon: Icon(LucideIcons.ellipsis, size: 16, color: tokens.textMuted),
+      onSelected: (val) {
+        if (val == 'edit') _openEditRuleDialog(rule);
+        if (val == 'delete') {
+          ref.read(tunnelsProvider.notifier).deleteRule(rule.id);
+        }
+      },
+      itemBuilder: (context) => [
+        const PopupMenuItem(
+          value: 'edit',
+          child: Row(
+            children: [
+              Icon(LucideIcons.pencil, size: 16),
+              SizedBox(width: 8),
+              Text('Edit'),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'delete',
+          child: Row(
+            children: [
+              Icon(LucideIcons.trash2, size: 16, color: tokens.danger),
+              const SizedBox(width: 8),
+              Text('Delete', style: TextStyle(color: tokens.danger)),
+            ],
+          ),
+        ),
+      ],
+    );
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
       decoration: BoxDecoration(
@@ -286,155 +415,50 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
               : tokens.border,
         ),
       ),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: accent.withValues(
-                alpha: hasError || isActive ? 0.13 : 0.04,
-              ),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(
-              hasError ? LucideIcons.triangleAlert : LucideIcons.network,
-              size: 20,
-              color: accent,
-            ),
-          ),
-          const SizedBox(width: 20),
-          SizedBox(
-            width: 220,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      // The wide card is one line of fixed columns, about 640px before the
+      // route gets any room. A phone gets two lines instead: who and what
+      // state on top, the route under it.
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth < _kTunnelCardWideMinWidth) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  host?.label ?? 'Host ${rule.hostId}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: -0.2,
-                    color: isActive ? tokens.textPrimary : tokens.textSecondary,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  '$kindLabel · ${host?.hostname ?? rule.hostId}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: shellvibeMono(
-                    context,
-                    size: 11,
-                    color: tokens.textSubtle,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: _TunnelRoute(
-              from: '127.0.0.1:${rule.localPort}',
-              to: isDynamic
-                  ? 'socks5 bridge'
-                  : '${rule.remoteHost}:${rule.remotePort}',
-              accent: accent,
-              lit: isActive || hasError,
-            ),
-          ),
-          SizedBox(
-            width: 150,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  stateLabel,
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                    color: accent,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  detailLabel,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.right,
-                  style: shellvibeMono(
-                    context,
-                    size: 11,
-                    color: tokens.textSubtle,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 14),
-          if (isStarting)
-            const SizedBox(
-              width: 34,
-              height: 34,
-              child: Center(
-                child: SizedBox(
-                  width: 15,
-                  height: 15,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              ),
-            )
-          else
-            ShellVibeIconButton(
-              icon: hasError
-                  ? LucideIcons.refreshCw
-                  : isActive
-                  ? LucideIcons.square
-                  : LucideIcons.play,
-              tooltip: isActive ? 'Stop tunnel' : 'Start tunnel',
-              ringed: true,
-              onPressed: () => unawaited(_toggleRule(rule, start: !isActive)),
-            ),
-          const SizedBox(width: 7),
-          PopupMenuButton<String>(
-            padding: EdgeInsets.zero,
-            iconSize: 16,
-            tooltip: 'Tunnel actions',
-            icon: Icon(LucideIcons.ellipsis, size: 16, color: tokens.textMuted),
-            onSelected: (val) {
-              if (val == 'edit') _openEditRuleDialog(rule);
-              if (val == 'delete') {
-                ref.read(tunnelsProvider.notifier).deleteRule(rule.id);
-              }
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'edit',
-                child: Row(
+                Row(
                   children: [
-                    Icon(LucideIcons.pencil, size: 16),
-                    SizedBox(width: 8),
-                    Text('Edit'),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: 'delete',
-                child: Row(
-                  children: [
-                    Icon(LucideIcons.trash2, size: 16, color: tokens.danger),
+                    iconBox,
+                    const SizedBox(width: 12),
+                    Expanded(child: hostColumn),
                     const SizedBox(width: 8),
-                    Text('Delete', style: TextStyle(color: tokens.danger)),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 110),
+                      child: statusColumn,
+                    ),
+                    const SizedBox(width: 8),
+                    toggle,
+                    menu,
                   ],
                 ),
-              ),
+                const SizedBox(height: 12),
+                route,
+              ],
+            );
+          }
+          return Row(
+            children: [
+              iconBox,
+              const SizedBox(width: 20),
+              SizedBox(width: 220, child: hostColumn),
+              Expanded(child: route),
+              SizedBox(width: 150, child: statusColumn),
+              const SizedBox(width: 14),
+              toggle,
+              const SizedBox(width: 7),
+              menu,
             ],
-          ),
-        ],
+          );
+        },
       ),
     );
   }
@@ -478,6 +502,9 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
 }
 
 /// `from ——→ to`, drawn as two hairlines around a state-tinted arrow.
+/// Inner width below which a rule card stacks its route under the header row.
+const double _kTunnelCardWideMinWidth = 640;
+
 class _TunnelRoute extends StatelessWidget {
   final String from;
   final String to;
