@@ -1,7 +1,7 @@
 # Privacy
 
-**Last updated:** 2026-09-25 · Applies to ShellVibe 1.5.0 for macOS,
-Windows and Linux.
+**Last updated:** 2026-10-09 · Applies to ShellVibe 1.8.0 for macOS,
+Windows, Linux, iOS and Android.
 
 ShellVibe is a terminal, SSH and SFTP client. It runs on your machine and talks
 to the servers you point it at. This document describes every case in which it
@@ -27,8 +27,9 @@ The rest of this page is the detail behind those two paragraphs.
 
 ## What is stored on your device
 
-Everything ShellVibe knows lives in a database file on your own machine, in the
-per-user application-support directory your operating system provides:
+Everything ShellVibe knows lives in a database file on your own device, in the
+per-user application-support directory your operating system provides (on iOS
+and Android, the app's private storage, which other apps cannot read):
 
 | Data | Notes |
 | --- | --- |
@@ -42,7 +43,8 @@ per-user application-support directory your operating system provides:
 | Crash logs | A local file; see **Crashes** below |
 
 Identity secrets are encrypted with a key derived from your master password and
-held in your operating system's keychain or credential store. Without that
+held in your operating system's keychain or credential store (the Keychain on
+iOS, Keystore-backed storage on Android). Without that
 password the encrypted rows are not readable, including by anyone who copies the
 database file.
 
@@ -59,6 +61,8 @@ kind; GitHub sees what it sees for any anonymous visitor, namely your IP address
 and your HTTP client's user agent, under
 [GitHub's privacy statement](https://docs.github.com/site-policy/privacy-policies/github-privacy-statement).
 ShellVibe never performs this check on its own, on a schedule or at launch.
+The iOS, Android and Microsoft Store builds have no such button: they are
+updated by the App Store, Google Play and the Microsoft Store.
 
 **Fonts.** Every interface and terminal font ShellVibe offers ships inside the
 app. Choosing one in Settings makes no network request, and no font is ever
@@ -70,6 +74,25 @@ This version has no relay for Device Link.
 
 **Your ShellVibe account — only if you sign in.** Everything in the next
 section happens only while you are signed in. Signing out stops it.
+
+## Permissions on iOS and Android
+
+The phone and tablet builds ask for a few permissions. Each is used for one
+thing, and only when you start it:
+
+- **Camera** — to scan the QR code a desktop shows when you pair it for Device
+  Link. The code is read on the device; no picture is stored or sent anywhere.
+- **Face ID, Touch ID or fingerprint** — to unlock the app if you turn on the
+  biometric lock. The check is done by the operating system, which tells
+  ShellVibe only whether it succeeded; ShellVibe never sees your biometric
+  data.
+- **Local network** (iOS) — to find and connect to your paired desktop for
+  Device Link.
+- **Notifications and a foreground service** (Android) — while an SSH session
+  or a port forward is open, Android shows a "connected" notification with a
+  Disconnect all button, which keeps those connections alive when you switch
+  to another app. It goes away when the last connection closes. ShellVibe
+  sends no other notifications on Android or iOS.
 
 ## Your account and our server
 
@@ -87,7 +110,9 @@ section happens only while you are signed in. Signing out stops it.
 | Order, time and originating device of each sync record | Yes | 90 days |
 
 A device's name is your computer's network name as the operating system
-reports it (for example `alices-macbook`).
+reports it (for example `alices-macbook`). Where the operating system gives no
+useful name, as phones often do, it is a generic one such as `iPhone` or
+`Android device`.
 
 Sync records are labelled with keyed hashes rather than the names of what
 changed, so we cannot tell a host from a snippet. What the metadata above does
@@ -135,7 +160,7 @@ rather than ours.
 ## Crashes
 
 If ShellVibe crashes it appends the error and stack trace to a log file on your
-machine. The app never transmits it.
+device. The app never transmits it.
 
 On the next launch after a crash, and from Settings → About → Report a problem,
 ShellVibe offers to open a **public** GitHub issue with the error log filled in.
@@ -158,13 +183,16 @@ are self-service in the web panel:
 - **Export** — the panel's account export downloads everything the server holds
   about you. Backup contents are listed there and downloaded from the panel's
   backup page, since each can be several megabytes.
-- **Erase** — the panel's danger zone deletes your account, every device, every
+- **Erase** — the panel's danger zone deletes your account (in the app,
+  Settings → Account → Delete Account… takes you there), every device, every
   backup and your sync history immediately. Database copies age it out within
   14 days.
 - **Rectify, or anything else** — write to the contact below.
 
 Data that never left your device is under your control there; deleting the
-application's data directory removes it.
+application's data directory, or removing the app from a phone or tablet,
+removes it. iOS may keep the app's keychain entries until the device is
+erased.
 
 ## Changes
 
@@ -173,6 +201,6 @@ changes are noted in `CHANGELOG.md` and this file's "last updated" date moves.
 
 ## Contact
 
-The data controller is Mustafa Kılıç. Privacy requests and security reports:
-`security@shellvibe.dev` (see `SECURITY.md`). Anything else: open an issue in
+The data controller is Mustafa Kılıç. Privacy requests: `info@shellvibe.dev`.
+Security reports: `security@shellvibe.dev` (see `SECURITY.md`). Anything else: open an issue in
 the repository.
