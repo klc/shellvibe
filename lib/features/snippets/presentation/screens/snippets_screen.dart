@@ -33,13 +33,15 @@ import 'runbooks_screen.dart';
 /// Column weights shared by the snippet list header and its rows.
 const List<int> _kSnippetColumnFlex = [4, 5, 3];
 
-/// Rendered width of the row's trailing controls.
+/// Width of the row's trailing controls: Copy, Run and the overflow menu, each
+/// one control height square.
 ///
-/// Measured, not guessed: the two [ShellVibeIconButton]s occupy one control
-/// height each (34px under a pointer) and the [PopupMenuButton] 48px once
-/// Material's minimum tap target is applied, plus the 12px the popup adds
-/// around its icon.
-const double _kSnippetActionsWidth = 128;
+/// That height is 34px under a pointer and the touch target on a touch host,
+/// so a fixed width measured on desktop overflowed a phone or iPad row by the
+/// difference. The menu trigger is sized by [shellvibeMenuTriggerStyle] so it
+/// counts as one of the three.
+double _snippetActionsWidth(ShellVibeTokens tokens) =>
+    3 * shellvibeControlHeight(tokens, tokens.controlHeight);
 
 /// The two halves of the automation library.
 ///
@@ -899,7 +901,7 @@ class _SnippetListHeader extends StatelessWidget {
               flex: _kSnippetColumnFlex[2],
               child: Text('TAGS', style: style, maxLines: 1),
             ),
-          const SizedBox(width: _kSnippetActionsWidth),
+          SizedBox(width: _snippetActionsWidth(tokens)),
         ],
       ),
     );
@@ -1001,7 +1003,7 @@ class _SnippetRow extends StatelessWidget {
                         ),
                 ),
               SizedBox(
-                width: _kSnippetActionsWidth,
+                width: _snippetActionsWidth(tokens),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
@@ -1021,6 +1023,7 @@ class _SnippetRow extends StatelessWidget {
                       tooltip: 'Snippet actions',
                       padding: EdgeInsets.zero,
                       iconSize: 16,
+                      style: shellvibeMenuTriggerStyle(tokens),
                       icon: const Icon(LucideIcons.ellipsis, size: 16),
                       onSelected: (value) {
                         if (value == 'edit') onEdit();

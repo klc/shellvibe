@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'package:shellvibe/app/widgets/shellvibe_ui.dart';
+import 'package:shellvibe/core/utils/platform_capabilities.dart';
 import 'package:shellvibe/features/snippets/presentation/screens/snippets_screen.dart';
 import 'package:shellvibe/shared/database/app_database.dart';
 import 'package:shellvibe/shared/providers/database_providers.dart';
@@ -44,6 +45,40 @@ void main() {
   );
 
   group('SnippetsScreen Widget Tests', () {
+    // The row's Copy, Run and menu controls grow to the touch target on a
+    // touch host; a slot measured under a pointer overflowed by the
+    // difference on an iPhone and an iPad.
+    for (final size in const [Size(430, 932), Size(1032, 1366)]) {
+      testWidgets('a row fits its controls on a touch host at $size', (
+        tester,
+      ) async {
+        await seedSnippet();
+        debugPlatformCapabilitiesOverride = TargetPlatform.iOS;
+        addTearDown(() => debugPlatformCapabilitiesOverride = null);
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [appDatabaseProvider.overrideWithValue(db)],
+            child: ShadTheme(
+              data: ShadThemeData(
+                colorScheme: const ShadSlateColorScheme.light(),
+                brightness: Brightness.light,
+              ),
+              child: const MaterialApp(home: SnippetsScreen()),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(const Key('snippet_run_seed')), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      });
+    }
+
     testWidgets('Opens SnippetFormDialog on add button tap', (tester) async {
       await seedSnippet();
       await tester.pumpWidget(
