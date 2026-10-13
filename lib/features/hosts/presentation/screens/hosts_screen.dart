@@ -389,6 +389,11 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
                             onOpenSftp: () => _onOpenSftp(host),
                             onEdit: () =>
                                 _openHostForm(context, initialHost: host),
+                            onDuplicate: () => _openHostForm(
+                              context,
+                              initialHost: host,
+                              duplicate: true,
+                            ),
                             onDelete: () => _deleteHost(context, host),
                           );
                         },
@@ -849,11 +854,13 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
   Future<void> _openHostForm(
     BuildContext context, {
     HostModel? initialHost,
+    bool duplicate = false,
   }) async {
     final saved = await showDialog<HostModel>(
       context: context,
       builder: (ctx) => HostFormDialog(
         initialHost: initialHost,
+        duplicate: duplicate,
         workspaceId: ref.read(activeWorkspaceIdProvider),
       ),
     );
