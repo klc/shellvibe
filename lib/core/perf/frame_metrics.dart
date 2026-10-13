@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 
+import '../utils/platform_capabilities.dart';
+
 /// Whether frame instrumentation is compiled in.
 ///
 /// Gated behind a `--dart-define` rather than [kDebugMode] on purpose: the
@@ -183,7 +185,9 @@ class FrameMetricsRecorder {
   /// Display refresh rate, falling back to 60Hz when the platform does not
   /// report one (headless test binding, some Linux compositors).
   double get refreshRateHz {
-    final rate = PlatformDispatcher.instance.implicitView?.display.refreshRate;
+    final rate = displayOf(
+      PlatformDispatcher.instance.implicitView,
+    )?.refreshRate;
     if (rate == null || !rate.isFinite || rate <= 0) return 60;
     return rate;
   }
