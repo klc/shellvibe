@@ -85,7 +85,7 @@ Release-by-release detail lives in [`CHANGELOG.md`](CHANGELOG.md).
 | Secure Storage | `flutter_secure_storage` (Keychain / KeyStore / Credential Manager) |
 | Crypto | `cryptography` — AES-256-GCM + Argon2id |
 | Routing | `go_router` (declarative, vault-gated) |
-| Desktop | `window_manager`, `tray_manager`, `hotkey_manager`, `desktop_drop` |
+| Desktop | `window_manager`, `tray_manager`, `desktop_drop` |
 | UI Kit | `shadcn_ui`, `lucide_icons_flutter` |
 
 ## 📁 Project Layout
