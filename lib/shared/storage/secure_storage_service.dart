@@ -175,29 +175,20 @@ class SecureStorageService {
     await delete(key: SecureStorageKeys.masterSalt);
   }
 
+  static String _tokenKey(String key) =>
+      key.startsWith(SecureStorageKeys.tokenPrefix)
+      ? key
+      : '${SecureStorageKeys.tokenPrefix}$key';
+
   /// Stores a sensitive token (e.g. OAuth token, API token, session secret) under a key.
-  Future<void> saveToken(String key, String token) async {
-    final fullKey = key.startsWith(SecureStorageKeys.tokenPrefix)
-        ? key
-        : '${SecureStorageKeys.tokenPrefix}$key';
-    await write(key: fullKey, value: token);
-  }
+  Future<void> saveToken(String key, String token) =>
+      write(key: _tokenKey(key), value: token);
 
   /// Retrieves a sensitive token by key.
-  Future<String?> getToken(String key) async {
-    final fullKey = key.startsWith(SecureStorageKeys.tokenPrefix)
-        ? key
-        : '${SecureStorageKeys.tokenPrefix}$key';
-    return await read(key: fullKey);
-  }
+  Future<String?> getToken(String key) => read(key: _tokenKey(key));
 
   /// Deletes a sensitive token by key.
-  Future<void> deleteToken(String key) async {
-    final fullKey = key.startsWith(SecureStorageKeys.tokenPrefix)
-        ? key
-        : '${SecureStorageKeys.tokenPrefix}$key';
-    await delete(key: fullKey);
-  }
+  Future<void> deleteToken(String key) => delete(key: _tokenKey(key));
 
   Future<T> _locked<T>(Future<T> Function() action) {
     final result = _queue.then((_) => action());
@@ -268,15 +259,6 @@ class SecureStorageService {
         )
       : _storage.containsKey(key: key);
 
-  Future<void> _storeDeleteAll() => _bundled
-      ? _locked(() async {
-          // Removes the bundle and every pre-bundle item in one call.
-          await _storage.deleteAll();
-          _bundle = {};
-          _settled.clear();
-        })
-      : _storage.deleteAll();
-
   /// Writes an arbitrary key-value pair to secure storage.
   Future<void> write({required String key, required String value}) async {
     try {
@@ -321,20 +303,6 @@ class SecureStorageService {
     } catch (e) {
       if (_isEntitlementError(e)) {
         _inMemoryFallback.remove(key);
-      } else {
-        rethrow;
-      }
-    }
-  }
-
-  /// Clears all stored key-value pairs in secure storage.
-  Future<void> deleteAll() async {
-    try {
-      await _storeDeleteAll();
-      _inMemoryFallback.clear();
-    } catch (e) {
-      if (_isEntitlementError(e)) {
-        _inMemoryFallback.clear();
       } else {
         rethrow;
       }

@@ -1,3 +1,4 @@
+import '../../core/utils/fnv1a.dart';
 import 'app_alert.dart';
 
 /// What the window looks like to the user right now.
@@ -231,13 +232,8 @@ class NotificationPolicy {
     return flat.length <= limit ? flat : '${flat.substring(0, limit - 1)}…';
   }
 
-  /// FNV-1a: the same in every process, unlike [String.hashCode], and kept
-  /// positive because some platforms take the id as a signed 32-bit integer.
-  static int _stableId(String key) {
-    var hash = 0x811c9dc5;
-    for (final unit in key.codeUnits) {
-      hash = ((hash ^ unit) * 0x01000193) & 0x7fffffff;
-    }
-    return hash;
-  }
+  /// Kept positive because some platforms take the id as a signed 32-bit
+  /// integer. The multiplier is odd, so dropping the top bit here gives the
+  /// same low 31 bits as dropping it on every round did.
+  static int _stableId(String key) => fnv1a32(key) & 0x7fffffff;
 }

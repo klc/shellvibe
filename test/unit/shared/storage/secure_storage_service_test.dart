@@ -60,18 +60,14 @@ void main() {
         expect(await storageService.getToken(tokenKey), isNull);
       });
 
-      test('Generic key-value CRUD operations and deleteAll', () async {
+      test('Generic key-value CRUD operations', () async {
         await storageService.write(key: 'key1', value: 'val1');
-        await storageService.write(key: 'key2', value: 'val2');
 
         expect(await storageService.containsKey(key: 'key1'), isTrue);
         expect(await storageService.read(key: 'key1'), equals('val1'));
 
         await storageService.delete(key: 'key1');
         expect(await storageService.containsKey(key: 'key1'), isFalse);
-
-        await storageService.deleteAll();
-        expect(await storageService.containsKey(key: 'key2'), isFalse);
       });
     });
   }
@@ -164,18 +160,6 @@ void main() {
       for (var i = 0; i < 20; i++) {
         expect(await reopened.read(key: 'shellvibe_k$i'), '$i');
       }
-    });
-
-    test('deleteAll takes the bundle and older items with it', () async {
-      FlutterSecureStorage.setMockInitialValues({'shellvibe_old': 'x'});
-      final storage = bundled();
-      await storage.write(key: 'shellvibe_new', value: 'y');
-
-      await storage.deleteAll();
-
-      expect(await raw.readAll(), isEmpty);
-      expect(await storage.read(key: 'shellvibe_new'), isNull);
-      expect(await bundled().read(key: 'shellvibe_old'), isNull);
     });
 
     test('is off by default under flutter test', () async {

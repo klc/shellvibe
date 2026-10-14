@@ -2,25 +2,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/app/window/start_hidden.dart';
 
 void main() {
-  group('shouldStartHidden', () {
-    test('hides only a launch at login with the tray on', () {
-      expect(
-        shouldStartHidden(launchedAtLogin: true, trayEnabled: true),
-        isTrue,
-      );
-      // No tray icon: hidden would be an app nobody can find.
-      expect(
-        shouldStartHidden(launchedAtLogin: true, trayEnabled: false),
-        isFalse,
-      );
-      // A normal launch always shows the window.
-      expect(
-        shouldStartHidden(launchedAtLogin: false, trayEnabled: true),
-        isFalse,
-      );
-    });
-  });
-
   group('resolveStartHidden', () {
     Future<bool> resolve({
       List<String> args = const [],

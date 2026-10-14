@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/app/keyboard/app_keymap.dart';
+import 'package:shellvibe/app/widgets/app_navigation_shell.dart';
 import 'package:xterm3/xterm.dart';
 
 void main() {
@@ -15,6 +16,12 @@ void main() {
 
   List<SingleActivator> chords(Map<ShortcutActivator, Intent> map) =>
       map.keys.cast<SingleActivator>().toList();
+
+  // The keymap cannot import the shell without a cycle, so the digit count is
+  // a constant there; this is what keeps it honest.
+  test('one digit shortcut per navigation item', () {
+    expect(kModuleShortcutCount, appNavigationItems.length);
+  });
 
   group('labels', () {
     test('Command on Apple keyboards, in Apple\'s modifier order', () {

@@ -6,7 +6,7 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:shellvibe/features/workspaces/presentation/screens/workspace_manager_screen.dart';
 import 'package:shellvibe/shared/database/app_database.dart';
 import 'package:shellvibe/shared/providers/database_providers.dart';
-import 'package:shellvibe/shared/providers/workspace_provider.dart';
+import 'package:shellvibe/features/workspaces/presentation/providers/workspace_provider.dart';
 import 'package:shellvibe/app/widgets/shellvibe_ui.dart';
 
 void main() {
