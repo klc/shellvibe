@@ -114,6 +114,35 @@ void main() {
     });
   });
 
+  group('excludedJumpHostIds', () {
+    test('excludes the edited host and everything routed through it', () {
+      final hosts = [
+        host(id: 'edited', jumpHostId: 'bastion'),
+        host(id: 'bastion'),
+        host(id: 'via-edited', jumpHostId: 'edited'),
+        host(id: 'via-via', jumpHostId: 'via-edited'),
+        host(id: 'unrelated', jumpHostId: 'bastion'),
+      ];
+
+      expect(SshConnectPlanner.excludedJumpHostIds('edited', hosts), {
+        'edited',
+        'via-edited',
+        'via-via',
+      });
+    });
+  });
+
+  group('splitUserHost', () {
+    test('separates and trims user and host, null user without an @', () {
+      expect(splitUserHost(' ops@db.example.com '), (
+        user: 'ops',
+        host: 'db.example.com',
+      ));
+      expect(splitUserHost('@db'), (user: '', host: 'db'));
+      expect(splitUserHost('db'), (user: null, host: 'db'));
+    });
+  });
+
   group('buildConnectConfig', () {
     test('prefers the host\'s own username', () {
       final config = planner.buildConnectConfig(

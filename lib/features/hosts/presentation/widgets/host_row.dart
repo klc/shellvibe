@@ -71,9 +71,7 @@ class _HostRowState extends State<HostRow> {
     final onEdit = widget.onEdit;
     final onDelete = widget.onDelete;
     final tokens = ShellVibeTokens.resolve(context);
-    final address =
-        '${host.username != null && host.username!.isNotEmpty ? '${host.username}@' : ''}'
-        '${host.hostname}:${host.port}';
+    final address = host.address;
     // A host can carry several tags but the row has one chip slot: the first
     // tag by name, with a count for the rest (same shape as snippet tags).
     final tagNames = [

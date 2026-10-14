@@ -128,6 +128,28 @@ void main() {
     },
   );
 
+  test(
+    'a remote read that fails mid-transfer reports the remote error',
+    () async {
+      final id = download('file.bin');
+      await _eventually(() => client.opened['/remote/file.bin'] != null);
+      final remote = client.opened['/remote/file.bin']!.single;
+
+      remote.send([1, 2, 3]);
+      await _eventually(() => item(id).transferredBytes == 3);
+
+      // addStream closes the sink on error; closing it again in `finally`
+      // must not replace this message with "File closed".
+      remote.bytes.addError(StateError('connection reset by peer'));
+      await remote.bytes.close();
+
+      await _eventually(() => item(id).status == TransferStatus.failed);
+      expect(item(id).error, contains('connection reset by peer'));
+      expect(item(id).error, isNot(contains('File closed')));
+      await _eventually(() => remote.isClosed && partials().isEmpty);
+    },
+  );
+
   test('cancelling leaves the file that was already there untouched', () async {
     final destination = File('${dir.path}/file.bin');
     await destination.writeAsString('original');
@@ -209,6 +231,32 @@ void main() {
       expect(partials(), isEmpty);
     },
   );
+
+  test('resuming a paused download restarts its progress from zero', () async {
+    final id = download('file.bin');
+    await _eventually(() => client.opened['/remote/file.bin'] != null);
+    final firstRun = client.opened['/remote/file.bin']!.single;
+
+    firstRun.send([1, 2, 3]);
+    await _eventually(() => item(id).transferredBytes == 3);
+    worker.pauseTransfer(id);
+    // The paused loop only notices on its next chunk.
+    firstRun.send([4]);
+    await _eventually(() => firstRun.isClosed);
+    expect(item(id).status, TransferStatus.paused);
+
+    // The partial file is gone, so the restart reads from byte 0 and the
+    // progress must say so rather than sit at the old count.
+    worker.resumeTransfer(client, id);
+    expect(item(id).transferredBytes, 0);
+
+    // Let the restarted run finish so it is not still writing its partial
+    // file while the temp directory is torn down.
+    await _eventually(() => client.opened['/remote/file.bin']!.length == 2);
+    final secondRun = client.opened['/remote/file.bin']![1];
+    await secondRun.bytes.close();
+    await _eventually(() => item(id).status == TransferStatus.completed);
+  });
 
   test('clearFinished drops completed and cancelled rows only', () async {
     final done = download('done.bin');

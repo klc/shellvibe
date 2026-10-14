@@ -89,11 +89,6 @@ class HostsRepository {
     );
   }
 
-  Future<List<HostModel>> getAllHosts() async {
-    final rows = await hostsDao.getAllHosts();
-    return _mapHosts(rows);
-  }
-
   Future<List<HostModel>> getHostsByWorkspace(String workspaceId) async {
     final rows = await hostsDao.getHostsByWorkspace(workspaceId);
     return _mapHosts(rows);
@@ -125,10 +120,6 @@ class HostsRepository {
     String? toIdentityId,
   ) async {
     return hostsDao.reassignIdentity(fromIdentityId, toIdentityId);
-  }
-
-  Stream<List<Host>> watchHosts() {
-    return hostsDao.watchAllHosts();
   }
 
   // --- Host Groups CRUD ---
@@ -168,21 +159,6 @@ class HostsRepository {
     );
   }
 
-  Future<List<HostGroupModel>> getAllHostGroups() async {
-    final rows = await hostsDao.getAllHostGroups();
-    return rows
-        .map(
-          (row) => HostGroupModel(
-            id: row.id,
-            workspaceId: row.workspaceId,
-            parentId: row.parentId,
-            name: row.name,
-            colorTag: row.colorTag,
-          ),
-        )
-        .toList();
-  }
-
   Future<List<HostGroupModel>> getHostGroupsByWorkspace(
     String workspaceId,
   ) async {
@@ -193,21 +169,11 @@ class HostsRepository {
   Future<HostGroupModel?> getHostGroupById(String id) async {
     final row = await hostsDao.getHostGroupById(id);
     if (row == null) return null;
-    return HostGroupModel(
-      id: row.id,
-      workspaceId: row.workspaceId,
-      parentId: row.parentId,
-      name: row.name,
-      colorTag: row.colorTag,
-    );
+    return _mapGroup(row);
   }
 
   Future<void> deleteHostGroup(String id) async {
     await hostsDao.deleteHostGroup(id);
-  }
-
-  Stream<List<HostGroup>> watchHostGroups() {
-    return hostsDao.watchAllHostGroups();
   }
 
   /// Maps [rows] with their tags, reading every membership once instead of

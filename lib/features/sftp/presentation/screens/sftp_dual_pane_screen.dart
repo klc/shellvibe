@@ -29,7 +29,6 @@ import '../widgets/sftp_transfer_queue_sheet.dart';
 const double _kDualPaneMinHeight = 480;
 
 class SftpDualPaneScreen extends ConsumerStatefulWidget {
-  final SftpClient? sftpClient;
   final String? hostLabel;
 
   /// Terminal tab whose SSH session this screen transfers files over.
@@ -39,12 +38,7 @@ class SftpDualPaneScreen extends ConsumerStatefulWidget {
   /// pinned, the header names the connection and it cannot drift.
   final String? sessionTabId;
 
-  const SftpDualPaneScreen({
-    super.key,
-    this.sftpClient,
-    this.hostLabel,
-    this.sessionTabId,
-  });
+  const SftpDualPaneScreen({super.key, this.hostLabel, this.sessionTabId});
 
   @override
   ConsumerState<SftpDualPaneScreen> createState() => _SftpDualPaneScreenState();
@@ -60,34 +54,27 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
   SSHSessionManager? _subscribedSession;
   String? _subscribedTabId;
   int _attachmentGeneration = 0;
-  late bool _usesProvidedClient;
 
   @override
   void initState() {
     super.initState();
-    _usesProvidedClient = widget.sftpClient != null;
-    if (widget.sftpClient != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        ref.read(sftpProvider.notifier).setRemoteClient(widget.sftpClient);
-      });
-    } else {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _syncActiveSshSession();
-      });
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _syncActiveSshSession();
+    });
   }
 
-  /// The tab this screen transfers over: the pinned [sessionTabId] when one was
-  /// passed, otherwise the active terminal tab (legacy embedded usage).
+  /// The tab this screen transfers over; null when [sessionTabId] names no
+  /// open tab, which leaves the remote pane disconnected.
   TerminalTabSession? _resolveTargetTab() {
-    final tabsState = ref.read(terminalTabsProvider);
-    final targetId = widget.sessionTabId;
-    if (targetId == null) return tabsState.activeTab;
-    return tabsState.tabs.where((tab) => tab.id == targetId).firstOrNull;
+    return ref
+        .read(terminalTabsProvider)
+        .tabs
+        .where((tab) => tab.id == widget.sessionTabId)
+        .firstOrNull;
   }
 
   Future<void> _syncActiveSshSession() async {
-    if (!mounted || _usesProvidedClient) return;
+    if (!mounted) return;
 
     final generation = ++_attachmentGeneration;
     final activeTab = _resolveTargetTab();
@@ -171,21 +158,6 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
   }
 
   @override
-  void didUpdateWidget(covariant SftpDualPaneScreen oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.sftpClient != widget.sftpClient) {
-      _usesProvidedClient = widget.sftpClient != null;
-      if (_usesProvidedClient) {
-        unawaited(
-          ref.read(sftpProvider.notifier).setRemoteClient(widget.sftpClient),
-        );
-      } else {
-        unawaited(_syncActiveSshSession());
-      }
-    }
-  }
-
-  @override
   void dispose() {
     _attachmentGeneration++;
     unawaited(_stopWatchingSession());
@@ -203,28 +175,17 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     );
   }
 
-  void _handleDragAndDropUpload(
-    List<DropItem> droppedFiles,
-    String remoteDirectoryPath,
-  ) {
+  void _handleDragAndDropUpload(List<DropItem> droppedFiles) {
     final notifier = ref.read(sftpProvider.notifier);
     for (final file in droppedFiles) {
-      final item = SftpFileItem(
-        name: file.name,
-        path: file.path,
-        size: 0,
-        permissions: '-rw-r--r--',
-        isDirectory: false,
-        isLocal: true,
-      );
-      notifier.uploadLocalItem(item);
+      notifier.uploadLocalItem(file.path);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     ref.listen<TerminalTabsState>(terminalTabsProvider, (_, _) {
-      if (!_usesProvidedClient) unawaited(_syncActiveSshSession());
+      unawaited(_syncActiveSshSession());
     });
     final state = ref.watch(sftpProvider);
     final notifier = ref.read(sftpProvider.notifier);
@@ -237,13 +198,11 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     final isMobile =
         screenSize.width < tokens.breakpointCompact ||
         screenSize.height < _kDualPaneMinHeight;
-    final targetTab = widget.sessionTabId == null
-        ? null
-        : ref
-              .watch(terminalTabsProvider)
-              .tabs
-              .where((tab) => tab.id == widget.sessionTabId)
-              .firstOrNull;
+    final targetTab = ref
+        .watch(terminalTabsProvider)
+        .tabs
+        .where((tab) => tab.id == widget.sessionTabId)
+        .firstOrNull;
     final connectionLabel =
         widget.hostLabel ?? targetTab?.host?.label ?? targetTab?.title;
     final targetHost = targetTab?.host;
@@ -266,8 +225,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
             // The old header never said which server was on the far side of
             // the queue; the address is the whole point of this line.
             meta: targetHost != null
-                ? '${targetHost.username != null && targetHost.username!.isNotEmpty ? '${targetHost.username}@' : ''}'
-                      '${targetHost.hostname}:${targetHost.port} · sftp'
+                ? '${targetHost.address} · sftp'
                 : 'local ↔ remote · sftp',
             queuedCount: queuedCount,
             onBack: canPop ? () => Navigator.of(context).maybePop() : null,
@@ -393,8 +351,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
 
   Widget _buildLocalPane(SftpState state, SftpNotifier notifier) {
     return DropTarget(
-      onDragDone: (details) =>
-          _handleDragAndDropUpload(details.files, state.remotePath),
+      onDragDone: (details) => _handleDragAndDropUpload(details.files),
       child: _buildPane(
         title: 'Local Workstation',
         path: state.localPath,
@@ -409,7 +366,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
           }
         },
         onDelete: notifier.deleteLocalItem,
-        onUpload: (item) => notifier.uploadLocalItem(item),
+        onUpload: (item) => notifier.uploadLocalItem(item.path),
       ),
     );
   }
@@ -420,8 +377,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     String? connectionLabel,
   ) {
     return DropTarget(
-      onDragDone: (details) =>
-          _handleDragAndDropUpload(details.files, state.remotePath),
+      onDragDone: (details) => _handleDragAndDropUpload(details.files),
       child: _buildPane(
         title: state.remoteClient != null
             ? (connectionLabel == null
