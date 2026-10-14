@@ -17,8 +17,6 @@ class TemplatesDao extends DatabaseAccessor<AppDatabase>
     )..where((tbl) => tbl.workspaceId.equals(workspaceId))).get();
   }
 
-  Stream<List<Template>> watchAllTemplates() => select(templates).watch();
-
   /// Panes in capture order — replay depends on this ordering, so it is applied
   /// here rather than left to the caller.
   Future<List<TemplatePane>> getPanesForTemplate(String templateId) {

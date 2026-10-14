@@ -25,12 +25,6 @@ class TunnelsDao extends DatabaseAccessor<AppDatabase> with _$TunnelsDaoMixin {
     )..where((tbl) => tbl.hostId.isIn(hostIds))).get();
   }
 
-  Stream<List<PortForwardRule>> watchRulesForHost(String hostId) {
-    return (select(
-      portForwardRules,
-    )..where((tbl) => tbl.hostId.equals(hostId))).watch();
-  }
-
   Future<List<PortForwardRule>> getAutoStartRules() {
     return (select(
       portForwardRules,

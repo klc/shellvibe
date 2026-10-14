@@ -10,20 +10,10 @@ part 'hosts_dao.g.dart';
 class HostsDao extends DatabaseAccessor<AppDatabase> with _$HostsDaoMixin {
   HostsDao(super.db);
 
-  Future<List<Host>> getAllHosts() => select(hosts).get();
-
   Future<List<Host>> getHostsByWorkspace(String workspaceId) {
     return (select(
       hosts,
     )..where((tbl) => tbl.workspaceId.equals(workspaceId))).get();
-  }
-
-  Stream<List<Host>> watchAllHosts() => select(hosts).watch();
-
-  Stream<List<Host>> watchHostsByWorkspace(String workspaceId) {
-    return (select(
-      hosts,
-    )..where((tbl) => tbl.workspaceId.equals(workspaceId))).watch();
   }
 
   Future<Host?> getHostById(String id) {
@@ -183,20 +173,10 @@ class HostsDao extends DatabaseAccessor<AppDatabase> with _$HostsDaoMixin {
 
   // --- Host Groups ---
 
-  Future<List<HostGroup>> getAllHostGroups() => select(hostGroups).get();
-
   Future<List<HostGroup>> getHostGroupsByWorkspace(String workspaceId) {
     return (select(
       hostGroups,
     )..where((tbl) => tbl.workspaceId.equals(workspaceId))).get();
-  }
-
-  Stream<List<HostGroup>> watchAllHostGroups() => select(hostGroups).watch();
-
-  Stream<List<HostGroup>> watchHostGroupsByWorkspace(String workspaceId) {
-    return (select(
-      hostGroups,
-    )..where((tbl) => tbl.workspaceId.equals(workspaceId))).watch();
   }
 
   Future<HostGroup?> getHostGroupById(String id) {

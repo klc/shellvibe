@@ -24,14 +24,6 @@ class PairedDevicesDao extends DatabaseAccessor<AppDatabase>
         .get();
   }
 
-  Stream<List<PairedDevice>> watchAll() {
-    return (select(pairedDevices)..orderBy([
-          (table) => OrderingTerm.desc(table.lastSeenAt),
-          (table) => OrderingTerm.asc(table.name),
-        ]))
-        .watch();
-  }
-
   Future<int> upsert(PairedDevicesCompanion entry) {
     return into(pairedDevices).insertOnConflictUpdate(entry);
   }

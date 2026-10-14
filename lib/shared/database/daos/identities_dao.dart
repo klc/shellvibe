@@ -17,14 +17,6 @@ class IdentitiesDao extends DatabaseAccessor<AppDatabase>
     )..where((tbl) => tbl.workspaceId.equals(workspaceId))).get();
   }
 
-  Stream<List<Identity>> watchAllIdentities() => select(identities).watch();
-
-  Stream<List<Identity>> watchIdentitiesByWorkspace(String workspaceId) {
-    return (select(
-      identities,
-    )..where((tbl) => tbl.workspaceId.equals(workspaceId))).watch();
-  }
-
   Future<Identity?> getIdentityById(String id) {
     return (select(
       identities,

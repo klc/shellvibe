@@ -17,8 +17,6 @@ class RunbooksDao extends DatabaseAccessor<AppDatabase>
     )..where((tbl) => tbl.workspaceId.equals(workspaceId))).get();
   }
 
-  Stream<List<Runbook>> watchAllRunbooks() => select(runbooks).watch();
-
   Future<List<RunbookStep>> getStepsForRunbook(String runbookId) {
     return (select(runbookSteps)
           ..where((tbl) => tbl.runbookId.equals(runbookId))
