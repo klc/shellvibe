@@ -3,7 +3,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../../core/network/ssh_session_manager.dart';
 import '../../../../core/utils/platform_capabilities.dart';
 import '../../../../shared/providers/database_providers.dart';
-import '../../../../shared/providers/workspace_provider.dart';
+import '../../../workspaces/presentation/providers/workspace_provider.dart';
 import '../../../hosts/domain/models/host_model.dart';
 import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
 import '../../../terminal/presentation/notifiers/terminal_tabs_notifier.dart';
@@ -58,37 +58,33 @@ class TemplatesNotifier extends _$TemplatesNotifier {
           activeTabId: tabsState.activeTabId,
         );
 
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() async {
-      final repo = ref.read(templatesRepositoryProvider);
-      await repo.addTemplate(template);
-      return repo.getTemplatesByWorkspace(ref.read(activeWorkspaceIdProvider));
-    });
-
+    await _mutate(
+      () => ref.read(templatesRepositoryProvider).addTemplate(template),
+    );
     return template;
   }
 
-  Future<void> updateTemplate(TemplateModel template) async {
-    state = const AsyncValue.loading();
+  /// Runs [op], then reloads the list in place: a save, edit or delete must
+  /// not blank the list to a spinner on the way through.
+  Future<void> _mutate(Future<void> Function() op) async {
     state = await AsyncValue.guard(() async {
-      final repo = ref.read(templatesRepositoryProvider);
-      await repo.updateTemplate(template);
-      return repo.getTemplatesByWorkspace(ref.read(activeWorkspaceIdProvider));
+      await op();
+      return ref
+          .read(templatesRepositoryProvider)
+          .getTemplatesByWorkspace(ref.read(activeWorkspaceIdProvider));
     });
   }
+
+  Future<void> updateTemplate(TemplateModel template) => _mutate(
+    () => ref.read(templatesRepositoryProvider).updateTemplate(template),
+  );
 
   Future<void> renameTemplate(TemplateModel template, String name) {
     return updateTemplate(template.copyWith(name: name));
   }
 
-  Future<void> deleteTemplate(String id) async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() async {
-      final repo = ref.read(templatesRepositoryProvider);
-      await repo.deleteTemplate(id);
-      return repo.getTemplatesByWorkspace(ref.read(activeWorkspaceIdProvider));
-    });
-  }
+  Future<void> deleteTemplate(String id) =>
+      _mutate(() => ref.read(templatesRepositoryProvider).deleteTemplate(id));
 
   /// Recreates [template]'s layout **in addition to** whatever is already open;
   /// nothing currently on screen is closed.

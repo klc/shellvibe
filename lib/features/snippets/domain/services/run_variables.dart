@@ -27,12 +27,22 @@ class RunVariables {
 RunVariables collectRunVariables(
   RunbookModel runbook, {
   Map<String, SnippetModel> snippets = const {},
+}) => collectStepVariables(
+  runbook.orderedSteps,
+  snippets: snippets,
+  own: runbook.variables,
+);
+
+/// The variables [steps] (in run order) need, given the runbook's [own]
+/// declarations; the editor asks before there is a runbook to ask about.
+RunVariables collectStepVariables(
+  List<RunbookStepModel> steps, {
+  Map<String, SnippetModel> snippets = const {},
+  List<VariableDeclaration> own = const [],
 }) {
-  final ordered = [...runbook.steps]
-    ..sort((a, b) => a.stepOrder.compareTo(b.stepOrder));
   final names = <String>{};
   final fromSnippets = <String, VariableDeclaration>{};
-  for (final step in ordered) {
+  for (final step in steps) {
     switch (step.kind) {
       case StepKind.command:
         names.addAll(SnippetVariableParser.extractVariables(step.command));
@@ -47,10 +57,10 @@ RunVariables collectRunVariables(
         break;
     }
   }
-  final own = {for (final v in runbook.variables) v.name: v};
+  final declared = {for (final v in own) v.name: v};
   return RunVariables(names.toList(), [
     for (final name in names)
-      own[name] ?? fromSnippets[name] ?? VariableDeclaration(name: name),
+      declared[name] ?? fromSnippets[name] ?? VariableDeclaration(name: name),
   ]);
 }
 

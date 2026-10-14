@@ -119,12 +119,6 @@ class RunbookRunNotifier extends _$RunbookRunNotifier {
   /// Continues approval step [stepId] for the in-flight run.
   void approve(String stepId) => _run?.approve(stepId);
 
-  /// Forgets a settled run, e.g. when its results panel is dismissed.
-  void clear() {
-    if (isRunning) return;
-    state = null;
-  }
-
   void _apply(RunEvent event) {
     // Events keep arriving while a disposed run unwinds its cancel.
     if (!ref.mounted) return;

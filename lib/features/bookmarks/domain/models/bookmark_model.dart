@@ -1,11 +1,6 @@
-/// What a bookmark points at.
-enum BookmarkTargetType { host, template }
-
 /// A starred host or layout, in the order the user put it in.
 ///
-/// One of [hostId] and [templateId] is set and the other is null; [targetType]
-/// says which, so callers switch on a value rather than on which field happens
-/// to be non-null.
+/// One of [hostId] and [templateId] is set and the other is null.
 class BookmarkModel {
   final String id;
   final String workspaceId;
@@ -22,12 +17,6 @@ class BookmarkModel {
     this.position = 0,
     required this.createdAt,
   });
-
-  BookmarkTargetType get targetType =>
-      hostId != null ? BookmarkTargetType.host : BookmarkTargetType.template;
-
-  /// Id of whatever this points at, whichever kind it is.
-  String get targetId => hostId ?? templateId!;
 
   @override
   bool operator ==(Object other) =>

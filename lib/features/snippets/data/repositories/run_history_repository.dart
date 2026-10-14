@@ -94,8 +94,8 @@ class RunHistoryRepository {
     // The run's own id: the handle an MCP client was given is the history key.
     final runId = run.id;
     final isSnippet = RunbookRunService.isSnippetRunbook(run.runbook);
-    final steps = List<RunbookStepModel>.from(run.runbook.steps)
-      ..sort((a, b) => a.stepOrder.compareTo(b.stepOrder));
+    final steps = run.runbook.orderedSteps;
+    final secrets = run.variableValues.values;
 
     final hostRows = <RunbookRunHostsCompanion>[];
     final stepRows = <RunbookRunStepsCompanion>[];
@@ -115,8 +115,10 @@ class RunHistoryRepository {
       );
       for (final step in steps) {
         final result = host.results[step.id];
+        // Every input value is masked, not only the secret ones: the values are
+        // never stored themselves, and this file is not encrypted.
         final (output, truncated) = _tail(
-          _redact(result?.output ?? '', run.variableValues),
+          redactSecrets(result?.output ?? '', secrets),
         );
         stepRows.add(
           RunbookRunStepsCompanion.insert(
@@ -138,7 +140,7 @@ class RunHistoryRepository {
             error: Value(
               result?.errorMessage == null
                   ? null
-                  : _redact(result!.errorMessage!, run.variableValues),
+                  : redactSecrets(result!.errorMessage!, secrets),
             ),
             durationMs: Value(result?.durationMs),
           ),
@@ -176,19 +178,6 @@ class RunHistoryRepository {
     return runId;
   }
 
-  /// Output with every non-empty input value masked. Exact matches only: a
-  /// program that transforms the value before echoing it is out of reach, which
-  /// is why the values are also never stored themselves.
-  static String _redact(String text, Map<String, String> values) {
-    var result = text;
-    final secrets = values.values.where((v) => v.isNotEmpty).toList()
-      ..sort((a, b) => b.length.compareTo(a.length));
-    for (final secret in secrets) {
-      result = result.replaceAll(secret, '[redacted]');
-    }
-    return result;
-  }
-
   /// The last [maxOutputBytes] of [output], cut on a character boundary.
   static (String, bool) _tail(String output) {
     final bytes = utf8.encode(output);
@@ -204,9 +193,6 @@ class RunHistoryRepository {
 
   Future<List<RunHistorySummary>> forRunbook(String runbookId, {int? limit}) =>
       _summaries(_dao.runsForRunbook(runbookId, limit: limit));
-
-  Future<List<RunHistorySummary>> forSnippets({int? limit}) =>
-      _summaries(_dao.snippetRuns(limit: limit));
 
   /// One snippet's runs, newest first.
   Future<List<RunHistorySummary>> forSnippet(String snippetId, {int? limit}) =>

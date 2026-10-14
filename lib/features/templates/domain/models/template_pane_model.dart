@@ -82,33 +82,6 @@ class TemplatePaneModel {
           : (startupSnippetId ?? this.startupSnippetId),
     );
   }
-
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'templateId': templateId,
-        'paneOrder': paneOrder,
-        'parentPaneId': parentPaneId,
-        'splitDirection': encodeSplitDirection(splitDirection),
-        'splitRatio': splitRatio,
-        'sessionType': encodeSessionType(sessionType),
-        'hostId': hostId,
-        'title': title,
-        'startupSnippetId': startupSnippetId,
-      };
-
-  factory TemplatePaneModel.fromJson(Map<String, dynamic> json) =>
-      TemplatePaneModel(
-        id: json['id'] as String,
-        templateId: json['templateId'] as String,
-        paneOrder: json['paneOrder'] as int,
-        parentPaneId: json['parentPaneId'] as String?,
-        splitDirection: decodeSplitDirection(json['splitDirection'] as String?),
-        splitRatio: (json['splitRatio'] as num?)?.toDouble() ?? 0.5,
-        sessionType: decodeSessionType(json['sessionType'] as String?),
-        hostId: json['hostId'] as String?,
-        title: json['title'] as String?,
-        startupSnippetId: json['startupSnippetId'] as String?,
-      );
 }
 
 /// Storage encoding for the split axis. `Axis.horizontal` is a side-by-side
