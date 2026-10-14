@@ -18,15 +18,6 @@ class BiometricLockService {
     }
   }
 
-  /// Retrieves list of available biometric types on the device.
-  Future<List<BiometricType>> getAvailableBiometrics() async {
-    try {
-      return await _auth.getAvailableBiometrics();
-    } catch (_) {
-      return [];
-    }
-  }
-
   /// Prompts the user for biometric authentication.
   Future<bool> authenticate({
     String localizedReason = 'Authenticate to access ShellVibe',

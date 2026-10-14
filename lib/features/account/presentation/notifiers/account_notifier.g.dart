@@ -60,7 +60,7 @@ final class AccountNotifierProvider
   AccountNotifier create() => AccountNotifier();
 }
 
-String _$accountNotifierHash() => r'9c22592331980be4e4d5764ea67d17dfc7619ad4';
+String _$accountNotifierHash() => r'1c15154d180bf42fb63c2ad72b1c3aadfd8a8d08';
 
 /// Single owner of the account session.
 ///
@@ -89,55 +89,3 @@ abstract class _$AccountNotifier extends $AsyncNotifier<AccountState> {
     return element.handleCreate(ref, build);
   }
 }
-
-/// The API client of the current session, for feature repositories.
-///
-/// Watching this rather than constructing an [ApiClient] per feature keeps one
-/// token source and one `401` handler in the app.
-
-@ProviderFor(sessionApiClient)
-final sessionApiClientProvider = SessionApiClientProvider._();
-
-/// The API client of the current session, for feature repositories.
-///
-/// Watching this rather than constructing an [ApiClient] per feature keeps one
-/// token source and one `401` handler in the app.
-
-final class SessionApiClientProvider
-    extends
-        $FunctionalProvider<
-          AsyncValue<ApiClient>,
-          ApiClient,
-          FutureOr<ApiClient>
-        >
-    with $FutureModifier<ApiClient>, $FutureProvider<ApiClient> {
-  /// The API client of the current session, for feature repositories.
-  ///
-  /// Watching this rather than constructing an [ApiClient] per feature keeps one
-  /// token source and one `401` handler in the app.
-  SessionApiClientProvider._()
-    : super(
-        from: null,
-        argument: null,
-        retry: null,
-        name: r'sessionApiClientProvider',
-        isAutoDispose: false,
-        dependencies: null,
-        $allTransitiveDependencies: null,
-      );
-
-  @override
-  String debugGetCreateSourceHash() => _$sessionApiClientHash();
-
-  @$internal
-  @override
-  $FutureProviderElement<ApiClient> $createElement($ProviderPointer pointer) =>
-      $FutureProviderElement(pointer);
-
-  @override
-  FutureOr<ApiClient> create(Ref ref) {
-    return sessionApiClient(ref);
-  }
-}
-
-String _$sessionApiClientHash() => r'a50c6aa3adbcecc8697802b13d816c9ffab283d6';

@@ -1,7 +1,7 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../shared/providers/database_providers.dart';
-import '../../../../shared/providers/workspace_provider.dart';
+import '../../../workspaces/presentation/providers/workspace_provider.dart';
 import '../../../../core/sync/e2ee_cloud_sync_service.dart';
 import '../../data/repositories/vault_repository.dart';
 import '../../data/vault_key_service.dart';
@@ -60,31 +60,17 @@ class IdentitiesNotifier extends _$IdentitiesNotifier {
     String? password,
     String? privateKey,
     String? passphrase,
-  }) async {
-    final previousState = state;
-    try {
-      final repo = ref.read(vaultRepositoryProvider);
-      await repo.saveIdentity(
-        workspaceId: workspaceId,
-        title: title,
-        username: username,
-        authType: authType,
-        password: password,
-        privateKey: privateKey,
-        passphrase: passphrase,
-      );
-      final items = await repo.getAllIdentities(
-        decryptSecrets: false,
-        workspaceId: ref.read(activeWorkspaceIdProvider),
-      );
-      state = AsyncData(items);
-    } catch (_) {
-      state = previousState;
-      // Rethrow so the caller (e.g. the identity form) can tell the user the
-      // save failed instead of closing as if it had succeeded.
-      rethrow;
-    }
-  }
+  }) => _mutate(
+    (repo) => repo.saveIdentity(
+      workspaceId: workspaceId,
+      title: title,
+      username: username,
+      authType: authType,
+      password: password,
+      privateKey: privateKey,
+      passphrase: passphrase,
+    ),
+  );
 
   Future<void> updateIdentity({
     required String id,
@@ -95,47 +81,40 @@ class IdentitiesNotifier extends _$IdentitiesNotifier {
     String? password,
     String? privateKey,
     String? passphrase,
-  }) async {
-    final previousState = state;
-    try {
-      final repo = ref.read(vaultRepositoryProvider);
-      await repo.saveIdentity(
-        id: id,
-        workspaceId: workspaceId,
-        title: title,
-        username: username,
-        authType: authType,
-        password: password,
-        privateKey: privateKey,
-        passphrase: passphrase,
-      );
-      final items = await repo.getAllIdentities(
-        decryptSecrets: false,
-        workspaceId: ref.read(activeWorkspaceIdProvider),
-      );
-      state = AsyncData(items);
-    } catch (_) {
-      state = previousState;
-      // Rethrow so the caller (e.g. the identity form) can tell the user the
-      // save failed instead of closing as if it had succeeded.
-      rethrow;
-    }
-  }
+  }) => _mutate(
+    (repo) => repo.saveIdentity(
+      id: id,
+      workspaceId: workspaceId,
+      title: title,
+      username: username,
+      authType: authType,
+      password: password,
+      privateKey: privateKey,
+      passphrase: passphrase,
+    ),
+  );
 
-  Future<void> deleteIdentity(String id) async {
+  Future<void> deleteIdentity(String id) =>
+      _mutate((repo) => repo.deleteIdentity(id));
+
+  /// Runs [write], then re-reads the list. On failure the list is put back
+  /// and the error rethrown, so the caller (e.g. the identity form) can tell
+  /// the user the save failed instead of closing as if it had succeeded.
+  Future<void> _mutate(
+    Future<void> Function(VaultRepository repo) write,
+  ) async {
     final previousState = state;
     try {
       final repo = ref.read(vaultRepositoryProvider);
-      await repo.deleteIdentity(id);
-      final items = await repo.getAllIdentities(
-        decryptSecrets: false,
-        workspaceId: ref.read(activeWorkspaceIdProvider),
+      await write(repo);
+      state = AsyncData(
+        await repo.getAllIdentities(
+          decryptSecrets: false,
+          workspaceId: ref.read(activeWorkspaceIdProvider),
+        ),
       );
-      state = AsyncData(items);
     } catch (_) {
       state = previousState;
-      // Rethrow so the caller (e.g. the identity form) can tell the user the
-      // save failed instead of closing as if it had succeeded.
       rethrow;
     }
   }

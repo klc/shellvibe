@@ -9,6 +9,7 @@ import 'package:shellvibe/core/sync/backup_envelope.dart';
 import 'package:shellvibe/core/sync/backup_scope_store.dart';
 import 'package:shellvibe/core/sync/sync_journal.dart';
 import 'package:shellvibe/features/cloud_backup/data/cloud_backup_store.dart';
+import 'package:shellvibe/features/cloud_backup/domain/backup_frequency.dart';
 import 'package:shellvibe/features/cloud_backup/presentation/notifiers/cloud_backup_notifier.dart';
 import 'package:shellvibe/shared/database/app_database.dart';
 import 'package:shellvibe/shared/storage/secure_storage_service.dart';

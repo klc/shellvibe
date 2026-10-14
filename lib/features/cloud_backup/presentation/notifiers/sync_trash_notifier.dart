@@ -108,7 +108,7 @@ class SyncTrashNotifier extends _$SyncTrashNotifier {
     if (restored) {
       // The row went in underneath every list that is already holding what it
       // read at startup.
-      invalidateRestoredData(ref);
+      invalidateRestoredData(ref.invalidate);
     }
 
     ref.invalidateSelf();

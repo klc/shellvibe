@@ -9,7 +9,6 @@ import 'package:shellvibe/core/api/api_client.dart';
 import 'package:shellvibe/core/sync/e2ee_cloud_sync_service.dart';
 import 'package:shellvibe/core/sync/sync_journal.dart';
 import 'package:shellvibe/features/cloud_backup/data/cloud_backup_api.dart';
-import 'package:shellvibe/features/cloud_backup/domain/cloud_backup_service.dart';
 import 'package:shellvibe/features/cloud_backup/domain/sync_snapshot_service.dart';
 import 'package:shellvibe/features/vault/data/vault_key_service.dart';
 import 'package:shellvibe/shared/database/app_database.dart';
@@ -31,7 +30,6 @@ void main() {
   late AppDatabase db;
   late E2EECloudSyncService e2ee;
   late SyncSnapshotService ground;
-  late String? backupUploadId;
   late String? syncUploadId;
   ({int revision, int clock})? mark;
 
@@ -54,7 +52,6 @@ void main() {
       vaultKeyService: vaultKeyService,
       cryptoEngine: fastEncryptionEngine(),
     );
-    backupUploadId = null;
     syncUploadId = null;
     mark = null;
 
@@ -64,13 +61,8 @@ void main() {
     );
 
     ground = SyncSnapshotService.over(
-      backupService: CloudBackupService(
-        api: CloudBackupApi(client: client),
-        sync: e2ee,
-        readPendingUploadId: () async => backupUploadId,
-        writePendingUploadId: (id) async => backupUploadId = id,
-        newUploadId: () => 'backup-upload',
-      ),
+      sync: e2ee,
+      newUploadId: () => 'backup-upload',
       syncApi: CloudBackupApi(client: client, kind: VaultKind.sync),
       readPendingUploadId: () async => syncUploadId,
       writePendingUploadId: (id) async => syncUploadId = id,

@@ -18,6 +18,37 @@ enum AppPalette {
 
 enum AppCursorStyle { block, underline, bar }
 
+extension AppPaletteLabel on AppPalette {
+  String get label => switch (this) {
+    AppPalette.dark => 'ShellVibe Graphite',
+    AppPalette.oled => 'ShellVibe OLED',
+    AppPalette.teal => 'ShellVibe Teal',
+    AppPalette.catppuccin => 'Catppuccin',
+    AppPalette.nord => 'Nord',
+    AppPalette.dracula => 'Dracula',
+    AppPalette.solarizedDark => 'Solarized Dark',
+    AppPalette.tokyoNight => 'Tokyo Night',
+    AppPalette.gruvbox => 'Gruvbox',
+    AppPalette.oneDark => 'One Dark',
+  };
+}
+
+extension AppCursorStyleLabel on AppCursorStyle {
+  String get label => switch (this) {
+    AppCursorStyle.block => 'Block',
+    AppCursorStyle.underline => 'Underline',
+    AppCursorStyle.bar => 'Bar',
+  };
+}
+
+extension MoshPredictionModeLabel on MoshPredictionMode {
+  String get label => switch (this) {
+    MoshPredictionMode.never => 'Never',
+    MoshPredictionMode.adaptive => 'Adaptive',
+    MoshPredictionMode.always => 'Always',
+  };
+}
+
 /// The terminal font size range: the Settings slider's ends, and where the
 /// zoom shortcuts stop.
 const double kTerminalFontSizeMin = 10;

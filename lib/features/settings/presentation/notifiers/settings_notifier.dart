@@ -118,35 +118,23 @@ class SettingsNotifier extends _$SettingsNotifier {
     return '${seconds ~/ 60} minutes';
   }
 
-  Future<void> setThemeMode(ThemeMode mode) async {
-    final current = _base;
-    await updateSettings(current.copyWith(themeMode: mode));
-  }
+  Future<void> setThemeMode(ThemeMode mode) =>
+      _edit((s) => s.copyWith(themeMode: mode));
 
-  Future<void> setPalette(AppPalette palette) async {
-    final current = _base;
-    await updateSettings(current.copyWith(palette: palette));
-  }
+  Future<void> setPalette(AppPalette palette) =>
+      _edit((s) => s.copyWith(palette: palette));
 
-  Future<void> setTerminalPalette(TerminalPalette palette) async {
-    final current = _base;
-    await updateSettings(current.copyWith(terminalPalette: palette));
-  }
+  Future<void> setTerminalPalette(TerminalPalette palette) =>
+      _edit((s) => s.copyWith(terminalPalette: palette));
 
-  Future<void> setFontFamily(String fontFamily) async {
-    final current = _base;
-    await updateSettings(current.copyWith(fontFamily: fontFamily));
-  }
+  Future<void> setFontFamily(String fontFamily) =>
+      _edit((s) => s.copyWith(fontFamily: fontFamily));
 
-  Future<void> setUiFontFamily(String uiFontFamily) async {
-    final current = _base;
-    await updateSettings(current.copyWith(uiFontFamily: uiFontFamily));
-  }
+  Future<void> setUiFontFamily(String uiFontFamily) =>
+      _edit((s) => s.copyWith(uiFontFamily: uiFontFamily));
 
-  Future<void> setFontSize(double fontSize) async {
-    final current = _base;
-    await updateSettings(current.copyWith(fontSize: fontSize));
-  }
+  Future<void> setFontSize(double fontSize) =>
+      _edit((s) => s.copyWith(fontSize: fontSize));
 
   /// One point bigger or smaller per press of the zoom shortcuts, held to the
   /// slider's range; a [step] of zero restores the default size.
@@ -162,55 +150,36 @@ class SettingsNotifier extends _$SettingsNotifier {
     await setFontSize(next);
   }
 
-  Future<void> setLineHeightFactor(double lineHeightFactor) async {
-    final current = _base;
-    await updateSettings(current.copyWith(lineHeightFactor: lineHeightFactor));
-  }
+  Future<void> setLineHeightFactor(double lineHeightFactor) =>
+      _edit((s) => s.copyWith(lineHeightFactor: lineHeightFactor));
 
-  Future<void> setCursorStyle(AppCursorStyle cursorStyle) async {
-    final current = _base;
-    await updateSettings(current.copyWith(cursorStyle: cursorStyle));
-  }
+  Future<void> setCursorStyle(AppCursorStyle cursorStyle) =>
+      _edit((s) => s.copyWith(cursorStyle: cursorStyle));
 
-  Future<void> setEnableLigatures(bool enabled) async {
-    final current = _base;
-    await updateSettings(current.copyWith(enableLigatures: enabled));
-  }
+  Future<void> setEnableLigatures(bool enabled) =>
+      _edit((s) => s.copyWith(enableLigatures: enabled));
 
-  Future<void> setKeepRunningInTray(bool enabled) async {
-    final current = _base;
-    await updateSettings(current.copyWith(keepRunningInTray: enabled));
-  }
+  Future<void> setKeepRunningInTray(bool enabled) =>
+      _edit((s) => s.copyWith(keepRunningInTray: enabled));
 
-  Future<void> setDesktopNotifications(bool enabled) async {
-    final current = _base;
-    await updateSettings(current.copyWith(desktopNotifications: enabled));
-  }
+  Future<void> setDesktopNotifications(bool enabled) =>
+      _edit((s) => s.copyWith(desktopNotifications: enabled));
 
-  Future<void> setDrawBoldTextWithBrightColors(bool enabled) async {
-    final current = _base;
-    await updateSettings(
-      current.copyWith(drawBoldTextWithBrightColors: enabled),
-    );
-  }
+  Future<void> setDrawBoldTextWithBrightColors(bool enabled) =>
+      _edit((s) => s.copyWith(drawBoldTextWithBrightColors: enabled));
 
-  Future<void> setMoshPrediction(MoshPredictionMode mode) async {
-    final current = _base;
-    await updateSettings(current.copyWith(moshPrediction: mode));
-  }
+  Future<void> setMoshPrediction(MoshPredictionMode mode) =>
+      _edit((s) => s.copyWith(moshPrediction: mode));
 
-  Future<void> setAutoLockTimer(int seconds) async {
-    final current = _base;
-    await updateSettings(current.copyWith(autoLockTimerSeconds: seconds));
-  }
+  Future<void> setAutoLockTimer(int seconds) =>
+      _edit((s) => s.copyWith(autoLockTimerSeconds: seconds));
 
-  Future<void> setClipboardAutoClear(int seconds) async {
-    final current = _base;
-    await updateSettings(current.copyWith(clipboardAutoClearSeconds: seconds));
-  }
+  Future<void> setClipboardAutoClear(int seconds) =>
+      _edit((s) => s.copyWith(clipboardAutoClearSeconds: seconds));
 
-  Future<void> setActiveWorkspace(String workspaceId) async {
-    final current = _base;
-    await updateSettings(current.copyWith(activeWorkspaceId: workspaceId));
-  }
+  Future<void> setActiveWorkspace(String workspaceId) =>
+      _edit((s) => s.copyWith(activeWorkspaceId: workspaceId));
+
+  Future<void> _edit(AppSettingsModel Function(AppSettingsModel s) change) =>
+      updateSettings(change(_base));
 }

@@ -18,6 +18,7 @@ import '../../../vault/presentation/notifiers/identities_notifier.dart';
 import '../../../vault/presentation/notifiers/vault_notifier.dart';
 import '../../data/cloud_backup_api.dart';
 import '../../data/cloud_backup_store.dart';
+import '../../domain/backup_frequency.dart';
 import '../../domain/cloud_backup_service.dart';
 
 part 'cloud_backup_notifier.g.dart';
@@ -102,22 +103,6 @@ final class CloudBackupState {
 
   bool get isReady => blocker == null;
 
-  /// How long ago the last complete backup was, or null when there has never
-  /// been one from this device.
-  Duration? get sinceLastFullBackup {
-    final at = lastFullBackupAt;
-
-    return at == null ? null : DateTime.now().difference(at);
-  }
-
-  /// True when the server holds a revision this device has not seen.
-  bool get serverIsAhead {
-    final serverRevision = head?.currentRevision;
-    if (serverRevision == null || serverRevision == 0) return false;
-
-    return serverRevision != lastKnownRevision;
-  }
-
   CloudBackupState copyWith({
     CloudBackupBlocker? blocker,
     VaultHead? head,
@@ -154,8 +139,8 @@ final class CloudBackupState {
 
 /// Drives the cloud backup surface.
 ///
-/// Rebuilds when the account or the entitlement changes, so signing out or a
-/// lapsed subscription closes the feature without anything having to listen.
+/// Rebuilds when the account or the plan's limits change, so signing out
+/// closes the feature without anything having to listen.
 @Riverpod(keepAlive: true)
 class CloudBackupNotifier extends _$CloudBackupNotifier {
   CloudBackupService? _service;
@@ -197,11 +182,15 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
 
     // Read for its limits, not for permission: cloud backup is free, and
     // the upload size the server will accept is the one thing here the
-    // client cannot know on its own.
-    final entitlement = await ref.watch(entitlementProvider.future);
-
+    // client cannot know on its own. Only the limit: the entitlement
+    // republishes a few times right after sign-in, and each one would
+    // otherwise be a rebuild that schedules another backup run.
     _deviceId = account.session!.deviceId;
-    _maxSizeBytes = entitlement.entitlement.limits.maxBackupSizeBytes;
+    _maxSizeBytes = await ref.watch(
+      entitlementProvider.selectAsync(
+        (s) => s.entitlement.limits.maxBackupSizeBytes,
+      ),
+    );
 
     _service = CloudBackupService(
       api: CloudBackupApi(
@@ -353,12 +342,16 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
       await _store.adoptSyncKey(opened.syncKey);
 
       state = AsyncValue.data(
-        CloudBackupState(
+        current.copyWith(
+          busy: false,
+          clearBlocker: true,
           head: head,
           recoveryCodeMissing: recoveryCode == null || recoveryCode.isEmpty,
           message:
               'Unlocked. Restore revision ${head.currentRevision} to bring '
               'this device up to date before backing up from here.',
+          messageIsError: false,
+          clearConflict: true,
         ),
       );
 
@@ -626,7 +619,7 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
       // still holding what it read at startup. Without this the app shows the
       // old data until it is restarted -- which is what "reopen the app to see
       // everything" used to paper over.
-      invalidateRestoredData(ref);
+      invalidateRestoredData(ref.invalidate);
 
       // Repairs are reported, never swallowed. A host restored without its
       // credentials still looks restored on the list, and finding that out at
@@ -734,7 +727,11 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
   }
 
   /// The scheduled backup already running, if one is.
-  Future<void>? _scheduledRun;
+  ///
+  /// Static, not a field: a rebuild is a new instance, and each build
+  /// schedules a run. Held per instance, the run the old one started and the
+  /// run the new one schedules would seal and upload side by side.
+  static Future<void>? _scheduledRun;
 
   /// Backs up if one is due and anything has changed.
   ///
@@ -744,8 +741,21 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
   /// is checked here, and a call that lands while one is running joins it.
   /// Two overlapping runs would each seal the vault, and whichever finished
   /// second read the other's result as its own and left the mark unwritten.
-  Future<void> maybeBackUpOnSchedule() =>
-      _scheduledRun ??= _backUpIfDue().whenComplete(() => _scheduledRun = null);
+  Future<void> maybeBackUpOnSchedule() async {
+    // A run in flight may belong to a previous instance (a rebuild). Joining
+    // it would adopt its result, but that instance's `ref` is unmounted and
+    // its `_backUpIfDue` bails out early -- so wait for it, then ask the
+    // question again on this instance. Calls on the same instance still
+    // dedupe: the second call waits for the first and finds nothing due.
+    final previous = _scheduledRun;
+    if (previous != null) await previous.catchError((_) {});
+    if (!ref.mounted) return;
+
+    final run = _scheduledRun ??= _backUpIfDue().whenComplete(
+      () => _scheduledRun = null,
+    );
+    return run;
+  }
 
   Future<void> _backUpIfDue() async {
     final frequency = state.value?.frequency ?? BackupFrequency.off;
@@ -754,6 +764,9 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
 
     if (_service == null || _deviceId == null) return;
     if (!await _store.isConfigured()) return;
+    // Every await below may outlive this instance (a rebuild disposes it);
+    // `ref` and `state` throw once it has.
+    if (!ref.mounted) return;
 
     // A conflict waits for the user: restore the other device's backup or
     // overwrite it. Retrying on the next tick cannot settle it, and each try
@@ -761,6 +774,7 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
     if (state.value?.conflictingServerRevision != null) return;
 
     final mark = await _store.readAutoBackupMark();
+    if (!ref.mounted) return;
     final now = DateTime.now();
 
     if (mark != null && now.difference(mark.at) < interval) return;
@@ -773,6 +787,7 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
         (await ref.read(appDatabaseProvider).syncJournal?.readState())
             ?.lastSeenClock ??
         0;
+    if (!ref.mounted) return;
 
     if (mark != null && clock == mark.clock) {
       // Nothing to write, but the schedule has been honoured. Recording it
@@ -803,6 +818,7 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
     // wrote or restored, and overwriting that without being asked is the one
     // move here that destroys someone's data.
     await backUpNow();
+    if (!ref.mounted) return;
 
     // The mark is only written for an upload that actually landed. Writing it
     // after a refusal -- a conflict, a throttle, a body over the plan's limit,
@@ -879,6 +895,7 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
   }
 
   void _publish(CloudBackupState Function(CloudBackupState state) update) {
+    if (!ref.mounted) return;
     final current = state.value;
     if (current == null) return;
 
