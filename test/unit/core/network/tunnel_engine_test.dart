@@ -114,9 +114,10 @@ void main() {
         throwsA(isA<Exception>()),
       );
 
-      final tunnel = tunnelEngine.getActiveTunnel('r_fail');
-      expect(tunnel, isNotNull);
-      expect(tunnel!.isActive, isFalse);
+      final tunnel = tunnelEngine.activeTunnelsList.singleWhere(
+        (t) => t.ruleId == 'r_fail',
+      );
+      expect(tunnel.isActive, isFalse);
       expect(tunnel.error, contains('Remote forward failed'));
     });
   });

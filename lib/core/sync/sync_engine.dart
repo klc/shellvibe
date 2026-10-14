@@ -53,8 +53,6 @@ final class SyncResult {
     this.repaired = 0,
     this.unreadable = 0,
   });
-
-  bool get changedAnything => pushed > 0 || pulled > 0;
 }
 
 /// Sends local operations and applies remote ones.

@@ -206,7 +206,7 @@ class SSHSessionManager {
         // exact string `ssh-keygen -lf` prints. Re-encoding it would produce a
         // value the user cannot compare against anything.
         final fingerprintStr = utf8.decode(fingerprintBytes);
-        return await _verifyHostKey(
+        return await verifyHostKey(
           hostname: config.hostname,
           port: config.port,
           keyType: type,
@@ -309,114 +309,58 @@ class SSHSessionManager {
     required String fingerprint,
     HostKeyPromptCallback? promptCallback,
   }) async {
-    return _verifyHostKey(
-      hostname: hostname,
-      port: port,
-      keyType: keyType,
-      fingerprint: fingerprint,
-      promptCallback: promptCallback,
-    );
-  }
-
-  Future<bool> _verifyHostKey({
-    required String hostname,
-    required int port,
-    required String keyType,
-    required String fingerprint,
-    HostKeyPromptCallback? promptCallback,
-  }) async {
     // A closed session must never raise a prompt for a dead tab.
     if (_abortRequested) return false;
 
-    final dao = knownHostsDao;
-
-    if (dao != null) {
-      final existingHost = await dao.findKnownHost(hostname, port);
-
-      if (existingHost != null) {
-        if (existingHost.fingerprintSha256 == fingerprint) {
-          // Trusted key matches database
-          return true;
-        } else {
-          // A changed key must never be accepted through the normal connect
-          // flow. Updating known_hosts requires a separate, explicitly
-          // verified key-rotation operation; a prompt alone cannot establish
-          // that the new key belongs to the intended server.
-          if (promptCallback != null) {
-            _isPromptingHostKey = true;
-            try {
-              await promptCallback(
-                hostname,
-                port,
-                keyType,
-                fingerprint,
-                HostKeyVerificationStatus.mismatch,
-              );
-            } finally {
-              _isPromptingHostKey = false;
-            }
-          }
-          _hostKeyRejected = true;
-          return false;
-        }
-      } else {
-        // Unknown host (First connection). Without a prompt callback there is
-        // no one to confirm the key, so deny instead of blind TOFU.
-        bool approve = false;
-        if (promptCallback != null) {
-          _isPromptingHostKey = true;
-          try {
-            approve = await promptCallback(
-              hostname,
-              port,
-              keyType,
-              fingerprint,
-              HostKeyVerificationStatus.unknown,
-            );
-          } finally {
-            _isPromptingHostKey = false;
-          }
-        }
-
-        if (approve) {
-          await dao.insertOrUpdateKnownHost(
-            KnownHostsCompanion.insert(
-              id: const Uuid().v4(),
-              hostname: hostname,
-              port: port,
-              keyType: keyType,
-              fingerprintSha256: fingerprint,
-              firstSeenAt: DateTime.now(),
-            ),
-          );
-        }
-        if (!approve) _hostKeyRejected = true;
-        return approve;
-      }
-    }
-
-    // Fallback if no DAO provided
-    if (promptCallback != null) {
+    // Asks the user, holding the handshake timer while the dialog is up.
+    Future<bool> prompt(HostKeyVerificationStatus status) async {
+      if (promptCallback == null) return false;
       _isPromptingHostKey = true;
-      bool approve;
       try {
-        approve = await promptCallback(
+        return await promptCallback(
           hostname,
           port,
           keyType,
           fingerprint,
-          HostKeyVerificationStatus.unknown,
+          status,
         );
       } finally {
         _isPromptingHostKey = false;
       }
-      if (!approve) _hostKeyRejected = true;
-      return approve;
     }
-    // Nothing can vouch for this key: neither a known_hosts store nor a user.
-    // Deny rather than silently accepting an unverified host.
-    _hostKeyRejected = true;
-    return false;
+
+    bool reject() {
+      _hostKeyRejected = true;
+      return false;
+    }
+
+    final dao = knownHostsDao;
+    final existingHost = await dao?.findKnownHost(hostname, port);
+    if (existingHost != null) {
+      if (existingHost.fingerprintSha256 == fingerprint) return true;
+      // A changed key must never be accepted through the normal connect flow.
+      // Updating known_hosts requires a separate, explicitly verified
+      // key-rotation operation; a prompt alone cannot establish that the new
+      // key belongs to the intended server. The user is still told.
+      await prompt(HostKeyVerificationStatus.mismatch);
+      return reject();
+    }
+
+    // Unknown host (first connection). Without a prompt callback there is no
+    // one to confirm the key, so deny instead of blind TOFU — and with no
+    // known_hosts store either, nothing can vouch for it at all.
+    if (!await prompt(HostKeyVerificationStatus.unknown)) return reject();
+    await dao?.insertOrUpdateKnownHost(
+      KnownHostsCompanion.insert(
+        id: const Uuid().v4(),
+        hostname: hostname,
+        port: port,
+        keyType: keyType,
+        fingerprintSha256: fingerprint,
+        firstSeenAt: DateTime.now(),
+      ),
+    );
+    return true;
   }
 
   /// Opens an interactive shell [SSHSession].
@@ -460,25 +404,25 @@ class SSHSessionManager {
   /// Sends a keep-alive ping to the remote server.
   Future<void> ping() async {
     final activeClient = _client;
-    if (activeClient != null && _isConnected && !activeClient.isClosed) {
-      try {
-        await activeClient.ping();
-      } catch (_) {
-        _keepAliveTimer?.cancel();
-        _keepAliveTimer = null;
-        _isConnected = false;
-        if (!_clientChanges.isClosed) {
-          _clientChanges.add(null);
-        }
-        // Ping failed, connection may have been dropped
-      }
-    } else {
-      _keepAliveTimer?.cancel();
-      _keepAliveTimer = null;
-      _isConnected = false;
-      if (!_clientChanges.isClosed) {
-        _clientChanges.add(null);
-      }
+    if (activeClient == null || !_isConnected || activeClient.isClosed) {
+      _markDisconnected();
+      return;
+    }
+    try {
+      await activeClient.ping();
+    } catch (_) {
+      // Ping failed, connection may have been dropped
+      _markDisconnected();
+    }
+  }
+
+  /// Stops the keep-alive and tells listeners the client is gone.
+  void _markDisconnected() {
+    _keepAliveTimer?.cancel();
+    _keepAliveTimer = null;
+    _isConnected = false;
+    if (!_clientChanges.isClosed) {
+      _clientChanges.add(null);
     }
   }
 
@@ -491,12 +435,7 @@ class SSHSessionManager {
   /// Cancels timers and closes active SSH client session and socket.
   Future<void> close() async {
     _abortRequested = true;
-    _keepAliveTimer?.cancel();
-    _keepAliveTimer = null;
-    _isConnected = false;
-    if (!_clientChanges.isClosed) {
-      _clientChanges.add(null);
-    }
+    _markDisconnected();
 
     if (_client != null) {
       try {

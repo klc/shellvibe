@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:shellvibe/core/network/pty_session.dart';
@@ -29,9 +28,6 @@ final class FakePtySession implements PtySession {
 
   @override
   void resize(int rows, int columns) {}
-
-  @override
-  bool kill([ProcessSignal signal = ProcessSignal.sigterm]) => true;
 
   @override
   void acknowledge() => ackCount++;

@@ -13,11 +13,13 @@ import 'package:shellvibe/core/network/local_pty_manager.dart';
 import 'package:xterm3/xterm.dart';
 
 import '../../../../support/fake_pty_session.dart';
+import '../../../../support/in_memory_paired_devices.dart';
 import 'package:shellvibe/core/network/coalescing_terminal_writer.dart';
 
 const _timeout = Duration(seconds: 5);
 
 void main() {
+  final devices = InMemoryPairedDevices();
   late FakePtySession pty;
   late Terminal terminal;
   late TerminalLocalPtyBridge bridge;
@@ -71,6 +73,8 @@ void main() {
       identity: identity,
       hostName: 'test-host',
       appVersion: 'test',
+      pairedDeviceAuthenticator: devices.authenticate,
+      pairedDevicePersister: devices.save,
       sessionTransportsProvider: () => [transport],
     );
     await server.start();
@@ -299,6 +303,8 @@ void main() {
         identity: identity,
         hostName: 'test-host',
         appVersion: 'test',
+        pairedDeviceAuthenticator: devices.authenticate,
+        pairedDevicePersister: devices.save,
         sessionTransportsProvider: () => [oversizedTransport],
       );
       await oversizedServer.start();
@@ -332,6 +338,8 @@ void main() {
         identity: identity,
         hostName: 'test-host',
         appVersion: 'test',
+        pairedDeviceAuthenticator: devices.authenticate,
+        pairedDevicePersister: devices.save,
         sessionTransportsProvider: () => [failingTransport],
       );
       await failingServer.start();
@@ -380,6 +388,8 @@ void main() {
         identity: identity,
         hostName: 'test-host',
         appVersion: 'test',
+        pairedDeviceAuthenticator: devices.authenticate,
+        pairedDevicePersister: devices.save,
         sessionTransportsProvider: () => [slowTransport],
       );
       await slowServer.start();

@@ -22,9 +22,6 @@ abstract class PtySession {
   /// Tells the process its window changed.
   void resize(int rows, int columns);
 
-  /// Signals the process.
-  bool kill([ProcessSignal signal = ProcessSignal.sigterm]);
-
   /// Reports that a batch has been parsed and the next may be sent.
   ///
   /// This is the brake. Until it is called for a batch, the reader eventually
@@ -88,10 +85,10 @@ class _Wire {
   static const int data = 1;
   static const int exit = 2;
   static const int failure = 3;
+  static const int disposed = 4;
 
   static const int write = 10;
   static const int resize = 11;
-  static const int kill = 12;
   static const int acknowledge = 13;
   static const int dispose = 14;
 }
@@ -111,7 +108,7 @@ class _Wire {
 /// than per KiB — and the round trip is cheap because this isolate has no
 /// frames to draw while it waits.
 class PtyIsolateSession implements PtySession {
-  PtyIsolateSession._(this._isolate, this._commands, this._events, this._config);
+  PtyIsolateSession._(this._isolate, this._commands, this._port, this._events);
 
   /// Starts the isolate and the process on it.
   ///
@@ -119,11 +116,10 @@ class PtyIsolateSession implements PtySession {
   /// process, and a failure to spawn surfaces here rather than as silence.
   static Future<PtyIsolateSession> start(PtySessionConfig config) async {
     final events = ReceivePort();
-    final isolate = await Isolate.spawn(
-      _readerMain,
-      [events.sendPort, config],
-      debugName: 'pty-reader',
-    );
+    final isolate = await Isolate.spawn(_readerMain, [
+      events.sendPort,
+      config,
+    ], debugName: 'pty-reader');
 
     final stream = events.asBroadcastStream();
     final first = await stream.first as List<Object?>;
@@ -133,18 +129,13 @@ class PtyIsolateSession implements PtySession {
       throw PtySessionException(first[1]! as String);
     }
 
-    return PtyIsolateSession._(
-      isolate,
-      first[1]! as SendPort,
-      stream,
-      config,
-    );
+    return PtyIsolateSession._(isolate, first[1]! as SendPort, events, stream);
   }
 
   final Isolate _isolate;
   final SendPort _commands;
+  final ReceivePort _port;
   final Stream<Object?> _events;
-  final PtySessionConfig _config;
 
   final _output = StreamController<Uint8List>();
   final _exitCode = Completer<int>();
@@ -204,13 +195,6 @@ class PtyIsolateSession implements PtySession {
   }
 
   @override
-  bool kill([ProcessSignal signal = ProcessSignal.sigterm]) {
-    if (_disposed) return false;
-    _commands.send([_Wire.kill, _signalName(signal)]);
-    return true;
-  }
-
-  @override
   void acknowledge() {
     if (_disposed) return;
     _commands.send(const [_Wire.acknowledge]);
@@ -220,37 +204,28 @@ class PtyIsolateSession implements PtySession {
   Future<void> dispose({bool kill = true}) async {
     if (_disposed) return;
     _disposed = true;
+    // The reader kills the process and exits on its own, answering with
+    // [_Wire.disposed]. `Isolate.kill` is delivered out of band, ahead of
+    // queued messages, so killing first would race the dispose command and
+    // could orphan the shell: its fds are process-wide and nothing sends it
+    // SIGHUP. The kill below is only the backstop for a reader that never
+    // answers.
+    final acknowledged = _events
+        .firstWhere(
+          (event) => (event! as List<Object?>)[0] == _Wire.disposed,
+          orElse: () => null,
+        )
+        .timeout(const Duration(seconds: 2), onTimeout: () => null);
     _commands.send([_Wire.dispose, kill]);
+    await acknowledged;
     await _eventSubscription?.cancel();
     _eventSubscription = null;
     if (!_output.isClosed) await _output.close();
     if (!_exitCode.isCompleted) _exitCode.complete(-1);
-    // The reader tears its own process down on the dispose message; killing
-    // the isolate is the backstop for one that never got there.
-    _isolate.kill(priority: Isolate.beforeNextEvent);
+    _isolate.kill(priority: Isolate.immediate);
+    _port.close();
   }
-
-  /// The configuration this session was started with.
-  PtySessionConfig get config => _config;
 }
-
-/// `ProcessSignal` is a class of constants rather than an enum, so it has no
-/// index to send and no `values` to look one up in. Its `toString` is the
-/// signal's name, and the handful a terminal ever sends map back cleanly.
-String _signalName(ProcessSignal signal) => signal.toString();
-
-ProcessSignal _signalByName(String name) => switch (name) {
-  'SIGHUP' => ProcessSignal.sighup,
-  'SIGINT' => ProcessSignal.sigint,
-  'SIGQUIT' => ProcessSignal.sigquit,
-  'SIGKILL' => ProcessSignal.sigkill,
-  'SIGTERM' => ProcessSignal.sigterm,
-  'SIGUSR1' => ProcessSignal.sigusr1,
-  'SIGUSR2' => ProcessSignal.sigusr2,
-  'SIGWINCH' => ProcessSignal.sigwinch,
-  // Anything else falls back to the signal a terminal means by "stop".
-  _ => ProcessSignal.sigterm,
-};
 
 /// Raised when the PTY could not be started, or died in a way that has to be
 /// reported rather than delivered as output.
@@ -317,13 +292,15 @@ class _Reader {
     );
 
     unawaited(
-      pty.exitCode.then((code) {
-        _flush();
-        events.send([_Wire.exit, code]);
-      }).catchError((Object _) {
-        _flush();
-        events.send([_Wire.exit, -1]);
-      }),
+      pty.exitCode
+          .then((code) {
+            _flush();
+            events.send([_Wire.exit, code]);
+          })
+          .catchError((Object _) {
+            _flush();
+            events.send([_Wire.exit, -1]);
+          }),
     );
   }
 
@@ -374,12 +351,6 @@ class _Reader {
         } catch (e) {
           events.send([_Wire.failure, 'resize: $e']);
         }
-      case _Wire.kill:
-        try {
-          pty.kill(_signalByName(command[1]! as String));
-        } catch (_) {
-          // A process that is already gone needs no signal.
-        }
       case _Wire.acknowledge:
         if (_outstanding > 0) _outstanding--;
         _releaseOwedAcks();
@@ -413,9 +384,13 @@ class _Reader {
     _flushTimer = null;
     if (kill) {
       try {
-        pty.kill();
+        // SIGHUP is what a closing terminal sends; interactive shells ignore
+        // the SIGTERM default and would outlive the tab.
+        pty.kill(ProcessSignal.sighup);
       } catch (_) {}
     }
     _commands.close();
+    // Exits with the acknowledgement so it cannot be lost behind the exit.
+    Isolate.exit(events, const [_Wire.disposed]);
   }
 }

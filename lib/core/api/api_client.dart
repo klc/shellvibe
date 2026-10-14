@@ -86,18 +86,6 @@ final class ApiClient {
     authenticated: authenticated,
   );
 
-  /// PATCH. Not retried, for the same reason as [post].
-  Future<ApiResponse> patch(
-    String path, {
-    Object? body,
-    bool authenticated = true,
-  }) => _send(
-    method: 'PATCH',
-    path: path,
-    body: body,
-    authenticated: authenticated,
-  );
-
   /// DELETE. Not retried, for the same reason as [post].
   Future<ApiResponse> delete(
     String path, {
