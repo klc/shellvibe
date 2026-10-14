@@ -232,16 +232,6 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
       session.errorMessage == null &&
       session.disconnectCause == TerminalDisconnectCause.remoteExit;
 
-  String _bannerMessage(TerminalTabSession session) {
-    if (session.errorMessage != null) {
-      return 'Connection Error: ${session.errorMessage}';
-    }
-    return switch (session.disconnectCause) {
-      TerminalDisconnectCause.remoteExit => 'Session ended',
-      _ => 'Connection lost',
-    };
-  }
-
   /// A modifier click (⌘ on macOS; ⌘ or Ctrl elsewhere) toggles this pane in
   /// the broadcast selection and makes it the active origin; a plain click
   /// routes through [TerminalTabsNotifier.tapPane], which clears the
@@ -541,7 +531,6 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
             _SessionBanner(
               session: session,
               cleanExit: _isCleanExit(session),
-              message: _bannerMessage(session),
               onReconnect: () => ref
                   .read(terminalTabsProvider.notifier)
                   .reconnectTab(session.id),
@@ -703,13 +692,11 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
 class _SessionBanner extends StatelessWidget {
   final TerminalTabSession session;
   final bool cleanExit;
-  final String message;
   final VoidCallback onReconnect;
 
   const _SessionBanner({
     required this.session,
     required this.cleanExit,
-    required this.message,
     required this.onReconnect,
   });
 
@@ -755,7 +742,7 @@ class _SessionBanner extends StatelessWidget {
                 if (session.errorMessage != null) ...[
                   const SizedBox(height: 2),
                   Text(
-                    message,
+                    'Connection Error: ${session.errorMessage}',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: shellvibeMono(

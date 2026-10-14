@@ -172,6 +172,29 @@ void main() {
       expect(received, equals(['\x03']));
     });
 
+    testWidgets('Sticky Ctrl maps a typed symbol like the bar key does', (
+      tester,
+    ) async {
+      final terminal = Terminal();
+      final received = <String>[];
+      terminal.onOutput = received.add;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: MobileExtraKeysBar(terminal: terminal)),
+        ),
+      );
+
+      // Ctrl+/ is 0x1F on a real terminal, not the 0x0F a bare low-five-bits
+      // mask gives; the IME path has to agree with the bar's own symbol keys.
+      await tester.tap(find.byKey(const Key('key_ctrl')));
+      await tester.pump();
+      terminal.textInput('/');
+      await tester.pump();
+
+      expect(received, equals(['\x1f']));
+    });
+
     testWidgets('Sticky Alt prepends ESC to keyboard-typed char', (
       tester,
     ) async {

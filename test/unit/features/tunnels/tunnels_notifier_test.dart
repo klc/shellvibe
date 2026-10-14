@@ -3,9 +3,9 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/features/tunnels/domain/models/tunnel_rule_model.dart';
-import 'package:shellvibe/features/tunnels/domain/repositories/tunnel_repository.dart';
+import 'package:shellvibe/features/tunnels/data/repositories/tunnel_repository.dart';
 import 'package:shellvibe/features/tunnels/presentation/providers/tunnels_providers.dart';
-import 'package:shellvibe/shared/providers/workspace_provider.dart';
+import 'package:shellvibe/features/workspaces/presentation/providers/workspace_provider.dart';
 
 void main() {
   late _FakeTunnelRepository repository;

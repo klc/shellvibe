@@ -27,8 +27,6 @@ final class DeviceLinkPairingRepository {
 
   Future<List<PairedDevice>> getAll() => dao.getAll();
 
-  Stream<List<PairedDevice>> watchAll() => dao.watchAll();
-
   Future<void> savePairedDevice({
     required String id,
     required String name,

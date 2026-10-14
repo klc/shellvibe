@@ -1,5 +1,26 @@
 import '../models/terminal_tab_session.dart';
 
+/// Root pane of the tab [pane] belongs to — the tab it is displayed in. The
+/// loop is bounded by the list length so a corrupted parent link cannot spin
+/// forever.
+TerminalTabSession rootOfPane(
+  List<TerminalTabSession> allTabs,
+  TerminalTabSession pane,
+) {
+  var current = pane;
+  for (var hops = 0; hops < allTabs.length; hops++) {
+    final parentId = current.splitParentId;
+    if (parentId == null) return current;
+    final parent = allTabs.firstWhere(
+      (t) => t.id == parentId,
+      orElse: () => current,
+    );
+    if (parent.id == current.id) return current;
+    current = parent;
+  }
+  return current;
+}
+
 /// Tree math over a tab strip's split panes: root lookup, focus-on-close,
 /// reordering, swapping and docking.
 ///
@@ -18,21 +39,6 @@ class TerminalPaneLayout {
       if (tab.id == id) return tab;
     }
     return null;
-  }
-
-  /// Walks [tabs] up the split tree and returns the id of [tab]'s root pane —
-  /// the tab it is displayed in. The loop is bounded by the list length so a
-  /// corrupted parent link cannot spin forever.
-  String rootIdOf(TerminalTabSession tab, List<TerminalTabSession> tabs) {
-    var current = tab;
-    for (var hops = 0; hops < tabs.length; hops++) {
-      final parentId = current.splitParentId;
-      if (parentId == null) return current.id;
-      final parent = findInList(tabs, parentId);
-      if (parent == null) return current.id;
-      current = parent;
-    }
-    return current.id;
   }
 
   /// Picks the pane that takes focus once [closedTab] and its subtree are
@@ -55,13 +61,13 @@ class TerminalPaneLayout {
   }) {
     if (remainingTabs.isEmpty) return null;
 
-    final rootId = rootIdOf(closedTab, oldTabs);
+    final rootId = rootOfPane(oldTabs, closedTab).id;
 
     // The closed pane's tab survives: stay inside it. The nearest surviving
     // ancestor is the pane that grows into the freed space, so it gets focus;
     // failing that, any surviving pane of the tab beats leaving the tab.
     final survivorsInTab = remainingTabs
-        .where((t) => rootIdOf(t, oldTabs) == rootId)
+        .where((t) => rootOfPane(oldTabs, t).id == rootId)
         .toList();
     if (survivorsInTab.isNotEmpty) {
       final survivingIds = survivorsInTab.map((t) => t.id).toSet();
@@ -194,7 +200,7 @@ class TerminalPaneLayout {
 
     final pane = tabs[index];
     final other = tabs[otherIndex];
-    if (rootIdOf(pane, tabs) != rootIdOf(other, tabs)) return null;
+    if (rootOfPane(tabs, pane).id != rootOfPane(tabs, other).id) return null;
 
     for (final tab in tabs) {
       if (tab.id == paneId || tab.id == otherPaneId) continue;
@@ -254,7 +260,7 @@ class TerminalPaneLayout {
     final pane = findInList(tabs, paneId);
     final target = findInList(tabs, targetId);
     if (pane == null || target == null) return null;
-    if (rootIdOf(pane, tabs) != rootIdOf(target, tabs)) return null;
+    if (rootOfPane(tabs, pane).id != rootOfPane(tabs, target).id) return null;
 
     var result = [...tabs];
     final children = result.where((t) => t.splitParentId == paneId).toList();

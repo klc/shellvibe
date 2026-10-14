@@ -9,9 +9,9 @@ import '../../../../app/keyboard/app_keymap.dart';
 import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/widgets/adaptive_modal.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
-import '../../../../core/network/ssh_session_manager.dart';
 import '../../../../core/utils/platform_capabilities.dart';
 import '../../../hosts/domain/models/host_model.dart';
+import '../../../hosts/domain/services/host_launcher.dart';
 import '../../../settings/presentation/notifiers/settings_notifier.dart';
 import '../../../snippets/domain/models/snippet_model.dart';
 import '../../../snippets/domain/services/snippet_variable_parser.dart';
@@ -21,10 +21,7 @@ import '../../../templates/domain/models/template_model.dart';
 import '../../../templates/presentation/dialogs/save_template_dialog.dart';
 import '../../../templates/presentation/notifiers/templates_notifier.dart';
 import '../../../templates/presentation/widgets/template_picker_sheet.dart';
-import '../../../vault/domain/models/identity_model.dart';
-import '../../../vault/presentation/notifiers/identities_notifier.dart';
 import '../../domain/models/terminal_tab_session.dart';
-import '../dialogs/host_key_prompt_dialog.dart';
 import '../notifiers/terminal_tabs_notifier.dart';
 import '../widgets/select_host_panel.dart';
 import '../widgets/terminal_empty_state.dart';
@@ -63,25 +60,17 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
     super.dispose();
   }
 
-  TerminalTabSession? _resolveRootTab(TerminalTabsState tabsState) {
-    final activeTab = tabsState.activeTab;
-    if (activeTab == null) return null;
-    var current = activeTab;
-    while (current.splitParentId != null) {
-      final parent = tabsState.tabs.firstWhere(
-        (t) => t.id == current.splitParentId,
-        orElse: () => current,
-      );
-      if (parent.id == current.id) break;
-      current = parent;
-    }
-    return current;
-  }
+  /// Credential and host key prompts for a connect started from here. Built
+  /// per use: it holds this state's context, like the dialogs it opens.
+  HostLauncher get _launcher => HostLauncher(context: context, ref: ref);
 
   @override
   Widget build(BuildContext context) {
     final tabsState = ref.watch(terminalTabsProvider);
-    final activeRootTab = _resolveRootTab(tabsState);
+    final activeTab = tabsState.activeTab;
+    final activeRootTab = activeTab == null
+        ? null
+        : rootOfPane(tabsState.tabs, activeTab);
 
     // Notices the notifier cannot toast itself (a startup snippet that needs
     // input).
@@ -157,17 +146,11 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
                               gradientExtent: 220,
                               child: TerminalEmptyState(
                                 onConnectToHost: _connectToHost,
-                                onShowSelectHostModal: () =>
-                                    _showSelectHostModal(context, ref),
+                                onShowSelectHostModal: _showSelectHostModal,
                                 onDeviceLinkAction: _handleDeviceLinkAction,
                               ),
                             )
-                          : _buildTabBody(
-                              context,
-                              ref,
-                              tabsState,
-                              activeRootTab,
-                            ),
+                          : _buildTabBody(tabsState, activeRootTab),
                     ),
                     Positioned(
                       top: 0,
@@ -176,14 +159,13 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
                       child: TerminalTabStrip(
                         tabsState: tabsState,
                         activeRootTab: activeRootTab,
-                        onPromptHostKey: _promptHostKey,
+                        onPromptHostKey: _launcher.promptHostKey,
                         onStartSplitWithHost: _startSplitWithHost,
                         onSaveTemplate: _saveCurrentLayoutAsTemplate,
                         onRunTemplate: _runTemplate,
                         onDeviceLinkAction: _handleDeviceLinkAction,
                         onShowTabMenu: _showTabMenu,
-                        onShowNewTabMenu: (buttonContext) =>
-                            _showNewTabMenu(buttonContext, ref),
+                        onShowNewTabMenu: _showNewTabMenu,
                       ),
                     ),
                   ],
@@ -197,8 +179,6 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
   }
 
   Widget _buildTabBody(
-    BuildContext context,
-    WidgetRef ref,
     TerminalTabsState tabsState,
     TerminalTabSession activeRootTab,
   ) {
@@ -258,7 +238,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
           notifier.splitTab(
             pane.id,
             direction: Axis.horizontal,
-            onHostKeyPrompt: _promptHostKey,
+            onHostKeyPrompt: _launcher.promptHostKey,
           ),
         ),
       ),
@@ -270,7 +250,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
           notifier.splitTab(
             pane.id,
             direction: Axis.vertical,
-            onHostKeyPrompt: _promptHostKey,
+            onHostKeyPrompt: _launcher.promptHostKey,
           ),
         ),
       ),
@@ -460,19 +440,19 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
     if (isMobilePlatform) {
       unawaited(context.push('/device-link/scan'));
     } else {
-      unawaited(_openDeviceLinkQr(context, ref));
+      unawaited(_openDeviceLinkQr());
     }
   }
 
-  Future<void> _openDeviceLinkQr(BuildContext context, WidgetRef ref) async {
+  Future<void> _openDeviceLinkQr() async {
     try {
       final payload = await ref
           .read(terminalTabsProvider.notifier)
           .createDeviceLinkPairingPayload();
-      if (!context.mounted) return;
+      if (!mounted) return;
       await context.push('/device-link/pair', extra: payload);
     } catch (error) {
-      if (!context.mounted) return;
+      if (!mounted) return;
       ShadToaster.of(context).show(
         ShadToast.destructive(
           description: Text('Device Link server could not start: $error'),
@@ -481,11 +461,11 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
     }
   }
 
-  /// The "+" menu. Desktop anchors it to the button it came from; a phone
-  /// gets the same rows as a sheet.
-  Future<void> _showNewTabMenu(BuildContext context, WidgetRef ref) async {
+  /// The "+" menu. Desktop anchors it to the button it came from
+  /// ([anchorContext]); a phone gets the same rows as a sheet.
+  Future<void> _showNewTabMenu(BuildContext anchorContext) async {
     final action = await showAdaptiveActionMenu<_NewTabAction>(
-      context: context,
+      context: anchorContext,
       actions: [
         if (supportsLocalShell)
           const AdaptiveMenuAction(
@@ -522,55 +502,18 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
       case _NewTabAction.localShell:
         ref.read(terminalTabsProvider.notifier).openLocalTab();
       case _NewTabAction.connectToHost:
-        _showSelectHostModal(this.context, ref);
+        _showSelectHostModal();
       case _NewTabAction.runTemplate:
-        TemplatePickerSheet.show(this.context, onSelect: _runTemplate);
+        TemplatePickerSheet.show(context, onSelect: _runTemplate);
       case _NewTabAction.deviceLink:
         _handleDeviceLinkAction();
     }
   }
 
-  /// Decrypts the identity attached to [host], if any.
-  ///
-  /// Returns `(ok: false, ...)` when the stored credentials cannot be read, so
-  /// callers abort instead of connecting with silently missing credentials;
-  /// the failure is surfaced as a toast here.
-  Future<({bool ok, IdentityModel? identity})> _resolveIdentity(
-    HostModel host,
-  ) async {
-    if (host.identityId == null) return (ok: true, identity: null);
-    try {
-      final identity = await ref
-          .read(identitiesProvider.notifier)
-          .getDecryptedIdentity(host.identityId!);
-      return (ok: true, identity: identity);
-    } catch (e) {
-      if (mounted) {
-        ShadToaster.of(context).show(
-          ShadToast.destructive(
-            description: Text('Cannot read stored credentials: $e'),
-          ),
-        );
-      }
-      return (ok: false, identity: null);
-    }
-  }
-
-  /// Resolves the host's identity and opens an SSH tab.
-  ///
-  /// Host key verification is routed through [HostKeyPromptDialog] so the user
-  /// actually gets asked.
+  /// Opens an SSH tab for [host], with the credential and host key prompts
+  /// every other "connect" in the app goes through.
   Future<void> _connectToHost(HostModel host) async {
-    final resolved = await _resolveIdentity(host);
-    if (!resolved.ok) return;
-
-    await ref
-        .read(terminalTabsProvider.notifier)
-        .openTabForHost(
-          host,
-          identity: resolved.identity,
-          onHostKeyPrompt: _promptHostKey,
-        );
+    await _launcher.openSession(host);
   }
 
   /// Splits [paneId] into a pane running on a different host: asks for the
@@ -579,8 +522,6 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
     final direction = await _askSplitDirection();
     if (direction == null || !mounted) return;
     _showSelectHostModal(
-      context,
-      ref,
       onSelect: (host) => _splitWithHost(paneId, direction, host),
     );
   }
@@ -615,7 +556,8 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
     Axis direction,
     HostModel host,
   ) async {
-    final resolved = await _resolveIdentity(host);
+    final launcher = _launcher;
+    final resolved = await launcher.resolveIdentity(host);
     if (!resolved.ok) return;
 
     await ref
@@ -625,7 +567,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
           direction: direction,
           host: host,
           identity: resolved.identity,
-          onHostKeyPrompt: _promptHostKey,
+          onHostKeyPrompt: launcher.promptHostKey,
         );
   }
 
@@ -666,12 +608,13 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
   /// Panes that cannot be recreated — a deleted host, unreadable credentials —
   /// are reported rather than failing the whole run.
   Future<void> _runTemplate(TemplateModel template) async {
+    final launcher = _launcher;
     final result = await ref
         .read(templatesProvider.notifier)
         .runTemplate(
           template,
-          resolveIdentity: _resolveIdentity,
-          onHostKeyPrompt: _promptHostKey,
+          resolveIdentity: launcher.resolveIdentity,
+          onHostKeyPrompt: launcher.promptHostKey,
         );
     if (!mounted) return;
     if (result.openedPanes > 0) {
@@ -702,34 +645,13 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
     );
   }
 
-  Future<bool> _promptHostKey(
-    String hostname,
-    int port,
-    String keyType,
-    String fingerprint,
-    HostKeyVerificationStatus status,
-  ) async {
-    if (!mounted) return false;
-    final approved = await HostKeyPromptDialog.show(
-      context,
-      hostname: hostname,
-      port: port,
-      keyType: keyType,
-      fingerprint: fingerprint,
-      status: status,
-    );
-    return approved ?? false;
-  }
-
   /// Host picker sheet. [onSelect] runs after the sheet is dismissed, so the
   /// same list drives both "new tab" and "split with another host".
   ///
   /// A new tab can also be a whole saved layout, so unless [onSelect] narrows
   /// the choice to one host (a split can only take one), templates are listed
   /// beside the hosts.
-  void _showSelectHostModal(
-    BuildContext context,
-    WidgetRef ref, {
+  void _showSelectHostModal({
     Future<void> Function(HostModel host)? onSelect,
   }) {
     showAdaptivePanel<void>(

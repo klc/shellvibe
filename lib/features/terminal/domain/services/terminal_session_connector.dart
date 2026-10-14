@@ -70,25 +70,6 @@ class TerminalSessionConnector {
   /// included. The listener decides whether that is a first connect.
   final void Function(TerminalTabSession tab)? onSessionLive;
 
-  /// The planner that turns a stored host into a jump chain and a connect
-  /// config, built fresh off the current [hostsRepository] on every access —
-  /// matching how the notifier used to read the repository provider anew each
-  /// time rather than caching a planner across a repository change.
-  SshConnectPlanner get _connectPlanner => SshConnectPlanner(hostsRepository());
-
-  Future<List<HostModel>> _resolveJumpChain(HostModel target) =>
-      _connectPlanner.resolveJumpChain(target);
-
-  SSHConnectConfig _buildConnectConfig(
-    HostModel host,
-    IdentityModel? identity, {
-    HostKeyPromptCallback? onHostKeyPrompt,
-  }) => _connectPlanner.buildConnectConfig(
-    host,
-    identity,
-    onHostKeyPrompt: onHostKeyPrompt,
-  );
-
   /// Opens an SSH shell on [tab] against [host] and wires the resulting
   /// session into the tab's terminal and bridge.
   ///
@@ -106,6 +87,9 @@ class TerminalSessionConnector {
     // A reconnect reuses the emulator, so it starts from whatever the dead
     // session left latched. See [_resetTerminalForNewSession].
     _resetTerminalForNewSession(terminal);
+    // Built off the current repository per connect rather than cached, so a
+    // repository change is picked up by the next connect.
+    final planner = SshConnectPlanner(hostsRepository());
     try {
       // ProxyJump: connect each hop in turn, tunneling every subsequent hop's
       // transport through the previous hop's already-authenticated client.
@@ -113,19 +97,19 @@ class TerminalSessionConnector {
       // Gated on the synchronous `jumpHostId` check, not just an empty
       // resolved chain: `await` always inserts a microtask gap even for an
       // already-completed Future, so unconditionally awaiting
-      // `_resolveJumpChain` would delay `tab.sshSessionManager` being set
+      // `resolveJumpChain` would delay `tab.sshSessionManager` being set
       // below past the caller's next synchronous read of it — every hostless
       // connect, not just jump ones.
       SSHClient? viaClient;
       if (host.jumpHostId != null) {
-        final jumpChain = await _resolveJumpChain(host);
+        final jumpChain = await planner.resolveJumpChain(host);
         for (final jumpHost in jumpChain) {
           final jumpIdentity = jumpHost.identityId == null
               ? null
               : await fetchIdentityById(jumpHost.identityId!);
           final jumpManager = SSHSessionManager(knownHostsDao: knownHostsDao());
           tab.jumpSessionManagers.add(jumpManager);
-          final jumpConfig = _buildConnectConfig(
+          final jumpConfig = planner.buildConnectConfig(
             jumpHost,
             jumpIdentity,
             onHostKeyPrompt: onHostKeyPrompt,
@@ -145,7 +129,7 @@ class TerminalSessionConnector {
       final sessionManager = SSHSessionManager(knownHostsDao: knownHostsDao());
       tab.sshSessionManager = sessionManager;
 
-      final config = _buildConnectConfig(
+      final config = planner.buildConnectConfig(
         host,
         identity,
         onHostKeyPrompt: onHostKeyPrompt,
@@ -157,55 +141,63 @@ class TerminalSessionConnector {
       );
 
       await sessionManager.connect(config, viaClient: viaClient);
-      try {
-        // Mosh only changes *how* the shell is opened: the SSH connect, host
-        // key verification, and identity resolution above are shared, and the
-        // client stays live underneath either way.
-        final startedMosh = host.protocol == 'mosh'
-            ? await _startMoshShell(tab, host, config, sessionManager)
-            : false;
+      // The tab can be closed while the handshake is in flight. Its dispose
+      // ran with nothing to close, so what just came up is torn down here;
+      // otherwise the socket and keep-alive timer keep running against a tab
+      // that no longer exists.
+      if (!tabIsOpen(tab.id)) {
+        await tab.closeSessions();
+        return;
+      }
 
-        if (!startedMosh) {
-          final sshSession = await sessionManager.openShell(
-            width: terminal.viewWidth,
-            height: terminal.viewHeight,
-          );
+      // Mosh only changes *how* the shell is opened: the SSH connect, host
+      // key verification, and identity resolution above are shared, and the
+      // client stays live underneath either way.
+      final startedMosh = host.protocol == 'mosh'
+          ? await _startMoshShell(tab, host, config, sessionManager)
+          : false;
 
-          final bridge = TerminalSSHBridge(
-            terminal: terminal,
-            session: sshSession,
-            onClosed: () => _handleRemoteExit(tab),
-          );
-
-          tab.sshBridge = bridge;
-          // A dropped SSH keep-alive means a dead tab here. On a Mosh tab it
-          // means nothing — surviving exactly that is the point — so the
-          // listener is deliberately not wired in that branch.
-          tab.sshClientChangesSub = sessionManager.clientChanges.listen(
-            (client) => _handleClientChange(tab, client),
-          );
-          // The view has already sized the terminal by now, so `onResize` —
-          // only wired when the bridge is built — never fires for that first
-          // layout and the remote PTY would stay at whatever openShell
-          // requested.
-          bridge.resizeTerminal(terminal.viewWidth, terminal.viewHeight);
+      if (!startedMosh) {
+        final sshSession = await sessionManager.openShell(
+          width: terminal.viewWidth,
+          height: terminal.viewHeight,
+        );
+        if (!tabIsOpen(tab.id)) {
+          await tab.closeSessions();
+          return;
         }
 
-        tab.isConnecting = false;
-        tab.isConnected = true;
-        tab.disconnectCause = null;
+        final bridge = TerminalSSHBridge(
+          terminal: terminal,
+          session: sshSession,
+          onClosed: () => _handleRemoteExit(tab),
+        );
 
-        notifyChanged();
-        // Wire broadcast if this pane is already part of the selection.
-        syncBroadcast();
-        onSessionLive?.call(tab);
-      } catch (e) {
-        // A failure after a successful connect (e.g. server refuses a PTY)
-        // must tear the client down; otherwise the socket and keep-alive
-        // timer keep running against a dead tab.
-        await sessionManager.close();
-        rethrow;
+        tab.sshBridge = bridge;
+        // A dropped SSH keep-alive means a dead tab here. On a Mosh tab it
+        // means nothing — surviving exactly that is the point — so the
+        // listener is deliberately not wired in that branch.
+        tab.sshClientChangesSub = sessionManager.clientChanges.listen(
+          (client) => _handleClientChange(tab, client),
+        );
+        // The view has already sized the terminal by now, so `onResize` —
+        // only wired when the bridge is built — never fires for that first
+        // layout and the remote PTY would stay at whatever openShell
+        // requested.
+        bridge.resizeTerminal(terminal.viewWidth, terminal.viewHeight);
+      } else if (!tabIsOpen(tab.id)) {
+        await tab.closeSessions();
+        return;
       }
+
+      tab.isConnecting = false;
+      tab.isConnected = true;
+      tab.disconnectCause = null;
+
+      notifyChanged();
+      // Wire broadcast if this pane is already part of the selection.
+      syncBroadcast();
+      onSessionLive?.call(tab);
     } catch (e) {
       tab.isConnecting = false;
       tab.isConnected = false;
@@ -214,19 +206,10 @@ class TerminalSessionConnector {
         '\r\n\x1b[1;31m[Connection Error]\x1b[0m Failed to connect: $e\r\n',
       );
       notifyChanged();
-      // Not nulled: the error banner/reconnect path expects a failed tab to
-      // still carry a (now-closed) session manager, and the next connect
-      // attempt (see `tab.sshSessionManager = sessionManager` above) always
-      // overwrites this with a fresh one anyway.
-      await tab.sshSessionManager?.close();
-      await tab.moshLinkSub?.cancel();
-      tab.moshLinkSub = null;
-      await tab.moshSessionManager?.close();
-      tab.moshSessionManager = null;
-      for (final jumpManager in tab.jumpSessionManagers.reversed) {
-        await jumpManager.close();
-      }
-      tab.jumpSessionManagers = [];
+      // A failure after a successful connect (e.g. server refuses a PTY)
+      // must tear the client down too; otherwise the socket and keep-alive
+      // timer keep running against a dead tab.
+      await tab.closeSessions();
     }
   }
 
@@ -394,34 +377,7 @@ class TerminalSessionConnector {
     await _refreshTabHost(tab);
     final host = tab.host!;
 
-    await tab.sshClientChangesSub?.cancel();
-    tab.sshClientChangesSub = null;
-    await tab.moshLinkSub?.cancel();
-    tab.moshLinkSub = null;
-    tab.moshLinkState = null;
-    if (tab.sshBridge != null) {
-      await tab.sshBridge!.dispose(closeSession: true);
-      tab.sshBridge = null;
-    }
-    // A Mosh session cannot be reattached — the client holds the OCB counter
-    // state and the server's replay filter rejects an old sequence — so a
-    // reconnect always starts a fresh one.
-    if (tab.moshBridge != null) {
-      await tab.moshBridge!.dispose(closeSession: true);
-      tab.moshBridge = null;
-    }
-    if (tab.moshSessionManager != null) {
-      await tab.moshSessionManager!.close();
-      tab.moshSessionManager = null;
-    }
-    if (tab.sshSessionManager != null) {
-      await tab.sshSessionManager!.close();
-      tab.sshSessionManager = null;
-    }
-    for (final jumpManager in tab.jumpSessionManagers.reversed) {
-      await jumpManager.close();
-    }
-    tab.jumpSessionManagers = [];
+    await tab.closeSessions();
 
     await connectSshTab(tab, host, tab.identity, tab.hostKeyPromptCallback);
   }

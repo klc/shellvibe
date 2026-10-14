@@ -7,7 +7,6 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../../../core/network/tunnel_engine.dart';
-import '../../../../shared/providers/workspace_provider.dart';
 import '../../../hosts/domain/models/host_model.dart';
 import '../../../hosts/domain/services/host_launcher.dart';
 import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
@@ -26,74 +25,35 @@ class TunnelsScreen extends ConsumerStatefulWidget {
 }
 
 class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
-  final Map<String, HostModel> _hostsMap = {};
-
   /// Rules whose SSH connection is being dialed right now. A background
   /// connect can take seconds and produces nothing visible until it lands, so
   /// the card shows it rather than looking like a dead button.
   final Set<String> _startingRuleIds = {};
 
-  @override
-  void initState() {
-    super.initState();
-    _loadHostsMap();
-  }
+  /// Creates a rule, or edits [rule] when given.
+  Future<void> _openRuleDialog({TunnelRuleModel? rule}) async {
+    final saved = await showDialog<TunnelRuleModel>(
+      context: context,
+      builder: (_) => TunnelFormDialog(
+        rule: rule,
+        defaultHostId: rule?.hostId ?? widget.filterHostId,
+      ),
+    );
+    if (saved == null) return;
 
-  Future<void> _loadHostsMap() async {
+    final notifier = ref.read(tunnelsProvider.notifier);
     try {
-      final hosts = await ref
-          .read(hostsRepositoryProvider)
-          .getHostsByWorkspace(ref.read(activeWorkspaceIdProvider));
+      await (rule == null
+          ? notifier.addRule(saved)
+          : notifier.updateRule(saved));
+    } catch (e) {
       if (mounted) {
-        setState(() {
-          for (final h in hosts) {
-            _hostsMap[h.id] = h;
-          }
-        });
-      }
-    } catch (_) {}
-  }
-
-  void _openCreateRuleDialog() async {
-    final rule = await showDialog<TunnelRuleModel>(
-      context: context,
-      builder: (_) => TunnelFormDialog(defaultHostId: widget.filterHostId),
-    );
-
-    if (rule != null) {
-      try {
-        await ref.read(tunnelsProvider.notifier).addRule(rule);
-      } catch (e) {
-        if (mounted) {
-          ShadToaster.of(context).show(
-            ShadToast.destructive(
-              title: const Text('Save Tunnel Error'),
-              description: Text('$e'),
-            ),
-          );
-        }
-      }
-    }
-  }
-
-  void _openEditRuleDialog(TunnelRuleModel rule) async {
-    final updatedRule = await showDialog<TunnelRuleModel>(
-      context: context,
-      builder: (_) => TunnelFormDialog(rule: rule, defaultHostId: rule.hostId),
-    );
-
-    if (updatedRule != null) {
-      try {
-        await ref.read(tunnelsProvider.notifier).updateRule(updatedRule);
-      } catch (e) {
-        if (mounted) {
-          ShadToaster.of(context).show(
-            ShadToast.destructive(
-              title: const Text('Save Tunnel Error'),
-              description: Text('$e'),
-            ),
-          );
-        }
+        ShadToaster.of(context).show(
+          ShadToast.destructive(
+            title: const Text('Save Tunnel Error'),
+            description: Text('$e'),
+          ),
+        );
       }
     }
   }
@@ -102,6 +62,12 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
   Widget build(BuildContext context) {
     final tokens = ShellVibeTokens.resolve(context);
     final state = ref.watch(tunnelsProvider);
+    // Watched rather than fetched once: a host edited while this screen is
+    // open is reflected on its cards.
+    final hostsById = {
+      for (final h in ref.watch(hostsProvider).value ?? const <HostModel>[])
+        h.id: h,
+    };
     final activeTunnelsAsync = ref.watch(activeTunnelsStreamProvider);
     final filteredRules = widget.filterHostId != null
         ? state.rules.where((r) => r.hostId == widget.filterHostId).toList()
@@ -139,7 +105,7 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
                     ShellVibeButton(
                       icon: LucideIcons.plus,
                       label: 'Add tunnel',
-                      onPressed: _openCreateRuleDialog,
+                      onPressed: _openRuleDialog,
                     ),
                   ],
                 ),
@@ -182,7 +148,7 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
                         ShellVibeButton(
                           icon: LucideIcons.plus,
                           label: 'Create your first rule',
-                          onPressed: _openCreateRuleDialog,
+                          onPressed: _openRuleDialog,
                         ),
                       ],
                     ),
@@ -198,7 +164,7 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
                         return _buildRuleCard(
                           rule: rule,
                           activeTunnel: activeMap[rule.id],
-                          host: _hostsMap[rule.hostId],
+                          host: hostsById[rule.hostId],
                         );
                       },
                     ),
@@ -371,7 +337,7 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
       style: shellvibeMenuTriggerStyle(tokens),
       icon: Icon(LucideIcons.ellipsis, size: 16, color: tokens.textMuted),
       onSelected: (val) {
-        if (val == 'edit') _openEditRuleDialog(rule);
+        if (val == 'edit') _openRuleDialog(rule: rule);
         if (val == 'delete') {
           ref.read(tunnelsProvider.notifier).deleteRule(rule.id);
         }

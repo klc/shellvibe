@@ -50,6 +50,14 @@ class MobileExtraKeysBar extends StatefulWidget {
   State<MobileExtraKeysBar> createState() => _MobileExtraKeysBarState();
 }
 
+/// Ctrl + a printable ASCII [ch] as the control code a terminal sends:
+/// A-Z/a-z -> 1-26 and the symbols by the same low-five-bits rule, except
+/// `/` and `-`, which real terminals map to 0x1F (readline's undo).
+String _ctrlCode(String ch) {
+  if (ch == '/' || ch == '-') return '\x1f';
+  return String.fromCharCode(ch.codeUnitAt(0) & 0x1F);
+}
+
 class _MobileExtraKeysBarState extends State<MobileExtraKeysBar> {
   bool _ctrlActive = false;
   bool _altActive = false;
@@ -93,10 +101,7 @@ class _MobileExtraKeysBarState extends State<MobileExtraKeysBar> {
       final code = data.codeUnitAt(0);
       if (code >= 32 && code <= 126) {
         var output = data;
-        if (_ctrlActive) {
-          // Ctrl + letter/symbol -> ASCII control code (A-Z/a-z -> 1-26).
-          output = String.fromCharCode(code & 0x1F);
-        }
+        if (_ctrlActive) output = _ctrlCode(data);
         if (_altActive) {
           output = '\x1b$output';
         }
@@ -146,51 +151,7 @@ class _MobileExtraKeysBarState extends State<MobileExtraKeysBar> {
         output = ctrlChar;
       } else if (rawChar.length == 1) {
         final code = rawChar.codeUnitAt(0);
-        if (code >= 65 && code <= 90) {
-          // A-Z -> ASCII 1-26
-          output = String.fromCharCode(code - 64);
-        } else if (code >= 97 && code <= 122) {
-          // a-z -> ASCII 1-26
-          output = String.fromCharCode(code - 96);
-        } else {
-          // Symbols ASCII control code conversion
-          switch (rawChar) {
-            case '|':
-              output = '\x1c';
-              break;
-            case '~':
-              output = '\x1e';
-              break;
-            case '/':
-              output = '\x1f';
-              break;
-            case '-':
-              output = '\x1f';
-              break;
-            case '[':
-              output = '\x1b';
-              break;
-            case '\\':
-              output = '\x1c';
-              break;
-            case ']':
-              output = '\x1d';
-              break;
-            case '^':
-              output = '\x1e';
-              break;
-            case '_':
-              output = '\x1f';
-              break;
-            case '@':
-              output = '\x00';
-              break;
-            default:
-              if (code >= 32 && code <= 126) {
-                output = String.fromCharCode(code & 0x1F);
-              }
-          }
-        }
+        if (code >= 32 && code <= 126) output = _ctrlCode(rawChar);
       }
     }
 

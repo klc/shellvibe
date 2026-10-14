@@ -57,7 +57,7 @@ final class TunnelRepositoryProvider
   }
 }
 
-String _$tunnelRepositoryHash() => r'0015025dc51e3be2433739fd7b65f4ce7f460d13';
+String _$tunnelRepositoryHash() => r'efac6eba1409ea4cd7b133cb1e271a69ac293b29';
 
 /// Provider for [TunnelEngine]
 
@@ -245,7 +245,7 @@ final class TunnelsNotifierProvider
   }
 }
 
-String _$tunnelsNotifierHash() => r'516adb5a5f20664da1a3c9574ed7c41eb59b3d36';
+String _$tunnelsNotifierHash() => r'5b1afed78a45f4f394ae291e5afeb76d39556fe1';
 
 abstract class _$TunnelsNotifier extends $Notifier<TunnelsState> {
   TunnelsState build();
