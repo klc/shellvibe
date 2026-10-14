@@ -2,8 +2,11 @@
 ///
 /// These are the contract every MCP component agrees on: the classifier
 /// produces a [RiskCategory], the policy engine turns it into a
-/// [PolicyAction], and the transport reports failures as an [McpErrorCode].
+/// [PolicyAction], and the transport reports failures as an `McpErrorCode`
+/// (`core/mcp/mcp_errors.dart`, re-exported here).
 library;
+
+export '../../../../core/mcp/mcp_errors.dart' show McpErrorCode;
 
 /// How much an agent client is allowed to do on one host.
 ///
@@ -163,86 +166,6 @@ enum ApprovalScope {
   };
 }
 
-/// Machine-readable failure codes returned to the agent.
-///
-/// The agent reads these to correct itself, so each one has a distinct,
-/// actionable meaning; `internal` is the only catch-all.
-enum McpErrorCode {
-  /// The vault is locked, so no credential can be resolved.
-  vaultLocked,
-
-  /// No grant exists for this host yet; call `request_host_access` first.
-  hostAccessRequired,
-
-  /// The policy engine refused this command.
-  policyDenied,
-
-  /// The command needs a terminal; a batch alternative is in the message.
-  interactiveCommand,
-
-  /// No open session with that id.
-  sessionNotFound,
-
-  /// This client already holds the maximum number of concurrent sessions.
-  sessionLimitReached,
-
-  /// The host has no POSIX shell to normalize into.
-  shellUnsupported,
-
-  /// The host's SSH host key is not in `known_hosts` yet, and the MCP path
-  /// never accepts a fingerprint on the user's behalf. Only a human verifying
-  /// it from a terminal tab can clear this — retrying cannot.
-  hostKeyUntrusted,
-
-  /// The host exists but is hidden from MCP.
-  hostNotVisible,
-
-  /// Access to this host was denied recently; requests are refused until the
-  /// cooldown expires.
-  cooldown,
-
-  /// No runbook with that id in this client's workspace.
-  runbookNotFound,
-
-  /// No run with that id that this client started.
-  runNotFound,
-
-  /// A runbook run is already in progress; only one runs at a time.
-  runbookBusy,
-
-  /// The variables passed to a runbook are not acceptable.
-  invalidVariables,
-
-  /// Missing, revoked, or expired bearer token.
-  unauthorized,
-
-  /// Too many requests from this client.
-  rateLimited,
-
-  /// Anything not covered above.
-  internal;
-
-  String get wireName => switch (this) {
-    McpErrorCode.vaultLocked => 'VAULT_LOCKED',
-    McpErrorCode.hostAccessRequired => 'HOST_ACCESS_REQUIRED',
-    McpErrorCode.policyDenied => 'POLICY_DENIED',
-    McpErrorCode.interactiveCommand => 'INTERACTIVE_COMMAND',
-    McpErrorCode.sessionNotFound => 'SESSION_NOT_FOUND',
-    McpErrorCode.sessionLimitReached => 'SESSION_LIMIT_REACHED',
-    McpErrorCode.shellUnsupported => 'SHELL_UNSUPPORTED',
-    McpErrorCode.hostKeyUntrusted => 'HOST_KEY_UNTRUSTED',
-    McpErrorCode.hostNotVisible => 'HOST_NOT_VISIBLE',
-    McpErrorCode.cooldown => 'COOLDOWN',
-    McpErrorCode.runbookNotFound => 'RUNBOOK_NOT_FOUND',
-    McpErrorCode.runNotFound => 'RUN_NOT_FOUND',
-    McpErrorCode.runbookBusy => 'RUNBOOK_BUSY',
-    McpErrorCode.invalidVariables => 'INVALID_VARIABLES',
-    McpErrorCode.unauthorized => 'UNAUTHORIZED',
-    McpErrorCode.rateLimited => 'RATE_LIMITED',
-    McpErrorCode.internal => 'INTERNAL_ERROR',
-  };
-}
-
 /// The outcome recorded in the audit log for one tool call.
 enum AuditDecision {
   allowed,
@@ -257,5 +180,15 @@ enum AuditDecision {
     AuditDecision.denied => 'denied',
     AuditDecision.autoDenied => 'auto_denied',
     AuditDecision.error => 'error',
+  };
+
+  /// Reverses [wireName] for a stored audit row. An unrecognized value must
+  /// never read as a quiet success.
+  static AuditDecision fromName(String value) => switch (value) {
+    'allowed' => AuditDecision.allowed,
+    'confirmed' => AuditDecision.confirmed,
+    'denied' => AuditDecision.denied,
+    'auto_denied' => AuditDecision.autoDenied,
+    _ => AuditDecision.error,
   };
 }

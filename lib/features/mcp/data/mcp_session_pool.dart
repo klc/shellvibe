@@ -61,7 +61,16 @@ class McpSession {
 class McpSessionPool {
   final McpHostConnector connector;
   final int maxSessionsPerClient;
-  final Duration idleTimeout;
+
+  /// The "Limits" knobs from Settings. Mutable because they are user
+  /// settings on a pool that lives as long as the app: `McpSettingsNotifier`
+  /// writes them here on load and on every change, and each is read at the
+  /// moment it applies (sweep tick, shell creation, `run_command` call).
+  /// The pool is the one object the shell layer and `run_command` both hold,
+  /// which is why they live here and not on a settings service.
+  Duration idleTimeout;
+  int outputCapBytes;
+  Duration defaultCommandTimeout;
 
   /// Where each session shows itself to the user. Defaults to a mirror with
   /// no surface so the pool works unchanged in tests and anywhere the UI is
@@ -78,6 +87,8 @@ class McpSessionPool {
     this.mirror = const NullMcpSessionMirror(),
     this.maxSessionsPerClient = 10,
     this.idleTimeout = const Duration(minutes: 30),
+    this.outputCapBytes = 100 * 1024,
+    this.defaultCommandTimeout = const Duration(seconds: 60),
   }) {
     // A period well under the default idle timeout so a session is reaped
     // within a minute of going stale rather than lingering until the next
@@ -125,6 +136,7 @@ class McpSessionPool {
       shell = PersistentShellSession(
         channel: channel,
         reopen: openPtylessShell,
+        outputCapBytes: outputCapBytes,
       );
       await shell.initialize();
     } catch (_) {
@@ -177,6 +189,20 @@ class McpSessionPool {
   }
 
   McpSession? find(String sessionId) => _sessions[sessionId];
+
+  /// [find], refusing an id that belongs to a different client: a client must
+  /// never be able to touch, list, or even learn of another client's session
+  /// by guessing its id, so "not yours" and "does not exist" read the same.
+  McpSession requireOwned(String clientId, String sessionId) {
+    final session = find(sessionId);
+    if (session == null || session.clientId != clientId) {
+      throw McpToolException(
+        McpErrorCode.sessionNotFound,
+        'No open session with id "$sessionId" for this client.',
+      );
+    }
+    return session;
+  }
 
   List<McpSession> sessionsForClient(String clientId) =>
       _sessions.values.where((s) => s.clientId == clientId).toList();
@@ -241,14 +267,8 @@ class McpSessionPool {
   /// dropped out from under the session, so it is dead and removed. The
   /// connection is closed anyway (idempotent — the manager already tore down
   /// its own client/socket) so timers and controllers on it are released.
-  Future<void> _dropSession(String sessionId) async {
-    final session = _sessions.remove(sessionId);
-    if (session == null) return;
-    await _clientChangeSubs.remove(sessionId)?.cancel();
-    await _closeSurface(session, 'connection lost');
-    await session.shell.close();
-    await session.connection.close();
-  }
+  Future<void> _dropSession(String sessionId) =>
+      close(sessionId, reason: 'connection lost');
 
   /// Closes a session's watchable surface, swallowing anything it throws:
   /// this runs on every teardown path, including the vault-lock and panic

@@ -1,11 +1,11 @@
 import 'dart:convert';
 
-/// Protocol version this server negotiates in `initialize`.
+/// Protocol version this server speaks, reported in `initialize`.
 ///
-/// v0 speaks exactly one MCP protocol revision. Multi-version negotiation is
-/// deferred until a real client forces the question; until then a mismatched
-/// request gets a precise rejection instead of a server that silently
-/// half-understands a newer or older wire shape.
+/// v0 speaks exactly one MCP protocol revision. Per the spec the server
+/// always answers with a version it supports — it never rejects the
+/// client's — and a client that cannot speak it is the one that disconnects,
+/// so there is nothing to validate on this side.
 const String kMcpProtocolVersion = '2025-06-18';
 
 /// Raised when an MCP frame is malformed or violates protocol rules.
@@ -17,29 +17,6 @@ class McpProtocolException implements Exception {
 
   @override
   String toString() => 'McpProtocolException($code): $message';
-}
-
-/// Raised when a peer's `initialize` request declares a protocol version
-/// this server does not speak.
-class McpUnsupportedVersionException extends McpProtocolException {
-  final String version;
-
-  const McpUnsupportedVersionException(this.version)
-    : super('unsupported_version', 'Unsupported MCP protocol version');
-}
-
-/// Checks an `initialize` request's declared `protocolVersion` against the
-/// one version this server speaks.
-///
-/// Kept as a free function rather than folded into a session/handler class:
-/// this file is pure protocol, no session state, so the check that guards
-/// entry into a session lives here as the one place both the transport and
-/// any future test can call it without pulling in the rest of the server.
-String negotiateMcpProtocolVersion(String requested) {
-  if (requested != kMcpProtocolVersion) {
-    throw McpUnsupportedVersionException(requested);
-  }
-  return requested;
 }
 
 /// Base class for JSON-RPC 2.0 frames exchanged over the MCP transport.

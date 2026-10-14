@@ -2,8 +2,8 @@ import '../models/mcp_models.dart';
 
 /// Masks secrets out of text before it reaches an AI agent.
 ///
-/// Every byte returned by `run_command`, `sftp_read` and `read_tab_output`
-/// passes through here first (see docs/mcp_plan.md, "Maskeleme motoru").
+/// Every byte returned by `run_command` and the runbook tools passes
+/// through here first (see docs/mcp_plan.md, "Maskeleme motoru").
 /// This engine is also the one committed to the in-app AI assistant
 /// (docs/product_roadmap §3.2) — it is written once, in this file, and used
 /// in two places, so a fix or a new pattern only has to happen here.
@@ -11,13 +11,7 @@ import '../models/mcp_models.dart';
 /// [redact] never throws on unmatched input; text with nothing to mask comes
 /// back unchanged with a zero [RedactionResult.count].
 class OutputRedactor {
-  const OutputRedactor({this.extraPatterns = const []});
-
-  /// Additional patterns to mask beyond the built-ins, e.g. a host-specific
-  /// secret format. Each full match is replaced with `[REDACTED:custom]` —
-  /// there is no way for a caller to name a type per pattern, so all of them
-  /// share one label.
-  final List<RegExp> extraPatterns;
+  const OutputRedactor();
 
   // --- Built-in patterns -----------------------------------------------
   //
@@ -92,7 +86,6 @@ class OutputRedactor {
   ///    the only pattern with no format constraint on the value — it would
   ///    otherwise be free to re-mask (and double-count) a value a more
   ///    specific pattern already replaced with a `[REDACTED:...]` marker.
-  /// 5. Caller-supplied [extraPatterns] run last of all.
   ///
   /// Overlapping matches: every replacement callback below checks whether
   /// the text it is about to replace already contains a `[REDACTED:` marker
@@ -128,12 +121,6 @@ class OutputRedactor {
     final assignmentResult = _redactAssignment(text);
     text = assignmentResult.text;
     total += assignmentResult.count;
-
-    for (final pattern in extraPatterns) {
-      final result = _redactWhole(text, pattern, 'custom');
-      text = result.text;
-      total += result.count;
-    }
 
     return RedactionResult(text, total);
   }
