@@ -7,6 +7,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:uuid/uuid.dart';
 import 'package:xterm3/xterm.dart';
 
+import '../../../../app/router/app_router.dart';
 import '../../../../core/network/device_link/device_link_local_session_transport.dart';
 import '../../../../core/network/device_link/device_link_server.dart';
 import '../../../../core/network/device_link/device_link_session_transport.dart';
@@ -20,7 +21,9 @@ import '../../../hosts/domain/models/host_model.dart';
 import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
 import '../../../settings/domain/models/app_settings_model.dart';
 import '../../../settings/presentation/notifiers/settings_notifier.dart';
+import '../../../snippets/presentation/notifiers/runbooks_notifier.dart';
 import '../../../snippets/presentation/notifiers/snippets_notifier.dart';
+import '../../../snippets/presentation/widgets/prod_confirmation.dart';
 import '../../../device_link/data/repositories/device_link_pairing_repository.dart';
 import '../../../vault/data/repositories/vault_env_repository.dart';
 import '../../../vault/domain/models/identity_model.dart';
@@ -197,6 +200,21 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       final all = await ref.read(snippetsRepositoryProvider).getAllSnippets();
       return all.where((s) => s.id == id).firstOrNull;
     },
+    loadRunbook: (id) async {
+      final all = await ref
+          .read(runbooksRepositoryProvider)
+          .getRunbooksByWorkspace(ref.read(activeWorkspaceIdProvider));
+      return all.where((r) => r.id == id).firstOrNull;
+    },
+    confirmProd: (runbook, host) async {
+      final context = rootNavigatorKey.currentContext;
+      if (context == null) return false;
+      return confirmProdRun(
+        context,
+        what: 'startup runbook "${runbook.title}"',
+        hosts: [host],
+      );
+    },
     send: (tab, code) {
       // Pasted, then Enter typed: inside a bracketed paste a newline is text.
       tab.terminal.paste(code);
@@ -211,18 +229,22 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     IdentityModel? identity,
     HostKeyPromptCallback? onHostKeyPrompt,
     String? startupSnippetId,
+    String? startupRunbookId,
   }) async {
     final tabId = const Uuid().v4();
-    final newTab = TerminalTabSession(
-      id: tabId,
-      title: host.label,
-      sessionType: TerminalSessionType.ssh,
-      host: host,
-      identity: identity,
-      terminal: _newTerminal(),
-      isConnecting: true,
-      hostKeyPromptCallback: onHostKeyPrompt,
-    )..startupSnippetOverrideId = startupSnippetId;
+    final newTab =
+        TerminalTabSession(
+            id: tabId,
+            title: host.label,
+            sessionType: TerminalSessionType.ssh,
+            host: host,
+            identity: identity,
+            terminal: _newTerminal(),
+            isConnecting: true,
+            hostKeyPromptCallback: onHostKeyPrompt,
+          )
+          ..startupSnippetOverrideId = startupSnippetId
+          ..startupRunbookId = startupRunbookId;
     _ownedTabs.add(newTab);
 
     final updatedTabs = [...state.tabs, newTab];
@@ -785,6 +807,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     IdentityModel? identity,
     HostKeyPromptCallback? onHostKeyPrompt,
     String? startupSnippetId,
+    String? startupRunbookId,
   }) {
     final parentIndex = state.tabs.indexWhere((t) => t.id == parentTabId);
     if (parentIndex == -1) return null;
@@ -802,22 +825,25 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
         (parentTab.sessionType == TerminalSessionType.ssh &&
             parentTab.host != null);
 
-    final splitTab = TerminalTabSession(
-      id: splitId,
-      // A pane on its own connection is titled after that host; an inherited
-      // pane keeps the parent's title with a marker.
-      title: host != null ? host.label : '${parentTab.title} (Split)',
-      sessionType: isSshSplit
-          ? TerminalSessionType.ssh
-          : TerminalSessionType.local,
-      host: targetHost,
-      identity: host != null ? identity : parentTab.identity,
-      terminal: _newTerminal(),
-      splitParentId: parentTabId,
-      splitDirection: direction,
-      isConnecting: isSshSplit,
-      hostKeyPromptCallback: onHostKeyPrompt,
-    )..startupSnippetOverrideId = startupSnippetId;
+    final splitTab =
+        TerminalTabSession(
+            id: splitId,
+            // A pane on its own connection is titled after that host; an inherited
+            // pane keeps the parent's title with a marker.
+            title: host != null ? host.label : '${parentTab.title} (Split)',
+            sessionType: isSshSplit
+                ? TerminalSessionType.ssh
+                : TerminalSessionType.local,
+            host: targetHost,
+            identity: host != null ? identity : parentTab.identity,
+            terminal: _newTerminal(),
+            splitParentId: parentTabId,
+            splitDirection: direction,
+            isConnecting: isSshSplit,
+            hostKeyPromptCallback: onHostKeyPrompt,
+          )
+          ..startupSnippetOverrideId = startupSnippetId
+          ..startupRunbookId = startupRunbookId;
     _ownedTabs.add(splitTab);
     state = state.copyWith(
       tabs: [...state.tabs, splitTab],

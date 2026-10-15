@@ -10,6 +10,7 @@ import '../../../../core/utils/platform_capabilities.dart';
 import '../../../hosts/domain/models/host_model.dart';
 import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
 import '../../../terminal/domain/models/terminal_tab_session.dart';
+import '../../../snippets/domain/models/runbook_model.dart';
 import '../../../snippets/domain/models/snippet_model.dart';
 import '../../domain/models/template_model.dart';
 import '../../domain/models/template_pane_model.dart';
@@ -169,6 +170,7 @@ class _TemplateEditorPanelState extends ConsumerState<TemplateEditorPanel> {
     final runbooks = ref.watch(runbooksProvider).value ?? const [];
     final snippets = ref.watch(snippetsProvider).value ?? const [];
     final snippetTitles = {for (final s in snippets) s.id: s.title};
+    final runbookTitles = {for (final r in runbooks) r.id: r.title};
     // A draft that names a runbook that is gone shows as "none" rather than
     // as a dropdown value with no item.
     final onOpenId = runbooks.any((r) => r.id == _draft.onOpenRunbookId)
@@ -294,11 +296,18 @@ class _TemplateEditorPanelState extends ConsumerState<TemplateEditorPanel> {
                         depth: entry.depth,
                         host: hostsById[entry.pane.hostId],
                         snippets: snippets,
+                        runbooks: runbooks,
                         startupSnippetTitle:
                             snippetTitles[entry.pane.startupSnippetId],
+                        startupRunbookTitle:
+                            runbookTitles[entry.pane.startupRunbookId],
                         onStartupSnippet: (id) => _edit(
                           (draft) =>
                               draft.withPaneStartupSnippet(entry.pane.id, id),
+                        ),
+                        onStartupRunbook: (id) => _edit(
+                          (draft) =>
+                              draft.withPaneStartupRunbook(entry.pane.id, id),
                         ),
                         problem: _draft.problemWith(
                           entry.pane,
@@ -486,8 +495,11 @@ class _PaneRow extends StatelessWidget {
     required this.depth,
     required this.host,
     required this.snippets,
+    required this.runbooks,
     required this.startupSnippetTitle,
+    required this.startupRunbookTitle,
     required this.onStartupSnippet,
+    required this.onStartupRunbook,
     required this.problem,
     required this.onChangeHost,
     required this.onSplit,
@@ -505,8 +517,17 @@ class _PaneRow extends StatelessWidget {
   /// Title of this pane's own startup snippet, when it has one.
   final String? startupSnippetTitle;
 
+  /// Runbooks a pane can be given to type once it connects.
+  final List<RunbookModel> runbooks;
+
+  /// Title of this pane's own startup runbook, when it has one.
+  final String? startupRunbookTitle;
+
   /// Picks this pane's startup snippet; null hands it back to the host's.
   final ValueChanged<String?> onStartupSnippet;
+
+  /// Picks this pane's startup runbook, in place of any snippet.
+  final ValueChanged<String> onStartupRunbook;
   final String? problem;
   final VoidCallback onChangeHost;
   final ValueChanged<Axis> onSplit;
@@ -526,6 +547,11 @@ class _PaneRow extends StatelessWidget {
         ? 'The host this pane used was deleted'
         : '${host!.username == null || host!.username!.isEmpty ? '' : '${host!.username}@'}'
               '${host!.hostname}:${host!.port}';
+    final startup = startupRunbookTitle != null
+        ? 'runbook: $startupRunbookTitle'
+        : startupSnippetTitle != null
+        ? 'startup: $startupSnippetTitle'
+        : null;
     final splitIcon = pane.isRoot
         ? LucideIcons.appWindow
         : pane.splitDirection == Axis.vertical
@@ -564,10 +590,7 @@ class _PaneRow extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  problem ??
-                      (startupSnippetTitle == null
-                          ? detail
-                          : '$detail · startup: $startupSnippetTitle'),
+                  problem ?? (startup == null ? detail : '$detail · $startup'),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: shellvibeMono(
@@ -581,30 +604,50 @@ class _PaneRow extends StatelessWidget {
           ),
           // Local shells have no connection coming up to hook into.
           if (!isLocal)
-            PopupMenuButton<String>(
+            // Each item carries what picking it does: a null value would read
+            // as the menu being dismissed.
+            PopupMenuButton<VoidCallback>(
               key: Key('template_pane_startup_${pane.id}'),
-              tooltip: 'Startup snippet',
+              tooltip: 'Startup snippet or runbook',
               icon: Icon(
                 LucideIcons.squareTerminal,
                 size: 16,
-                color: startupSnippetTitle == null
-                    ? tokens.textMuted
-                    : tokens.brand,
+                color: startup == null ? tokens.textMuted : tokens.brand,
               ),
-              // The empty string is "use the host's own": a null value would
-              // read as the menu being dismissed.
-              onSelected: (id) => onStartupSnippet(id.isEmpty ? null : id),
+              onSelected: (pick) => pick(),
               itemBuilder: (context) => [
-                const PopupMenuItem(
-                  key: Key('template_startup_host_default'),
-                  value: '',
-                  child: Text('Use host default'),
+                PopupMenuItem(
+                  key: const Key('template_startup_host_default'),
+                  value: () => onStartupSnippet(null),
+                  child: const Text('Use host default'),
                 ),
                 for (final snippet in snippets)
                   PopupMenuItem(
                     key: Key('template_startup_${snippet.id}'),
-                    value: snippet.id,
+                    value: () => onStartupSnippet(snippet.id),
                     child: Text(snippet.title, overflow: TextOverflow.ellipsis),
+                  ),
+                if (runbooks.isNotEmpty) const PopupMenuDivider(),
+                for (final runbook in runbooks)
+                  PopupMenuItem(
+                    key: Key('template_startup_runbook_${runbook.id}'),
+                    value: () => onStartupRunbook(runbook.id),
+                    child: Row(
+                      children: [
+                        Icon(
+                          LucideIcons.listChecks,
+                          size: 14,
+                          color: tokens.textMuted,
+                        ),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            runbook.title,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
               ],
             ),

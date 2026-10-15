@@ -142,6 +142,10 @@ class TerminalTabSession {
   /// host's own. Null means use the host's.
   String? startupSnippetOverrideId;
 
+  /// Runbook a template pane asks to have typed in once connected, in place
+  /// of any startup snippet.
+  String? startupRunbookId;
+
   /// Set once the startup snippet has been dealt with for this tab, so that
   /// reconnecting the same tab never types it again.
   bool startupSnippetHandled = false;

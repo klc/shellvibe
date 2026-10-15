@@ -80,7 +80,7 @@ void main() {
 
       final appDb = AppDatabase(NativeDatabase(dbFile));
       db = appDb;
-      expect(appDb.schemaVersion, 19);
+      expect(appDb.schemaVersion, 20);
 
       final snippet = (await appDb.select(appDb.snippets).get()).single;
       expect(snippet.variables, isNull);

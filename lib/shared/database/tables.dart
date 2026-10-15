@@ -400,6 +400,14 @@ class TemplatePanes extends Table {
     onDelete: KeyAction.setNull,
   )();
 
+  /// Runbook typed into this pane once it connects, in place of any startup
+  /// snippet. Cleared when the runbook is deleted.
+  TextColumn get startupRunbookId => text().nullable().references(
+    Runbooks,
+    #id,
+    onDelete: KeyAction.setNull,
+  )();
+
   @override
   Set<Column> get primaryKey => {id};
 }

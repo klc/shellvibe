@@ -39,6 +39,10 @@ class TemplatePaneModel {
   /// host's own".
   final String? startupSnippetId;
 
+  /// Runbook typed into this pane once it connects. When set it replaces any
+  /// startup snippet, the pane's or the host's.
+  final String? startupRunbookId;
+
   const TemplatePaneModel({
     required this.id,
     required this.templateId,
@@ -50,6 +54,7 @@ class TemplatePaneModel {
     this.hostId,
     this.title,
     this.startupSnippetId,
+    this.startupRunbookId,
   });
 
   bool get isRoot => parentPaneId == null;
@@ -66,6 +71,8 @@ class TemplatePaneModel {
     String? title,
     String? startupSnippetId,
     bool clearStartupSnippet = false,
+    String? startupRunbookId,
+    bool clearStartupRunbook = false,
   }) {
     return TemplatePaneModel(
       id: id ?? this.id,
@@ -80,6 +87,9 @@ class TemplatePaneModel {
       startupSnippetId: clearStartupSnippet
           ? null
           : (startupSnippetId ?? this.startupSnippetId),
+      startupRunbookId: clearStartupRunbook
+          ? null
+          : (startupRunbookId ?? this.startupRunbookId),
     );
   }
 }
@@ -87,21 +97,21 @@ class TemplatePaneModel {
 /// Storage encoding for the split axis. `Axis.horizontal` is a side-by-side
 /// split, `Axis.vertical` a top/bottom one.
 String? encodeSplitDirection(Axis? axis) => switch (axis) {
-      Axis.horizontal => 'horizontal',
-      Axis.vertical => 'vertical',
-      null => null,
-    };
+  Axis.horizontal => 'horizontal',
+  Axis.vertical => 'vertical',
+  null => null,
+};
 
 Axis? decodeSplitDirection(String? value) => switch (value) {
-      'horizontal' => Axis.horizontal,
-      'vertical' => Axis.vertical,
-      _ => null,
-    };
+  'horizontal' => Axis.horizontal,
+  'vertical' => Axis.vertical,
+  _ => null,
+};
 
 String encodeSessionType(TerminalSessionType type) => switch (type) {
-      TerminalSessionType.ssh => 'ssh',
-      TerminalSessionType.local => 'local',
-    };
+  TerminalSessionType.ssh => 'ssh',
+  TerminalSessionType.local => 'local',
+};
 
 /// Unknown values fall back to a local shell rather than throwing, so one bad
 /// row cannot make a whole template unreadable.

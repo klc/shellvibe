@@ -193,6 +193,7 @@ final class SyncRowCodec {
     'hostId': tp.hostId,
     'title': tp.title,
     'startupSnippetId': tp.startupSnippetId,
+    'startupRunbookId': tp.startupRunbookId,
   };
 
   static Map<String, dynamic> bookmark(Bookmark b) => {

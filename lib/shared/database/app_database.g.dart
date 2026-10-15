@@ -5827,6 +5827,20 @@ class $TemplatePanesTable extends TemplatePanes
       'REFERENCES snippets (id) ON DELETE SET NULL',
     ),
   );
+  static const VerificationMeta _startupRunbookIdMeta = const VerificationMeta(
+    'startupRunbookId',
+  );
+  @override
+  late final GeneratedColumn<String> startupRunbookId = GeneratedColumn<String>(
+    'startup_runbook_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES runbooks (id) ON DELETE SET NULL',
+    ),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -5839,6 +5853,7 @@ class $TemplatePanesTable extends TemplatePanes
     hostId,
     title,
     startupSnippetId,
+    startupRunbookId,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -5929,6 +5944,15 @@ class $TemplatePanesTable extends TemplatePanes
         ),
       );
     }
+    if (data.containsKey('startup_runbook_id')) {
+      context.handle(
+        _startupRunbookIdMeta,
+        startupRunbookId.isAcceptableOrUnknown(
+          data['startup_runbook_id']!,
+          _startupRunbookIdMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -5978,6 +6002,10 @@ class $TemplatePanesTable extends TemplatePanes
         DriftSqlType.string,
         data['${effectivePrefix}startup_snippet_id'],
       ),
+      startupRunbookId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}startup_runbook_id'],
+      ),
     );
   }
 
@@ -6013,6 +6041,10 @@ class TemplatePane extends DataClass implements Insertable<TemplatePane> {
   /// Startup snippet for this pane, overriding its host's. Null means use the
   /// host's own. Cleared when the snippet is deleted.
   final String? startupSnippetId;
+
+  /// Runbook typed into this pane once it connects, in place of any startup
+  /// snippet. Cleared when the runbook is deleted.
+  final String? startupRunbookId;
   const TemplatePane({
     required this.id,
     required this.templateId,
@@ -6024,6 +6056,7 @@ class TemplatePane extends DataClass implements Insertable<TemplatePane> {
     this.hostId,
     this.title,
     this.startupSnippetId,
+    this.startupRunbookId,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -6047,6 +6080,9 @@ class TemplatePane extends DataClass implements Insertable<TemplatePane> {
     }
     if (!nullToAbsent || startupSnippetId != null) {
       map['startup_snippet_id'] = Variable<String>(startupSnippetId);
+    }
+    if (!nullToAbsent || startupRunbookId != null) {
+      map['startup_runbook_id'] = Variable<String>(startupRunbookId);
     }
     return map;
   }
@@ -6073,6 +6109,9 @@ class TemplatePane extends DataClass implements Insertable<TemplatePane> {
       startupSnippetId: startupSnippetId == null && nullToAbsent
           ? const Value.absent()
           : Value(startupSnippetId),
+      startupRunbookId: startupRunbookId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(startupRunbookId),
     );
   }
 
@@ -6092,6 +6131,7 @@ class TemplatePane extends DataClass implements Insertable<TemplatePane> {
       hostId: serializer.fromJson<String?>(json['hostId']),
       title: serializer.fromJson<String?>(json['title']),
       startupSnippetId: serializer.fromJson<String?>(json['startupSnippetId']),
+      startupRunbookId: serializer.fromJson<String?>(json['startupRunbookId']),
     );
   }
   @override
@@ -6108,6 +6148,7 @@ class TemplatePane extends DataClass implements Insertable<TemplatePane> {
       'hostId': serializer.toJson<String?>(hostId),
       'title': serializer.toJson<String?>(title),
       'startupSnippetId': serializer.toJson<String?>(startupSnippetId),
+      'startupRunbookId': serializer.toJson<String?>(startupRunbookId),
     };
   }
 
@@ -6122,6 +6163,7 @@ class TemplatePane extends DataClass implements Insertable<TemplatePane> {
     Value<String?> hostId = const Value.absent(),
     Value<String?> title = const Value.absent(),
     Value<String?> startupSnippetId = const Value.absent(),
+    Value<String?> startupRunbookId = const Value.absent(),
   }) => TemplatePane(
     id: id ?? this.id,
     templateId: templateId ?? this.templateId,
@@ -6137,6 +6179,9 @@ class TemplatePane extends DataClass implements Insertable<TemplatePane> {
     startupSnippetId: startupSnippetId.present
         ? startupSnippetId.value
         : this.startupSnippetId,
+    startupRunbookId: startupRunbookId.present
+        ? startupRunbookId.value
+        : this.startupRunbookId,
   );
   TemplatePane copyWithCompanion(TemplatePanesCompanion data) {
     return TemplatePane(
@@ -6162,6 +6207,9 @@ class TemplatePane extends DataClass implements Insertable<TemplatePane> {
       startupSnippetId: data.startupSnippetId.present
           ? data.startupSnippetId.value
           : this.startupSnippetId,
+      startupRunbookId: data.startupRunbookId.present
+          ? data.startupRunbookId.value
+          : this.startupRunbookId,
     );
   }
 
@@ -6177,7 +6225,8 @@ class TemplatePane extends DataClass implements Insertable<TemplatePane> {
           ..write('sessionType: $sessionType, ')
           ..write('hostId: $hostId, ')
           ..write('title: $title, ')
-          ..write('startupSnippetId: $startupSnippetId')
+          ..write('startupSnippetId: $startupSnippetId, ')
+          ..write('startupRunbookId: $startupRunbookId')
           ..write(')'))
         .toString();
   }
@@ -6194,6 +6243,7 @@ class TemplatePane extends DataClass implements Insertable<TemplatePane> {
     hostId,
     title,
     startupSnippetId,
+    startupRunbookId,
   );
   @override
   bool operator ==(Object other) =>
@@ -6208,7 +6258,8 @@ class TemplatePane extends DataClass implements Insertable<TemplatePane> {
           other.sessionType == this.sessionType &&
           other.hostId == this.hostId &&
           other.title == this.title &&
-          other.startupSnippetId == this.startupSnippetId);
+          other.startupSnippetId == this.startupSnippetId &&
+          other.startupRunbookId == this.startupRunbookId);
 }
 
 class TemplatePanesCompanion extends UpdateCompanion<TemplatePane> {
@@ -6222,6 +6273,7 @@ class TemplatePanesCompanion extends UpdateCompanion<TemplatePane> {
   final Value<String?> hostId;
   final Value<String?> title;
   final Value<String?> startupSnippetId;
+  final Value<String?> startupRunbookId;
   final Value<int> rowid;
   const TemplatePanesCompanion({
     this.id = const Value.absent(),
@@ -6234,6 +6286,7 @@ class TemplatePanesCompanion extends UpdateCompanion<TemplatePane> {
     this.hostId = const Value.absent(),
     this.title = const Value.absent(),
     this.startupSnippetId = const Value.absent(),
+    this.startupRunbookId = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   TemplatePanesCompanion.insert({
@@ -6247,6 +6300,7 @@ class TemplatePanesCompanion extends UpdateCompanion<TemplatePane> {
     this.hostId = const Value.absent(),
     this.title = const Value.absent(),
     this.startupSnippetId = const Value.absent(),
+    this.startupRunbookId = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        templateId = Value(templateId),
@@ -6263,6 +6317,7 @@ class TemplatePanesCompanion extends UpdateCompanion<TemplatePane> {
     Expression<String>? hostId,
     Expression<String>? title,
     Expression<String>? startupSnippetId,
+    Expression<String>? startupRunbookId,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -6276,6 +6331,7 @@ class TemplatePanesCompanion extends UpdateCompanion<TemplatePane> {
       if (hostId != null) 'host_id': hostId,
       if (title != null) 'title': title,
       if (startupSnippetId != null) 'startup_snippet_id': startupSnippetId,
+      if (startupRunbookId != null) 'startup_runbook_id': startupRunbookId,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -6291,6 +6347,7 @@ class TemplatePanesCompanion extends UpdateCompanion<TemplatePane> {
     Value<String?>? hostId,
     Value<String?>? title,
     Value<String?>? startupSnippetId,
+    Value<String?>? startupRunbookId,
     Value<int>? rowid,
   }) {
     return TemplatePanesCompanion(
@@ -6304,6 +6361,7 @@ class TemplatePanesCompanion extends UpdateCompanion<TemplatePane> {
       hostId: hostId ?? this.hostId,
       title: title ?? this.title,
       startupSnippetId: startupSnippetId ?? this.startupSnippetId,
+      startupRunbookId: startupRunbookId ?? this.startupRunbookId,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -6341,6 +6399,9 @@ class TemplatePanesCompanion extends UpdateCompanion<TemplatePane> {
     if (startupSnippetId.present) {
       map['startup_snippet_id'] = Variable<String>(startupSnippetId.value);
     }
+    if (startupRunbookId.present) {
+      map['startup_runbook_id'] = Variable<String>(startupRunbookId.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -6360,6 +6421,7 @@ class TemplatePanesCompanion extends UpdateCompanion<TemplatePane> {
           ..write('hostId: $hostId, ')
           ..write('title: $title, ')
           ..write('startupSnippetId: $startupSnippetId, ')
+          ..write('startupRunbookId: $startupRunbookId, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -14627,6 +14689,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
+        'runbooks',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('template_panes', kind: UpdateKind.update)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
         'workspaces',
         limitUpdateKind: UpdateKind.delete,
       ),
@@ -20111,6 +20180,24 @@ final class $$RunbooksTableReferences
       manager.$state.copyWith(prefetchedData: cache),
     );
   }
+
+  static MultiTypedResultKey<$TemplatePanesTable, List<TemplatePane>>
+  _templatePanesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.templatePanes,
+    aliasName: 'runbooks__id__template_panes__startup_runbook_id',
+  );
+
+  $$TemplatePanesTableProcessedTableManager get templatePanesRefs {
+    final manager = $$TemplatePanesTableTableManager($_db, $_db.templatePanes)
+        .filter(
+          (f) => f.startupRunbookId.id.sqlEquals($_itemColumn<String>('id')!),
+        );
+
+    final cache = $_typedResult.readTableOrNull(_templatePanesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
 }
 
 class $$RunbooksTableFilterComposer
@@ -20221,6 +20308,31 @@ class $$RunbooksTableFilterComposer
           }) => $$TemplatesTableFilterComposer(
             $db: $db,
             $table: $db.templates,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> templatePanesRefs(
+    Expression<bool> Function($$TemplatePanesTableFilterComposer f) f,
+  ) {
+    final $$TemplatePanesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.templatePanes,
+      getReferencedColumn: (t) => t.startupRunbookId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TemplatePanesTableFilterComposer(
+            $db: $db,
+            $table: $db.templatePanes,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -20405,6 +20517,31 @@ class $$RunbooksTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> templatePanesRefs<T extends Object>(
+    Expression<T> Function($$TemplatePanesTableAnnotationComposer a) f,
+  ) {
+    final $$TemplatePanesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.templatePanes,
+      getReferencedColumn: (t) => t.startupRunbookId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TemplatePanesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.templatePanes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$RunbooksTableTableManager
@@ -20424,6 +20561,7 @@ class $$RunbooksTableTableManager
             bool workspaceId,
             bool runbookStepsRefs,
             bool templatesRefs,
+            bool templatePanesRefs,
           })
         > {
   $$RunbooksTableTableManager(_$AppDatabase db, $RunbooksTable table)
@@ -20494,12 +20632,14 @@ class $$RunbooksTableTableManager
                 workspaceId = false,
                 runbookStepsRefs = false,
                 templatesRefs = false,
+                templatePanesRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [
                     if (runbookStepsRefs) db.runbookSteps,
                     if (templatesRefs) db.templates,
+                    if (templatePanesRefs) db.templatePanes,
                   ],
                   addJoins:
                       <
@@ -20577,6 +20717,27 @@ class $$RunbooksTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (templatePanesRefs)
+                        await $_getPrefetchedData<
+                          Runbook,
+                          $RunbooksTable,
+                          TemplatePane
+                        >(
+                          currentTable: table,
+                          referencedTable: $$RunbooksTableReferences
+                              ._templatePanesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$RunbooksTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).templatePanesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.startupRunbookId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -20601,6 +20762,7 @@ typedef $$RunbooksTableProcessedTableManager =
         bool workspaceId,
         bool runbookStepsRefs,
         bool templatesRefs,
+        bool templatePanesRefs,
       })
     >;
 typedef $$RunbookStepsTableCreateCompanionBuilder =
@@ -21802,6 +21964,7 @@ typedef $$TemplatePanesTableCreateCompanionBuilder =
       Value<String?> hostId,
       Value<String?> title,
       Value<String?> startupSnippetId,
+      Value<String?> startupRunbookId,
       Value<int> rowid,
     });
 typedef $$TemplatePanesTableUpdateCompanionBuilder =
@@ -21816,6 +21979,7 @@ typedef $$TemplatePanesTableUpdateCompanionBuilder =
       Value<String?> hostId,
       Value<String?> title,
       Value<String?> startupSnippetId,
+      Value<String?> startupRunbookId,
       Value<int> rowid,
     });
 
@@ -21855,6 +22019,23 @@ final class $$TemplatePanesTableReferences
       $_db.snippets,
     ).filter((f) => f.id.sqlEquals($_column));
     final item = $_typedResult.readTableOrNull(_startupSnippetIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $RunbooksTable _startupRunbookIdTable(_$AppDatabase db) => db.runbooks
+      .createAlias('template_panes__startup_runbook_id__runbooks__id');
+
+  $$RunbooksTableProcessedTableManager? get startupRunbookId {
+    final $_column = $_itemColumn<String>('startup_runbook_id');
+    if ($_column == null) return null;
+    final manager = $$RunbooksTableTableManager(
+      $_db,
+      $_db.runbooks,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_startupRunbookIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -21948,6 +22129,29 @@ class $$TemplatePanesTableFilterComposer
           }) => $$SnippetsTableFilterComposer(
             $db: $db,
             $table: $db.snippets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$RunbooksTableFilterComposer get startupRunbookId {
+    final $$RunbooksTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.startupRunbookId,
+      referencedTable: $db.runbooks,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$RunbooksTableFilterComposer(
+            $db: $db,
+            $table: $db.runbooks,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -22052,6 +22256,29 @@ class $$TemplatePanesTableOrderingComposer
     );
     return composer;
   }
+
+  $$RunbooksTableOrderingComposer get startupRunbookId {
+    final $$RunbooksTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.startupRunbookId,
+      referencedTable: $db.runbooks,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$RunbooksTableOrderingComposer(
+            $db: $db,
+            $table: $db.runbooks,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$TemplatePanesTableAnnotationComposer
@@ -22140,6 +22367,29 @@ class $$TemplatePanesTableAnnotationComposer
     );
     return composer;
   }
+
+  $$RunbooksTableAnnotationComposer get startupRunbookId {
+    final $$RunbooksTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.startupRunbookId,
+      referencedTable: $db.runbooks,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$RunbooksTableAnnotationComposer(
+            $db: $db,
+            $table: $db.runbooks,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$TemplatePanesTableTableManager
@@ -22155,7 +22405,11 @@ class $$TemplatePanesTableTableManager
           $$TemplatePanesTableUpdateCompanionBuilder,
           (TemplatePane, $$TemplatePanesTableReferences),
           TemplatePane,
-          PrefetchHooks Function({bool templateId, bool startupSnippetId})
+          PrefetchHooks Function({
+            bool templateId,
+            bool startupSnippetId,
+            bool startupRunbookId,
+          })
         > {
   $$TemplatePanesTableTableManager(_$AppDatabase db, $TemplatePanesTable table)
     : super(
@@ -22180,6 +22434,7 @@ class $$TemplatePanesTableTableManager
                 Value<String?> hostId = const Value.absent(),
                 Value<String?> title = const Value.absent(),
                 Value<String?> startupSnippetId = const Value.absent(),
+                Value<String?> startupRunbookId = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => TemplatePanesCompanion(
                 id: id,
@@ -22192,6 +22447,7 @@ class $$TemplatePanesTableTableManager
                 hostId: hostId,
                 title: title,
                 startupSnippetId: startupSnippetId,
+                startupRunbookId: startupRunbookId,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -22206,6 +22462,7 @@ class $$TemplatePanesTableTableManager
                 Value<String?> hostId = const Value.absent(),
                 Value<String?> title = const Value.absent(),
                 Value<String?> startupSnippetId = const Value.absent(),
+                Value<String?> startupRunbookId = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => TemplatePanesCompanion.insert(
                 id: id,
@@ -22218,6 +22475,7 @@ class $$TemplatePanesTableTableManager
                 hostId: hostId,
                 title: title,
                 startupSnippetId: startupSnippetId,
+                startupRunbookId: startupRunbookId,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -22229,7 +22487,11 @@ class $$TemplatePanesTableTableManager
               )
               .toList(),
           prefetchHooksCallback:
-              ({templateId = false, startupSnippetId = false}) {
+              ({
+                templateId = false,
+                startupSnippetId = false,
+                startupRunbookId = false,
+              }) {
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [],
@@ -22279,6 +22541,21 @@ class $$TemplatePanesTableTableManager
                                   )
                                   as T;
                         }
+                        if (startupRunbookId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.startupRunbookId,
+                                    referencedTable:
+                                        $$TemplatePanesTableReferences
+                                            ._startupRunbookIdTable(db),
+                                    referencedColumn:
+                                        $$TemplatePanesTableReferences
+                                            ._startupRunbookIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
 
                         return state;
                       },
@@ -22303,7 +22580,11 @@ typedef $$TemplatePanesTableProcessedTableManager =
       $$TemplatePanesTableUpdateCompanionBuilder,
       (TemplatePane, $$TemplatePanesTableReferences),
       TemplatePane,
-      PrefetchHooks Function({bool templateId, bool startupSnippetId})
+      PrefetchHooks Function({
+        bool templateId,
+        bool startupSnippetId,
+        bool startupRunbookId,
+      })
     >;
 typedef $$PairedDevicesTableCreateCompanionBuilder =
     PairedDevicesCompanion Function({

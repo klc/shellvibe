@@ -872,6 +872,11 @@ class E2EECloudSyncService {
                         ? item['startupSnippetId'] as String?
                         : null,
                   ),
+                  startupRunbookId: Value(
+                    runbookIds.contains(item['startupRunbookId'])
+                        ? item['startupRunbookId'] as String?
+                        : null,
+                  ),
                 ),
               );
         }
