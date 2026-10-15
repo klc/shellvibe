@@ -1,16 +1,22 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../core/api/api_client.dart';
 import '../../../../core/api/api_exception.dart';
+import '../../../../core/api/api_transport.dart';
 import '../../../../shared/providers/database_providers.dart';
 import '../../data/account_api.dart';
 import '../../data/account_session_store.dart';
 import '../../domain/account_session.dart';
 
 part 'account_notifier.g.dart';
+
+/// Transport under the account's API client. Null builds the real one; tests
+/// override it with a scripted fake.
+final accountApiTransportProvider = Provider<ApiTransport?>((ref) => null);
 
 /// Where the account session stands.
 enum AccountStatus {
@@ -76,8 +82,9 @@ class AccountNotifier extends _$AccountNotifier {
   late final ApiClient _apiClient;
   late final AccountApi _api;
 
-  /// Serializes sign-in and sign-out so two taps cannot interleave a token
-  /// write with a token clear.
+  /// Serializes sign-in, sign-out and deletion so two taps cannot interleave
+  /// a token write with a token clear. Never completes with an error; see
+  /// [_enqueue].
   Future<void> _queue = Future<void>.value();
 
   @override
@@ -87,6 +94,7 @@ class AccountNotifier extends _$AccountNotifier {
     );
 
     _apiClient = ApiClient(
+      transport: ref.watch(accountApiTransportProvider),
       tokenProvider: _store.readToken,
       onUnauthenticated: _onServerRejectedToken,
     );
@@ -146,7 +154,7 @@ class AccountNotifier extends _$AccountNotifier {
   Future<void> signOut({bool everywhere = false}) async {
     final previous = await future;
 
-    _queue = _queue.then((_) async {
+    return _enqueue(() async {
       state = AsyncValue.data(
         AccountState.signedOut(lastEmail: previous.lastEmail),
       );
@@ -163,8 +171,6 @@ class AccountNotifier extends _$AccountNotifier {
         await _store.clearSession();
       }
     });
-
-    return _queue;
   }
 
   /// Forgets the device identity as well, so the next sign-in registers a new
@@ -173,6 +179,21 @@ class AccountNotifier extends _$AccountNotifier {
     await signOut();
     await _store.clearAll();
   }
+
+  /// Erases the account on the server, then forgets it on this device.
+  ///
+  /// The reverse order from [signOut]: nothing local changes until the server
+  /// confirms, so a refusal (wrong password, a shared team still owned, no
+  /// network) leaves the user signed in to fix it. Throws the [ApiFailure].
+  ///
+  /// Clears the device id and last email as well as the session: the device
+  /// record went with the account, and prefilling a deleted address would read
+  /// as the account still being there.
+  Future<void> deleteAccount({required String password}) => _enqueue(() async {
+    await _api.deleteAccount(password: password);
+    state = const AsyncValue.data(AccountState.signedOut());
+    await _store.clearAll();
+  });
 
   /// Devices on the account. Throws [ApiFailure] on a network or API error.
   Future<List<AccountDevice>> devices() => _api.devices();
@@ -197,21 +218,30 @@ class AccountNotifier extends _$AccountNotifier {
     );
   }
 
-  Future<void> _serialize(Future<AuthResult> Function() action) {
-    _queue = _queue.then((_) async {
-      final result = await action();
-      await _store.write(token: result.token, session: result.session);
+  Future<void> _serialize(Future<AuthResult> Function() action) =>
+      _enqueue(() async {
+        final result = await action();
+        await _store.write(token: result.token, session: result.session);
 
-      state = AsyncValue.data(
-        AccountState(
-          status: AccountStatus.signedIn,
-          session: result.session,
-          lastEmail: result.session.email,
-        ),
-      );
-    });
+        state = AsyncValue.data(
+          AccountState(
+            status: AccountStatus.signedIn,
+            session: result.session,
+            lastEmail: result.session.email,
+          ),
+        );
+      });
 
-    return _queue;
+  /// Runs [action] after everything already queued and returns its outcome.
+  ///
+  /// The stored tail swallows the failure the caller is handed: chained with a
+  /// bare `then`, one rejected sign-in would make every later call rethrow
+  /// that same error without running, until the app restarted.
+  Future<void> _enqueue(Future<void> Function() action) {
+    final next = _queue.then((_) => action());
+    _queue = next.then((_) {}, onError: (Object _) {});
+
+    return next;
   }
 
   /// Invoked by [ApiClient] when the server answers `401` to any call.
