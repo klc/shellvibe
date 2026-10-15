@@ -5,9 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../../../../app/theme/shellvibe_tokens.dart';
-import '../../../../app/widgets/adaptive_modal.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
-import '../../../../shared/providers/workspace_provider.dart';
+import '../../../workspaces/presentation/providers/workspace_provider.dart';
 import '../../../settings/presentation/notifiers/settings_notifier.dart';
 import '../../../terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import '../../domain/models/runbook_model.dart';
@@ -18,6 +17,7 @@ import '../../../templates/presentation/template_launch.dart';
 import '../notifiers/runbook_run_notifier.dart';
 import '../notifiers/runbooks_notifier.dart';
 import '../notifiers/snippets_notifier.dart';
+import '../widgets/automation_list_parts.dart';
 import '../widgets/automation_section_layout.dart';
 import '../widgets/prod_confirmation.dart';
 import '../widgets/run_history_section.dart';
@@ -32,16 +32,6 @@ import 'runbooks_screen.dart';
 
 /// Column weights shared by the snippet list header and its rows.
 const List<int> _kSnippetColumnFlex = [4, 5, 3];
-
-/// Width of the row's trailing controls: Copy, Run and the overflow menu, each
-/// one control height square.
-///
-/// That height is 34px under a pointer and the touch target on a touch host,
-/// so a fixed width measured on desktop overflowed a phone or iPad row by the
-/// difference. The menu trigger is sized by [shellvibeMenuTriggerStyle] so it
-/// counts as one of the three.
-double _snippetActionsWidth(ShellVibeTokens tokens) =>
-    3 * shellvibeControlHeight(tokens, tokens.controlHeight);
 
 /// The two halves of the automation library.
 ///
@@ -362,8 +352,6 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
     required bool compact,
     required bool showDetailDrawer,
   }) {
-    final tokens = ShellVibeTokens.resolve(context);
-
     Widget layout(Widget body, {Widget? drawer}) => AutomationSectionLayout(
       header: header,
       body: body,
@@ -430,7 +418,12 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
               : null,
           Column(
             children: [
-              _SnippetListHeader(tokens: tokens, compact: compact),
+              AutomationListHeader(
+                labels: const ['NAME', 'COMMAND', 'TAGS'],
+                columnFlex: _kSnippetColumnFlex,
+                compact: compact,
+                actionCount: 2,
+              ),
               Expanded(
                 child: ListView.builder(
                   itemCount: visible.length,
@@ -465,41 +458,30 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
     );
   }
 
-  /// The narrow-width form of the detail drawer.
-  void _showSnippetDetailSheet(SnippetModel snippet) {
-    final tokens = ShellVibeTokens.resolve(context);
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      backgroundColor: tokens.surface,
-      builder: (sheetContext) => SafeArea(
-        child: SizedBox(
-          height: MediaQuery.sizeOf(sheetContext).height * 0.72,
-          child: _SnippetDetailPanel(
-            snippet: snippet,
-            onCopy: () {
-              Navigator.of(sheetContext).pop();
-              _copySnippet(snippet);
-            },
-            onRun: () {
-              Navigator.of(sheetContext).pop();
-              _runSnippet(snippet);
-            },
-            onEdit: () {
-              Navigator.of(sheetContext).pop();
-              _openSnippetForm(snippet: snippet);
-            },
-            onDelete: () {
-              Navigator.of(sheetContext).pop();
-              _deleteSnippet(snippet);
-            },
-            onClose: () => Navigator.of(sheetContext).pop(),
-          ),
+  void _showSnippetDetailSheet(SnippetModel snippet) =>
+      showAutomationDetailSheet(
+        context,
+        (sheetContext) => _SnippetDetailPanel(
+          snippet: snippet,
+          onCopy: () {
+            Navigator.of(sheetContext).pop();
+            _copySnippet(snippet);
+          },
+          onRun: () {
+            Navigator.of(sheetContext).pop();
+            _runSnippet(snippet);
+          },
+          onEdit: () {
+            Navigator.of(sheetContext).pop();
+            _openSnippetForm(snippet: snippet);
+          },
+          onDelete: () {
+            Navigator.of(sheetContext).pop();
+            _deleteSnippet(snippet);
+          },
+          onClose: () => Navigator.of(sheetContext).pop(),
         ),
-      ),
-    );
-  }
+      );
 
   // ── data helpers ────────────────────────────────────────────────────────
 
@@ -585,27 +567,13 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
   }
 
   Future<void> _deleteSnippet(SnippetModel snippet) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => ShadDialog.alert(
-        title: const Text('Delete Snippet'),
-        description: Text(
-          'Are you sure you want to delete "${snippet.title}"?',
-        ),
-        actions: adaptiveDialogActions(context, [
-          ShellVibeButton.secondary(
-            label: 'Cancel',
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-          ),
-          ShellVibeButton.danger(
-            label: 'Delete',
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-          ),
-        ]),
-        actionsAxis: adaptiveDialogActionsAxis(context),
-      ),
-    );
-    if (confirm != true) return;
+    if (!await confirmAutomationDelete(
+      context,
+      what: 'Snippet',
+      name: snippet.title,
+    )) {
+      return;
+    }
     if (!mounted) return;
 
     if (_selectedSnippetId == snippet.id) {
@@ -868,46 +836,6 @@ class _FilterChip extends StatelessWidget {
   }
 }
 
-class _SnippetListHeader extends StatelessWidget {
-  final ShellVibeTokens tokens;
-  final bool compact;
-
-  const _SnippetListHeader({required this.tokens, required this.compact});
-
-  @override
-  Widget build(BuildContext context) {
-    final style = Theme.of(context).textTheme.labelSmall?.copyWith(
-      fontSize: 10,
-      letterSpacing: 0.8,
-      color: tokens.textMuted,
-    );
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: tokens.border)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            flex: _kSnippetColumnFlex[0],
-            child: Text('NAME', style: style, maxLines: 1),
-          ),
-          Expanded(
-            flex: _kSnippetColumnFlex[1],
-            child: Text('COMMAND', style: style, maxLines: 1),
-          ),
-          if (!compact)
-            Expanded(
-              flex: _kSnippetColumnFlex[2],
-              child: Text('TAGS', style: style, maxLines: 1),
-            ),
-          SizedBox(width: _snippetActionsWidth(tokens)),
-        ],
-      ),
-    );
-  }
-}
-
 /// Single-line dense snippet row.
 class _SnippetRow extends StatelessWidget {
   final SnippetModel snippet;
@@ -934,138 +862,60 @@ class _SnippetRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = ShellVibeTokens.resolve(context);
-    final monoStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
-      color: tokens.textMuted,
-      fontFamily: 'monospace',
-      fontSize: 12,
-    );
-    // The list is one line per snippet, so a multi-line body is flattened
-    // rather than clipped to its first line.
-    final preview = snippet.code.replaceAll(RegExp(r'\s*\n\s*'), ' ; ');
-
-    return Semantics(
-      button: true,
-      selected: selected,
-      label: '${snippet.title}, snippet',
-      child: InkWell(
-        key: Key('snippet_card_${snippet.id}'),
-        onTap: onSelect,
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(16, 0, 8, 0),
-          constraints: const BoxConstraints(minHeight: 42),
-          decoration: BoxDecoration(
-            color: selected
-                ? tokens.textPrimary.withValues(alpha: 0.06)
-                : Colors.transparent,
-            border: Border(
-              bottom: BorderSide(color: tokens.border),
-              left: BorderSide(
-                color: selected ? tokens.brand : Colors.transparent,
-                width: 2,
+    return AutomationRow(
+      tileKey: Key('snippet_card_${snippet.id}'),
+      title: snippet.title,
+      // The list is one line per snippet, so a multi-line body is flattened
+      // rather than clipped to its first line.
+      subtitle: snippet.code.replaceAll(RegExp(r'\s*\n\s*'), ' ; '),
+      monoSubtitle: true,
+      third: snippet.tags.isEmpty
+          ? const SizedBox.shrink()
+          : Align(
+              alignment: Alignment.centerLeft,
+              child: ShellVibeStatusChip(
+                label: snippet.tags.length == 1
+                    ? '#${snippet.tags.first}'
+                    : '#${snippet.tags.first} +${snippet.tags.length - 1}',
               ),
             ),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                flex: _kSnippetColumnFlex[0],
-                child: Text(
-                  snippet.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                  ),
-                ),
-              ),
-              Expanded(
-                flex: _kSnippetColumnFlex[1],
-                child: Text(
-                  preview,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: monoStyle,
-                ),
-              ),
-              if (!compact)
-                Expanded(
-                  flex: _kSnippetColumnFlex[2],
-                  child: snippet.tags.isEmpty
-                      ? const SizedBox.shrink()
-                      : Align(
-                          alignment: Alignment.centerLeft,
-                          child: ShellVibeStatusChip(
-                            label: snippet.tags.length == 1
-                                ? '#${snippet.tags.first}'
-                                : '#${snippet.tags.first} +${snippet.tags.length - 1}',
-                          ),
-                        ),
-                ),
-              SizedBox(
-                width: _snippetActionsWidth(tokens),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    ShellVibeIconButton(
-                      key: Key('snippet_copy_${snippet.id}'),
-                      icon: LucideIcons.copy,
-                      tooltip: 'Copy command',
-                      onPressed: onCopy,
-                    ),
-                    ShellVibeIconButton(
-                      key: Key('snippet_run_${snippet.id}'),
-                      icon: LucideIcons.play,
-                      tooltip: 'Run…',
-                      onPressed: onRun,
-                    ),
-                    PopupMenuButton<String>(
-                      tooltip: 'Snippet actions',
-                      padding: EdgeInsets.zero,
-                      iconSize: 16,
-                      style: shellvibeMenuTriggerStyle(tokens),
-                      icon: const Icon(LucideIcons.ellipsis, size: 16),
-                      onSelected: (value) {
-                        if (value == 'edit') onEdit();
-                        if (value == 'delete') onDelete();
-                      },
-                      itemBuilder: (context) => [
-                        const PopupMenuItem(
-                          value: 'edit',
-                          child: Row(
-                            children: [
-                              Icon(LucideIcons.pencil, size: 16),
-                              SizedBox(width: 8),
-                              Text('Edit snippet'),
-                            ],
-                          ),
-                        ),
-                        PopupMenuItem(
-                          value: 'delete',
-                          child: Row(
-                            children: [
-                              Icon(
-                                LucideIcons.trash2,
-                                size: 16,
-                                color: tokens.danger,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Delete snippet',
-                                style: TextStyle(color: tokens.danger),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+      columnFlex: _kSnippetColumnFlex,
+      compact: compact,
+      selected: selected,
+      semanticsLabel: '${snippet.title}, snippet',
+      onSelect: onSelect,
+      actions: [
+        ShellVibeIconButton(
+          key: Key('snippet_copy_${snippet.id}'),
+          icon: LucideIcons.copy,
+          tooltip: 'Copy command',
+          onPressed: onCopy,
         ),
-      ),
+        ShellVibeIconButton(
+          key: Key('snippet_run_${snippet.id}'),
+          icon: LucideIcons.play,
+          tooltip: 'Run…',
+          onPressed: onRun,
+        ),
+      ],
+      menuTooltip: 'Snippet actions',
+      onMenuSelected: (value) {
+        if (value == 'edit') onEdit();
+        if (value == 'delete') onDelete();
+      },
+      menuItems: [
+        automationMenuItem(
+          value: 'edit',
+          icon: LucideIcons.pencil,
+          label: 'Edit snippet',
+        ),
+        automationMenuItem(
+          value: 'delete',
+          icon: LucideIcons.trash2,
+          label: 'Delete snippet',
+          color: tokens.danger,
+        ),
+      ],
     );
   }
 }
@@ -1098,35 +948,11 @@ class _SnippetDetailPanel extends StatelessWidget {
       key: const Key('snippet_detail_drawer'),
       padding: const EdgeInsets.all(14),
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Text(
-                snippet.title,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-              ),
-            ),
-            ShellVibeIconButton(
-              icon: LucideIcons.x,
-              tooltip: 'Close details',
-              onPressed: onClose,
-            ),
-          ],
+        AutomationDetailHeader(
+          title: snippet.title,
+          tags: snippet.tags,
+          onClose: onClose,
         ),
-        if (snippet.tags.isNotEmpty) ...[
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 4,
-            runSpacing: 4,
-            children: [
-              for (final tag in snippet.tags)
-                ShellVibeStatusChip(label: '#$tag'),
-            ],
-          ),
-        ],
         const SizedBox(height: 12),
         ShellVibeButton(
           key: const Key('snippet_detail_run'),

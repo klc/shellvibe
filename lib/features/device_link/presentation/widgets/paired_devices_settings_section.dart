@@ -9,6 +9,7 @@ import '../../../../shared/providers/database_providers.dart';
 import '../../data/repositories/device_link_pairing_repository.dart';
 import '../../data/repositories/device_link_pairing_storage.dart';
 import '../../domain/models/device_link_pairing_profile.dart';
+import '../platform_icon.dart';
 
 /// Settings surface for both sides of the pairing contract:
 /// desktop authorization rows in Drift and mobile profiles in secure storage.
@@ -112,7 +113,7 @@ class _PairedDevicesSettingsSectionState
             for (final device in devices)
               ListTile(
                 key: Key('paired_device_${device.id}'),
-                leading: Icon(_platformIcon(device.platform)),
+                leading: Icon(platformIcon(device.platform)),
                 title: Text(device.name),
                 subtitle: Text(
                   '${device.platform} · last seen ${_formatDate(device.lastSeenAt)}',
@@ -150,7 +151,7 @@ class _PairedDevicesSettingsSectionState
             for (final profile in profiles)
               ListTile(
                 key: Key('saved_device_link_${profile.id}'),
-                leading: Icon(_platformIcon(profile.platform)),
+                leading: Icon(platformIcon(profile.platform)),
                 title: Text(profile.name),
                 subtitle: Text(
                   '${profile.host}:${profile.port} · paired ${_formatDate(profile.pairedAt)}',
@@ -165,13 +166,6 @@ class _PairedDevicesSettingsSectionState
         ],
       ),
     );
-  }
-
-  IconData _platformIcon(String platform) {
-    return switch (platform.toLowerCase()) {
-      'ios' || 'android' => LucideIcons.smartphone,
-      _ => LucideIcons.monitor,
-    };
   }
 
   String _formatDate(DateTime date) {

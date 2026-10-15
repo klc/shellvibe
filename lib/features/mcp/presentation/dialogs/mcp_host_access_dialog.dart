@@ -9,7 +9,7 @@ import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../domain/models/mcp_enums.dart';
 import '../../domain/models/mcp_models.dart';
 import 'mcp_command_approval_dialog.dart'
-    show mcpApprovalArmDelay, visibleControlChars;
+    show McpEnvironmentBadge, mcpApprovalArmDelay, visibleControlChars;
 
 /// How long a batch of host grants should last before the agent has to ask
 /// again.
@@ -389,7 +389,7 @@ class _HostRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          _EnvironmentBadge(environment: candidate.environment),
+          McpEnvironmentBadge(environment: candidate.environment),
           const SizedBox(width: 12),
           Text(
             'mode:',
@@ -419,29 +419,5 @@ class _HostRow extends StatelessWidget {
         ],
       ),
     );
-  }
-}
-
-class _EnvironmentBadge extends StatelessWidget {
-  final HostEnvironment environment;
-
-  const _EnvironmentBadge({required this.environment});
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = ShellVibeTokens.resolve(context);
-    final label = switch (environment) {
-      HostEnvironment.prod => 'prod',
-      HostEnvironment.staging => 'staging',
-      HostEnvironment.dev => 'dev',
-    };
-    return switch (environment) {
-      HostEnvironment.prod => ShadBadge.destructive(child: Text(label)),
-      HostEnvironment.staging => ShadBadge.outline(
-        foregroundColor: tokens.warning,
-        child: Text(label),
-      ),
-      HostEnvironment.dev => ShadBadge.secondary(child: Text(label)),
-    };
   }
 }

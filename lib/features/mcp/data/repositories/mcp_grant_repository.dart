@@ -38,14 +38,37 @@ class McpGrantRepository {
     DateTime? now,
   }) async {
     final grant = await dao.findGrant(clientId, hostId);
-    if (grant == null || grant.mode == deniedMode) return null;
-    final at = now ?? DateTime.now().toUtc();
-    if (grant.expiresAt != null && !grant.expiresAt!.isAfter(at)) return null;
-    if (grant.cooldownUntil != null && grant.cooldownUntil!.isAfter(at)) {
+    if (grant == null || !_isLive(grant, now ?? DateTime.now().toUtc())) {
       return null;
     }
     return McpAccessMode.fromName(grant.mode);
   }
+
+  /// Every grant a client currently holds, filtered exactly as
+  /// [effectiveMode] filters a single pair.
+  Future<List<McpHostGrant>> activeGrantsForClient(
+    String clientId, {
+    DateTime? now,
+  }) async {
+    final at = now ?? DateTime.now().toUtc();
+    final grants = await dao.getGrantsForClient(clientId);
+    return grants.where((g) => _isLive(g, at)).toList();
+  }
+
+  /// True while a prior denial for this pair is still cooling down.
+  Future<bool> isInCooldown(
+    String clientId,
+    String hostId, {
+    DateTime? now,
+  }) async {
+    final until = (await dao.findGrant(clientId, hostId))?.cooldownUntil;
+    return until != null && until.isAfter(now ?? DateTime.now().toUtc());
+  }
+
+  static bool _isLive(McpHostGrant grant, DateTime at) =>
+      grant.mode != deniedMode &&
+      (grant.expiresAt == null || grant.expiresAt!.isAfter(at)) &&
+      (grant.cooldownUntil == null || !grant.cooldownUntil!.isAfter(at));
 
   /// Grants or updates (client, host) access.
   ///

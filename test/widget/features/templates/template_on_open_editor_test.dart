@@ -77,7 +77,7 @@ void main() {
     addTearDown(tester.view.reset);
     final template = (await TemplatesRepository(
       db.templatesDao,
-    ).getAllTemplates()).single;
+    ).getTemplatesByWorkspace('default')).single;
     await tester.pumpWidget(
       ProviderScope(
         overrides: [appDatabaseProvider.overrideWithValue(db)],

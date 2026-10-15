@@ -46,7 +46,6 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
     required this.redactor,
   });
 
-  static const int _defaultTimeoutSeconds = 60;
   static const int _maxTimeoutSeconds = 600;
 
   @override
@@ -87,8 +86,8 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
           'description':
               'How long to wait for the command before attempting recovery '
               '(Ctrl-C, then reopening the shell if that does not work). '
-              'Defaults to $_defaultTimeoutSeconds; clamped to a maximum of '
-              '$_maxTimeoutSeconds.',
+              'Defaults to the timeout set in ShellVibe\'s settings (60 '
+              'unless changed); clamped to a maximum of $_maxTimeoutSeconds.',
         },
       },
       'required': ['sessionId', 'command'],
@@ -101,18 +100,11 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
     final sessionId = requireString(args, 'sessionId');
     final command = requireString(args, 'command');
     final rawTimeout =
-        optionalInt(args, 'timeoutSeconds') ?? _defaultTimeoutSeconds;
-    final timeoutSeconds = rawTimeout < 1
-        ? 1
-        : (rawTimeout > _maxTimeoutSeconds ? _maxTimeoutSeconds : rawTimeout);
+        optionalInt(args, 'timeoutSeconds') ??
+        sessionPool.defaultCommandTimeout.inSeconds;
+    final timeoutSeconds = rawTimeout.clamp(1, _maxTimeoutSeconds);
 
-    final session = sessionPool.find(sessionId);
-    if (session == null || session.clientId != ctx.clientId) {
-      throw McpToolException(
-        McpErrorCode.sessionNotFound,
-        'No open session with id "$sessionId" for this client.',
-      );
-    }
+    final session = sessionPool.requireOwned(ctx.clientId, sessionId);
 
     // Re-checked here rather than trusted from `open_session` time: a grant
     // can expire, be revoked, or enter cooldown while a session stays open
@@ -182,11 +174,11 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
           category: decision.category,
         );
         _notifyRefused(session, command, 'denied by policy');
-        return {
-          'error': 'POLICY_DENIED',
-          'category': decision.category.wireName,
-          'message': decision.message ?? 'This command was denied by policy.',
-        };
+        throw McpToolException(
+          McpErrorCode.policyDenied,
+          decision.message ?? 'This command was denied by policy.',
+          details: {'category': decision.category.wireName},
+        );
 
       case PolicyAction.rejectInteractive:
         await _audit(
@@ -198,10 +190,14 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
           category: decision.category,
         );
         _notifyRefused(session, command, 'needs a terminal — refused');
-        return {
-          'error': 'INTERACTIVE_COMMAND',
-          'message': _interactiveRejectionMessage(decision),
-        };
+        throw McpToolException(
+          McpErrorCode.interactiveCommand,
+          _interactiveRejectionMessage(decision),
+          details: {
+            'category': decision.category.wireName,
+            if (decision.hint != null) 'hint': decision.hint,
+          },
+        );
 
       case PolicyAction.confirm:
         final approvalRequest = CommandApprovalRequest(
@@ -228,11 +224,11 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
             category: decision.category,
           );
           _notifyRefused(session, command, 'you declined it');
-          return {
-            'error': 'POLICY_DENIED',
-            'category': decision.category.wireName,
-            'message': 'The user declined to approve this command.',
-          };
+          throw McpToolException(
+            McpErrorCode.policyDenied,
+            'The user declined to approve this command.',
+            details: {'category': decision.category.wireName},
+          );
         }
         if (approval.scope != ApprovalScope.once) {
           await approvalRepository.remember(

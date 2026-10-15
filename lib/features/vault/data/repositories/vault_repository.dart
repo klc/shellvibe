@@ -310,8 +310,4 @@ class VaultRepository {
   Future<void> deleteIdentity(String id) async {
     await identitiesDao.deleteIdentity(id);
   }
-
-  Stream<List<Identity>> watchIdentities() {
-    return identitiesDao.watchAllIdentities();
-  }
 }

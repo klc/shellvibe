@@ -13,16 +13,16 @@ import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../../../core/utils/platform_capabilities.dart';
 import '../../../../shared/database/app_database.dart';
-import '../../../../shared/providers/workspace_provider.dart';
+import '../../../workspaces/presentation/providers/workspace_provider.dart';
 import '../../../hosts/domain/models/host_model.dart';
 import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
 import '../../data/repositories/mcp_repository_providers.dart';
 import '../../domain/models/mcp_enums.dart';
 import '../dialogs/mcp_command_approval_dialog.dart' show riskCategoryLabel;
+import '../mcp_date_format.dart';
 import '../notifiers/mcp_activity_notifier.dart';
 import '../notifiers/mcp_settings_notifier.dart';
-import '../widgets/mcp_activity_panel.dart'
-    show McpDecisionChip, mcpAuditRowStatusForWire;
+import '../widgets/mcp_activity_panel.dart' show McpDecisionChip;
 
 /// Immutable filter selection for one query against [McpAuditRepository].
 /// Every field left null means "no filter on this dimension", matching the
@@ -235,11 +235,10 @@ class _McpAuditScreenState extends ConsumerState<McpAuditScreen> {
               to: _filters.to,
             );
 
-      final stamp = DateTime.now().toLocal();
-      String two(int v) => v.toString().padLeft(2, '0');
+      final stamp = DateTime.now();
       final name =
-          'shellvibe-mcp-audit-${stamp.year}${two(stamp.month)}${two(stamp.day)}-'
-          '${two(stamp.hour)}${two(stamp.minute)}${two(stamp.second)}'
+          'shellvibe-mcp-audit-${formatMcpDate(stamp).replaceAll('-', '')}-'
+          '${formatMcpClock(stamp).replaceAll(':', '')}'
           '.${asCsv ? 'csv' : 'json'}';
 
       final path = await _saveExportFile(
@@ -556,13 +555,13 @@ class _FiltersBar extends StatelessWidget {
         ShellVibeButton.secondary(
           buttonKey: const Key('mcp_audit_from_date_button'),
           icon: LucideIcons.calendar,
-          label: filters.from == null ? 'From' : _formatDate(filters.from!),
+          label: filters.from == null ? 'From' : formatMcpDate(filters.from!),
           onPressed: () => onPickDate(isFrom: true),
         ),
         ShellVibeButton.secondary(
           buttonKey: const Key('mcp_audit_to_date_button'),
           icon: LucideIcons.calendar,
-          label: filters.to == null ? 'To' : _formatDate(filters.to!),
+          label: filters.to == null ? 'To' : formatMcpDate(filters.to!),
           onPressed: () => onPickDate(isFrom: false),
         ),
         if (!filters.isEmpty)
@@ -583,12 +582,6 @@ class _FiltersBar extends StatelessWidget {
     AuditDecision.autoDenied => 'Auto-denied',
     AuditDecision.error => 'Error',
   };
-
-  String _formatDate(DateTime at) {
-    final local = at.toLocal();
-    String two(int v) => v.toString().padLeft(2, '0');
-    return '${local.year}-${two(local.month)}-${two(local.day)}';
-  }
 }
 
 class _AuditRowTile extends StatelessWidget {
@@ -607,7 +600,7 @@ class _AuditRowTile extends StatelessWidget {
           SizedBox(
             width: 138,
             child: Text(
-              _formatTimestamp(entry.at),
+              formatMcpTimestamp(entry.at),
               style: shellvibeMono(context, size: 11, color: tokens.textSubtle),
             ),
           ),
@@ -658,17 +651,10 @@ class _AuditRowTile extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          McpDecisionChip(status: mcpAuditRowStatusForWire(entry.decision)),
+          McpDecisionChip(decision: AuditDecision.fromName(entry.decision)),
         ],
       ),
     );
-  }
-
-  String _formatTimestamp(DateTime at) {
-    final local = at.toLocal();
-    String two(int v) => v.toString().padLeft(2, '0');
-    return '${local.year}-${two(local.month)}-${two(local.day)} '
-        '${two(local.hour)}:${two(local.minute)}:${two(local.second)}';
   }
 }
 

@@ -110,8 +110,6 @@ List<AppShortcut> buildAppShortcuts({
   required List<String> bookmarkedHostIds,
   bool locked = false,
   bool supportsLocalTerminal = false,
-  int maxHosts = kMaxHostShortcuts,
-  int maxTotal = kMaxAppShortcuts,
 }) {
   final generic = <AppShortcut>[
     if (supportsLocalTerminal)
@@ -125,7 +123,7 @@ List<AppShortcut> buildAppShortcuts({
 
   final byId = {for (final host in hosts) host.id: host};
   final seen = <String>{};
-  final room = (maxTotal - generic.length).clamp(0, maxHosts);
+  final room = (kMaxAppShortcuts - generic.length).clamp(0, kMaxHostShortcuts);
   final hostShortcuts = <AppShortcut>[];
   for (final id in bookmarkedHostIds) {
     if (hostShortcuts.length >= room) break;

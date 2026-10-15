@@ -4,7 +4,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../../core/network/ssh_session_manager.dart';
 import '../../../../core/network/tunnel_engine.dart';
 import '../../../../shared/providers/database_providers.dart';
-import '../../../../shared/providers/workspace_provider.dart';
+import '../../../workspaces/presentation/providers/workspace_provider.dart';
 import '../../../hosts/domain/models/host_model.dart';
 import '../../../hosts/domain/services/ssh_connect_planner.dart';
 import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
@@ -12,9 +12,8 @@ import '../../../terminal/domain/models/terminal_tab_session.dart';
 import '../../../terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import '../../../vault/domain/models/identity_model.dart';
 import '../../../vault/presentation/notifiers/identities_notifier.dart';
-import '../../data/repositories/tunnel_repository_impl.dart';
+import '../../data/repositories/tunnel_repository.dart';
 import '../../domain/models/tunnel_rule_model.dart';
-import '../../domain/repositories/tunnel_repository.dart';
 import '../../domain/services/tunnel_ssh_pool.dart';
 
 part 'tunnels_providers.g.dart';
@@ -23,7 +22,7 @@ part 'tunnels_providers.g.dart';
 @riverpod
 TunnelRepository tunnelRepository(Ref ref) {
   final dao = ref.watch(tunnelsDaoProvider);
-  return TunnelRepositoryImpl(dao);
+  return TunnelRepository(dao);
 }
 
 /// Provider for [TunnelEngine]
@@ -66,23 +65,13 @@ Stream<List<ActiveTunnel>> activeTunnelsStream(Ref ref) {
 class TunnelsState {
   final List<TunnelRuleModel> rules;
   final bool isLoading;
-  final String? error;
 
-  const TunnelsState({
-    this.rules = const [],
-    this.isLoading = false,
-    this.error,
-  });
+  const TunnelsState({this.rules = const [], this.isLoading = false});
 
-  TunnelsState copyWith({
-    List<TunnelRuleModel>? rules,
-    bool? isLoading,
-    String? error,
-  }) {
+  TunnelsState copyWith({List<TunnelRuleModel>? rules, bool? isLoading}) {
     return TunnelsState(
       rules: rules ?? this.rules,
       isLoading: isLoading ?? this.isLoading,
-      error: error,
     );
   }
 }
@@ -106,7 +95,7 @@ class TunnelsNotifier extends _$TunnelsNotifier {
     // `ref` getter always returns the current build's.
     final ref = this.ref;
     if (!ref.mounted) return;
-    state = state.copyWith(isLoading: true, error: null);
+    state = state.copyWith(isLoading: true);
     try {
       final repository = ref.read(tunnelRepositoryProvider);
       final rules = hostId != null
@@ -118,36 +107,24 @@ class TunnelsNotifier extends _$TunnelsNotifier {
       state = state.copyWith(rules: rules, isLoading: false);
     } catch (e) {
       if (!ref.mounted) return;
-      state = state.copyWith(error: e.toString(), isLoading: false);
+      state = state.copyWith(isLoading: false);
     }
   }
 
+  /// Throws on failure so the calling screen can toast it instead of
+  /// silently closing as if the rule was saved.
   Future<void> addRule(TunnelRuleModel rule) async {
     if (!ref.mounted) return;
-    try {
-      final repository = ref.read(tunnelRepositoryProvider);
-      await repository.addRule(rule);
-      await loadRules();
-    } catch (e) {
-      if (!ref.mounted) rethrow;
-      state = state.copyWith(error: 'Failed to add rule: $e');
-      // Rethrow so the calling screen can toast the failure instead of
-      // silently closing as if the rule was saved.
-      rethrow;
-    }
+    final repository = ref.read(tunnelRepositoryProvider);
+    await repository.addRule(rule);
+    await loadRules();
   }
 
   Future<void> updateRule(TunnelRuleModel rule) async {
     if (!ref.mounted) return;
-    try {
-      final repository = ref.read(tunnelRepositoryProvider);
-      await repository.updateRule(rule);
-      await loadRules();
-    } catch (e) {
-      if (!ref.mounted) rethrow;
-      state = state.copyWith(error: 'Failed to update rule: $e');
-      rethrow;
-    }
+    final repository = ref.read(tunnelRepositoryProvider);
+    await repository.updateRule(rule);
+    await loadRules();
   }
 
   Future<void> deleteRule(String id) async {
@@ -158,9 +135,8 @@ class TunnelsNotifier extends _$TunnelsNotifier {
       final repository = ref.read(tunnelRepositoryProvider);
       await repository.deleteRule(id);
       await loadRules();
-    } catch (e) {
-      if (!ref.mounted) return;
-      state = state.copyWith(error: 'Failed to delete rule: $e');
+    } catch (_) {
+      // Swallowed on purpose: the screen re-reads the rules on its next load.
     }
   }
 
@@ -194,45 +170,36 @@ class TunnelsNotifier extends _$TunnelsNotifier {
     final pool = ref.read(tunnelSshPoolProvider);
 
     final SSHClient sshClient;
-    try {
-      final reusable = _liveTerminalClientFor(rule.hostId);
-      if (reusable != null) {
-        sshClient = reusable;
-      } else {
-        final host = await ref
-            .read(hostsRepositoryProvider)
-            .getHostById(rule.hostId);
-        if (host == null) {
-          throw StateError(
-            'The host this forward belongs to no longer exists.',
-          );
-        }
-
-        IdentityModel? identity;
-        if (host.identityId != null) {
-          identity = await ref
-              .read(vaultRepositoryProvider)
-              .getIdentityById(host.identityId!);
-        } else if (resolveIdentity != null) {
-          final resolved = await resolveIdentity(host);
-          // Cancelled: the user called the connection off, which is not a
-          // failure to report.
-          if (!resolved.ok) return;
-          identity = resolved.identity;
-        }
-
-        sshClient = await pool.acquire(
-          ruleId: rule.id,
-          host: host,
-          identity: identity,
-          onHostKeyPrompt: onHostKeyPrompt,
-        );
+    final reusable = _liveTerminalClientFor(rule.hostId);
+    if (reusable != null) {
+      sshClient = reusable;
+    } else {
+      final host = await ref
+          .read(hostsRepositoryProvider)
+          .getHostById(rule.hostId);
+      if (host == null) {
+        throw StateError('The host this forward belongs to no longer exists.');
       }
-    } catch (e) {
-      if (ref.mounted) {
-        state = state.copyWith(error: 'Failed to connect: $e');
+
+      IdentityModel? identity;
+      if (host.identityId != null) {
+        identity = await ref
+            .read(vaultRepositoryProvider)
+            .getIdentityById(host.identityId!);
+      } else if (resolveIdentity != null) {
+        final resolved = await resolveIdentity(host);
+        // Cancelled: the user called the connection off, which is not a
+        // failure to report.
+        if (!resolved.ok) return;
+        identity = resolved.identity;
       }
-      rethrow;
+
+      sshClient = await pool.acquire(
+        ruleId: rule.id,
+        host: host,
+        identity: identity,
+        onHostKeyPrompt: onHostKeyPrompt,
+      );
     }
 
     try {
@@ -251,7 +218,9 @@ class TunnelsNotifier extends _$TunnelsNotifier {
           hostId: rule.hostId,
           sshClient: sshClient,
           remotePort: rule.remotePort ?? 8080,
-          localHost: rule.localHost ?? '127.0.0.1',
+          // The rule's "remote host" column is the bind address on this side
+          // for a remote forward.
+          localHost: rule.remoteHost ?? '127.0.0.1',
           localPort: rule.localPort,
         );
       } else if (rule.type == 'dynamic') {
@@ -262,14 +231,11 @@ class TunnelsNotifier extends _$TunnelsNotifier {
           localPort: rule.localPort,
         );
       }
-    } catch (e) {
+    } catch (_) {
       // The forward never came up, so nothing is riding on the connection any
       // more — hand the claim back so a pool-owned session does not stay open
       // for a rule that failed.
       await pool.release(rule.id);
-      if (ref.mounted) {
-        state = state.copyWith(error: 'Failed to start tunnel: $e');
-      }
       rethrow;
     }
   }

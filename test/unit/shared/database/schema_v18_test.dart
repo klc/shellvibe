@@ -185,7 +185,7 @@ void main() {
           ],
         ),
       );
-      final loaded = (await repo.getAllRunbooks()).single;
+      final loaded = (await repo.getRunbooksByWorkspace('default')).single;
       expect(loaded.tags, ['ops', 'prod']);
       expect(loaded.variables.single.required, isFalse);
       expect(loaded.steps.map((s) => s.kind), [

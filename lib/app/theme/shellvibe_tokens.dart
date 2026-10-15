@@ -121,9 +121,6 @@ class ShellVibeTokens extends ThemeExtension<ShellVibeTokens> {
   /// Inline right-hand detail panel that replaces detail modals.
   final double detailDrawerWidth;
 
-  /// Section navigation inside a work area (settings).
-  final double sectionNavWidth;
-
   /// Minimum interactive size on touch platforms.
   final double touchTarget;
 
@@ -152,7 +149,6 @@ class ShellVibeTokens extends ThemeExtension<ShellVibeTokens> {
   final double breakpointRailTouch;
 
   final Duration motionFast;
-  final Duration motionNormal;
 
   const ShellVibeTokens({
     required this.canvas,
@@ -195,7 +191,6 @@ class ShellVibeTokens extends ThemeExtension<ShellVibeTokens> {
     this.railWidth = 56,
     this.contextColumnWidth = 240,
     this.detailDrawerWidth = 284,
-    this.sectionNavWidth = 190,
     this.touchTarget = 44,
     this.breakpointCompact = 640,
     this.breakpointMedium = 900,
@@ -203,7 +198,6 @@ class ShellVibeTokens extends ThemeExtension<ShellVibeTokens> {
     this.breakpointRail = 720,
     this.breakpointRailTouch = 800,
     this.motionFast = const Duration(milliseconds: 120),
-    this.motionNormal = const Duration(milliseconds: 180),
   });
 
   static const dark = ShellVibeTokens(
@@ -290,15 +284,20 @@ class ShellVibeTokens extends ThemeExtension<ShellVibeTokens> {
   /// top (140–300px depending on the panel), not to its height, so tall and
   /// short panels share the same top-lit falloff. [gradientExtent] is that
   /// distance and [height] the panel's laid-out height; pass the latter from a
-  /// `LayoutBuilder` to keep the stop honest.
-  Gradient panelGradient({double gradientExtent = 200, double? height}) {
+  /// `LayoutBuilder` to keep the stop honest. [top] is the colour at the top
+  /// edge; overlays start one step higher than panels.
+  Gradient panelGradient({
+    double gradientExtent = 200,
+    double? height,
+    Color? top,
+  }) {
     final stop = height == null || height <= 0
         ? 1.0
         : (gradientExtent / height).clamp(0.05, 1.0);
     return LinearGradient(
       begin: Alignment.topCenter,
       end: Alignment.bottomCenter,
-      colors: [surface, surfaceLow],
+      colors: [top ?? surface, surfaceLow],
       stops: [0, stop.toDouble()],
     );
   }
@@ -398,7 +397,6 @@ class ShellVibeTokens extends ThemeExtension<ShellVibeTokens> {
     double? railWidth,
     double? contextColumnWidth,
     double? detailDrawerWidth,
-    double? sectionNavWidth,
     double? touchTarget,
     double? breakpointCompact,
     double? breakpointMedium,
@@ -406,7 +404,6 @@ class ShellVibeTokens extends ThemeExtension<ShellVibeTokens> {
     double? breakpointRail,
     double? breakpointRailTouch,
     Duration? motionFast,
-    Duration? motionNormal,
   }) {
     return ShellVibeTokens(
       canvas: canvas ?? this.canvas,
@@ -449,7 +446,6 @@ class ShellVibeTokens extends ThemeExtension<ShellVibeTokens> {
       railWidth: railWidth ?? this.railWidth,
       contextColumnWidth: contextColumnWidth ?? this.contextColumnWidth,
       detailDrawerWidth: detailDrawerWidth ?? this.detailDrawerWidth,
-      sectionNavWidth: sectionNavWidth ?? this.sectionNavWidth,
       touchTarget: touchTarget ?? this.touchTarget,
       breakpointCompact: breakpointCompact ?? this.breakpointCompact,
       breakpointMedium: breakpointMedium ?? this.breakpointMedium,
@@ -457,7 +453,6 @@ class ShellVibeTokens extends ThemeExtension<ShellVibeTokens> {
       breakpointRail: breakpointRail ?? this.breakpointRail,
       breakpointRailTouch: breakpointRailTouch ?? this.breakpointRailTouch,
       motionFast: motionFast ?? this.motionFast,
-      motionNormal: motionNormal ?? this.motionNormal,
     );
   }
 
@@ -533,7 +528,6 @@ class ShellVibeTokens extends ThemeExtension<ShellVibeTokens> {
         other.detailDrawerWidth,
         t,
       ),
-      sectionNavWidth: _lerpDouble(sectionNavWidth, other.sectionNavWidth, t),
       touchTarget: _lerpDouble(touchTarget, other.touchTarget, t),
       // Breakpoints are layout thresholds, not paint: crossfading them would
       // move the tier boundary through the middle of a theme animation.
@@ -547,11 +541,8 @@ class ShellVibeTokens extends ThemeExtension<ShellVibeTokens> {
           ? breakpointRailTouch
           : other.breakpointRailTouch,
       motionFast: t < 0.5 ? motionFast : other.motionFast,
-      motionNormal: t < 0.5 ? motionNormal : other.motionNormal,
     );
   }
 
   static double _lerpDouble(double a, double b, double t) => a + (b - a) * t;
 }
-
-/// Backwards compatibility alias

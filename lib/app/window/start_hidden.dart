@@ -11,12 +11,6 @@ const String kStartHiddenArgument = '--hidden';
 /// launch that hides the window with no tray icon to bring it back through is
 /// an app that is running and cannot be found. So with the tray off the window
 /// shows as it would on any launch.
-bool shouldStartHidden({
-  required bool launchedAtLogin,
-  required bool trayEnabled,
-}) => launchedAtLogin && trayEnabled;
-
-/// Resolves the start-hidden decision for this launch.
 ///
 /// The settings are read only for a launch that came from the login item:
 /// an ordinary launch needs no storage read before its window is up.
@@ -34,10 +28,7 @@ Future<bool> resolveStartHidden({
         ? await macOsLaunchedAtLogin()
         : args.contains(kStartHiddenArgument);
     if (!launchedAtLogin) return false;
-    return shouldStartHidden(
-      launchedAtLogin: true,
-      trayEnabled: await readTrayEnabled(),
-    );
+    return await readTrayEnabled();
   } catch (_) {
     return false;
   }

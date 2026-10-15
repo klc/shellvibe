@@ -214,7 +214,6 @@ class SshConfigResolver {
     final forwards = <SshForwardDraft>[];
     final warnings = <SshConfigWarning>[];
     SshJumpHostDraft? jumpHost;
-    var jumpViaProxyCommand = false;
     var jumpSet = false;
     var proxyCommandSet = false;
 
@@ -350,7 +349,6 @@ class SshConfigResolver {
                 final jump = _jumpFromProxyCommand(tokens);
                 if (jump != null) {
                   jumpHost = jump;
-                  jumpViaProxyCommand = true;
                   warn(
                     d,
                     'ProxyCommand approximated as ProxyJump to '
@@ -425,7 +423,6 @@ class SshConfigResolver {
       port: port ?? 22,
       identityFiles: identityFiles,
       jumpHost: jumpHost,
-      jumpViaProxyCommand: jumpViaProxyCommand,
       forwards: forwards,
       warnings: warnings,
     );
@@ -802,7 +799,6 @@ class SshConfigResolver {
           type: type,
           localPort: listen.port,
           bindAddress: listen.bind,
-          line: d.line,
         ),
         reason: null,
       );
@@ -848,7 +844,6 @@ class SshConfigResolver {
         bindAddress: listen.bind,
         remoteHost: dest.host,
         remotePort: dest.port,
-        line: d.line,
       ),
       reason: null,
     );
@@ -947,13 +942,6 @@ class SshConfigResolver {
   /// Case-sensitive `*`/`?` glob; [classes] additionally enables `[...]`
   /// character classes (glob(7) for Include paths).
   bool _globMatch(String pattern, String value, {required bool classes}) {
-    // Character-class expansion: rewrite `[abc]`/`[!abc]`/`[a-z]` into a
-    // predicate-free matcher by expanding to a set of alternatives is not
-    // practical for a full glob; instead run a recursive matcher.
-    return _globMatchRec(pattern, value, classes: classes);
-  }
-
-  bool _globMatchRec(String pattern, String value, {required bool classes}) {
     var p = 0;
     var v = 0;
     var starP = -1;

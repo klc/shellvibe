@@ -13,14 +13,12 @@ import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/widgets/adaptive_modal.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../../../app/widgets/workspace_switcher.dart';
-import '../../../../core/network/ssh_session_manager.dart';
 import '../../../../core/utils/platform_capabilities.dart';
-import '../../../../shared/providers/workspace_provider.dart';
+import '../../../workspaces/presentation/providers/workspace_provider.dart';
 import '../../../templates/domain/models/template_model.dart';
 import '../../../templates/presentation/widgets/template_editor_panel.dart';
 import '../../../templates/presentation/notifiers/templates_notifier.dart';
 import '../../../terminal/presentation/notifiers/terminal_tabs_notifier.dart';
-import '../../../vault/domain/models/identity_model.dart';
 import '../../../vault/presentation/notifiers/identities_notifier.dart';
 import '../../data/services/ssh_config_import_service.dart';
 import '../../domain/models/host_group_model.dart';
@@ -41,9 +39,7 @@ import '../widgets/template_nav_item.dart';
 import '../../../templates/presentation/template_launch.dart';
 
 class HostsScreen extends ConsumerStatefulWidget {
-  final void Function(HostModel host)? onConnectHost;
-
-  const HostsScreen({super.key, this.onConnectHost});
+  const HostsScreen({super.key});
 
   @override
   ConsumerState<HostsScreen> createState() => _HostsScreenState();
@@ -84,16 +80,33 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
         // column inside it.
         final hosts = hostsAsync.value ?? const <HostModel>[];
         final groups = groupsAsync.value ?? const <HostGroupModel>[];
-        final selectedHost = _visibleHosts(
+        // Watched once here rather than inside a per-host filter closure.
+        final connectedIds = _connectedHostIds();
+        final favoriteIds = _favoriteHostIds();
+        final scoped = _scopedHosts(
           hosts,
-        ).where((host) => host.id == _selectedHostId).firstOrNull;
+          connectedIds: connectedIds,
+          favoriteIds: favoriteIds,
+        );
+        final visible = scoped
+            .where((host) => hostMatchesQuery(host, _searchQuery))
+            .toList();
+        final selectedHost = visible
+            .where((host) => host.id == _selectedHostId)
+            .firstOrNull;
 
         return Scaffold(
           backgroundColor: Colors.transparent,
           body: Row(
             children: [
               if (showContextColumn)
-                _buildContextColumn(context, groupsAsync, hostsAsync),
+                _buildContextColumn(
+                  context,
+                  groups: groups,
+                  hosts: hosts,
+                  connectedIds: connectedIds,
+                  favoriteIds: favoriteIds,
+                ),
               Expanded(
                 child: Builder(
                   builder: (context) {
@@ -101,6 +114,10 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
                       context,
                       hostsAsync: hostsAsync,
                       groupsAsync: groupsAsync,
+                      scopedCount: scoped.length,
+                      visible: visible,
+                      connectedIds: connectedIds,
+                      favoriteIds: favoriteIds,
                       showContextColumn: showContextColumn,
                       showDetailDrawer: showDetailDrawer,
                     );
@@ -116,22 +133,12 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
               ),
               if (showDetailDrawer && selectedHost != null)
                 ShellVibeDetailDrawer(
-                  child: HostDetailPanel(
-                    host: selectedHost,
+                  child: _detailPanel(
+                    selectedHost,
                     hosts: hosts,
                     groups: groups,
-                    connected: _connectedHostIds().contains(selectedHost.id),
-                    isFavorite: _favoriteHostIds().contains(selectedHost.id),
-                    onToggleFavorite: () => unawaited(
-                      ref
-                          .read(bookmarksProvider.notifier)
-                          .toggleHost(selectedHost.id),
-                    ),
-                    onConnect: () => _onConnectHost(selectedHost),
-                    onOpenSftp: () => _onOpenSftp(selectedHost),
-                    onEdit: () =>
-                        _openHostForm(context, initialHost: selectedHost),
-                    onDelete: () => _deleteHost(context, selectedHost),
+                    connected: connectedIds.contains(selectedHost.id),
+                    isFavorite: favoriteIds.contains(selectedHost.id),
                     onClose: () => setState(() => _selectedHostId = null),
                   ),
                 ),
@@ -145,13 +152,12 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
   // ── context column ──────────────────────────────────────────────────────
 
   Widget _buildContextColumn(
-    BuildContext context,
-    AsyncValue<List<HostGroupModel>> groupsAsync,
-    AsyncValue<List<HostModel>> hostsAsync,
-  ) {
-    final hosts = hostsAsync.value ?? const <HostModel>[];
-    final groups = groupsAsync.value ?? const <HostGroupModel>[];
-    final connectedIds = _connectedHostIds();
+    BuildContext context, {
+    required List<HostGroupModel> groups,
+    required List<HostModel> hosts,
+    required Set<String> connectedIds,
+    required Set<String> favoriteIds,
+  }) {
     final templates = ref.watch(templatesProvider).value ?? const [];
 
     return ShellVibeContextColumn(
@@ -186,7 +192,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
           itemKey: const Key('hosts_filter_favorites'),
           icon: LucideIcons.star,
           label: 'Favorites',
-          count: _favoriteHostIds().length,
+          count: favoriteIds.length,
           selected: _selectedGroupId == null && _filter == HostFilter.favorites,
           onTap: () => _selectFilter(HostFilter.favorites),
         ),
@@ -242,12 +248,15 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
     BuildContext context, {
     required AsyncValue<List<HostModel>> hostsAsync,
     required AsyncValue<List<HostGroupModel>> groupsAsync,
+    required int scopedCount,
+    required List<HostModel> visible,
+    required Set<String> connectedIds,
+    required Set<String> favoriteIds,
     required bool showContextColumn,
     required bool showDetailDrawer,
   }) {
     final tokens = ShellVibeTokens.resolve(context);
     final groups = groupsAsync.value ?? const <HostGroupModel>[];
-    final connectedIds = _connectedHostIds();
 
     // One brand action per panel: adding a host is the thing this screen is
     // for, so everything else stays a hairline control.
@@ -293,8 +302,8 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
           ShellVibeWorkToolbar(
             title: _activeScopeLabel(groups),
             meta: hostsAsync.maybeWhen(
-              data: (hosts) =>
-                  '${_scopedHosts(hosts).length} hosts · ${connectedIds.length} connected',
+              data: (_) =>
+                  '$scopedCount hosts · ${connectedIds.length} connected',
               orElse: () => null,
             ),
             actions: actions,
@@ -338,8 +347,6 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
                   return _buildFirstRunEmptyState(context);
                 }
 
-                final visible = _visibleHosts(hosts);
-                final favoriteIds = _favoriteHostIds();
                 if (visible.isEmpty) {
                   return const ShellVibeEmptyState(
                     icon: LucideIcons.searchX,
@@ -425,37 +432,54 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
         child: SizedBox(
           height: MediaQuery.sizeOf(sheetContext).height * 0.72,
           child: Consumer(
-            builder: (context, sheetRef, _) => HostDetailPanel(
-              host: host,
+            builder: (context, sheetRef, _) => _detailPanel(
+              host,
               hosts: hosts,
               groups: groups,
               connected: connected,
               isFavorite: (sheetRef.watch(bookmarksProvider).value ?? const [])
                   .any((bookmark) => bookmark.hostId == host.id),
-              onToggleFavorite: () => unawaited(
-                sheetRef.read(bookmarksProvider.notifier).toggleHost(host.id),
-              ),
-              onConnect: () {
-                Navigator.of(sheetContext).pop();
-                _onConnectHost(host);
-              },
-              onOpenSftp: () {
-                Navigator.of(sheetContext).pop();
-                _onOpenSftp(host);
-              },
-              onEdit: () {
-                Navigator.of(sheetContext).pop();
-                _openHostForm(context, initialHost: host);
-              },
-              onDelete: () {
-                Navigator.of(sheetContext).pop();
-                _deleteHost(context, host);
-              },
+              // The sheet is a route of its own, so every action closes it
+              // before running on the screen underneath.
+              beforeAction: () => Navigator.of(sheetContext).pop(),
               onClose: () => Navigator.of(sheetContext).pop(),
             ),
           ),
         ),
       ),
+    );
+  }
+
+  /// The detail panel with its actions wired to this screen; the drawer and
+  /// the sheet differ only in where they show it and how they close.
+  HostDetailPanel _detailPanel(
+    HostModel host, {
+    required List<HostModel> hosts,
+    required List<HostGroupModel> groups,
+    required bool connected,
+    required bool isFavorite,
+    required VoidCallback onClose,
+    VoidCallback? beforeAction,
+  }) {
+    void run(void Function() action) {
+      beforeAction?.call();
+      action();
+    }
+
+    return HostDetailPanel(
+      host: host,
+      hosts: hosts,
+      groups: groups,
+      connected: connected,
+      isFavorite: isFavorite,
+      onToggleFavorite: () => unawaited(
+        ref.read(bookmarksProvider.notifier).toggleHost(host.id),
+      ),
+      onConnect: () => run(() => _onConnectHost(host)),
+      onOpenSftp: () => run(() => _onOpenSftp(host)),
+      onEdit: () => run(() => _openHostForm(context, initialHost: host)),
+      onDelete: () => run(() => _deleteHost(context, host)),
+      onClose: onClose,
     );
   }
 
@@ -669,7 +693,11 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
   }
 
   /// Hosts in the selected group/filter, before the search query is applied.
-  List<HostModel> _scopedHosts(List<HostModel> hosts) {
+  List<HostModel> _scopedHosts(
+    List<HostModel> hosts, {
+    required Set<String> connectedIds,
+    required Set<String> favoriteIds,
+  }) {
     if (_selectedGroupId != null) {
       return hosts
           .where((host) => host.groupIds.contains(_selectedGroupId))
@@ -678,39 +706,21 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
     return switch (_filter) {
       HostFilter.all => hosts,
       HostFilter.connected =>
-        hosts.where((host) => _connectedHostIds().contains(host.id)).toList(),
+        hosts.where((host) => connectedIds.contains(host.id)).toList(),
       HostFilter.favorites =>
-        hosts.where((host) => _favoriteHostIds().contains(host.id)).toList(),
+        hosts.where((host) => favoriteIds.contains(host.id)).toList(),
       HostFilter.ungrouped =>
         hosts.where((host) => host.groupIds.isEmpty).toList(),
     };
   }
 
-  List<HostModel> _visibleHosts(List<HostModel> hosts) {
-    return _scopedHosts(hosts).where((host) {
-      return hostMatchesQuery(host, _searchQuery);
-    }).toList();
-  }
-
   // ── actions ─────────────────────────────────────────────────────────────
-
-  /// Opens (and connects) a terminal tab for [host] and returns its id, or
-  /// null when credentials could not be read.
-  Future<String?> _openSessionForHost(HostModel host) async {
-    return _launcher.openSession(host);
-  }
-
-  Future<void> _defaultConnectHost(HostModel host) => _launcher.connect(host);
 
   Future<void> _onConnectHost(HostModel host) async {
     if (_connectingHostIds.contains(host.id)) return;
     setState(() => _connectingHostIds.add(host.id));
     try {
-      if (widget.onConnectHost != null) {
-        widget.onConnectHost!(host);
-      } else {
-        await _defaultConnectHost(host);
-      }
+      await _launcher.connect(host);
     } finally {
       if (mounted) {
         setState(() => _connectingHostIds.remove(host.id));
@@ -734,7 +744,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
       setState(() => _connectingHostIds.add(host.id));
       String? tabId;
       try {
-        tabId = await _openSessionForHost(host);
+        tabId = await _launcher.openSession(host);
       } finally {
         if (mounted) {
           setState(() => _connectingHostIds.remove(host.id));
@@ -770,30 +780,18 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
   /// The connect flow, built per call because it holds this context.
   HostLauncher get _launcher => HostLauncher(context: context, ref: ref);
 
-  /// Decrypts a host's stored credentials for a template replay.
-  ///
-  /// `ok: false` aborts the pane instead of connecting without the credentials
-  /// it was saved with.
-  Future<({bool ok, IdentityModel? identity})> _resolveIdentity(
-    HostModel host,
-  ) => _launcher.resolveIdentity(host);
-
-  Future<bool> _promptHostKey(
-    String hostname,
-    int port,
-    String keyType,
-    String fingerprint,
-    HostKeyVerificationStatus status,
-  ) => _launcher.promptHostKey(hostname, port, keyType, fingerprint, status);
-
   /// Opens a template's tabs and panes and moves to the terminal.
+  ///
+  /// The launcher decrypts each pane's host credentials; `ok: false` aborts
+  /// that pane instead of connecting without the credentials it was saved with.
   Future<void> _runTemplate(TemplateModel template) async {
+    final launcher = _launcher;
     final result = await ref
         .read(templatesProvider.notifier)
         .runTemplate(
           template,
-          resolveIdentity: _resolveIdentity,
-          onHostKeyPrompt: _promptHostKey,
+          resolveIdentity: launcher.resolveIdentity,
+          onHostKeyPrompt: launcher.promptHostKey,
         );
     if (!mounted) return;
 
@@ -978,11 +976,20 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
       ),
     );
 
-    if (confirm == true) {
-      if (_selectedHostId == host.id) {
-        setState(() => _selectedHostId = null);
-      }
+    if (confirm != true) return;
+    if (_selectedHostId == host.id) {
+      setState(() => _selectedHostId = null);
+    }
+    try {
       await ref.read(hostsProvider.notifier).deleteHost(host.id);
+    } catch (e) {
+      if (!mounted) return;
+      ShadToaster.of(this.context).show(
+        ShadToast.destructive(
+          title: const Text('Could not delete host'),
+          description: Text('$e'),
+        ),
+      );
     }
   }
 }

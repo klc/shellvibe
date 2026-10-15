@@ -7,7 +7,6 @@ list(APPEND FLUTTER_PLUGIN_LIST
   desktop_drop
   file_selector_windows
   flutter_secure_storage_windows
-  hotkey_manager_windows
   local_auth_windows
   nsd_windows
   screen_retriever_windows

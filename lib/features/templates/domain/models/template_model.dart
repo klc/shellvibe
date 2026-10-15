@@ -69,34 +69,6 @@ class TemplateModel {
       onOpenConfirm: onOpenConfirm ?? this.onOpenConfirm,
     );
   }
-
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'workspaceId': workspaceId,
-        'name': name,
-        'description': description,
-        'panes': panes.map((p) => p.toJson()).toList(),
-        'activePaneId': activePaneId,
-        'createdAt': createdAt.toIso8601String(),
-        'onOpenRunbookId': onOpenRunbookId,
-        'onOpenConfirm': onOpenConfirm,
-      };
-
-  factory TemplateModel.fromJson(Map<String, dynamic> json) => TemplateModel(
-        id: json['id'] as String,
-        workspaceId: json['workspaceId'] as String,
-        name: json['name'] as String,
-        description: json['description'] as String?,
-        panes: (json['panes'] as List<dynamic>?)
-                ?.map((e) =>
-                    TemplatePaneModel.fromJson(e as Map<String, dynamic>))
-                .toList() ??
-            const [],
-        activePaneId: json['activePaneId'] as String?,
-        createdAt: DateTime.parse(json['createdAt'] as String),
-        onOpenRunbookId: json['onOpenRunbookId'] as String?,
-        onOpenConfirm: json['onOpenConfirm'] as bool? ?? true,
-      );
 }
 
 /// Whether [template] matches a free-text search: its name or description

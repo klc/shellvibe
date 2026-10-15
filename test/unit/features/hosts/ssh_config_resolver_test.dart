@@ -216,7 +216,7 @@ void main() {
       expect(jump.username, 'user');
       expect(jump.host, 'bastion');
       expect(jump.port, 2222);
-      expect(res.hosts.single.jumpViaProxyCommand, isFalse);
+      expect(res.hosts.single.warnings, isEmpty);
     });
 
     test('ProxyJump none disables jump and wins first-obtained', () async {
@@ -233,7 +233,10 @@ void main() {
       final host = res.hosts.single;
       expect(host.jumpHost!.host, 'bastion');
       expect(host.jumpHost!.username, 'user');
-      expect(host.jumpViaProxyCommand, isTrue);
+      expect(
+        host.warnings.map((w) => w.message),
+        contains(contains('approximated as ProxyJump')),
+      );
     });
 
     test('non -W ProxyCommand is reported unsupported', () async {

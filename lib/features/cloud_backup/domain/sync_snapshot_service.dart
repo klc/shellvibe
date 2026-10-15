@@ -111,7 +111,8 @@ final class SyncSnapshotService {
   /// pair from the backup vault's. One shared key would let a retry of a
   /// backup upload be answered with the sync vault's stored revision.
   factory SyncSnapshotService.over({
-    required CloudBackupService backupService,
+    required E2EECloudSyncService sync,
+    required String Function() newUploadId,
     required VaultTransport syncApi,
     required Future<String?> Function() readPendingUploadId,
     required Future<void> Function(String? uploadId) writePendingUploadId,
@@ -121,10 +122,10 @@ final class SyncSnapshotService {
   }) => SyncSnapshotService(
     backups: CloudBackupService(
       api: syncApi,
-      sync: backupService.sync,
+      sync: sync,
       readPendingUploadId: readPendingUploadId,
       writePendingUploadId: writePendingUploadId,
-      newUploadId: backupService.newUploadId,
+      newUploadId: newUploadId,
     ),
     readMark: readMark,
     writeMark: writeMark,
@@ -144,7 +145,6 @@ final class SyncSnapshotService {
     required String deviceId,
     required int maxSizeBytes,
     required Uint8List syncKey,
-    String? recoveryCode,
     bool force = false,
   }) async {
     final state = await db.syncJournal?.readState();
@@ -155,7 +155,6 @@ final class SyncSnapshotService {
       passphrase: passphrase,
       deviceId: deviceId,
       maxSizeBytes: maxSizeBytes,
-      recoveryCode: recoveryCode,
       force: force,
       scope: BackupScope.syncGround,
       syncKey: syncKey,
@@ -188,8 +187,6 @@ final class SyncSnapshotService {
     required String deviceId,
     required int maxSizeBytes,
     required Uint8List syncKey,
-    String? recoveryCode,
-    DateTime? now,
   }) async {
     final current = await head();
 
@@ -198,7 +195,7 @@ final class SyncSnapshotService {
     if (current.isEmpty) return false;
 
     final mark = await readMark();
-    final at = now ?? DateTime.now();
+    final at = DateTime.now();
 
     final tooOld =
         current.updatedAt != null &&
@@ -222,7 +219,6 @@ final class SyncSnapshotService {
       deviceId: deviceId,
       maxSizeBytes: maxSizeBytes,
       syncKey: syncKey,
-      recoveryCode: recoveryCode,
     );
 
     return written.succeeded;
@@ -238,7 +234,6 @@ final class SyncSnapshotService {
   /// Returns null and a [SyncGroundProblem] when there is nothing usable.
   Future<({SyncGround? ground, SyncGroundProblem? problem})> readGround({
     required String secret,
-    BackupUnlockMethod unlockWith = BackupUnlockMethod.passphrase,
   }) async {
     final revisions = await backups.revisions();
     if (revisions.isEmpty) {
@@ -251,7 +246,6 @@ final class SyncSnapshotService {
       final opened = await backups.canOpen(
         revision: revision.revision,
         secret: secret,
-        unlockWith: unlockWith,
       );
 
       if (opened == null) {
@@ -299,13 +293,11 @@ final class SyncSnapshotService {
     required AppDatabase db,
     required SyncGround ground,
     required String secret,
-    BackupUnlockMethod unlockWith = BackupUnlockMethod.passphrase,
   }) async {
     final result = await backups.sync.importEncryptedBackup(
       backupPackageJson: ground.ciphertext,
       db: db,
       masterPassword: secret,
-      unlockWith: unlockWith,
       snapshotDeviceId: ground.deviceId,
       allowed: BackupScope.syncGround,
     );

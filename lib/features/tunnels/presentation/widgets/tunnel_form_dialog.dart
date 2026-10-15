@@ -6,7 +6,6 @@ import 'package:uuid/uuid.dart';
 
 import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/widgets/adaptive_modal.dart';
-import '../../../../shared/providers/workspace_provider.dart';
 import '../../../hosts/domain/models/host_model.dart';
 import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
 import '../../domain/models/tunnel_rule_model.dart';
@@ -32,9 +31,6 @@ class _TunnelFormDialogState extends ConsumerState<TunnelFormDialog> {
   late TextEditingController _remotePortController;
   bool _autoStart = false;
 
-  List<HostModel> _hosts = [];
-  bool _isLoadingHosts = true;
-
   @override
   void initState() {
     super.initState();
@@ -50,8 +46,6 @@ class _TunnelFormDialogState extends ConsumerState<TunnelFormDialog> {
       text: widget.rule?.remotePort?.toString() ?? '80',
     );
     _autoStart = widget.rule?.autoStart ?? false;
-
-    _loadHosts();
   }
 
   @override
@@ -62,32 +56,14 @@ class _TunnelFormDialogState extends ConsumerState<TunnelFormDialog> {
     super.dispose();
   }
 
-  Future<void> _loadHosts() async {
-    try {
-      final hostsRepo = ref.read(hostsRepositoryProvider);
-      final hosts = await hostsRepo.getHostsByWorkspace(
-        ref.read(activeWorkspaceIdProvider),
-      );
-      if (mounted) {
-        setState(() {
-          _hosts = hosts;
-          if (_selectedHostId == null && hosts.isNotEmpty) {
-            _selectedHostId = hosts.first.id;
-          }
-          _isLoadingHosts = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() => _isLoadingHosts = false);
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final isEditing = widget.rule != null;
     final tokens = ShellVibeTokens.resolve(context);
+    final hostsAsync = ref.watch(hostsProvider);
+    final hosts = hostsAsync.value ?? const <HostModel>[];
+    // A new rule defaults to the first host once the list is in.
+    _selectedHostId ??= hosts.firstOrNull?.id;
 
     return ShadDialog(
       title: Row(
@@ -128,7 +104,7 @@ class _TunnelFormDialogState extends ConsumerState<TunnelFormDialog> {
               children: [
                 const SizedBox(height: 8),
                 // Host Selector
-                if (_isLoadingHosts)
+                if (hostsAsync.isLoading)
                   const LinearProgressIndicator()
                 else
                   ShadSelectFormField<String>(
@@ -139,7 +115,7 @@ class _TunnelFormDialogState extends ConsumerState<TunnelFormDialog> {
                     // the empty case has to say what it is waiting for.
                     placeholder: const Text('Select a host'),
                     selectedOptionBuilder: (context, value) {
-                      final host = _hosts
+                      final host = hosts
                           .where((h) => h.id == value)
                           .firstOrNull;
                       return Text(
@@ -148,7 +124,7 @@ class _TunnelFormDialogState extends ConsumerState<TunnelFormDialog> {
                             : value,
                       );
                     },
-                    options: _hosts.map((host) {
+                    options: hosts.map((host) {
                       return ShadOption<String>(
                         value: host.id,
                         child: Text('${host.label} (${host.hostname})'),

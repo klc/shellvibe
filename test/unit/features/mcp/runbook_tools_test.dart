@@ -1241,23 +1241,5 @@ void main() {
       expect(defs['get_runbook_run']!.inputSchema['required'], ['runId']);
       expect(defs['cancel_runbook_run']!.inputSchema['required'], ['runId']);
     });
-
-    test(
-      'snake_case argument names are read as their camelCase twins',
-      () async {
-        await host('h1');
-        await runbook();
-        final future = run.execute(_ctx, {
-          'runbook_id': 'rb',
-          'host_ids': ['h1'],
-        });
-        final request = await answer(
-          const RunbookApprovalDecision(approved: true),
-        );
-        await future;
-        expect(request.runbookTitle, 'Release');
-        expect(gateway.started.single.hostIds, ['h1']);
-      },
-    );
   });
 }

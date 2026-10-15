@@ -14,7 +14,7 @@ import 'package:shellvibe/shared/providers/database_providers.dart';
 /// backup and sync notifiers do.
 final _restore = Provider<void Function()>(
   (ref) =>
-      () => invalidateRestoredData(ref),
+      () => invalidateRestoredData(ref.invalidate),
 );
 
 void main() {

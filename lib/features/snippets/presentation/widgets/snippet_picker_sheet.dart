@@ -32,11 +32,14 @@ class SnippetPickerSheet extends ConsumerStatefulWidget {
     BuildContext context, {
     required String targetLabel,
     required Future<void> Function(SnippetModel snippet) onSelect,
+    String title = 'Send Snippet',
+    bool isScrollControlled = false,
   }) {
     showAdaptivePanel<void>(
       context: context,
-      title: 'Send Snippet',
+      title: title,
       desktopHeight: 460,
+      isScrollControlled: isScrollControlled,
       builder: (ctx) =>
           SnippetPickerSheet(targetLabel: targetLabel, onSelect: onSelect),
     );

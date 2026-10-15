@@ -60,15 +60,6 @@ void main() {
     expect(await store.readEmail(), session.email);
   });
 
-  test('clearAll forgets the device identity too', () async {
-    await store.write(token: 'tok_123', session: session);
-    await store.clearAll();
-
-    expect(await store.readToken(), isNull);
-    expect(await store.readDeviceId(), isNull);
-    expect(await store.readEmail(), isNull);
-  });
-
   test('a token without a user id is not a session', () async {
     // Half-written state, e.g. the process died between two keychain writes.
     FlutterSecureStorage.setMockInitialValues({

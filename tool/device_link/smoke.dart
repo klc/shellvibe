@@ -17,10 +17,13 @@ const _timeout = Duration(seconds: 10);
 Future<void> main() async {
   final checks = _Checks();
   final identity = DeviceLinkIdentity.generate();
+  final paired = <String, String>{};
   final server = DeviceLinkServer(
     identity: identity,
     hostName: 'loopback-host',
     appVersion: 'smoke',
+    pairedDeviceAuthenticator: (deviceId, secret) => paired[deviceId] == secret,
+    pairedDevicePersister: (record) => paired[record.id] = record.secret,
   );
   DeviceLinkClientConnection? connection;
 
@@ -82,6 +85,8 @@ Future<void> main() async {
       _isErrorCode(secondUse, 'pairing_token_invalid'),
     );
 
+    // A smoke test is a test: it needs the raw frame to be malformed.
+    // ignore: invalid_use_of_visible_for_testing_member
     await connection.sendRawText(
       jsonEncode({'t': 'hello', 'v': deviceLinkProtocolVersion + 1}),
     );

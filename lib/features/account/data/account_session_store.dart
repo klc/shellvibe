@@ -78,15 +78,4 @@ final class AccountSessionStore {
     await storage.delete(key: SecureStorageKeys.accountToken);
     await storage.delete(key: SecureStorageKeys.accountUserId);
   }
-
-  /// Forgets everything, including the device identity.
-  ///
-  /// For "forget this device" and for account deletion, where keeping the id
-  /// of a record the server no longer has would make the next sign-in send a
-  /// `device_id` that resolves to nothing.
-  Future<void> clearAll() async {
-    await clearSession();
-    await storage.delete(key: SecureStorageKeys.accountDeviceId);
-    await storage.delete(key: SecureStorageKeys.accountEmail);
-  }
 }

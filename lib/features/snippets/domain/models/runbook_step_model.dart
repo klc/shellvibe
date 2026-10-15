@@ -97,33 +97,4 @@ class RunbookStepModel {
       snippetId: clearSnippet ? null : (snippetId ?? this.snippetId),
     );
   }
-
-  Map<String, dynamic> toJson() => {
-    'id': id,
-    'runbookId': runbookId,
-    'stepOrder': stepOrder,
-    'command': command,
-    'expectedExitCode': expectedExitCode,
-    'expectedOutputPattern': expectedOutputPattern,
-    'timeoutSeconds': timeoutSeconds,
-    'onFailure': onFailure.wireName,
-    'retries': retries,
-    'kind': kind.name,
-    'snippetId': snippetId,
-  };
-
-  factory RunbookStepModel.fromJson(Map<String, dynamic> json) =>
-      RunbookStepModel(
-        id: json['id'] as String,
-        runbookId: json['runbookId'] as String,
-        stepOrder: json['stepOrder'] as int,
-        command: json['command'] as String,
-        expectedExitCode: (json['expectedExitCode'] as int?) ?? 0,
-        expectedOutputPattern: json['expectedOutputPattern'] as String?,
-        timeoutSeconds: (json['timeoutSeconds'] as int?) ?? 30,
-        onFailure: StepFailurePolicy.parse(json['onFailure'] as String?),
-        retries: ((json['retries'] as int?) ?? 0).clamp(0, maxRetries),
-        kind: StepKind.parse(json['kind'] as String?),
-        snippetId: json['snippetId'] as String?,
-      );
 }

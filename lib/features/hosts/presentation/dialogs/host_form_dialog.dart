@@ -6,9 +6,10 @@ import 'package:shellvibe/app/widgets/shellvibe_ui.dart';
 import 'package:shellvibe/core/utils/platform_capabilities.dart';
 import 'package:shellvibe/features/vault/presentation/notifiers/identities_notifier.dart';
 
-import '../../../../shared/providers/workspace_provider.dart';
+import '../../../workspaces/presentation/providers/workspace_provider.dart';
 import '../../../snippets/presentation/notifiers/snippets_notifier.dart';
 import '../../domain/models/host_model.dart';
+import '../../domain/services/ssh_connect_planner.dart';
 import '../notifiers/host_groups_notifier.dart';
 import '../notifiers/hosts_notifier.dart';
 
@@ -110,16 +111,10 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
   }
 
   void _parseHostnameInput() {
-    final text = _hostnameController.text.trim();
-    if (text.contains('@')) {
-      final atIndex = text.indexOf('@');
-      final user = text.substring(0, atIndex).trim();
-      final host = text.substring(atIndex + 1).trim();
-      if (user.isNotEmpty) {
-        _usernameController.text = user;
-      }
-      _hostnameController.text = host;
-    }
+    final (:user, :host) = splitUserHost(_hostnameController.text);
+    if (user == null) return;
+    if (user.isNotEmpty) _usernameController.text = user;
+    _hostnameController.text = host;
   }
 
   Future<void> _save() async {
@@ -589,25 +584,12 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                 else
                   hostsAsync.when(
                     data: (hosts) {
-                      final excludedJumpHostIds = <String>{};
-                      if (isEditing) {
-                        final editedId = widget.initialHost!.id;
-                        excludedJumpHostIds.add(editedId);
-                        final jumpTargets = {
-                          for (final h in hosts) h.id: h.jumpHostId,
-                        };
-                        for (final h in hosts) {
-                          final visited = <String>{};
-                          var current = h.jumpHostId;
-                          while (current != null && visited.add(current)) {
-                            if (current == editedId) {
-                              excludedJumpHostIds.add(h.id);
-                              break;
-                            }
-                            current = jumpTargets[current];
-                          }
-                        }
-                      }
+                      final excludedJumpHostIds = isEditing
+                          ? SshConnectPlanner.excludedJumpHostIds(
+                              widget.initialHost!.id,
+                              hosts,
+                            )
+                          : const <String>{};
                       final candidateJumpHosts = hosts
                           .where((h) => !excludedJumpHostIds.contains(h.id))
                           .toList();

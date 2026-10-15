@@ -63,6 +63,10 @@ class ActiveTunnel {
     return '${(bytesTransferred / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
   }
 
+  /// This tunnel as it stands after [error] stopped it.
+  ActiveTunnel failed(Object error) =>
+      copyWith(isActive: false, error: error.toString());
+
   ActiveTunnel copyWith({
     String? ruleId,
     String? hostId,
@@ -96,7 +100,9 @@ class TunnelEngine {
   final Map<String, ServerSocket> _localServers = {};
   final Map<String, Socks5ProxyServer> _socksServers = {};
   final Map<String, SSHRemoteForward?> _remoteListeners = {};
-  final Map<String, List<StreamSubscription>> _subscriptions = {};
+
+  /// The remote forward's connection listener; the other kinds have none.
+  final Map<String, StreamSubscription> _remoteSubscriptions = {};
   final Map<String, Set<Socket>> _activeSockets = {};
   final Map<String, Set<SSHForwardChannel>> _activeChannels = {};
 
@@ -137,8 +143,6 @@ class TunnelEngine {
 
   List<ActiveTunnel> get activeTunnelsList => _activeTunnels.values.toList();
 
-  ActiveTunnel? getActiveTunnel(String ruleId) => _activeTunnels[ruleId];
-
   bool isTunnelActive(String ruleId) => _activeTunnels[ruleId]?.isActive ?? false;
 
   /// Start Local Port Forwarding (-L)
@@ -152,25 +156,20 @@ class TunnelEngine {
   }) async {
     await stopTunnel(ruleId);
 
+    final tunnel = ActiveTunnel(
+      ruleId: ruleId,
+      hostId: hostId,
+      type: 'local',
+      localPort: localPort,
+      remoteHost: remoteHost,
+      remotePort: remotePort,
+    );
     try {
       final serverSocket = await ServerSocket.bind('127.0.0.1', localPort);
       _localServers[ruleId] = serverSocket;
-      _subscriptions[ruleId] = [];
       _activeSockets[ruleId] = {};
       _activeChannels[ruleId] = {};
-
-      final active = ActiveTunnel(
-        ruleId: ruleId,
-        hostId: hostId,
-        type: 'local',
-        localPort: localPort,
-        remoteHost: remoteHost,
-        remotePort: remotePort,
-        isActive: true,
-      );
-
-      _activeTunnels[ruleId] = active;
-      _notify();
+      _publish(tunnel);
 
       serverSocket.listen((clientSocket) async {
         _activeSockets[ruleId]?.add(clientSocket);
@@ -202,17 +201,7 @@ class TunnelEngine {
       });
     } catch (e) {
       await stopTunnel(ruleId);
-      _activeTunnels[ruleId] = ActiveTunnel(
-        ruleId: ruleId,
-        hostId: hostId,
-        type: 'local',
-        localPort: localPort,
-        remoteHost: remoteHost,
-        remotePort: remotePort,
-        isActive: false,
-        error: e.toString(),
-      );
-      _notify();
+      _publish(tunnel.failed(e));
       rethrow;
     }
   }
@@ -228,6 +217,14 @@ class TunnelEngine {
   }) async {
     await stopTunnel(ruleId);
 
+    final tunnel = ActiveTunnel(
+      ruleId: ruleId,
+      hostId: hostId,
+      type: 'remote',
+      localPort: localPort,
+      remoteHost: localHost,
+      remotePort: remotePort,
+    );
     try {
       final listener = await sshClient.forwardRemote(
         port: remotePort,
@@ -235,39 +232,21 @@ class TunnelEngine {
       if (listener == null) {
         // dartssh2 reports a refused -R request by returning null. Surface it
         // as an inactive tunnel with an error instead of a phantom "active".
-        _activeTunnels[ruleId] = ActiveTunnel(
-          ruleId: ruleId,
-          hostId: hostId,
-          type: 'remote',
-          localPort: localPort,
-          remoteHost: localHost,
-          remotePort: remotePort,
-          isActive: false,
-          error: 'Remote forward (port $remotePort) was refused by the server',
+        _publish(
+          tunnel.failed(
+            'Remote forward (port $remotePort) was refused by the server',
+          ),
         );
-        _notify();
         return;
       }
       _remoteListeners[ruleId] = listener;
-      _subscriptions[ruleId] = [];
       _activeSockets[ruleId] = {};
       _activeChannels[ruleId] = {};
+      _publish(tunnel);
 
-      final active = ActiveTunnel(
-        ruleId: ruleId,
-        hostId: hostId,
-        type: 'remote',
-        localPort: localPort,
-        remoteHost: localHost,
-        remotePort: remotePort,
-        isActive: true,
-      );
-
-      _activeTunnels[ruleId] = active;
-      _notify();
-
-      {
-        final sub = listener.connections.listen((connection) async {
+      _remoteSubscriptions[ruleId] = listener.connections.listen((
+        connection,
+      ) async {
           _activeChannels[ruleId]?.add(connection);
           Socket? localSocket;
           try {
@@ -299,21 +278,9 @@ class TunnelEngine {
             connection.close();
           }
         });
-        _subscriptions[ruleId]?.add(sub);
-      }
     } catch (e) {
       await stopTunnel(ruleId);
-      _activeTunnels[ruleId] = ActiveTunnel(
-        ruleId: ruleId,
-        hostId: hostId,
-        type: 'remote',
-        localPort: localPort,
-        remoteHost: localHost,
-        remotePort: remotePort,
-        isActive: false,
-        error: e.toString(),
-      );
-      _notify();
+      _publish(tunnel.failed(e));
       rethrow;
     }
   }
@@ -327,6 +294,12 @@ class TunnelEngine {
   }) async {
     await stopTunnel(ruleId);
 
+    final tunnel = ActiveTunnel(
+      ruleId: ruleId,
+      hostId: hostId,
+      type: 'dynamic',
+      localPort: localPort,
+    );
     try {
       final socksServer = Socks5ProxyServer(
         localPort: localPort,
@@ -336,39 +309,21 @@ class TunnelEngine {
 
       await socksServer.start();
       _socksServers[ruleId] = socksServer;
-
-      final active = ActiveTunnel(
-        ruleId: ruleId,
-        hostId: hostId,
-        type: 'dynamic',
-        localPort: localPort,
-        isActive: true,
-      );
-
-      _activeTunnels[ruleId] = active;
-      _notify();
+      _publish(tunnel);
     } catch (e) {
-      _activeTunnels[ruleId] = ActiveTunnel(
-        ruleId: ruleId,
-        hostId: hostId,
-        type: 'dynamic',
-        localPort: localPort,
-        isActive: false,
-        error: e.toString(),
-      );
-      _notify();
+      _publish(tunnel.failed(e));
       rethrow;
     }
   }
 
+  void _publish(ActiveTunnel tunnel) {
+    _activeTunnels[tunnel.ruleId] = tunnel;
+    _notify();
+  }
+
   /// Stop a specific tunnel by ruleId
   Future<void> stopTunnel(String ruleId) async {
-    if (_subscriptions.containsKey(ruleId)) {
-      for (final sub in List<StreamSubscription>.from(_subscriptions[ruleId]!)) {
-        await sub.cancel();
-      }
-      _subscriptions.remove(ruleId);
-    }
+    await _remoteSubscriptions.remove(ruleId)?.cancel();
 
     if (_localServers.containsKey(ruleId)) {
       await _localServers[ruleId]?.close();
@@ -417,7 +372,7 @@ class TunnelEngine {
       ..._localServers.keys,
       ..._socksServers.keys,
       ..._remoteListeners.keys,
-      ..._subscriptions.keys,
+      ..._remoteSubscriptions.keys,
       ..._activeSockets.keys,
       ..._activeChannels.keys,
     }.toList();

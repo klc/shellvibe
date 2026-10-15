@@ -2,9 +2,10 @@ import 'dart:async';
 
 import '../models/runbook_model.dart';
 import '../models/runbook_step_model.dart';
+import 'runbook_run_service.dart';
 import 'snippet_variable_parser.dart';
 
-/// One try at a step. A step with retries keeps one per attempt.
+/// One try at a step; the last one decides the step.
 class StepAttempt {
   final bool success;
   final int? exitCode;
@@ -19,10 +20,8 @@ class StepAttempt {
   });
 }
 
-/// Result of executing a single runbook step.
-///
-/// The top-level fields are those of the last attempt, which is the one that
-/// decided the step; [attemptLog] keeps every attempt.
+/// Result of executing a single runbook step: the fields of the attempt that
+/// decided it.
 class RunbookStepResult {
   final RunbookStepModel step;
   final bool success;
@@ -35,7 +34,6 @@ class RunbookStepResult {
 
   /// Attempts made: 1 plus the retries that were used.
   final int attempts;
-  final List<StepAttempt> attemptLog;
 
   /// Wall time across every attempt and the waits between them.
   final int? durationMs;
@@ -51,49 +49,43 @@ class RunbookStepResult {
     this.errorMessage,
     this.command = '',
     this.attempts = 1,
-    this.attemptLog = const [],
     this.durationMs,
     this.outputTruncated = false,
   });
 }
 
-/// [result] with every non-empty string in [secrets] replaced by `[redacted]`
-/// in its command, output, error and each attempt, so a secret someone typed
-/// into a prompt is never shown, even where a command echoed it back.
+/// [text] with every non-empty string in [secrets] replaced by `[redacted]`,
+/// longest first so a value that contains another is masked whole. Exact
+/// matches only: a program that transforms the value before echoing it is out
+/// of reach.
+String redactSecrets(String text, Iterable<String> secrets) {
+  final list = secrets.where((s) => s.isNotEmpty).toList()
+    ..sort((a, b) => b.length.compareTo(a.length));
+  var out = text;
+  for (final secret in list) {
+    out = out.replaceAll(secret, '[redacted]');
+  }
+  return out;
+}
+
+/// [result] with [secrets] masked in its command, output and error, so a
+/// secret someone typed into a prompt is never shown, even where a command
+/// echoed it back.
 RunbookStepResult redactStepResult(
   RunbookStepResult result,
   Iterable<String> secrets,
 ) {
-  final list = secrets.where((s) => s.isNotEmpty).toList()
-    ..sort((a, b) => b.length.compareTo(a.length));
-  if (list.isEmpty) return result;
-  String mask(String text) {
-    var out = text;
-    for (final secret in list) {
-      out = out.replaceAll(secret, '[redacted]');
-    }
-    return out;
-  }
-
+  if (!secrets.any((s) => s.isNotEmpty)) return result;
   return RunbookStepResult(
     step: result.step,
     success: result.success,
     exitCode: result.exitCode,
-    output: mask(result.output),
+    output: redactSecrets(result.output, secrets),
     errorMessage: result.errorMessage == null
         ? null
-        : mask(result.errorMessage!),
-    command: mask(result.command),
+        : redactSecrets(result.errorMessage!, secrets),
+    command: redactSecrets(result.command, secrets),
     attempts: result.attempts,
-    attemptLog: [
-      for (final a in result.attemptLog)
-        StepAttempt(
-          success: a.success,
-          exitCode: a.exitCode,
-          output: mask(a.output),
-          errorMessage: a.errorMessage == null ? null : mask(a.errorMessage!),
-        ),
-    ],
     durationMs: result.durationMs,
     outputTruncated: result.outputTruncated,
   );
@@ -136,7 +128,8 @@ class RunbookExecutor {
   /// a record of the combined stdout/stderr output and the process exit code,
   /// so [RunbookStepModel.expectedExitCode] can be enforced for real.
   /// [variableValues] optional map of variable inputs to substitute into command templates.
-  /// [onProgress] optional callback invoked before each step starts.
+  /// [onProgress] reports each step's status as it changes: `running` when it
+  /// starts, then `success`, `failed` or `cancelled`.
   /// [onStepFinished] is called with a step's result as soon as it settles
   /// (success or failure, after its retries), so output can be shown before
   /// the run ends. A cancelled step has no result.
@@ -163,7 +156,7 @@ class RunbookExecutor {
     commandRunner, {
     Map<String, String> variableValues = const {},
     Map<String, String> builtinValues = const {},
-    void Function(RunbookStepModel step, String status)? onProgress,
+    void Function(RunbookStepModel step, RunStepStatus status)? onProgress,
     void Function(RunbookStepResult result)? onStepFinished,
     bool Function()? isCancelled,
     Future<void>? cancelSignal,
@@ -173,15 +166,13 @@ class RunbookExecutor {
     final results = <RunbookStepResult>[];
     RunbookStepModel? firstFailure;
 
-    // Sort steps by stepOrder
-    final sortedSteps = List<RunbookStepModel>.from(runbook.steps)
-      ..sort((a, b) => a.stepOrder.compareTo(b.stepOrder));
+    final sortedSteps = runbook.orderedSteps;
 
     bool cancelled() => isCancelled?.call() ?? false;
 
     RunbookExecutionResult cancelledFrom(int index) {
       for (final rest in sortedSteps.skip(index)) {
-        onProgress?.call(rest, 'cancelled');
+        onProgress?.call(rest, RunStepStatus.cancelled);
       }
       return RunbookExecutionResult(
         runbookId: runbook.id,
@@ -195,7 +186,7 @@ class RunbookExecutor {
     for (var i = 0; i < sortedSteps.length; i++) {
       final step = sortedSteps[i];
       if (cancelled()) return cancelledFrom(i);
-      onProgress?.call(step, 'running');
+      onProgress?.call(step, RunStepStatus.running);
 
       final stopwatch = Stopwatch()..start();
       final attempts = <StepAttempt>[];
@@ -275,17 +266,16 @@ class RunbookExecutor {
         errorMessage: last.errorMessage,
         command: commandToRun,
         attempts: attempts.length,
-        attemptLog: attempts,
         durationMs: stopwatch.elapsedMilliseconds,
       );
       results.add(result);
       onStepFinished?.call(result);
 
       if (last.success) {
-        onProgress?.call(step, 'success');
+        onProgress?.call(step, RunStepStatus.success);
         continue;
       }
-      onProgress?.call(step, 'failed');
+      onProgress?.call(step, RunStepStatus.failed);
       firstFailure ??= step;
       if (step.onFailure == StepFailurePolicy.stop) {
         return RunbookExecutionResult(

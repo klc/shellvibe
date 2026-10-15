@@ -57,11 +57,6 @@ class TerminalTabSession {
   final String title;
   final TerminalSessionType sessionType;
 
-  /// True for a mobile Device Link tab. It remains a local terminal session
-  /// for existing session-type switches, while this flag identifies the
-  /// mirrored PTY explicitly to shared lifecycle/UI code.
-  final bool isDeviceLink;
-
   /// Id of the MCP session this tab is watching, or null on an ordinary tab.
   ///
   /// One field rather than a separate `isMcp` flag: an AI tab is defined by
@@ -108,7 +103,7 @@ class TerminalTabSession {
 
   /// Prediction state owned by this tab and shared with its Mosh bridge.
   /// SSH and local sessions keep the engine available but never render it.
-  final MoshPredictionEngine moshPredictionEngine;
+  final MoshPredictionEngine moshPredictionEngine = MoshPredictionEngine();
 
   /// Stream of invalidations for [moshPredictionEngine.visibleText]. It is a
   /// plain Dart stream so the domain model does not depend on Flutter UI
@@ -173,19 +168,11 @@ class TerminalTabSession {
     required this.id,
     required this.title,
     required this.sessionType,
-    this.isDeviceLink = false,
     this.mcpSessionId,
     this.host,
     this.identity,
     required this.terminal,
-    MoshPredictionEngine? moshPredictionEngine,
-    this.sshSessionManager,
-    this.sshBridge,
-    this.sshClientChangesSub,
     this.hostKeyPromptCallback,
-    this.ptyBridge,
-    this.deviceLinkTransport,
-    this.attachment,
     this.isConnecting = false,
     this.isConnected = false,
     this.errorMessage,
@@ -193,7 +180,7 @@ class TerminalTabSession {
     this.splitParentId,
     this.splitDirection,
     this.splitRatio = 0.5,
-  }) : moshPredictionEngine = moshPredictionEngine ?? MoshPredictionEngine();
+  });
 
   void syncMoshPredictionMode(MoshPredictionMode mode) {
     if (moshPredictionEngine.mode != mode) {
@@ -255,39 +242,31 @@ class TerminalTabSession {
     return current;
   }
 
-  Future<void> dispose() async {
-    await deviceLinkTransport?.dispose();
-    deviceLinkTransport = null;
-    attachment = null;
-    moshPredictionEngine.reset();
-    refreshMoshPredictionText();
-    outputChain.dispose();
+  /// Tears down every transport behind this tab — subscriptions, bridges,
+  /// Mosh/SSH/jump managers, the PTY — and leaves the terminal, output chain
+  /// and Device Link attachment alone, so a reconnect can reuse them.
+  ///
+  /// A Mosh session cannot be reattached — the client holds the OCB counter
+  /// state and the server's replay filter rejects an old sequence — so a
+  /// reconnect always starts a fresh one.
+  Future<void> closeSessions() async {
     await sshClientChangesSub?.cancel();
     sshClientChangesSub = null;
     await moshLinkSub?.cancel();
     moshLinkSub = null;
-    if (sshBridge != null) {
-      await sshBridge!.dispose(closeSession: true);
-      sshBridge = null;
-    }
-    if (moshBridge != null) {
-      await moshBridge!.dispose(closeSession: true);
-      moshBridge = null;
-    }
-    if (moshSessionManager != null) {
-      // Closed before the SSH manager: the bootstrap client is the one below,
-      // and nothing about the UDP session outlives it.
-      await moshSessionManager!.close();
-      moshSessionManager = null;
-    }
-    if (ptyBridge != null) {
-      await ptyBridge!.dispose(killPty: true);
-      ptyBridge = null;
-    }
-    if (sshSessionManager != null) {
-      await sshSessionManager!.close();
-      sshSessionManager = null;
-    }
+    moshLinkState = null;
+    await sshBridge?.dispose(closeSession: true);
+    sshBridge = null;
+    await moshBridge?.dispose(closeSession: true);
+    moshBridge = null;
+    // Closed before the SSH manager: the bootstrap client is the one below,
+    // and nothing about the UDP session outlives it.
+    await moshSessionManager?.close();
+    moshSessionManager = null;
+    await ptyBridge?.dispose(killPty: true);
+    ptyBridge = null;
+    await sshSessionManager?.close();
+    sshSessionManager = null;
     // Closed innermost-first (reverse of connect order): the target's own
     // manager is already down above, so nothing downstream depends on these
     // anymore when they close.
@@ -295,6 +274,16 @@ class TerminalTabSession {
       await jumpManager.close();
     }
     jumpSessionManagers = [];
+  }
+
+  Future<void> dispose() async {
+    await deviceLinkTransport?.dispose();
+    deviceLinkTransport = null;
+    attachment = null;
+    moshPredictionEngine.reset();
+    refreshMoshPredictionText();
+    outputChain.dispose();
+    await closeSessions();
     await _moshPredictionChanges.close();
     // xterm3 guards write() against a disposed terminal, so late writes from
     // an in-flight connect do not crash after disposal.

@@ -6,7 +6,7 @@ import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/widgets/adaptive_modal.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../../../shared/database/models/workspace_usage.dart';
-import '../../../../shared/providers/workspace_provider.dart';
+import '../providers/workspace_provider.dart';
 import '../../domain/models/workspace_model.dart';
 import '../dialogs/workspace_form_dialog.dart';
 import '../notifiers/workspaces_notifier.dart';

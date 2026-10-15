@@ -21,31 +21,6 @@ class TunnelRuleModel {
     this.autoStart = false,
   });
 
-  bool get isLocal => type == 'local';
-  bool get isRemote => type == 'remote';
-  bool get isDynamic => type == 'dynamic';
-  String? get localHost => remoteHost;
-
-  TunnelRuleModel copyWith({
-    String? id,
-    String? hostId,
-    String? type,
-    int? localPort,
-    String? remoteHost,
-    int? remotePort,
-    bool? autoStart,
-  }) {
-    return TunnelRuleModel(
-      id: id ?? this.id,
-      hostId: hostId ?? this.hostId,
-      type: type ?? this.type,
-      localPort: localPort ?? this.localPort,
-      remoteHost: remoteHost ?? this.remoteHost,
-      remotePort: remotePort ?? this.remotePort,
-      autoStart: autoStart ?? this.autoStart,
-    );
-  }
-
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;

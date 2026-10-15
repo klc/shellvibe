@@ -119,24 +119,4 @@ void main() {
     final result = redactor.redact('postgres://user:pw@host/db');
     expect(result.text, 'postgres://[REDACTED:db_url]@host/db');
   });
-
-  test('caller-supplied extraPatterns are applied and counted', () {
-    final customRedactor = OutputRedactor(
-      extraPatterns: [RegExp(r'CUSTOM-SECRET-\d+')],
-    );
-
-    final result = customRedactor.redact(
-      'value is CUSTOM-SECRET-12345 in this line',
-    );
-
-    expect(result.count, 1);
-    expect(result.text, isNot(contains('CUSTOM-SECRET-12345')));
-    expect(result.text, contains('[REDACTED:custom]'));
-  });
-
-  test('extraPatterns do not affect a redactor without them', () {
-    final result = redactor.redact('value is CUSTOM-SECRET-12345 in this line');
-    expect(result.count, 0);
-    expect(result.text, contains('CUSTOM-SECRET-12345'));
-  });
 }

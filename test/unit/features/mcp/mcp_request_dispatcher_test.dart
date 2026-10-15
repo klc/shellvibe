@@ -7,6 +7,7 @@ import 'package:shellvibe/features/mcp/data/tools/mcp_tool_registry.dart';
 /// Records the context every call arrives with.
 final class _RecordingTool implements McpToolHandler {
   final List<McpToolContext> calls = [];
+  Map<String, Object?>? lastArgs;
 
   @override
   String get name => 'record';
@@ -21,6 +22,7 @@ final class _RecordingTool implements McpToolHandler {
   @override
   Future<Object?> execute(McpToolContext ctx, Map<String, Object?> args) async {
     calls.add(ctx);
+    lastArgs = args;
 
     return const {'ok': true};
   }
@@ -62,6 +64,22 @@ void main() {
 
     return tool.calls.last.connectionScopeId;
   }
+
+  test('snake_case argument names reach the tool as camelCase', () async {
+    await dispatcher.handle(
+      'client-1',
+      JsonRpcRequest(
+        id: ++ids,
+        method: McpMethod.toolsCall,
+        params: const {
+          'name': 'record',
+          'arguments': {'session_id': 's-1', 'command': 'ls'},
+        },
+      ),
+    );
+
+    expect(tool.lastArgs, {'sessionId': 's-1', 'command': 'ls'});
+  });
 
   test('calls between two handshakes share one scope', () async {
     await initialize('client-1');

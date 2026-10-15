@@ -77,17 +77,6 @@ class TrackedRun {
   });
 }
 
-/// An agent's argument names are camelCase, like every other tool here; a
-/// model that writes `runbook_id` anyway means the same thing, so snake_case
-/// keys are read as their camelCase twins.
-Map<String, Object?> _normalized(Map<String, Object?> args) {
-  String camel(String key) => key.replaceAllMapped(
-    RegExp(r'_([a-z])'),
-    (m) => m.group(1)!.toUpperCase(),
-  );
-  return {for (final e in args.entries) camel(e.key): e.value};
-}
-
 /// `list_runbooks` — the curated operations the user has written down.
 class ListRunbooksTool with McpArgReaders implements McpToolHandler {
   final RunbooksRepository runbooksRepository;
@@ -435,11 +424,7 @@ class RunRunbookTool with McpArgReaders implements McpToolHandler {
   );
 
   @override
-  Future<Object?> execute(
-    McpToolContext ctx,
-    Map<String, Object?> rawArgs,
-  ) async {
-    final args = _normalized(rawArgs);
+  Future<Object?> execute(McpToolContext ctx, Map<String, Object?> args) async {
     final runbookId = requireString(args, 'runbookId');
     final hostIds = requireStringList(args, 'hostIds');
 
@@ -838,11 +823,7 @@ class GetRunbookRunTool with McpArgReaders implements McpToolHandler {
   );
 
   @override
-  Future<Object?> execute(
-    McpToolContext ctx,
-    Map<String, Object?> rawArgs,
-  ) async {
-    final args = _normalized(rawArgs);
+  Future<Object?> execute(McpToolContext ctx, Map<String, Object?> args) async {
     final runId = requireString(args, 'runId');
     final wait = (optionalInt(args, 'waitSeconds') ?? 0).clamp(
       0,
@@ -922,11 +903,7 @@ class CancelRunbookRunTool with McpArgReaders implements McpToolHandler {
   );
 
   @override
-  Future<Object?> execute(
-    McpToolContext ctx,
-    Map<String, Object?> rawArgs,
-  ) async {
-    final args = _normalized(rawArgs);
+  Future<Object?> execute(McpToolContext ctx, Map<String, Object?> args) async {
     final runId = requireString(args, 'runId');
     final tracked = tracker.find(runId);
     if (tracked == null || tracked.clientId != ctx.clientId) {

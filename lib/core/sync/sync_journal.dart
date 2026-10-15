@@ -251,17 +251,6 @@ final class SyncJournal {
             ..orderBy([(t) => OrderingTerm.desc(t.deletedAt)]))
           .get();
 
-  /// True when this device deleted [entityId] and has not written it since.
-  ///
-  /// A pull consults this before applying an `upsert`: delete and rewrite
-  /// arriving out of order is the most commonly reported way a home-grown sync
-  /// resurrects a row the user deleted.
-  Future<bool> isDeleted({
-    required String entityType,
-    required String entityId,
-  }) async =>
-      await tombstoneFor(entityType: entityType, entityId: entityId) != null;
-
   /// The clock a row currently stands at on this device.
   ///
   /// Null for a row that has never taken part in sync, which is the state

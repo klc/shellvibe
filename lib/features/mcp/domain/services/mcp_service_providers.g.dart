@@ -61,7 +61,7 @@ final class PolicyEngineProvider
   }
 }
 
-String _$policyEngineHash() => r'f038819b7b95d107f7ea71b92508e65be108e7b6';
+String _$policyEngineHash() => r'19d47406aa142845d3780729788c2e9ddc08b31d';
 
 /// Provider for [ApprovalCoordinator].
 ///

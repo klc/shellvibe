@@ -123,9 +123,14 @@ class McpRequestDispatcher {
         'tools/call "arguments" must be an object.',
       );
     }
-    final args = rawArgs == null
-        ? const <String, Object?>{}
-        : Map<String, Object?>.from(rawArgs as Map);
+    // Argument names are camelCase in every schema; a model that writes
+    // `session_id` anyway means the same thing, so snake_case keys are read
+    // as their camelCase twins — here, once, for every tool.
+    final args = <String, Object?>{
+      if (rawArgs != null)
+        for (final entry in (rawArgs as Map).entries)
+          _camel('${entry.key}'): entry.value,
+    };
 
     final client = await lookupClient(clientId);
     if (client == null) {
@@ -176,6 +181,11 @@ class McpRequestDispatcher {
     }
   }
 
+  static String _camel(String key) => key.replaceAllMapped(
+    RegExp(r'_([a-z])'),
+    (m) => m.group(1)!.toUpperCase(),
+  );
+
   String _encodeToolError(McpToolException e) {
     final payload = e.toJson();
     return payload.entries
@@ -207,11 +217,6 @@ McpRequestDispatcher mcpRequestDispatcher(Ref ref) {
   final dao = ref.watch(mcpDaoProvider);
   final approvals = ref.watch(mcpApprovalRepositoryProvider);
   final grants = ref.watch(mcpGrantRepositoryProvider);
-
-  // A new dispatcher is a new server: no connection from before it is still
-  // open, so nothing scoped to one of them may keep answering.
-  unawaited(approvals.revokeSessionScoped());
-  unawaited(grants.revokeSessionScoped());
 
   return McpRequestDispatcher(
     registry: registry,

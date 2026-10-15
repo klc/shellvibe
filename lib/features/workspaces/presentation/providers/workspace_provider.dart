@@ -1,9 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../features/settings/presentation/notifiers/settings_notifier.dart';
-import '../../features/workspaces/data/repositories/workspace_repository.dart';
-import '../../features/workspaces/domain/models/workspace_model.dart';
-import 'database_providers.dart';
+import '../../../../shared/providers/database_providers.dart';
+import '../../../settings/presentation/notifiers/settings_notifier.dart';
+import '../../data/repositories/workspace_repository.dart';
+import '../../domain/models/workspace_model.dart';
 
 final workspacesProvider = FutureProvider<List<WorkspaceModel>>((ref) {
   final repository = WorkspaceRepository(

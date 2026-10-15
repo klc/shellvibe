@@ -47,7 +47,7 @@ void main() {
           (e) => e.name == name,
           orElse: () => fail('missing legacy palette $name'),
         );
-        expect(TerminalPaletteData.themeOf(value), isNotNull);
+        expect(TerminalPaletteData.of(value).theme, isNotNull);
       }
     });
 
