@@ -11,6 +11,8 @@ import 'package:shellvibe/features/billing/domain/entitlement.dart';
 import 'package:shellvibe/features/billing/presentation/notifiers/entitlement_notifier.dart';
 import 'package:shellvibe/shared/storage/secure_storage_service.dart';
 
+import '../../../support/fake_api_transport.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -247,9 +249,7 @@ void main() {
       );
     });
 
-    testWidgets('offers account deletion through the web panel', (
-      tester,
-    ) async {
+    testWidgets('offers account deletion inside the app', (tester) async {
       await pumpSignedIn(
         tester,
         billing: const EntitlementState(
@@ -265,7 +265,188 @@ void main() {
             'App Store 5.1.1(v) and Play require deletion to be reachable '
             'from inside an app that can create an account.',
       );
-      expect(find.textContaining('web panel'), findsOneWidget);
+      expect(find.textContaining('web panel'), findsNothing);
+    });
+  });
+
+  group('account deletion', () {
+    late FakeApiTransport transport;
+    late _StubEntitlementNotifier entitlement;
+
+    Future<void> openDeleteDialog(WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1080, 1920);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      FlutterSecureStorage.setMockInitialValues({
+        SecureStorageKeys.accountToken: 'test-token',
+        SecureStorageKeys.accountUserId: '01USERULID0000000000000000',
+        SecureStorageKeys.accountDeviceId: '01DEVICEULID00000000000000',
+        SecureStorageKeys.accountEmail: 'user@shellvibe.dev',
+      });
+      transport = FakeApiTransport();
+      entitlement = _StubEntitlementNotifier(
+        const EntitlementState(
+          entitlement: Entitlement.free,
+          source: EntitlementSource.server,
+        ),
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            accountApiTransportProvider.overrideWithValue(transport),
+            entitlementProvider.overrideWith(() => entitlement),
+          ],
+          child: ShadTheme(
+            data: ShadThemeData(
+              colorScheme: const ShadSlateColorScheme.light(),
+              brightness: Brightness.light,
+            ),
+            child: const MaterialApp(
+              home: Scaffold(
+                body: SingleChildScrollView(child: AccountSettingsSection()),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('account_delete_button')));
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> confirmWith(WidgetTester tester, String password) async {
+      await tester.enterText(
+        find.descendant(
+          of: find.byKey(const Key('account_delete_password')),
+          matching: find.byType(EditableText),
+        ),
+        password,
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('account_delete_confirm')));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('says what goes and what stays, and wants the password', (
+      tester,
+    ) async {
+      await openDeleteDialog(tester);
+
+      final dialog = find.byKey(const Key('account_delete_dialog'));
+      Finder inDialog(String text) =>
+          find.descendant(of: dialog, matching: find.textContaining(text));
+
+      expect(dialog, findsOneWidget);
+      expect(inDialog('user@shellvibe.dev'), findsOneWidget);
+      expect(inDialog('cloud backups'), findsOneWidget);
+      expect(inDialog('sync history'), findsOneWidget);
+      expect(inDialog('cannot be undone'), findsOneWidget);
+      expect(inDialog('are not touched'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('account_delete_confirm')));
+      await tester.pumpAndSettle();
+
+      expect(
+        transport.sent,
+        isEmpty,
+        reason: 'The server refuses a delete without the password.',
+      );
+    });
+
+    testWidgets('a wrong password is answered in place; the right one '
+        'deletes and signs out', (tester) async {
+      await openDeleteDialog(tester);
+      transport
+        ..enqueue(
+          status: 422,
+          body: {
+            'code': 'invalid_credentials',
+            'message': 'The password does not match this account.',
+            'details': <String, Object?>{},
+          },
+        )
+        ..enqueue(
+          body: {
+            'data': {'deleted': true},
+          },
+        );
+
+      await confirmWith(tester, 'wrong');
+
+      expect(
+        find.text('That password does not match this account.'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('account_delete_dialog')), findsOneWidget);
+      expect(
+        find.byKey(const Key('account_delete_web_panel')),
+        findsNothing,
+        reason: 'The API answered; the web panel would refuse the same way.',
+      );
+      expect(entitlement.cacheCleared, isFalse);
+
+      await confirmWith(tester, 'right');
+
+      expect(transport.lastRequest!.method, 'DELETE');
+      expect(transport.lastBody, {'password': 'right'});
+      expect(find.byKey(const Key('account_delete_dialog')), findsNothing);
+      expect(find.byKey(const Key('account_submit_button')), findsOneWidget);
+      expect(
+        entitlement.cacheCleared,
+        isTrue,
+        reason: 'Deletion forgets the account the way sign-out does.',
+      );
+    });
+
+    testWidgets('a team owner is told why the server refused', (tester) async {
+      await openDeleteDialog(tester);
+      transport.enqueue(
+        status: 409,
+        body: {
+          'code': 'account_owns_shared_team',
+          'message': 'Transfer or empty every team you own first.',
+          'details': {
+            'team_ids': ['01TEAM'],
+          },
+        },
+      );
+
+      await confirmWith(tester, 'right');
+
+      expect(find.textContaining('Hand the team over'), findsOneWidget);
+      expect(find.byKey(const Key('account_sign_out_button')), findsOneWidget);
+    });
+
+    testWidgets('a throttled attempt says when to retry', (tester) async {
+      await openDeleteDialog(tester);
+      transport.enqueue(
+        status: 429,
+        headers: {'Retry-After': '30'},
+        body: {
+          'code': 'rate_limited',
+          'message': 'Too many requests.',
+          'details': <String, Object?>{},
+        },
+      );
+
+      await confirmWith(tester, 'right');
+
+      expect(find.textContaining('Try again in 30 seconds'), findsOneWidget);
+    });
+
+    testWidgets('offers the web panel only when the API cannot be reached', (
+      tester,
+    ) async {
+      await openDeleteDialog(tester);
+      transport.enqueueTransportFailure();
+
+      await confirmWith(tester, 'right');
+
+      expect(find.textContaining('could not be reached'), findsOneWidget);
+      expect(find.byKey(const Key('account_delete_web_panel')), findsOneWidget);
       expect(kAccountDeletionUrl, 'https://shellvibe.dev/panel/danger');
     });
   });
@@ -305,6 +486,11 @@ final class _StubEntitlementNotifier extends EntitlementNotifier {
 
   final EntitlementState _state;
 
+  bool cacheCleared = false;
+
   @override
   Future<EntitlementState> build() async => _state;
+
+  @override
+  Future<void> clearCache() async => cacheCleared = true;
 }

@@ -7,8 +7,17 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Settings → Account → Delete Account… now deletes the account inside the
+  app: it says what is removed, asks for the password again and signs the
+  device out once the server confirms. Hosts and keys on the device are not
+  touched. The web panel is offered only when the server cannot be reached.
+
 ### Fixed
 
+- After one failed sign-in, every later attempt failed with the same error
+  without reaching the server until the app was restarted.
 - On iPhone and iPad, a snippet row no longer runs 8px past its edge, which
   clipped its "…" menu.
 - On Android phones, a port-forwarding rule card no longer runs off the
