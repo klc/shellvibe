@@ -16,6 +16,9 @@ class _RecordingTarget implements TemplateRunnerTarget {
 
   /// The startup snippet each opened or split pane was asked to carry.
   final Map<String, String?> startupSnippets = {};
+
+  /// The startup runbook each opened or split pane was asked to carry.
+  final Map<String, String?> startupRunbooks = {};
   final Set<String> failingHostIds;
   var _counter = 0;
   String? _activeTabId;
@@ -38,6 +41,7 @@ class _RecordingTarget implements TemplateRunnerTarget {
     HostModel host, {
     IdentityModel? identity,
     String? startupSnippetId,
+    String? startupRunbookId,
   }) async {
     if (failingHostIds.contains(host.id)) {
       // Mirrors a connect that never produces a pane.
@@ -47,6 +51,7 @@ class _RecordingTarget implements TemplateRunnerTarget {
     }
     _created('openTabForHost(${host.id})');
     startupSnippets[_activeTabId!] = startupSnippetId;
+    startupRunbooks[_activeTabId!] = startupRunbookId;
     await connectionGate?.future;
   }
 
@@ -60,10 +65,12 @@ class _RecordingTarget implements TemplateRunnerTarget {
     HostModel? host,
     IdentityModel? identity,
     String? startupSnippetId,
+    String? startupRunbookId,
   }) async {
     final axis = direction == Axis.horizontal ? 'h' : 'v';
     _created('splitTab($parentTabId, $axis, host=${host?.id})');
     startupSnippets[_activeTabId!] = startupSnippetId;
+    startupRunbooks[_activeTabId!] = startupRunbookId;
     await connectionGate?.future;
   }
 
@@ -94,6 +101,7 @@ TemplatePaneModel _pane({
   String? hostId,
   String? title,
   String? startupSnippetId,
+  String? startupRunbookId,
 }) {
   return TemplatePaneModel(
     id: id,
@@ -106,6 +114,7 @@ TemplatePaneModel _pane({
     hostId: hostId,
     title: title,
     startupSnippetId: startupSnippetId,
+    startupRunbookId: startupRunbookId,
   );
 }
 
@@ -131,7 +140,7 @@ void main() {
   const runner = TemplateRunner();
 
   group('TemplateRunner', () {
-    test('hands each pane its own startup snippet to open with', () async {
+    test('hands each pane its own startup snippet or runbook', () async {
       final target = _RecordingTarget();
       await runner.run(
         _template([
@@ -149,6 +158,7 @@ void main() {
             splitDirection: Axis.horizontal,
             sessionType: TerminalSessionType.ssh,
             hostId: 'a',
+            startupRunbookId: 'rb',
           ),
         ]),
         target: target,
@@ -158,6 +168,7 @@ void main() {
       // The root pane carries its override; the split, with none, leaves the
       // host's own default to apply.
       expect(target.startupSnippets, {'live_0': 'sn', 'live_1': null});
+      expect(target.startupRunbooks, {'live_0': null, 'live_1': 'rb'});
     });
 
     test('recreates panes in capture order', () async {

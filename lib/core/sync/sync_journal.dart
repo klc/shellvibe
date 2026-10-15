@@ -223,10 +223,9 @@ final class SyncJournal {
           .getSingleOrNull();
 
   /// Drops [operation] without sending it: something newer replaced the row.
-  Future<void> discardPending(PendingOperation operation) =>
-      (db.delete(
-        db.pendingOperations,
-      )..where((t) => t.id.equals(operation.id))).go();
+  Future<void> discardPending(PendingOperation operation) => (db.delete(
+    db.pendingOperations,
+  )..where((t) => t.id.equals(operation.id))).go();
 
   /// Drops the operations that were accepted by the server.
   ///
@@ -704,7 +703,10 @@ final class SyncJournal {
       ('template_panes', 'startup_snippet_id'),
       ('runbook_steps', 'snippet_id'),
     ],
-    'runbooks': [('templates', 'on_open_runbook_id')],
+    'runbooks': [
+      ('templates', 'on_open_runbook_id'),
+      ('template_panes', 'startup_runbook_id'),
+    ],
   };
 
   /// Everything a delete of [entityType]/[entityId] takes with it, including

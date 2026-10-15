@@ -90,6 +90,7 @@ class TemplatesRepository {
             hostId: Value(pane.hostId),
             title: Value(pane.title),
             startupSnippetId: Value(pane.startupSnippetId),
+            startupRunbookId: Value(pane.startupRunbookId),
           ),
         )
         .toList();
@@ -118,6 +119,7 @@ class TemplatesRepository {
               hostId: pane.hostId,
               title: pane.title,
               startupSnippetId: pane.startupSnippetId,
+              startupRunbookId: pane.startupRunbookId,
             ),
           )
           .toList(),

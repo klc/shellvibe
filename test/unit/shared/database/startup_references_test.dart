@@ -80,7 +80,7 @@ void main() {
 
       final appDb = AppDatabase(NativeDatabase(dbFile));
       db = appDb;
-      expect(appDb.schemaVersion, 19);
+      expect(appDb.schemaVersion, 20);
 
       final host = (await appDb.select(appDb.hosts).get()).single;
       expect(host.startupSnippetId, isNull);
@@ -89,6 +89,7 @@ void main() {
       expect(template.onOpenConfirm, isTrue);
       final pane = (await appDb.select(appDb.templatePanes).get()).single;
       expect(pane.startupSnippetId, isNull);
+      expect(pane.startupRunbookId, isNull);
     });
   });
 
@@ -175,15 +176,26 @@ void main() {
       );
     });
 
-    test('deleting a runbook clears the template on-open reference', () async {
-      await db.runbooksDao.deleteRunbook('rb');
-      final template = (await db.select(db.templates).get()).single;
-      expect(template.onOpenRunbookId, isNull);
-      expect(
-        await recorded(),
-        containsAll(['runbooks/rb:delete', 'templates/t:upsert']),
-      );
-    });
+    test(
+      'deleting a runbook clears the template and pane references',
+      () async {
+        await (db.update(db.templatePanes)..where((p) => p.id.equals('p')))
+            .write(const TemplatePanesCompanion(startupRunbookId: Value('rb')));
+        await db.runbooksDao.deleteRunbook('rb');
+        final template = (await db.select(db.templates).get()).single;
+        expect(template.onOpenRunbookId, isNull);
+        final pane = (await db.select(db.templatePanes).get()).single;
+        expect(pane.startupRunbookId, isNull);
+        expect(
+          await recorded(),
+          containsAll([
+            'runbooks/rb:delete',
+            'templates/t:upsert',
+            'template_panes/p:upsert',
+          ]),
+        );
+      },
+    );
 
     test('SyncJournal.setNulls mirrors the schema', () {
       expect(
@@ -197,6 +209,10 @@ void main() {
       expect(
         SyncJournal.setNulls['runbooks'],
         contains(('templates', 'on_open_runbook_id')),
+      );
+      expect(
+        SyncJournal.setNulls['runbooks'],
+        contains(('template_panes', 'startup_runbook_id')),
       );
     });
   });
