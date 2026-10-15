@@ -1,0 +1,5 @@
+name,region,role
+web-1,eu-central,frontend
+web-2,eu-central,frontend
+db-1,eu-central,database
+cache-1,us-east,cache

@@ -1,0 +1,8 @@
+
+  ShellVibe demo server
+
+  A sandbox for trying ShellVibe: no internet access, and everything in
+  this home directory is reset every night.
+
+  Things to try:  htop    nano notes.txt    tree projects    tail logs/app.log
+

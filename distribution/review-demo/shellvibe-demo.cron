@@ -1,0 +1,2 @@
+# Nightly reset of the ShellVibe app-review demo container.
+0 4 * * * root /opt/shellvibe-demo/demo.sh reset

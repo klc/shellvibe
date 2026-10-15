@@ -1,0 +1,10 @@
+[Unit]
+Description=ShellVibe app-review demo SSH session
+# sshd -i exits 255 on a normal disconnect; don't keep one failed unit per connection around.
+CollectMode=inactive-or-failed
+
+[Service]
+ExecStart=/usr/bin/docker exec -i shellvibe-demo /usr/sbin/sshd -i -e
+StandardInput=socket
+StandardError=journal
+RuntimeMaxSec=6h

@@ -1,0 +1,9 @@
+# Notes
+
+Edit this file in ShellVibe's SFTP browser, or in the terminal with:
+
+    nano notes.txt
+
+- [ ] Connect over SSH
+- [ ] Open htop
+- [ ] Edit this file and save it

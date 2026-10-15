@@ -1,0 +1,14 @@
+[Unit]
+Description=ShellVibe app-review demo SSH
+
+[Socket]
+ListenStream=33022
+Accept=yes
+MaxConnections=8
+MaxConnectionsPerSource=3
+# Pause accepting under a connection flood instead of tripping the trigger limit (which stops the socket).
+PollLimitIntervalSec=2s
+PollLimitBurst=10
+
+[Install]
+WantedBy=sockets.target

@@ -1,0 +1,26 @@
+# Runs per connection in inetd mode (`sshd -i`) through `docker exec`; the container has no network.
+HostKey /etc/ssh/hostkeys/ssh_host_ed25519_key
+HostKey /etc/ssh/hostkeys/ssh_host_ecdsa_key
+HostKey /etc/ssh/hostkeys/ssh_host_rsa_key
+
+AllowUsers demo
+PermitRootLogin no
+PasswordAuthentication yes
+KbdInteractiveAuthentication no
+UsePAM no
+MaxAuthTries 3
+LoginGraceTime 30
+
+PrintMotd yes
+PrintLastLog no
+ClientAliveInterval 60
+ClientAliveCountMax 3
+
+# Forwarding only reaches the container's own loopback, so the tunnels screen can be tried safely.
+AllowTcpForwarding yes
+GatewayPorts no
+X11Forwarding no
+AllowAgentForwarding no
+PermitTunnel no
+
+Subsystem sftp internal-sftp
