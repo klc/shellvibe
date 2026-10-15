@@ -17,7 +17,18 @@ class HostFormDialog extends ConsumerStatefulWidget {
   final HostModel? initialHost;
   final String? workspaceId;
 
-  const HostFormDialog({super.key, this.initialHost, this.workspaceId});
+  /// Saves [initialHost]'s settings as a new host instead of updating it, so
+  /// a server set up like an existing one only needs its address changed.
+  final bool duplicate;
+
+  const HostFormDialog({
+    super.key,
+    this.initialHost,
+    this.workspaceId,
+    this.duplicate = false,
+  });
+
+  bool get isEditing => initialHost != null && !duplicate;
 
   @override
   ConsumerState<HostFormDialog> createState() => _HostFormDialogState();
@@ -47,7 +58,13 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
   void initState() {
     super.initState();
     final init = widget.initialHost;
-    _labelController = TextEditingController(text: init?.label ?? '');
+    _labelController = TextEditingController(
+      text: init == null
+          ? ''
+          : widget.duplicate
+          ? '${init.label} (copy)'
+          : init.label,
+    );
     _hostnameController = TextEditingController(text: init?.hostname ?? '');
     _usernameController = TextEditingController(text: init?.username ?? '');
     _portController = TextEditingController(
@@ -124,7 +141,7 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
 
     try {
       final notifier = ref.read(hostsProvider.notifier);
-      final isEditing = widget.initialHost != null;
+      final isEditing = widget.isEditing;
       final portVal = int.tryParse(_portController.text.trim()) ?? 22;
       final usernameVal = _usernameController.text.trim().isEmpty
           ? null
@@ -222,7 +239,7 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final isEditing = widget.initialHost != null;
+    final isEditing = widget.isEditing;
     final groupsAsync = ref.watch(hostGroupsProvider);
     final identitiesAsync = ref.watch(identitiesProvider);
     final hostsAsync = ref.watch(hostsProvider);
@@ -253,7 +270,11 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
           const SizedBox(width: 14),
           Flexible(
             child: Text(
-              isEditing ? 'Edit host' : 'New host',
+              isEditing
+                  ? 'Edit host'
+                  : widget.duplicate
+                  ? 'Duplicate host'
+                  : 'New host',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),

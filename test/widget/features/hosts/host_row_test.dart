@@ -67,6 +67,7 @@ void main() {
                 onConnect: () {},
                 onOpenSftp: () {},
                 onEdit: () {},
+                onDuplicate: () {},
                 onDelete: () {},
                 onToggleFavorite: () {},
               ),
