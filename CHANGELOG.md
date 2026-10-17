@@ -7,6 +7,13 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Windows (Microsoft Store): the package keeps write virtualization on, as
+  Windows Terminal does. New files the Local Shell's shells create under
+  AppData, and what they write to HKCU, stay with the ShellVibe package and
+  are removed with it. The Store denied the capability that turned it off.
+
 ## [1.9.0] - 2026-10-17
 
 ### Added

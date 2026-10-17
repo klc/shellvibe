@@ -11,10 +11,9 @@
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
   xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
   xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
-  xmlns:desktop6="http://schemas.microsoft.com/appx/manifest/desktop/windows10/6"
   xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
-  IgnorableNamespaces="uap uap3 desktop desktop6 com rescap">
+  IgnorableNamespaces="uap uap3 desktop com rescap">
 
   <Identity
     Name="@IDENTITY_NAME@"
@@ -27,17 +26,15 @@
     <PublisherDisplayName>@PUBLISHER_DISPLAY_NAME@</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
     <!--
-      A terminal's child processes are the user's own shells. Left virtualized,
-      what they write under AppData or HKCU (npm -g, git config, a dotfile)
-      would land in the package's private copy and vanish for every program
-      outside it. Needs the unvirtualizedResources capability below.
+      Write virtualization stays on, as in Windows Terminal: the Local Shell's
+      shells run inside the package, so new files they create under AppData
+      and their HKCU writes land in the package's private copy. Turning it off
+      needs unvirtualizedResources, which the Store denied for a terminal
+      (10.6.3, 2026-10-14).
     -->
-    <desktop6:FileSystemWriteVirtualization>disabled</desktop6:FileSystemWriteVirtualization>
-    <desktop6:RegistryWriteVirtualization>disabled</desktop6:RegistryWriteVirtualization>
   </Properties>
 
   <Dependencies>
-    <!-- 19041 (Windows 10 2004) is the first with the desktop6 switches above. -->
     <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26100.0" />
   </Dependencies>
 
@@ -95,6 +92,5 @@
 
   <Capabilities>
     <rescap:Capability Name="runFullTrust" />
-    <rescap:Capability Name="unvirtualizedResources" />
   </Capabilities>
 </Package>
