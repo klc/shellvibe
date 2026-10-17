@@ -24,6 +24,7 @@ class HostRow extends StatefulWidget {
   final VoidCallback onConnect;
   final VoidCallback onOpenSftp;
   final VoidCallback onEdit;
+  final VoidCallback onDuplicate;
   final VoidCallback onDelete;
   final VoidCallback onToggleFavorite;
 
@@ -40,6 +41,7 @@ class HostRow extends StatefulWidget {
     required this.onConnect,
     required this.onOpenSftp,
     required this.onEdit,
+    required this.onDuplicate,
     required this.onDelete,
     required this.onToggleFavorite,
   });
@@ -69,11 +71,10 @@ class _HostRowState extends State<HostRow> {
     final onConnect = widget.onConnect;
     final onOpenSftp = widget.onOpenSftp;
     final onEdit = widget.onEdit;
+    final onDuplicate = widget.onDuplicate;
     final onDelete = widget.onDelete;
     final tokens = ShellVibeTokens.resolve(context);
-    final address =
-        '${host.username != null && host.username!.isNotEmpty ? '${host.username}@' : ''}'
-        '${host.hostname}:${host.port}';
+    final address = host.address;
     // A host can carry several tags but the row has one chip slot: the first
     // tag by name, with a count for the rest (same shape as snippet tags).
     final tagNames = [
@@ -317,6 +318,7 @@ class _HostRowState extends State<HostRow> {
                           icon: const Icon(LucideIcons.ellipsis, size: 16),
                           onSelected: (value) {
                             if (value == 'edit') onEdit();
+                            if (value == 'duplicate') onDuplicate();
                             if (value == 'delete') onDelete();
                           },
                           itemBuilder: (context) => [
@@ -327,6 +329,16 @@ class _HostRowState extends State<HostRow> {
                                   Icon(LucideIcons.pencil, size: 16),
                                   SizedBox(width: 8),
                                   Text('Edit host'),
+                                ],
+                              ),
+                            ),
+                            const PopupMenuItem(
+                              value: 'duplicate',
+                              child: Row(
+                                children: [
+                                  Icon(LucideIcons.copy, size: 16),
+                                  SizedBox(width: 8),
+                                  Text('Duplicate host'),
                                 ],
                               ),
                             ),

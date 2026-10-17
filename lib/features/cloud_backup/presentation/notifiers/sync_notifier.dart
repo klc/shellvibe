@@ -23,7 +23,6 @@ import '../../../settings/presentation/notifiers/backup_scope_notifier.dart';
 import '../../data/cloud_backup_api.dart';
 import '../../data/cloud_backup_store.dart';
 import '../../data/sync_operations_api.dart';
-import '../../domain/cloud_backup_service.dart';
 import '../../domain/sync_join_service.dart';
 import '../../domain/sync_snapshot_service.dart';
 
@@ -120,7 +119,7 @@ final class SyncState {
 
 /// Runs automatic sync.
 ///
-/// Rebuilds when the account, the entitlement or the switch changes, so
+/// Rebuilds when the account, the plan's limits or the switch changes, so
 /// signing out or turning it off stops it without anything having to listen.
 ///
 /// `keepAlive` because it owns timers: a disposed instance would leave them
@@ -153,7 +152,22 @@ class SyncNotifier extends _$SyncNotifier {
 
   /// One pass at a time. Two overlapping passes would push the same
   /// operations twice and race each other's cursor writes.
-  Future<void> _inFlight = Future<void>.value();
+  ///
+  /// Static, not a field: a rebuild is a new instance, and the pass or join
+  /// the old one started is still running when the new one begins. A chain
+  /// each instance held for itself is exactly the overlap this forbids.
+  static Future<void> _inFlight = Future<void>.value();
+
+  /// Queues [work] behind whatever is running, on any instance.
+  ///
+  /// The chain itself never fails: a pass that threw is that caller's to
+  /// see, not the next pass's to inherit forever.
+  static Future<T> _serial<T>(Future<T> Function() work) {
+    final run = _inFlight.then((_) => work());
+    _inFlight = run.then<void>((_) {}, onError: (_) {});
+
+    return run;
+  }
 
   /// How long to wait after a change before sending.
   ///
@@ -207,8 +221,13 @@ class SyncNotifier extends _$SyncNotifier {
 
     // Read for its limits, not for permission: sync is free, and the upload
     // size the server will accept is the one thing here the client cannot
-    // know on its own.
-    final entitlement = await ref.watch(entitlementProvider.future);
+    // know on its own. Only the limit: the entitlement republishes a few
+    // times right after sign-in, and each one would otherwise be a rebuild.
+    final maxSizeBytes = await ref.watch(
+      entitlementProvider.selectAsync(
+        (s) => s.entitlement.limits.maxBackupSizeBytes,
+      ),
+    );
 
     final store = CloudBackupStore(
       storage: ref.watch(secureStorageServiceProvider),
@@ -230,13 +249,8 @@ class SyncNotifier extends _$SyncNotifier {
     final client = ref.watch(accountProvider.notifier).apiClient;
 
     final ground = SyncSnapshotService.over(
-      backupService: CloudBackupService(
-        api: CloudBackupApi(client: client),
-        sync: ref.watch(e2eeCloudSyncServiceProvider),
-        readPendingUploadId: store.readPendingUploadId,
-        writePendingUploadId: store.writePendingUploadId,
-        newUploadId: const Uuid().v4,
-      ),
+      sync: ref.watch(e2eeCloudSyncServiceProvider),
+      newUploadId: const Uuid().v4,
       syncApi: CloudBackupApi(client: client, kind: VaultKind.sync),
       readPendingUploadId: store.readPendingSyncUploadId,
       writePendingUploadId: store.writePendingSyncUploadId,
@@ -265,7 +279,7 @@ class SyncNotifier extends _$SyncNotifier {
     }
 
     _deviceId = account.session!.deviceId;
-    _maxSizeBytes = entitlement.entitlement.limits.maxBackupSizeBytes;
+    _maxSizeBytes = maxSizeBytes;
     _passphrase = passphrase;
     _syncKey = syncKey;
     _ground = ground;
@@ -301,16 +315,10 @@ class SyncNotifier extends _$SyncNotifier {
     // device that has finished returns at once, and one that was closed
     // halfway through finishes rather than calling itself done.
     //
-    // Started from `listenSelf` rather than from here, and that is the whole
-    // point of it: fired from inside `build` it runs while `state` is still
-    // loading, and every `_publish` it makes is dropped because there is no
-    // state to update yet. The join's result and, worse, its failure both
-    // land on the floor, and the screen keeps showing the "watching for
-    // changes" this method is about to return -- a sync that reports itself
-    // healthy while nothing has happened at all.
     // On the event queue, not here: `build`'s own return value is assigned
     // after it completes, so anything published from inside it is overwritten
-    // a moment later even when it is not dropped outright.
+    // a moment later -- the join's failure included, leaving a sync that
+    // reports itself healthy while nothing has happened at all.
     Future(() => unawaited(_startJoinOnce()));
 
     return const SyncState(blocker: null);
@@ -378,12 +386,6 @@ class SyncNotifier extends _$SyncNotifier {
         await journal.forgetVersionsBy(journal.deviceId);
         await journal.writeJoinState(SyncJoinState.none);
 
-        // The guard is per-instance and this notifier survives rebuilds, so a
-        // rebuild that discovers the re-key would set the flag and then find
-        // the join already marked started -- and the forced ground rewrite,
-        // the only thing that carries those rows to the other devices, would
-        // never run. The join state on disk says it has to run again; this
-        // lets it.
         _joinStarted = false;
       }
 
@@ -397,10 +399,7 @@ class SyncNotifier extends _$SyncNotifier {
     return (await store.syncKeyForUpload(autoSyncEnabled: true))!;
   }
 
-  /// Runs the join the first time this build publishes a state.
-  ///
-  /// `listenSelf` fires on every publish, including the ones the join itself
-  /// makes, so the guard is what keeps one join from starting another.
+  /// Runs the join once per build.
   Future<void> _startJoinOnce() async {
     if (_joinStarted || _join == null) return;
     _joinStarted = true;
@@ -414,16 +413,23 @@ class SyncNotifier extends _$SyncNotifier {
     if (join == null) return;
 
     try {
-      final result = await join.join(
-        secret: _passphrase!,
-        deviceId: _deviceId!,
-        maxSizeBytes: _maxSizeBytes,
-        syncKey: _syncKey!,
-      );
+      final result = await _serial(() async {
+        // Queued behind another pass; this instance may have been rebuilt
+        // away (and `_stop()` run) by the time its turn comes.
+        if (!ref.mounted) return const SyncJoinResult();
+
+        return join.join(
+          secret: _passphrase!,
+          deviceId: _deviceId!,
+          maxSizeBytes: _maxSizeBytes,
+          syncKey: _syncKey!,
+        );
+      });
+      if (!ref.mounted) return;
 
       // Before the verdict: a join the vault stopped after the merge has
       // still written the ground's rows.
-      if (result.applied > 0) invalidateRestoredData(ref);
+      if (result.applied > 0) invalidateRestoredData(ref.invalidate);
 
       if (!result.succeeded) {
         // The one refusal that clears on its own. Letting the join start
@@ -546,7 +552,11 @@ class SyncNotifier extends _$SyncNotifier {
     final engine = _engine;
     if (engine == null) return Future.value();
 
-    _inFlight = _inFlight.then((_) async {
+    return _serial(() async {
+      // Queued behind another pass; this instance may have been rebuilt away
+      // (and `_stop()` run) by the time its turn comes.
+      if (!ref.mounted) return;
+
       _publish((s) => s.copyWith(running: true, clearError: true));
       _heldByVault = false;
 
@@ -561,7 +571,7 @@ class SyncNotifier extends _$SyncNotifier {
         if (result.pulled > 0) {
           // The operations wrote straight to the database, so every list
           // notifier is still holding what it read at startup.
-          invalidateRestoredData(ref);
+          if (ref.mounted) invalidateRestoredData(ref.invalidate);
         }
 
         _publish(
@@ -618,8 +628,6 @@ class SyncNotifier extends _$SyncNotifier {
         _publish((s) => s.copyWith(running: false, error: '$e'));
       }
     });
-
-    return _inFlight;
   }
 
   Future<({int clock, int? seq})> _cursorOf(SyncEngine engine) async {
@@ -642,7 +650,7 @@ class SyncNotifier extends _$SyncNotifier {
       // Unknown counts as moved: a needless re-read beats a stale list.
     }
 
-    invalidateRestoredData(ref);
+    if (ref.mounted) invalidateRestoredData(ref.invalidate);
   }
 
   Future<SyncResult> _pullThenPush(SyncEngine engine) async {
@@ -705,24 +713,23 @@ class SyncNotifier extends _$SyncNotifier {
     _engine = null;
     _join = null;
     _ground = null;
+    _passphrase = null;
+    _syncKey = null;
+    _deviceId = null;
     _joinStarted = false;
     _heldByVault = false;
     _reKeyed = false;
   }
 
-  /// The state as this notifier last knew it.
-  ///
-  /// `state.value` is null until `build` finishes, and the old version of
-  /// [_publish] returned early in that window. That is how a join that failed
-  /// before anyone opened the screen came to report itself as healthy: the
-  /// error was written to a state that did not exist yet. Keeping a copy means
-  /// a late update lands on the right thing rather than on nothing.
-  SyncState _current = const SyncState(blocker: SyncBlocker.disabled);
-
+  /// Drops the update when this instance has been rebuilt away: the pass that
+  /// made it still finishes, but the state it would land on belongs to the
+  /// instance that replaced this one.
   void _publish(SyncState Function(SyncState state) update) {
-    _current = update(state.value ?? _current);
+    if (!ref.mounted) return;
+    final current = state.value;
+    if (current == null) return;
 
-    state = AsyncValue.data(_current);
+    state = AsyncValue.data(update(current));
   }
 }
 

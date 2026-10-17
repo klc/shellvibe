@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/core/api/api_client.dart';
+import 'package:shellvibe/core/api/api_exception.dart';
 import 'package:shellvibe/features/account/data/account_api.dart';
 import 'package:shellvibe/features/account/data/device_descriptor.dart';
 import 'package:shellvibe/features/account/domain/account_session.dart';
@@ -198,6 +199,68 @@ void main() {
       });
 
       expect(device.platform, 'some_future_platform');
+    });
+  });
+
+  group('deleteAccount', () {
+    test('sends the password in the body of an authenticated DELETE', () async {
+      transport.enqueue(
+        body: {
+          'data': {'deleted': true, 'removed_without_cascade': <String, int>{}},
+        },
+      );
+
+      await api.deleteAccount(password: 'hunter2-should-not-leak');
+
+      final request = transport.lastRequest!;
+      expect(request.method, 'DELETE');
+      expect(request.url.path, endsWith('/api/v1/account'));
+      expect(request.headers['Authorization'], 'Bearer test-token');
+      expect(transport.lastBody, {'password': 'hunter2-should-not-leak'});
+      expect(request.url.toString(), isNot(contains('hunter2')));
+    });
+
+    test('surfaces the server\'s refusals by code', () async {
+      transport
+        ..enqueue(
+          status: 422,
+          body: {
+            'code': 'invalid_credentials',
+            'message': 'The password does not match this account.',
+            'details': <String, Object?>{},
+          },
+        )
+        ..enqueue(
+          status: 409,
+          body: {
+            'code': 'account_owns_shared_team',
+            'message': 'Transfer or empty every team you own first.',
+            'details': {
+              'team_ids': ['01TEAM'],
+            },
+          },
+        );
+
+      await expectLater(
+        api.deleteAccount(password: 'wrong'),
+        throwsA(
+          isA<ApiException>().having(
+            (e) => e.code,
+            'code',
+            ApiErrorCode.invalidCredentials,
+          ),
+        ),
+      );
+      await expectLater(
+        api.deleteAccount(password: 'right'),
+        throwsA(
+          isA<ApiException>().having(
+            (e) => e.code,
+            'code',
+            ApiErrorCode.accountOwnsSharedTeam,
+          ),
+        ),
+      );
     });
   });
 

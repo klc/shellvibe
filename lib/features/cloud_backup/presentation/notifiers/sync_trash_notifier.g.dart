@@ -60,7 +60,7 @@ final class SyncTrashNotifierProvider
   SyncTrashNotifier create() => SyncTrashNotifier();
 }
 
-String _$syncTrashNotifierHash() => r'0501a50268e5bd0274f597a501b39dc9edd3f7a7';
+String _$syncTrashNotifierHash() => r'ff5394a26929737104e71916a29c9ab57fa65b86';
 
 /// The deleted rows this device can still put back.
 ///

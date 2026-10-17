@@ -14,7 +14,7 @@ final class AuthResult {
   const AuthResult({required this.token, required this.session});
 }
 
-/// The `/auth`, `/me` and `/devices` half of the v1 API.
+/// The `/auth`, `/me`, `/devices` and `/account` part of the v1 API.
 final class AccountApi {
   final ApiClient client;
 
@@ -101,6 +101,16 @@ final class AccountApi {
   /// Revokes another device's access.
   Future<void> revokeDevice(String deviceId) =>
       client.delete('/devices/$deviceId');
+
+  /// Permanently erases the account, with its devices, backups and sync
+  /// history.
+  ///
+  /// The server asks for the current [password] on top of the bearer token, so
+  /// a leaked token alone cannot destroy an account. It refuses with
+  /// `422 invalid_credentials` on a wrong password and `409
+  /// account_owns_shared_team` while a team the user owns has other members.
+  Future<void> deleteAccount({required String password}) =>
+      client.delete('/account', body: {'password': password});
 
   AuthResult _authResult(
     Map<String, Object?> data, {

@@ -4,12 +4,10 @@ import 'dart:convert';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../shared/database/app_database.dart';
-import '../../../../shared/providers/database_providers.dart';
-import '../../../../shared/providers/workspace_provider.dart';
+import '../../../workspaces/presentation/providers/workspace_provider.dart';
 import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
 import '../../data/mcp_providers.dart';
 import '../../data/mcp_session_pool.dart';
-import '../../data/repositories/mcp_grant_repository.dart';
 import '../../data/repositories/mcp_repository_providers.dart';
 import '../../domain/services/approval_coordinator.dart';
 import '../../domain/services/mcp_service_providers.dart';
@@ -224,14 +222,13 @@ class McpActivityNotifier extends _$McpActivityNotifier {
     final clientRepo = ref.read(mcpClientRepositoryProvider);
     final approvalRepo = ref.read(mcpApprovalRepositoryProvider);
     final auditRepo = ref.read(mcpAuditRepositoryProvider);
-    final dao = ref.read(mcpDaoProvider);
+    final grantRepo = ref.read(mcpGrantRepositoryProvider);
     final pool = ref.read(mcpSessionPoolProvider);
     final coordinator = ref.read(approvalCoordinatorProvider);
     final hostsRepo = ref.read(hostsRepositoryProvider);
 
     final clients = await clientRepo.listClients(workspaceId);
     final pendingCommands = coordinator.currentCommands;
-    final now = DateTime.now().toUtc();
 
     final activities = <McpClientActivity>[];
     for (final client in clients) {
@@ -240,23 +237,7 @@ class McpActivityNotifier extends _$McpActivityNotifier {
       // belongs on this panel — see [McpClientActivity]'s docstring.
       if (sessions.isEmpty) continue;
 
-      // McpGrantRepository exposes no "list grants for a client" method —
-      // only single-pair reads/writes and the panic-button bulk deletes (see
-      // its docstring). Reading the DAO directly here, the same DAO the
-      // repository itself wraps, is the pragmatic path rather than widening
-      // that repository's fixed API for this one caller. The
-      // expiresAt/cooldownUntil filtering below mirrors exactly what
-      // `McpGrantRepository.effectiveMode` already does per-pair, just
-      // applied across a whole list.
-      final grants = await dao.getGrantsForClient(client.id);
-      final activeGrants = grants.where((g) {
-        if (g.mode == McpGrantRepository.deniedMode) return false;
-        if (g.expiresAt != null && !g.expiresAt!.isAfter(now)) return false;
-        if (g.cooldownUntil != null && g.cooldownUntil!.isAfter(now)) {
-          return false;
-        }
-        return true;
-      }).toList();
+      final activeGrants = await grantRepo.activeGrantsForClient(client.id);
 
       final approvals = await approvalRepo.listActive(client.id);
       final recentAudit = await auditRepo.query(

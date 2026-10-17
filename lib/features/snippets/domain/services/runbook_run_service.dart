@@ -175,8 +175,7 @@ class RunbookRunService {
     RunStrategy strategy = RunStrategy.defaultParallel,
     void Function(RunEvent event)? onEvent,
   }) {
-    final steps = List<RunbookStepModel>.from(runbook.steps)
-      ..sort((a, b) => a.stepOrder.compareTo(b.stepOrder));
+    final steps = runbook.orderedSteps;
     final cancelSignal = Completer<void>();
     final openSessions = <RemoteCommandSession>{};
     // One decision per approval step for the whole run: the first Continue
@@ -282,16 +281,8 @@ class RunbookRunService {
           onStepFinished: (result) => emit(
             StepFinishedEvent(host.id, redactStepResult(result, secretValues)),
           ),
-          onProgress: (step, status) {
-            final mapped = switch (status) {
-              'running' => RunStepStatus.running,
-              'waiting' => RunStepStatus.waiting,
-              'success' => RunStepStatus.success,
-              'cancelled' => RunStepStatus.cancelled,
-              _ => RunStepStatus.failed,
-            };
-            emit(StepStatusEvent(host.id, step.id, mapped));
-          },
+          onProgress: (step, status) =>
+              emit(StepStatusEvent(host.id, step.id, status)),
         );
         final status = execution.cancelled
             ? RunHostStatus.cancelled

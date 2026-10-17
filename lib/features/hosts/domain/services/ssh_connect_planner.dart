@@ -19,6 +19,29 @@ class SshConnectPlanner {
 
   const SshConnectPlanner(this.hostsRepository);
 
+  /// Hosts that may not be picked as the jump host of [editedId]: itself,
+  /// and every host whose own jump chain already passes through it, since
+  /// choosing one of those would close a cycle.
+  static Set<String> excludedJumpHostIds(
+    String editedId,
+    List<HostModel> hosts,
+  ) {
+    final excluded = <String>{editedId};
+    final jumpTargets = {for (final h in hosts) h.id: h.jumpHostId};
+    for (final h in hosts) {
+      final visited = <String>{};
+      var current = h.jumpHostId;
+      while (current != null && visited.add(current)) {
+        if (current == editedId) {
+          excluded.add(h.id);
+          break;
+        }
+        current = jumpTargets[current];
+      }
+    }
+    return excluded;
+  }
+
   /// The jump hosts to connect through before [target], nearest-first — i.e.
   /// in the order they must be dialed, each one tunneling the next.
   ///
@@ -64,13 +87,9 @@ class SshConnectPlanner {
     IdentityModel? identity, {
     HostKeyPromptCallback? onHostKeyPrompt,
   }) {
-    String cleanHostname = host.hostname.trim();
-    String? parsedUser;
-    if (cleanHostname.contains('@')) {
-      final atIndex = cleanHostname.indexOf('@');
-      parsedUser = cleanHostname.substring(0, atIndex).trim();
-      cleanHostname = cleanHostname.substring(atIndex + 1).trim();
-    }
+    final (user: parsedUser, host: cleanHostname) = splitUserHost(
+      host.hostname,
+    );
 
     final hostUser = host.username?.trim();
     final identityUser = identity?.username.trim();
@@ -94,4 +113,16 @@ class SshConnectPlanner {
       onHostKeyPrompt: onHostKeyPrompt,
     );
   }
+}
+
+/// Splits a `user@host` string into its parts, both trimmed. [user] is null
+/// when there is no `@`, and empty when there is nothing in front of it.
+({String? user, String host}) splitUserHost(String input) {
+  final text = input.trim();
+  final at = text.indexOf('@');
+  if (at == -1) return (user: null, host: text);
+  return (
+    user: text.substring(0, at).trim(),
+    host: text.substring(at + 1).trim(),
+  );
 }

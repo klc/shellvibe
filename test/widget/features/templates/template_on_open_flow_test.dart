@@ -109,7 +109,7 @@ void main() {
   Future<void> pump(WidgetTester tester) async {
     final template = (await TemplatesRepository(
       db.templatesDao,
-    ).getAllTemplates()).single;
+    ).getTemplatesByWorkspace('default')).single;
     await tester.pumpWidget(
       ProviderScope(
         overrides: [

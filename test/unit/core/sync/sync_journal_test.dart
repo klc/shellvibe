@@ -240,8 +240,8 @@ void main() {
         await deleteHost('h1');
 
         expect(
-          await journal.isDeleted(entityType: 'hosts', entityId: 'h1'),
-          isTrue,
+          await journal.tombstoneFor(entityType: 'hosts', entityId: 'h1'),
+          isNotNull,
         );
       },
     );
@@ -252,8 +252,8 @@ void main() {
       await writeHost('h1');
 
       expect(
-        await journal.isDeleted(entityType: 'hosts', entityId: 'h1'),
-        isFalse,
+        await journal.tombstoneFor(entityType: 'hosts', entityId: 'h1'),
+        isNull,
         reason:
             'This device would otherwise drop its own row on the next '
             'reconciliation.',
@@ -267,8 +267,8 @@ void main() {
 
       expect(await journal.pending(), isEmpty);
       expect(
-        await journal.isDeleted(entityType: 'hosts', entityId: 'ghost'),
-        isFalse,
+        await journal.tombstoneFor(entityType: 'hosts', entityId: 'ghost'),
+        isNull,
       );
     });
   });
@@ -294,8 +294,8 @@ void main() {
 
       expect(await journal.trash(), isEmpty);
       expect(
-        await journal.isDeleted(entityType: 'hosts', entityId: 'h1'),
-        isTrue,
+        await journal.tombstoneFor(entityType: 'hosts', entityId: 'h1'),
+        isNotNull,
       );
     });
 
@@ -316,8 +316,8 @@ void main() {
 
       expect(await journal.trash(), isEmpty);
       expect(
-        await journal.isDeleted(entityType: 'hosts', entityId: 'h1'),
-        isTrue,
+        await journal.tombstoneFor(entityType: 'hosts', entityId: 'h1'),
+        isNotNull,
       );
     });
   });

@@ -28,8 +28,6 @@ class TerminalPaletteData {
 
   static TerminalPaletteData of(TerminalPalette palette) =>
       kTerminalPalettes.firstWhere((p) => p.palette == palette);
-
-  static TerminalTheme themeOf(TerminalPalette palette) => of(palette).theme;
 }
 
 /// All selectable terminal color schemes, in Settings dropdown order:

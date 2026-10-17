@@ -3,6 +3,7 @@ import 'package:drift/drift.dart';
 
 import '../../../../shared/database/app_database.dart';
 import '../../../../shared/database/daos/snippets_dao.dart';
+import 'runbooks_repository.dart';
 import '../../domain/models/snippet_model.dart';
 import '../../domain/models/variable_declaration.dart';
 
@@ -19,12 +20,6 @@ class SnippetsRepository {
   Future<List<SnippetModel>> getSnippetsByWorkspace(String workspaceId) async {
     final rows = await _dao.getSnippetsByWorkspace(workspaceId);
     return rows.map(_mapToModel).toList();
-  }
-
-  Stream<List<SnippetModel>> watchSnippetsByWorkspace(String workspaceId) {
-    return _dao
-        .watchSnippetsByWorkspace(workspaceId)
-        .map((rows) => rows.map(_mapToModel).toList());
   }
 
   Future<void> addSnippet(SnippetModel snippet) async {
@@ -56,21 +51,12 @@ class SnippetsRepository {
   }
 
   SnippetModel _mapToModel(Snippet row) {
-    List<String> tags = [];
-    if (row.tags != null && row.tags!.isNotEmpty) {
-      try {
-        final decoded = jsonDecode(row.tags!);
-        if (decoded is List) {
-          tags = decoded.map((e) => e.toString()).toList();
-        }
-      } catch (_) {}
-    }
     return SnippetModel(
       id: row.id,
       workspaceId: row.workspaceId,
       title: row.title,
       code: row.code,
-      tags: tags,
+      tags: RunbooksRepository.decodeStringList(row.tags),
       variables: VariableDeclaration.decodeList(row.variables),
     );
   }

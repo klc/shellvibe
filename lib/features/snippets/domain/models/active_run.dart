@@ -31,14 +31,6 @@ class HostRunState {
     this.results = const {},
   });
 
-  bool get finished => switch (status) {
-    RunHostStatus.succeeded ||
-    RunHostStatus.failed ||
-    RunHostStatus.cancelled ||
-    RunHostStatus.skipped => true,
-    _ => false,
-  };
-
   HostRunState copyWith({
     RunHostStatus? status,
     String? error,

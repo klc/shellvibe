@@ -60,7 +60,7 @@ bool _isIPhone(
 /// does not (no display attached yet, or a zero size or ratio), which is the
 /// window's size: wrong for an iPad in Split View, but never a crash.
 Size displaySizeOf(FlutterView? view, {required Size fallback}) {
-  final display = view?.display;
+  final display = displayOf(view);
   return (display == null ? null : _logicalSize(display)) ?? fallback;
 }
 

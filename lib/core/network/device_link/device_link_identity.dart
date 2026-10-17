@@ -4,6 +4,8 @@ import 'dart:typed_data';
 
 import 'package:basic_utils/basic_utils.dart';
 
+import '../../crypto/encryption_engine.dart';
+
 /// In-memory TLS identity used by a Device Link server.
 ///
 /// The identity is intentionally not persisted here. Callers own persistence
@@ -146,7 +148,7 @@ final class DeviceLinkIdentity {
   static bool matchesSpkiPin(List<int> certificateDer, String expectedPin) {
     try {
       final actual = spkiSha256Base64FromCertificateDer(certificateDer);
-      return _constantTimeEquals(actual, expectedPin);
+      return constantTimeEquals(actual.codeUnits, expectedPin.codeUnits);
     } on Object {
       return false;
     }
@@ -172,14 +174,6 @@ final class DeviceLinkIdentity {
         '-----END CERTIFICATE-----';
   }
 
-  static bool _constantTimeEquals(String left, String right) {
-    var difference = left.length ^ right.length;
-    final length = left.length < right.length ? left.length : right.length;
-    for (var i = 0; i < length; i++) {
-      difference |= left.codeUnitAt(i) ^ right.codeUnitAt(i);
-    }
-    return difference == 0;
-  }
 }
 
 /// Non-sensitive error raised while building a TLS identity.

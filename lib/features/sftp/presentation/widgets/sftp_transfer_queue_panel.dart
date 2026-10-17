@@ -1,13 +1,12 @@
-import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
-import '../../data/sftp_transfer_queue_worker.dart';
 import '../../domain/models/transfer_item.dart';
 import '../providers/sftp_providers.dart';
+import 'transfer_row_actions.dart';
 
 /// Height the wireframe reserves for the docked queue — roughly four rows.
 const double kSftpQueuePanelHeight = 150;
@@ -103,10 +102,6 @@ class _QueueRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = ShellVibeTokens.resolve(context);
-    final worker = ref.watch(sftpTransferQueueWorkerProvider);
-    final client = ref.watch(
-      sftpProvider.select((state) => state.remoteClient),
-    );
     final isUpload = item.type == TransferType.upload;
     // Done is not the same colour as running: a finished row goes green so a
     // glance down the queue separates "still moving" from "landed".
@@ -179,9 +174,9 @@ class _QueueRow extends ConsumerWidget {
           ),
           SizedBox(
             width: 68,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: _actions(worker, client),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: TransferRowActions(item: item),
             ),
           ),
         ],
@@ -197,69 +192,4 @@ class _QueueRow extends ConsumerWidget {
     TransferStatus.failed => 'failed',
     TransferStatus.cancelled => 'cancelled',
   };
-
-  List<Widget> _actions(SftpTransferQueueWorker worker, SftpClient? client) {
-    switch (item.status) {
-      case TransferStatus.inProgress:
-        return [
-          _IconAction(
-            icon: LucideIcons.pause,
-            tooltip: 'Pause transfer',
-            onPressed: () => worker.pauseTransfer(item.id),
-          ),
-          _IconAction(
-            icon: LucideIcons.x,
-            tooltip: 'Cancel transfer',
-            onPressed: () => worker.cancelTransfer(item.id),
-          ),
-        ];
-      case TransferStatus.paused:
-        return [
-          if (client != null)
-            _IconAction(
-              icon: LucideIcons.play,
-              tooltip: 'Resume transfer',
-              onPressed: () => worker.resumeTransfer(client, item.id),
-            ),
-          _IconAction(
-            icon: LucideIcons.x,
-            tooltip: 'Cancel transfer',
-            onPressed: () => worker.cancelTransfer(item.id),
-          ),
-        ];
-      case TransferStatus.pending:
-        return [
-          _IconAction(
-            icon: LucideIcons.x,
-            tooltip: 'Cancel transfer',
-            onPressed: () => worker.cancelTransfer(item.id),
-          ),
-        ];
-      case TransferStatus.completed:
-      case TransferStatus.failed:
-      case TransferStatus.cancelled:
-        return const [];
-    }
-  }
-}
-
-class _IconAction extends StatelessWidget {
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback onPressed;
-
-  const _IconAction({
-    required this.icon,
-    required this.tooltip,
-    required this.onPressed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ShellVibeIconButton(
-      icon: icon,
-      tooltip: tooltip,
-      onPressed: onPressed,
-    );
-  }
 }

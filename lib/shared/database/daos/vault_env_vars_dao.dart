@@ -15,12 +15,6 @@ class VaultEnvVarsDao extends DatabaseAccessor<AppDatabase>
     )..where((tbl) => tbl.workspaceId.equals(workspaceId))).get();
   }
 
-  Stream<List<VaultEnvVar>> watchByWorkspace(String workspaceId) {
-    return (select(
-      vaultEnvVars,
-    )..where((tbl) => tbl.workspaceId.equals(workspaceId))).watch();
-  }
-
   Future<VaultEnvVar?> getById(String id) {
     return (select(
       vaultEnvVars,

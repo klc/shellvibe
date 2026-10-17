@@ -37,6 +37,24 @@ void main() {
 
   DateTime inMinutes(int m) => DateTime.now().toUtc().add(Duration(minutes: m));
 
+  test('activeGrantsForClient and isInCooldown mirror effectiveMode', () async {
+    await grants.grant(
+      clientId: 'client-1',
+      hostId: 'host-1',
+      mode: McpAccessMode.readonly,
+    );
+    expect(
+      (await grants.activeGrantsForClient('client-1')).map((g) => g.hostId),
+      ['host-1'],
+    );
+    expect(await grants.isInCooldown('client-1', 'host-1'), isFalse);
+
+    await grants.denyWithCooldown(clientId: 'client-1', hostId: 'host-1');
+    expect(await grants.isInCooldown('client-1', 'host-1'), isTrue);
+    expect(await grants.activeGrantsForClient('client-1'), isEmpty);
+    expect(await grants.effectiveMode('client-1', 'host-1'), isNull);
+  });
+
   test('a denial for a never-granted pair never becomes a grant', () async {
     await grants.denyWithCooldown(clientId: 'client-1', hostId: 'host-1');
 
@@ -84,5 +102,15 @@ void main() {
       await grants.effectiveMode('client-1', 'host-1', now: inMinutes(11)),
       McpAccessMode.readonly,
     );
+  });
+
+  test('an expired grant yields effectiveMode null', () async {
+    await grants.grant(
+      clientId: 'client-1',
+      hostId: 'host-1',
+      mode: McpAccessMode.readonly,
+      expiresAt: inMinutes(-1),
+    );
+    expect(await grants.effectiveMode('client-1', 'host-1'), isNull);
   });
 }

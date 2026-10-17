@@ -13,11 +13,6 @@ class RunbooksRepository {
 
   RunbooksRepository(this._dao);
 
-  Future<List<RunbookModel>> getAllRunbooks() async {
-    final runbooks = await _dao.getAllRunbooks();
-    return _loadModels(runbooks);
-  }
-
   Future<List<RunbookModel>> getRunbooksByWorkspace(String workspaceId) async {
     final runbooks = await _dao.getRunbooksByWorkspace(workspaceId);
     return _loadModels(runbooks);
@@ -30,17 +25,6 @@ class RunbooksRepository {
       results.add(_mapToModel(r, steps));
     }
     return results;
-  }
-
-  Stream<List<RunbookModel>> watchAllRunbooks() {
-    return _dao.watchAllRunbooks().asyncMap((runbooks) async {
-      final results = <RunbookModel>[];
-      for (final r in runbooks) {
-        final steps = await _dao.getStepsForRunbook(r.id);
-        results.add(_mapToModel(r, steps));
-      }
-      return results;
-    });
   }
 
   Future<void> addRunbook(RunbookModel runbook) async {
@@ -86,7 +70,8 @@ class RunbooksRepository {
   static String? encodeHostIds(List<String> ids) =>
       ids.isEmpty ? null : jsonEncode(ids);
 
-  static List<String> decodeHostIds(String? raw) {
+  /// Reads a JSON string-list column; anything unreadable is an empty list.
+  static List<String> decodeStringList(String? raw) {
     if (raw == null || raw.isEmpty) return const [];
     try {
       final decoded = jsonDecode(raw);
@@ -140,9 +125,9 @@ class RunbooksRepository {
       title: r.title,
       description: r.description,
       createdAt: r.createdAt,
-      defaultHostIds: decodeHostIds(r.defaultHostIds),
+      defaultHostIds: decodeStringList(r.defaultHostIds),
       variables: VariableDeclaration.decodeList(r.variables),
-      tags: decodeHostIds(r.tags),
+      tags: decodeStringList(r.tags),
       steps: steps
           .map(
             (s) => RunbookStepModel(

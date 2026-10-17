@@ -18,13 +18,6 @@ class McpClientRepository {
 
   const McpClientRepository(this.dao);
 
-  /// Default token lifetime when the caller does not specify one.
-  ///
-  /// 30 days balances "the user should not have to regenerate on every
-  /// visit" against "a token copied into a config file and forgotten should
-  /// not stay valid forever".
-  static const defaultValidity = Duration(days: 30);
-
   /// Registers a new client and returns its id and the raw bearer token.
   ///
   /// This is the ONLY moment the raw token exists outside the agent's own
@@ -41,7 +34,10 @@ class McpClientRepository {
     final id = const Uuid().v4();
     final rawToken = McpToken.generate();
     final now = DateTime.now().toUtc();
-    final expiresAt = now.add(validFor ?? defaultValidity);
+    // 30 days balances "the user should not have to regenerate on every
+    // visit" against "a token copied into a config file and forgotten should
+    // not stay valid forever".
+    final expiresAt = now.add(validFor ?? const Duration(days: 30));
     await dao.insertClient(
       McpClientsCompanion.insert(
         id: id,

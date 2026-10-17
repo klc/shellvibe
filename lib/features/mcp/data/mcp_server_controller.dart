@@ -6,7 +6,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../core/mcp/mcp_endpoint_file.dart';
 import '../../../core/mcp/mcp_http_transport.dart';
 import '../../../core/mcp/mcp_protocol.dart';
-import '../../../shared/providers/workspace_provider.dart';
+import '../../workspaces/presentation/providers/workspace_provider.dart';
 import '../../snippets/presentation/notifiers/runbook_run_notifier.dart';
 import '../../vault/presentation/notifiers/vault_notifier.dart';
 import '../domain/services/mcp_service_providers.dart';
@@ -32,14 +32,11 @@ typedef McpHttpTransportFactory =
 /// Thrown when [McpServerController._guardedOnRequest] rejects a request
 /// because the vault is locked or in its `isLocking` drain window.
 ///
-/// This is intentionally *not* the tool-facing `VAULT_LOCKED` wire error
-/// (`McpErrorCode.vaultLocked` in `mcp_enums.dart`, surfaced as a normal
-/// JSON-RPC success whose `McpToolResult.isError` is set — see
-/// `mcp_protocol.dart`'s docstring on why MCP errors work that way). That
-/// shaping is a `tools/call`-specific concern for the request dispatcher
-/// this controller does not own (Faz 2+); every credential lookup the
-/// dispatcher makes already goes through the vault and fails there on its
-/// own. This exception exists only to close the narrow race between the
+/// This is intentionally not shaped as a tool-facing `McpToolException`
+/// (a normal JSON-RPC success whose `McpToolResult.isError` is set — see
+/// `mcp_protocol.dart`'s docstring on why MCP errors work that way): every
+/// credential lookup the dispatcher makes already goes through the vault and
+/// fails there on its own. This exception exists only to close the narrow race between the
 /// vault flipping `isLocking` and this controller's [McpServerController.stop]
 /// actually finishing — see the class docstring's "Vault gate" section. The
 /// transport's blanket exception handler (`mcp_http_transport.dart`) turns
@@ -100,12 +97,10 @@ class McpServerController {
   /// later does not move an already-running bridge's visibility.
   final String Function() activeWorkspaceId;
 
-  /// Reserved name for the client row this controller itself creates and
-  /// manages. Never matches a name a future Settings screen lets the user
-  /// choose for their own registered agents, so [_resolveActiveClient] only
-  /// ever touches rows it created.
   /// Reserved name for the client row this controller mints for its own
-  /// bridge on every [start].
+  /// bridge on every [start]. Never matches a name a user could choose for
+  /// their own registered agents, so [_resolveActiveClient] only ever
+  /// touches rows it created.
   ///
   /// Public because the Settings UI must be able to tell this row apart from
   /// the ones a user registered: it is infrastructure, not a client anyone
@@ -121,6 +116,11 @@ class McpServerController {
   /// and app shutdown all leave nothing half-alive behind.
   final Future<void> Function()? onStopped;
 
+  /// Runs before the transport binds on every [start]. Clears whatever
+  /// "this session" state outlived the last run: [onStopped] cannot be
+  /// relied on for that, since on app quit the container is already gone.
+  final Future<void> Function()? onStarting;
+
   McpHttpTransport? _transport;
   Future<void>? _startFuture;
 
@@ -131,6 +131,7 @@ class McpServerController {
     required this.isVaultAvailable,
     required this.activeWorkspaceId,
     this.onStopped,
+    this.onStarting,
   });
 
   bool get isRunning => _transport?.isRunning ?? false;
@@ -172,6 +173,8 @@ class McpServerController {
       );
     }
 
+    await onStarting?.call();
+
     final transport = transportFactory(
       onRequest: _guardedOnRequest,
       authenticate: _authenticate,
@@ -181,12 +184,8 @@ class McpServerController {
     _transport = transport;
 
     try {
-      final (:clientId, :rawToken) = await _resolveActiveClient();
+      final rawToken = await _resolveActiveClient();
       await McpEndpointFile.write(port: boundPort, token: rawToken, pid: pid);
-      // clientId is not persisted anywhere beyond the row `createClient`
-      // already wrote — it exists here only so a future caller can log which
-      // client this boot minted without a second DB round trip.
-      assert(clientId.isNotEmpty);
     } on Object {
       // Never leave a bound, discoverable-in-principle HTTP server running
       // with no way for a bridge to learn its port/token — that is a server
@@ -248,12 +247,11 @@ class McpServerController {
     if (boundPort == null) return null;
 
     try {
-      final (:clientId, :rawToken) = await _resolveActiveClient();
+      final rawToken = await _resolveActiveClient();
       await McpEndpointFile.write(port: boundPort, token: rawToken, pid: pid);
       // The caller's request still fails: it presented the old token, and
       // honouring it would mean accepting a credential that was revoked.
       // The bridge re-reads the file on its next launch and succeeds then.
-      assert(clientId.isNotEmpty);
     } on Object {
       // A failed re-mint must not turn into a successful authentication.
       return null;
@@ -274,8 +272,8 @@ class McpServerController {
     return onRequest(clientId, request);
   }
 
-  /// Ensures the workspace's MCP client row exists and returns its id and a
-  /// **fresh** raw bearer token for it.
+  /// Ensures the workspace's MCP client row exists and returns a **fresh**
+  /// raw bearer token for it.
   ///
   /// `McpClientRepository.createClient` (see its docstring) is the only
   /// moment a raw token exists outside an agent's own config — the database
@@ -292,12 +290,11 @@ class McpServerController {
   /// window on every boot is a feature here, not a limitation. Rows this
   /// controller does not own — a name a future Settings screen lets the
   /// user pick for their own registered agents — are never touched.
-  Future<({String clientId, String rawToken})> _resolveActiveClient() async {
+  Future<String> _resolveActiveClient() async {
     final workspaceId = activeWorkspaceId();
     // Every workspace, not just the active one: a system row left behind in
     // the workspace the server last ran for would keep its token valid (and
     // hidden from Settings) after the server moved to another workspace.
-    final existing = await clients.listClientsNamed(systemClientName);
     // Delete rather than revoke. A revoked row is kept around so a *user's*
     // token fails cleanly and stays visible in Settings as something they
     // once issued; neither applies to this one. It is minted fresh on every
@@ -305,16 +302,15 @@ class McpServerController {
     // dead infrastructure rows — one per app launch — that the user never
     // created and cannot act on. The audit log is unaffected: it copies
     // client labels at write time and holds no foreign key into this table.
-    final stale = existing.where((client) => client.name == systemClientName);
-    for (final client in stale) {
+    for (final client in await clients.listClientsNamed(systemClientName)) {
       await clients.deleteClient(client.id);
     }
 
-    final (clientId, rawToken) = await clients.createClient(
+    final (_, rawToken) = await clients.createClient(
       workspaceId: workspaceId,
       name: systemClientName,
     );
-    return (clientId: clientId, rawToken: rawToken);
+    return rawToken;
   }
 }
 
@@ -333,6 +329,14 @@ McpServerController mcpServerController(Ref ref) {
   // Read lazily, not watched: these are keepAlive services this controller
   // only reaches for when it stops, so build order cannot form a cycle.
   var disposed = false;
+  // No connection survives a stop, so nothing scoped to "this session" may
+  // answer for whatever connects after a restart. Runs on start as well as
+  // stop: app quit disposes the container before the stop path gets here.
+  Future<void> revokeSessionScoped() async {
+    await ref.read(mcpApprovalRepositoryProvider).revokeSessionScoped();
+    await ref.read(mcpGrantRepositoryProvider).revokeSessionScoped();
+  }
+
   Future<void> endAgentActivity() async {
     // On app exit the container is going away with everything in it.
     if (disposed) return;
@@ -344,7 +348,7 @@ McpServerController mcpServerController(Ref ref) {
       await ref.read(runbookRunProvider.notifier).cancel();
     }
     dispatcher.endAllScopes();
-    await ref.read(mcpApprovalRepositoryProvider).revokeSessionScoped();
+    await revokeSessionScoped();
   }
 
   final controller = McpServerController(
@@ -355,6 +359,7 @@ McpServerController mcpServerController(Ref ref) {
     isVaultAvailable: () => _vaultAllowsMcp(ref.read(vaultProvider)),
     activeWorkspaceId: () => ref.read(activeWorkspaceIdProvider),
     onStopped: endAgentActivity,
+    onStarting: revokeSessionScoped,
   );
 
   // Mirrors `TerminalTabsNotifier`'s `ref.listen(vaultProvider, ...)` for

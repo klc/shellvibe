@@ -5,7 +5,7 @@ import 'package:shellvibe/app/widgets/shellvibe_ui.dart';
 
 import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/widgets/adaptive_modal.dart';
-import '../../../../shared/providers/workspace_provider.dart';
+import '../../../workspaces/presentation/providers/workspace_provider.dart';
 import '../../domain/models/identity_model.dart';
 import '../notifiers/identities_notifier.dart';
 

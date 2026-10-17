@@ -165,7 +165,7 @@ void main() {
 
       final snapshot = DeviceLinkSnapshot.capture(source);
       final destination = Terminal(maxLines: 32);
-      snapshot.writeTo(destination);
+      snapshot.applyTo(destination);
 
       expect(destination.isUsingAltBuffer, isTrue);
       expect(destination.autoWrapMode, isFalse);

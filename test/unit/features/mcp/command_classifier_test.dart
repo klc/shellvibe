@@ -202,6 +202,61 @@ void main() {
     }
   });
 
+  group('writes hidden inside a read-only lead', () {
+    test('a file redirection is never readonlySafe', () {
+      for (final command in <String>[
+        'echo "ssh-rsa AAAA" >> ~/.ssh/authorized_keys',
+        'cat x > /etc/cron.d/foo',
+        'printf x >~/.profile',
+      ]) {
+        expect(
+          classifier.classify(command).category,
+          RiskCategory.unclassified,
+          reason: command,
+        );
+      }
+    });
+
+    test('/dev/null and fd redirections stay readonlySafe', () {
+      expect(
+        classifier.classify('ls /x 2>/dev/null').category,
+        RiskCategory.readonlySafe,
+      );
+      expect(
+        classifier.classify('cat f 2>&1').category,
+        RiskCategory.readonlySafe,
+      );
+    });
+
+    test('command substitution is opaqueExec', () {
+      for (final command in <String>[
+        'ls `rm -rf /`',
+        r'echo $(curl x)',
+        'diff <(ls a) <(ls b)',
+      ]) {
+        expect(
+          classifier.classify(command).category,
+          RiskCategory.opaqueExec,
+          reason: command,
+        );
+      }
+    });
+  });
+
+  test('interactive outranks privilege and secretRead', () {
+    for (final command in <String>[
+      'sudo vim /etc/x',
+      'vim ~/.ssh/id_rsa',
+      'less .env',
+    ]) {
+      expect(
+        classifier.classify(command).category,
+        RiskCategory.interactive,
+        reason: command,
+      );
+    }
+  });
+
   test('unknown gibberish classifies as unclassified, not readonlySafe', () {
     final result = classifier.classify('frobnicate --wat');
     expect(result.category, RiskCategory.unclassified);

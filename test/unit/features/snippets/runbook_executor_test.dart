@@ -263,7 +263,6 @@ void main() {
         expect(result.overallSuccess, isTrue);
         final r = result.stepResults.single;
         expect(r.attempts, 3);
-        expect(r.attemptLog.map((a) => a.output), ['try 1', 'try 2', 'good']);
         expect(r.output, 'good');
       });
 
@@ -305,7 +304,8 @@ void main() {
           (command, timeout) async => ('bad', 1),
           isCancelled: () => cancelled,
           cancelSignal: cancel.future,
-          onProgress: (step, status) => statuses.add('${step.id}:$status'),
+          onProgress: (step, status) =>
+              statuses.add('${step.id}:${status.name}'),
         );
         await Future<void>.delayed(const Duration(milliseconds: 20));
         cancelled = true;
@@ -494,7 +494,7 @@ void main() {
           (command, timeout) async => ('', 0),
           awaitApproval: (s) => gate.future,
           isCancelled: () => cancelled,
-          onProgress: (s, status) => statuses.add('${s.id}:$status'),
+          onProgress: (s, status) => statuses.add('${s.id}:${status.name}'),
         );
         await Future<void>.delayed(const Duration(milliseconds: 10));
         cancelled = true;

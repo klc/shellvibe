@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -30,8 +29,9 @@ class McpHttpTransportStartException implements Exception {
 }
 
 /// The localhost HTTP transport for the MCP server: `POST /mcp` for
-/// JSON-RPC requests/notifications, `GET /mcp` for a server→client
-/// Server-Sent Events stream.
+/// JSON-RPC requests/notifications. There is no server→client stream (no
+/// `GET /mcp` SSE endpoint): v0 never sends server-initiated messages, so
+/// `GET` is answered `405` like every other method.
 ///
 /// This is the `dart:io` `HttpServer` sibling of
 /// `core/network/device_link/device_link_server.dart` — same house pattern
@@ -115,7 +115,6 @@ final class McpHttpTransport {
   static const int _rateLimitedCode = -32002;
 
   HttpServer? _httpServer;
-  final Set<HttpResponse> _sseClients = {};
   final Map<String, _RateWindow> _rateWindows = {};
 
   McpHttpTransport({
@@ -173,22 +172,12 @@ final class McpHttpTransport {
     return bound.port;
   }
 
-  /// Stops accepting connections, force-closes every open SSE stream, and
-  /// releases the port. Safe to call when not running.
+  /// Stops accepting connections and releases the port. Safe to call when
+  /// not running.
   Future<void> stop() async {
     final server = _httpServer;
     if (server == null) return;
     _httpServer = null;
-
-    for (final client in List<HttpResponse>.of(_sseClients)) {
-      try {
-        await client.close();
-      } on Object {
-        // The client may already be gone; nothing to clean up beyond
-        // removing it below.
-      }
-    }
-    _sseClients.clear();
     _rateWindows.clear();
 
     // `force: true` drops any request still mid-flight rather than waiting
@@ -196,23 +185,6 @@ final class McpHttpTransport {
     // particular) needs "no more MCP activity" to be true the moment this
     // future completes, not "eventually, once whatever was running wraps up".
     await server.close(force: true);
-  }
-
-  /// Pushes [notification] to every currently connected `GET /mcp` SSE
-  /// client. Dead subscriptions (the peer went away without a clean
-  /// close — e.g. the bridge process was killed) are pruned as they are
-  /// discovered rather than on a timer, since a write is the only reliable
-  /// way to notice one on a plain `HttpResponse`.
-  void broadcastNotification(JsonRpcNotification notification) {
-    if (_sseClients.isEmpty) return;
-    final frame = 'data: ${jsonEncode(notification.toJson())}\n\n';
-    for (final client in List<HttpResponse>.of(_sseClients)) {
-      try {
-        client.write(frame);
-      } on Object {
-        _sseClients.remove(client);
-      }
-    }
   }
 
   Future<void> _handleRequest(HttpRequest request) async {
@@ -235,15 +207,12 @@ final class McpHttpTransport {
         return;
       }
 
-      switch (request.method) {
-        case 'POST':
-          await _handlePost(request);
-        case 'GET':
-          await _handleGet(request);
-        default:
-          request.response.statusCode = HttpStatus.methodNotAllowed;
-          await request.response.close();
+      if (request.method != 'POST') {
+        request.response.statusCode = HttpStatus.methodNotAllowed;
+        await request.response.close();
+        return;
       }
+      await _handlePost(request);
     } on Object catch (error, stackTrace) {
       // This is the backstop for the whole request lifecycle: nothing above
       // — origin/auth checks, body parsing, [onRequest] itself — may ever
@@ -292,8 +261,7 @@ final class McpHttpTransport {
 
   /// Authenticates and rate-limits [request], writing the appropriate `401`
   /// or `429` (plus a JSON-RPC error body naming the problem) and returning
-  /// `null` if either check fails. Shared by `POST` and `GET` since both
-  /// require a bearer token.
+  /// `null` if either check fails.
   Future<String?> _authenticateAndRateLimit(HttpRequest request) async {
     final token = _bearerToken(request);
     if (token == null) {
@@ -433,30 +401,6 @@ final class McpHttpTransport {
           ),
         );
     }
-  }
-
-  /// Opens a long-lived `text/event-stream` response and registers it for
-  /// [broadcastNotification]. The response is deliberately never closed
-  /// here — it stays open until the peer disconnects (removed via
-  /// [HttpResponse.done]) or [stop] force-closes it.
-  Future<void> _handleGet(HttpRequest request) async {
-    final clientId = await _authenticateAndRateLimit(request);
-    if (clientId == null) return;
-
-    final response = request.response;
-    response.statusCode = HttpStatus.ok;
-    response.bufferOutput = false;
-    response.headers
-      ..set(HttpHeaders.contentTypeHeader, 'text/event-stream')
-      ..set(HttpHeaders.cacheControlHeader, 'no-cache')
-      ..set(HttpHeaders.connectionHeader, 'keep-alive');
-
-    _sseClients.add(response);
-    unawaited(
-      response.done
-          .then((_) => _sseClients.remove(response))
-          .catchError((_) => _sseClients.remove(response)),
-    );
   }
 
   Future<void> _respondJson(

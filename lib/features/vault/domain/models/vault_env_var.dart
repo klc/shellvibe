@@ -21,22 +21,6 @@ class VaultEnvVarModel {
     required this.createdAt,
   });
 
-  VaultEnvVarModel copyWith({
-    String? id,
-    String? workspaceId,
-    String? name,
-    String? value,
-    DateTime? createdAt,
-  }) {
-    return VaultEnvVarModel(
-      id: id ?? this.id,
-      workspaceId: workspaceId ?? this.workspaceId,
-      name: name ?? this.name,
-      value: value ?? this.value,
-      createdAt: createdAt ?? this.createdAt,
-    );
-  }
-
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||

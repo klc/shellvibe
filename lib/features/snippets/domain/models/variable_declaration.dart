@@ -59,26 +59,6 @@ class VariableDeclaration {
   String get displayLabel =>
       (label?.trim().isNotEmpty ?? false) ? label! : name;
 
-  VariableDeclaration copyWith({
-    VariableType? type,
-    String? label,
-    String? description,
-    String? defaultValue,
-    List<String>? options,
-    bool? required,
-    bool clearLabel = false,
-    bool clearDescription = false,
-    bool clearDefault = false,
-  }) => VariableDeclaration(
-    name: name,
-    type: type ?? this.type,
-    label: clearLabel ? null : (label ?? this.label),
-    description: clearDescription ? null : (description ?? this.description),
-    defaultValue: clearDefault ? null : (defaultValue ?? this.defaultValue),
-    options: options ?? this.options,
-    required: required ?? this.required,
-  );
-
   Map<String, dynamic> toJson() => {
     'name': name,
     'type': type.wireName,

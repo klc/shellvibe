@@ -1,13 +1,12 @@
-import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
-import '../../data/sftp_transfer_queue_worker.dart';
 import '../../domain/models/transfer_item.dart';
 import '../providers/sftp_providers.dart';
+import 'transfer_row_actions.dart';
 
 class SftpTransferQueueSheet extends ConsumerWidget {
   const SftpTransferQueueSheet({super.key});
@@ -109,8 +108,6 @@ class _TransferTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isUpload = item.type == TransferType.upload;
-    final worker = ref.watch(sftpTransferQueueWorkerProvider);
-    final sftpClient = ref.watch(sftpProvider.select((s) => s.remoteClient));
     final colorScheme = ShadTheme.of(context).colorScheme;
     final tokens = ShellVibeTokens.resolve(context);
 
@@ -169,7 +166,7 @@ class _TransferTile extends ConsumerWidget {
                   style: TextStyle(fontSize: 12, color: tokens.brandBright),
                 ),
               const SizedBox(width: 8),
-              _buildActionButtons(worker, sftpClient),
+              TransferRowActions(item: item),
             ],
           ),
           const SizedBox(height: 4),
@@ -196,45 +193,6 @@ class _TransferTile extends ConsumerWidget {
             ),
         ],
       ),
-    );
-  }
-
-  Widget _buildActionButtons(
-    SftpTransferQueueWorker worker,
-    SftpClient? client,
-  ) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (item.status == TransferStatus.inProgress)
-          ShellVibeIconButton(
-            icon: LucideIcons.pause,
-            tooltip: 'Pause Transfer',
-            onPressed: () => worker.pauseTransfer(item.id),
-          )
-        else if (item.status == TransferStatus.paused && client != null)
-          ShellVibeIconButton(
-            icon: LucideIcons.play,
-            tooltip: 'Resume Transfer',
-            onPressed: () => worker.resumeTransfer(client, item.id),
-          )
-        else if ((item.status == TransferStatus.failed ||
-                item.status == TransferStatus.cancelled) &&
-            client != null)
-          ShellVibeIconButton(
-            icon: LucideIcons.refreshCw,
-            tooltip: 'Retry Transfer',
-            onPressed: () => worker.retryTransfer(client, item.id),
-          ),
-        if (item.status == TransferStatus.inProgress ||
-            item.status == TransferStatus.pending ||
-            item.status == TransferStatus.paused)
-          ShellVibeIconButton(
-            icon: LucideIcons.x,
-            tooltip: 'Cancel Transfer',
-            onPressed: () => worker.cancelTransfer(item.id),
-          ),
-      ],
     );
   }
 }

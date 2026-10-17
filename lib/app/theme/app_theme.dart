@@ -10,13 +10,6 @@ import 'shellvibe_tokens.dart';
 import 'ui_font.dart';
 
 class AppTheme {
-  static ThemeData get darkTheme => buildTheme(const AppSettingsModel());
-
-  static ShadThemeData get darkShadTheme =>
-      buildShadTheme(const AppSettingsModel());
-  static ShadThemeData get lightShadTheme =>
-      buildShadTheme(const AppSettingsModel(themeMode: ThemeMode.light));
-
   /// Whichever of the palette's darkest and lightest inks reads better on
   /// [fill]. Used where the token contract has no dedicated on-colour.
   static Color legibleInk(Color fill, ShellVibeTokens tokens) {

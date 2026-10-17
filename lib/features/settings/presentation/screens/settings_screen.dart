@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -8,6 +7,7 @@ import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../tunnels/presentation/tunnel_availability.dart';
 import '../../domain/models/settings_section.dart';
+import '../dialogs/problem_report_dialog.dart';
 import '../widgets/settings_section_view.dart';
 
 export '../../domain/models/settings_section.dart'
@@ -211,7 +211,7 @@ class SettingsScreen extends StatelessWidget {
             ),
             child: Text(
               '${AppConstants.appName} ${AppConstants.appVersion}\n'
-              '${platformLabel()}',
+              '${currentPlatformLabel()}',
               style: shellvibeMono(
                 context,
                 size: 10.5,
@@ -302,19 +302,6 @@ class _IndexTile extends StatelessWidget {
       ),
     );
   }
-}
-
-/// The platform this build is running on, for the nav column's build stamp.
-String platformLabel() {
-  if (kIsWeb) return 'web';
-  return switch (defaultTargetPlatform) {
-    TargetPlatform.macOS => 'macOS',
-    TargetPlatform.windows => 'Windows',
-    TargetPlatform.linux => 'Linux',
-    TargetPlatform.android => 'Android',
-    TargetPlatform.iOS => 'iOS',
-    _ => 'unknown',
-  };
 }
 
 /// One section on a page of its own, on the compact tier.

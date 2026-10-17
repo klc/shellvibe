@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'package:shellvibe/app/theme/app_theme.dart';
+import 'package:shellvibe/features/settings/domain/models/app_settings_model.dart';
 import 'package:shellvibe/features/hosts/presentation/dialogs/host_form_dialog.dart';
 import 'package:shellvibe/features/hosts/presentation/dialogs/host_group_form_dialog.dart';
 import 'package:shellvibe/features/hosts/presentation/dialogs/ssh_config_import_dialog.dart';
@@ -66,9 +67,9 @@ void main() {
       ProviderScope(
         overrides: [appDatabaseProvider.overrideWithValue(db)],
         child: ShadTheme(
-          data: AppTheme.darkShadTheme,
+          data: AppTheme.buildShadTheme(const AppSettingsModel()),
           child: MaterialApp(
-            theme: AppTheme.darkTheme,
+            theme: AppTheme.buildTheme(const AppSettingsModel()),
             builder: (context, child) => MediaQuery.withClampedTextScaling(
               minScaleFactor: textScale,
               maxScaleFactor: textScale,

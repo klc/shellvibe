@@ -49,9 +49,6 @@ class TunnelSshPool {
   /// Host ids this pool currently holds a background connection for.
   Iterable<String> get connectedHostIds => _sessions.keys;
 
-  /// True when [hostId]'s connection is this pool's, not a terminal tab's.
-  bool holds(String hostId) => _sessions.containsKey(hostId);
-
   /// An authenticated client for [host], opening one if this pool does not
   /// already have a live one, and charging it to [ruleId].
   Future<SSHClient> acquire({

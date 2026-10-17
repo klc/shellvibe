@@ -212,7 +212,7 @@ void main() {
   test('a snippet run is stored without a runbook id', () async {
     final snippetBook = runbook(id: 'snippet:sn');
     final id = await repo.save(run(book: snippetBook));
-    final summary = (await repo.forSnippets()).single;
+    final summary = (await repo.forSnippet('sn')).single;
     expect(summary.id, id);
     expect(summary.kind, 'snippet');
     expect(summary.runbookId, isNull);
@@ -264,7 +264,8 @@ void main() {
         ),
       );
     }
-    expect(await repo.forSnippets(), hasLength(50));
+    final kept = [for (var i = 0; i < 3; i++) ...await repo.forSnippet('s$i')];
+    expect(kept, hasLength(50));
   });
 
   test('deleting a run cascades to its hosts and steps', () async {
@@ -281,7 +282,7 @@ void main() {
     await repo.save(run());
     await repo.save(run(book: runbook(id: 'snippet:sn')));
     await repo.clear();
-    expect(await repo.forSnippets(), isEmpty);
+    expect(await repo.forSnippet('sn'), isEmpty);
     expect(await repo.forRunbook('rb'), hasLength(1));
   });
 

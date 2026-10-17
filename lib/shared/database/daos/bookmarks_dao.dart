@@ -20,16 +20,6 @@ class BookmarksDao extends DatabaseAccessor<AppDatabase>
         .get();
   }
 
-  Stream<List<Bookmark>> watchBookmarksByWorkspace(String workspaceId) {
-    return (select(bookmarks)
-          ..where((tbl) => tbl.workspaceId.equals(workspaceId))
-          ..orderBy([
-            (tbl) => OrderingTerm.asc(tbl.position),
-            (tbl) => OrderingTerm.asc(tbl.createdAt),
-          ]))
-        .watch();
-  }
-
   Future<Bookmark?> getBookmarkForHost(String hostId) {
     return (select(
       bookmarks,

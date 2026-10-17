@@ -143,11 +143,11 @@ void main() {
     await pool.acquire(ruleId: 'r2', host: target);
 
     await pool.release('r1');
-    expect(pool.holds('web'), isTrue);
+    expect(pool.connectedHostIds, contains('web'));
     expect(managers.single.closeCalled, isFalse);
 
     await pool.release('r2');
-    expect(pool.holds('web'), isFalse);
+    expect(pool.connectedHostIds, isNot(contains('web')));
     expect(managers.single.closeCalled, isTrue);
   });
 
@@ -156,7 +156,7 @@ void main() {
 
     await pool.release('rule-from-a-terminal-tab');
 
-    expect(pool.holds('web'), isTrue);
+    expect(pool.connectedHostIds, contains('web'));
     expect(managers.single.closeCalled, isFalse);
   });
 
@@ -166,7 +166,7 @@ void main() {
 
     managers.single.dropConnection();
     await Future<void>.delayed(Duration.zero);
-    expect(pool.holds('web'), isFalse);
+    expect(pool.connectedHostIds, isNot(contains('web')));
 
     await pool.acquire(ruleId: 'r1', host: target);
     expect(managers, hasLength(2));
@@ -206,7 +206,7 @@ void main() {
       throwsA(isA<Exception>()),
     );
 
-    expect(pool.holds('web'), isFalse);
+    expect(pool.connectedHostIds, isNot(contains('web')));
     expect(pool.connectedHostIds, isEmpty);
   });
 }

@@ -1,6 +1,6 @@
 # Privacy
 
-**Last updated:** 2026-10-09 · Applies to ShellVibe 1.8.0 for macOS,
+**Last updated:** 2026-10-17 · Applies to ShellVibe 1.9.0 for macOS,
 Windows, Linux, iOS and Android.
 
 ShellVibe is a terminal, SSH and SFTP client. It runs on your machine and talks
@@ -189,15 +189,16 @@ not directed at children and does not knowingly collect data from them.
 
 Under the GDPR, the Turkish KVKK and comparable laws you have rights of access,
 rectification, erasure and portability over personal data we hold. Most of them
-are self-service in the web panel:
+are self-service, in the app or the web panel:
 
 - **Export** — the panel's account export downloads everything the server holds
   about you. Backup contents are listed there and downloaded from the panel's
   backup page, since each can be several megabytes.
-- **Erase** — the panel's danger zone deletes your account (in the app,
-  Settings → Account → Delete Account… takes you there), every device, every
-  backup and your sync history immediately. Database copies age it out within
-  14 days.
+- **Erase** — Settings → Account → Delete Account… in the app, after asking
+  for your password again, deletes your account, every device, every backup
+  and your sync history immediately; the panel's danger zone does the same.
+  Hosts, keys and settings on the device are not touched. Database copies age
+  it out within 14 days.
 - **Rectify, or anything else** — write to the contact below.
 
 Data that never left your device is under your control there; deleting the

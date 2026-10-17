@@ -123,7 +123,12 @@ class SftpTransferQueueWorker {
 
     _pauseFlags.remove(id);
     _restartRequested.remove(id);
-    _queue[id] = item.copyWith(status: TransferStatus.pending);
+    // The partial file was deleted on pause, so the restart begins at byte 0;
+    // the bar must not sit at the old percentage and then drop.
+    _queue[id] = item.copyWith(
+      status: TransferStatus.pending,
+      transferredBytes: 0,
+    );
     _notifyQueue();
     _scheduleTransfer(client, id);
   }
@@ -342,36 +347,46 @@ class SftpTransferQueueWorker {
       bool sawFirstChunk = false;
 
       try {
-        final stream = remoteFile.read();
-        await for (final chunk in stream) {
-          if (_cancelFlags[id] == true || _pauseFlags[id] == true) {
-            break;
-          }
-          sink.add(chunk);
-          transferred += chunk.length;
+        // addStream rather than add-in-a-loop: the sink pauses the remote
+        // read while the disk catches up, so a fast link and a slow disk no
+        // longer buffer the whole file in memory.
+        await sink.addStream(
+          remoteFile
+              .read()
+              .takeWhile(
+                (_) => _cancelFlags[id] != true && _pauseFlags[id] != true,
+              )
+              .map((chunk) {
+                transferred += chunk.length;
 
-          final nowMs = stopwatch.elapsedMilliseconds;
-          if (!sawFirstChunk) {
-            // Start the window at the first byte that arrived. The time
-            // before it is spent opening and stat-ing the remote file, and
-            // charging that to the transfer makes the first sample far too
-            // slow.
-            sawFirstChunk = true;
-            lastTimeMs = nowMs;
-            lastTransferred = transferred;
-          } else if (nowMs - lastTimeMs >= 500) {
-            lastSpeed =
-                ((transferred - lastTransferred) * 1000) ~/
-                (nowMs - lastTimeMs);
-            lastTimeMs = nowMs;
-            lastTransferred = transferred;
-          }
+                final nowMs = stopwatch.elapsedMilliseconds;
+                if (!sawFirstChunk) {
+                  // Start the window at the first byte that arrived. The time
+                  // before it is spent opening and stat-ing the remote file,
+                  // and charging that to the transfer makes the first sample
+                  // far too slow.
+                  sawFirstChunk = true;
+                  lastTimeMs = nowMs;
+                  lastTransferred = transferred;
+                } else if (nowMs - lastTimeMs >= 500) {
+                  lastSpeed =
+                      ((transferred - lastTransferred) * 1000) ~/
+                      (nowMs - lastTimeMs);
+                  lastTimeMs = nowMs;
+                  lastTransferred = transferred;
+                }
 
-          onProgress(transferred, lastSpeed);
-        }
+                onProgress(transferred, lastSpeed);
+                return chunk;
+              }),
+        );
         await sink.flush();
       } finally {
-        await sink.close();
+        // A failed addStream closes the IOSink itself; closing it again
+        // throws "File closed" and would mask the remote error.
+        try {
+          await sink.close();
+        } catch (_) {}
       }
 
       if (_cancelFlags[id] != true && _pauseFlags[id] != true) {

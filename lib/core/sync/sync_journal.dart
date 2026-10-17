@@ -223,10 +223,9 @@ final class SyncJournal {
           .getSingleOrNull();
 
   /// Drops [operation] without sending it: something newer replaced the row.
-  Future<void> discardPending(PendingOperation operation) =>
-      (db.delete(
-        db.pendingOperations,
-      )..where((t) => t.id.equals(operation.id))).go();
+  Future<void> discardPending(PendingOperation operation) => (db.delete(
+    db.pendingOperations,
+  )..where((t) => t.id.equals(operation.id))).go();
 
   /// Drops the operations that were accepted by the server.
   ///
@@ -250,17 +249,6 @@ final class SyncJournal {
             ..where((t) => t.body.isNotNull())
             ..orderBy([(t) => OrderingTerm.desc(t.deletedAt)]))
           .get();
-
-  /// True when this device deleted [entityId] and has not written it since.
-  ///
-  /// A pull consults this before applying an `upsert`: delete and rewrite
-  /// arriving out of order is the most commonly reported way a home-grown sync
-  /// resurrects a row the user deleted.
-  Future<bool> isDeleted({
-    required String entityType,
-    required String entityId,
-  }) async =>
-      await tombstoneFor(entityType: entityType, entityId: entityId) != null;
 
   /// The clock a row currently stands at on this device.
   ///
@@ -704,7 +692,10 @@ final class SyncJournal {
       ('template_panes', 'startup_snippet_id'),
       ('runbook_steps', 'snippet_id'),
     ],
-    'runbooks': [('templates', 'on_open_runbook_id')],
+    'runbooks': [
+      ('templates', 'on_open_runbook_id'),
+      ('template_panes', 'startup_runbook_id'),
+    ],
   };
 
   /// Everything a delete of [entityType]/[entityId] takes with it, including

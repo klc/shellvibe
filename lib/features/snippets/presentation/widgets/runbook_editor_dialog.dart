@@ -12,6 +12,7 @@ import '../../domain/models/snippet_model.dart';
 import '../../domain/models/variable_declaration.dart';
 import '../../domain/services/run_variables.dart';
 import '../notifiers/snippets_notifier.dart';
+import 'snippet_picker_sheet.dart';
 import 'variables_editor.dart';
 
 /// Form dialog for creating or editing a Runbook and its step sequence.
@@ -62,16 +63,8 @@ class _RunbookEditorDialogState extends ConsumerState<RunbookEditorDialog> {
 
   /// The `${INPUT:...}` names the steps will ask for: from commands as typed
   /// and, for snippet steps, from the snippet's code.
-  List<String> _usedVariableNames() => collectRunVariables(
-    RunbookModel(
-      id: '',
-      workspaceId: widget.workspaceId,
-      title: '',
-      createdAt: DateTime(2026),
-      steps: _steps,
-    ),
-    snippets: _snippets,
-  ).names;
+  List<String> _usedVariableNames() =>
+      collectStepVariables(_steps, snippets: _snippets).names;
 
   @override
   void initState() {
@@ -143,31 +136,28 @@ class _RunbookEditorDialogState extends ConsumerState<RunbookEditorDialog> {
     _steps[index] = change(_steps[index]);
   }
 
-  Future<void> _pickSnippet(int index) async {
-    final picked = await showAdaptivePanel<SnippetModel>(
-      context: context,
-      title: 'Choose a snippet',
-      desktopHeight: 460,
-      isScrollControlled: true,
-      builder: (ctx) => _SnippetPicker(
-        snippets: ref.read(snippetsProvider).value ?? const [],
-        onPicked: (snippet) => Navigator.of(ctx).pop(snippet),
-      ),
-    );
-    if (picked == null || !mounted) return;
-    setState(() {
-      _update(
-        index,
-        // The command column keeps a comment naming the snippet: a client that
-        // predates snippet steps then runs a no-op rather than an empty line.
-        (s) => s.copyWith(
-          kind: StepKind.snippet,
-          snippetId: picked.id,
-          command: '# snippet: ${picked.title}',
-        ),
-      );
-    });
-  }
+  void _pickSnippet(int index) => SnippetPickerSheet.show(
+    context,
+    title: 'Choose a snippet',
+    isScrollControlled: true,
+    targetLabel: 'Step ${index + 1} runs',
+    onSelect: (picked) async {
+      if (!mounted) return;
+      setState(() {
+        _update(
+          index,
+          // The command column keeps a comment naming the snippet: a client
+          // that predates snippet steps then runs a no-op rather than an empty
+          // line.
+          (s) => s.copyWith(
+            kind: StepKind.snippet,
+            snippetId: picked.id,
+            command: '# snippet: ${picked.title}',
+          ),
+        );
+      });
+    },
+  );
 
   void _setKind(int index, StepKind kind) {
     if (_steps[index].kind == kind) return;
@@ -657,76 +647,6 @@ class _RunbookEditorDialogState extends ConsumerState<RunbookEditorDialog> {
               ),
             ),
           ],
-        ),
-      ],
-    );
-  }
-}
-
-/// A searchable list of the snippets a step can run.
-class _SnippetPicker extends StatefulWidget {
-  final List<SnippetModel> snippets;
-  final ValueChanged<SnippetModel> onPicked;
-
-  const _SnippetPicker({required this.snippets, required this.onPicked});
-
-  @override
-  State<_SnippetPicker> createState() => _SnippetPickerState();
-}
-
-class _SnippetPickerState extends State<_SnippetPicker> {
-  String _query = '';
-
-  @override
-  Widget build(BuildContext context) {
-    final needle = _query.trim().toLowerCase();
-    final visible = [
-      for (final s in widget.snippets)
-        if (needle.isEmpty ||
-            s.title.toLowerCase().contains(needle) ||
-            s.code.toLowerCase().contains(needle) ||
-            s.tags.any((t) => t.toLowerCase().contains(needle)))
-          s,
-    ];
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-          child: ShellVibeSearchField(
-            fieldKey: const Key('step_snippet_search'),
-            hintText: 'Search snippets…',
-            onChanged: (value) => setState(() => _query = value),
-          ),
-        ),
-        Flexible(
-          child: visible.isEmpty
-              ? const Padding(
-                  padding: EdgeInsets.all(24),
-                  child: Text(
-                    'No snippets match.',
-                    textAlign: TextAlign.center,
-                  ),
-                )
-              : ListView(
-                  shrinkWrap: true,
-                  children: [
-                    for (final snippet in visible)
-                      ListTile(
-                        key: Key('step_snippet_option_${snippet.id}'),
-                        dense: true,
-                        title: Text(snippet.title),
-                        subtitle: Text(
-                          snippet.code,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontFamily: 'monospace'),
-                        ),
-                        onTap: () => widget.onPicked(snippet),
-                      ),
-                  ],
-                ),
         ),
       ],
     );

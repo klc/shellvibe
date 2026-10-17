@@ -5,9 +5,10 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/widgets/adaptive_modal.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
-import '../../../../shared/providers/workspace_provider.dart';
+import '../../../workspaces/presentation/providers/workspace_provider.dart';
 import '../../../hosts/domain/models/host_model.dart';
 import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
+import '../../../settings/presentation/copy_secret_with_auto_clear.dart';
 import '../../../settings/presentation/notifiers/settings_notifier.dart';
 import '../../domain/models/identity_model.dart';
 import '../../domain/models/vault_env_var.dart';
@@ -834,16 +835,13 @@ class _EnvVarRowState extends ConsumerState<_EnvVarRow> {
       return;
     }
 
-    final settings = ref.read(settingsProvider).value;
-    final clearSeconds = settings?.clipboardAutoClearSeconds ?? 30;
-    await ref
-        .read(clipboardAutoClearServiceProvider)
-        .copyAndScheduleClear(value, duration: Duration(seconds: clearSeconds));
-    if (mounted) {
-      ShadToaster.of(
-        context,
-      ).show(const ShadToast(description: Text('Value copied to clipboard')));
-    }
+    if (!mounted) return;
+    await copySecretWithAutoClear(
+      ref,
+      context,
+      value,
+      toast: 'Value copied to clipboard',
+    );
   }
 
   @override
@@ -1260,25 +1258,15 @@ class _IdentityRow extends ConsumerWidget {
       return;
     }
 
-    final settings = ref.read(settingsProvider).value;
-    final clearSeconds = settings?.clipboardAutoClearSeconds ?? 30;
-    await ref
-        .read(clipboardAutoClearServiceProvider)
-        .copyAndScheduleClear(
-          secret,
-          duration: Duration(seconds: clearSeconds),
-        );
-    if (context.mounted) {
-      ShadToaster.of(context).show(
-        ShadToast(
-          description: Text(
-            isPassword
-                ? 'Password copied to clipboard'
-                : 'Key copied to clipboard',
-          ),
-        ),
-      );
-    }
+    if (!context.mounted) return;
+    await copySecretWithAutoClear(
+      ref,
+      context,
+      secret,
+      toast: isPassword
+          ? 'Password copied to clipboard'
+          : 'Key copied to clipboard',
+    );
   }
 }
 

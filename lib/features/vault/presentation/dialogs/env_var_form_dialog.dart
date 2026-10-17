@@ -4,7 +4,7 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:shellvibe/app/widgets/shellvibe_ui.dart';
 
 import '../../../../app/widgets/adaptive_modal.dart';
-import '../../../../shared/providers/workspace_provider.dart';
+import '../../../workspaces/presentation/providers/workspace_provider.dart';
 import '../../domain/models/vault_env_var.dart';
 import '../../domain/models/vault_env_var_rules.dart';
 import '../notifiers/vault_env_vars_notifier.dart';

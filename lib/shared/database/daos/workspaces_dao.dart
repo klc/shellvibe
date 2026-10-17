@@ -28,14 +28,6 @@ class WorkspacesDao extends DatabaseAccessor<AppDatabase>
         .get();
   }
 
-  Stream<List<Workspace>> watchAllWorkspaces() {
-    return (select(workspaces)..orderBy([
-          (tbl) => OrderingTerm.asc(tbl.createdAt),
-          (tbl) => OrderingTerm.asc(tbl.name),
-        ]))
-        .watch();
-  }
-
   Future<Workspace?> getWorkspaceById(String id) {
     return (select(
       workspaces,
@@ -67,10 +59,6 @@ class WorkspacesDao extends DatabaseAccessor<AppDatabase>
       write: () => (update(workspaces)..where((tbl) => tbl.id.equals(id)))
           .write(WorkspacesCompanion(name: Value(name))),
     );
-  }
-
-  Future<bool> updateWorkspace(Workspace workspace) async {
-    return await updateWorkspaceName(workspace.id, workspace.name) == 1;
   }
 
   Future<WorkspaceUsage> getWorkspaceUsage(String id) async {

@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show ProviderOrFamily;
 
 import '../features/bookmarks/presentation/notifiers/bookmarks_notifier.dart';
 import '../features/hosts/presentation/notifiers/host_groups_notifier.dart';
@@ -29,41 +29,23 @@ import '../features/workspaces/presentation/notifiers/workspaces_notifier.dart';
 /// moment is cheaper in both runtime and review than making every list in the
 /// app reactive to catch one event a user triggers by hand.
 ///
-/// Two entry points rather than one, because a notifier holds a `Ref` and a
-/// widget a `WidgetRef`; they share no supertype, and the parameter type of
-/// `invalidate` is not part of this Riverpod version's public API. A wrapper
-/// clever enough to take both would be harder to read than the repetition.
-/// A table added to the backup payload or the sync writer needs its notifier
-/// added to both.
-void invalidateRestoredData(Ref ref) {
+/// Takes the `invalidate` tear-off rather than a `Ref`, because a notifier
+/// holds a `Ref` and a widget a `WidgetRef`; they share no supertype but both
+/// `invalidate` methods accept a [ProviderOrFamily]. A table added to the
+/// backup payload or the sync writer needs its notifier added here.
+void invalidateRestoredData(void Function(ProviderOrFamily) invalidate) {
   // Workspaces first: the lists below are scoped by the selected workspace, so
   // a stale selection would filter freshly restored rows straight back out.
-  ref.invalidate(workspaceManagerProvider);
+  invalidate(workspaceManagerProvider);
 
-  ref.invalidate(hostsProvider);
-  ref.invalidate(hostGroupsProvider);
-  ref.invalidate(identitiesProvider);
-  ref.invalidate(undecryptableIdentityIdsProvider);
-  ref.invalidate(vaultEnvVarsProvider);
-  ref.invalidate(tunnelsProvider);
-  ref.invalidate(snippetsProvider);
-  ref.invalidate(runbooksProvider);
-  ref.invalidate(templatesProvider);
-  ref.invalidate(bookmarksProvider);
-}
-
-/// [invalidateRestoredData], for a widget.
-void invalidateRestoredDataFor(WidgetRef ref) {
-  ref.invalidate(workspaceManagerProvider);
-
-  ref.invalidate(hostsProvider);
-  ref.invalidate(hostGroupsProvider);
-  ref.invalidate(identitiesProvider);
-  ref.invalidate(undecryptableIdentityIdsProvider);
-  ref.invalidate(vaultEnvVarsProvider);
-  ref.invalidate(tunnelsProvider);
-  ref.invalidate(snippetsProvider);
-  ref.invalidate(runbooksProvider);
-  ref.invalidate(templatesProvider);
-  ref.invalidate(bookmarksProvider);
+  invalidate(hostsProvider);
+  invalidate(hostGroupsProvider);
+  invalidate(identitiesProvider);
+  invalidate(undecryptableIdentityIdsProvider);
+  invalidate(vaultEnvVarsProvider);
+  invalidate(tunnelsProvider);
+  invalidate(snippetsProvider);
+  invalidate(runbooksProvider);
+  invalidate(templatesProvider);
+  invalidate(bookmarksProvider);
 }

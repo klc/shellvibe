@@ -1,27 +1,54 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/features/hosts/domain/models/host_model.dart';
+import 'package:shellvibe/features/snippets/domain/models/runbook_model.dart';
+import 'package:shellvibe/features/snippets/domain/models/runbook_step_model.dart';
 import 'package:shellvibe/features/snippets/domain/models/snippet_model.dart';
 import 'package:shellvibe/features/terminal/domain/models/terminal_tab_session.dart';
 import 'package:shellvibe/features/terminal/domain/services/startup_snippet_sender.dart';
 import 'package:xterm3/xterm.dart';
 
-HostModel host({String? startup}) => HostModel(
+HostModel host({String? startup, String environment = 'dev'}) => HostModel(
   id: 'h',
   workspaceId: 'w',
   label: 'web',
   hostname: 'web.example.com',
   startupSnippetId: startup,
+  environment: environment,
   createdAt: DateTime(2026),
 );
 
-TerminalTabSession tab({HostModel? host, String? override}) =>
+TerminalTabSession tab({HostModel? host, String? override, String? runbook}) =>
     TerminalTabSession(
-      id: 't',
-      title: 'web',
-      sessionType: TerminalSessionType.ssh,
-      host: host,
-      terminal: Terminal(),
-    )..startupSnippetOverrideId = override;
+        id: 't',
+        title: 'web',
+        sessionType: TerminalSessionType.ssh,
+        host: host,
+        terminal: Terminal(),
+      )
+      ..startupSnippetOverrideId = override
+      ..startupRunbookId = runbook;
+
+RunbookStepModel step(
+  int order,
+  String command, {
+  StepKind kind = StepKind.command,
+  String? snippetId,
+}) => RunbookStepModel(
+  id: 's$order',
+  runbookId: 'rb',
+  stepOrder: order,
+  command: command,
+  kind: kind,
+  snippetId: snippetId,
+);
+
+RunbookModel runbook(String id, List<RunbookStepModel> steps) => RunbookModel(
+  id: id,
+  workspaceId: 'w',
+  title: 'Book $id',
+  steps: steps,
+  createdAt: DateTime(2026),
+);
 
 SnippetModel snippet(String id, String code) =>
     SnippetModel(id: id, workspaceId: 'w', title: 'Snip $id', code: code);
@@ -33,14 +60,39 @@ class Harness {
     'input': snippet('input', r'cd ${INPUT:dir}'),
     'shell': snippet('shell', r'echo ${HOME}'),
   };
+  final runbooks = {
+    // Out of order on purpose: steps go out by stepOrder.
+    'logs': runbook('logs', [
+      step(1, r'tail -f ${SV:HOST}.log'),
+      step(0, 'cd /var/www/app'),
+    ]),
+    'via-snippet': runbook('via-snippet', [
+      step(0, 'stale', kind: StepKind.snippet, snippetId: 'pane'),
+    ]),
+    'gone-snippet': runbook('gone-snippet', [
+      step(0, '', kind: StepKind.snippet, snippetId: 'gone'),
+    ]),
+    'gate': runbook('gate', [
+      step(0, 'uptime'),
+      step(1, '', kind: StepKind.approval),
+    ]),
+    'input': runbook('input', [step(0, r'cd ${INPUT:dir}')]),
+  };
   final sent = <String>[];
   final notices = <String>[];
+  final prodAsks = <String>[];
+  bool prodAnswer = false;
   int loads = 0;
 
   late final sender = StartupSnippetSender(
     loadSnippet: (id) async {
       loads++;
       return snippets[id];
+    },
+    loadRunbook: (id) async => runbooks[id],
+    confirmProd: (runbook, host) async {
+      prodAsks.add('${runbook.id}@${host.label}');
+      return prodAnswer;
     },
     send: (tab, code) => sent.add(code),
     notify: notices.add,
@@ -163,6 +215,87 @@ void main() {
       final h = Harness();
       await h.sender.onSessionLive(tab(host: host(startup: 'shell')));
       expect(h.sent, [r'echo ${HOME}']);
+    });
+  });
+
+  group('startup runbook', () {
+    test(
+      'replaces the startup snippet, steps in order, one per line',
+      () async {
+        final h = Harness();
+        final outcome = await h.sender.onSessionLive(
+          tab(
+            host: host(startup: 'host'),
+            override: 'pane',
+            runbook: 'logs',
+          ),
+        );
+        expect(outcome, StartupSnippetOutcome.sent);
+        expect(h.sent, ['cd /var/www/app\ntail -f web.example.com.log']);
+      },
+    );
+
+    test('a snippet step types the snippet as it is now', () async {
+      final h = Harness();
+      await h.sender.onSessionLive(tab(host: host(), runbook: 'via-snippet'));
+      expect(h.sent, ['htop']);
+    });
+
+    test('a deleted runbook falls back to the startup snippet', () async {
+      final h = Harness();
+      await h.sender.onSessionLive(
+        tab(
+          host: host(startup: 'host'),
+          runbook: 'gone',
+        ),
+      );
+      expect(h.sent, ['cd /srv']);
+    });
+
+    for (final (id, why) in [
+      ('gate', 'approval'),
+      ('gone-snippet', 'deleted'),
+    ]) {
+      test('$why step: nothing is typed, and the user is told', () async {
+        final h = Harness();
+        expect(
+          await h.sender.onSessionLive(tab(host: host(), runbook: id)),
+          StartupSnippetOutcome.blocked,
+        );
+        expect(h.sent, isEmpty);
+        expect(h.notices.single, contains(why));
+      });
+    }
+
+    test('input is never typed blank', () async {
+      final h = Harness();
+      expect(
+        await h.sender.onSessionLive(tab(host: host(), runbook: 'input')),
+        StartupSnippetOutcome.needsInput,
+      );
+      expect(h.sent, isEmpty);
+      expect(h.notices.single, contains('needs input'));
+    });
+
+    test('production asks first, and a no types nothing', () async {
+      final h = Harness();
+      final prod = host(environment: 'prod');
+      expect(
+        await h.sender.onSessionLive(tab(host: prod, runbook: 'logs')),
+        StartupSnippetOutcome.declined,
+      );
+      expect(h.prodAsks, ['logs@web']);
+      expect(h.sent, isEmpty);
+
+      h.prodAnswer = true;
+      await h.sender.onSessionLive(tab(host: prod, runbook: 'logs'));
+      expect(h.sent, hasLength(1));
+    });
+
+    test('a non-production host is not asked', () async {
+      final h = Harness();
+      await h.sender.onSessionLive(tab(host: host(), runbook: 'logs'));
+      expect(h.prodAsks, isEmpty);
     });
   });
 }

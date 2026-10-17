@@ -1,11 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
-import 'dart:typed_data';
 
-import 'package:basic_utils/basic_utils.dart';
-
+import '../../crypto/encryption_engine.dart';
 import 'device_link_identity.dart';
 import 'device_link_attachment.dart';
 import 'device_link_protocol.dart';
@@ -16,12 +13,6 @@ const deviceLinkPingInterval = Duration(seconds: 5);
 
 typedef DeviceLinkSessionListProvider =
     FutureOr<List<DeviceLinkSessionInfo>> Function();
-
-typedef DeviceLinkBinaryFrameHandler =
-    FutureOr<void> Function(
-      DeviceLinkServerConnection connection,
-      DeviceLinkBinaryFrame frame,
-    );
 
 typedef DeviceLinkPairedDeviceAuthenticator =
     FutureOr<bool> Function(String deviceId, String secret);
@@ -145,17 +136,13 @@ final class DeviceLinkQrPayload {
 final class DeviceLinkPairingTokenStore {
   final Duration ttl;
   final Map<String, DateTime> _tokens = {};
-  final Random _random = Random.secure();
 
   DeviceLinkPairingTokenStore({this.ttl = const Duration(seconds: 90)});
 
   String issue({DateTime? now}) {
     final current = now ?? DateTime.now().toUtc();
     _purge(current);
-    final bytes = Uint8List.fromList(
-      List<int>.generate(32, (_) => _random.nextInt(256)),
-    );
-    final token = base64Url.encode(bytes).replaceAll('=', '');
+    final token = base64UrlNoPad(secureRandomBytes(32));
     _tokens[token] = current.add(ttl);
     return token;
   }
@@ -165,12 +152,6 @@ final class DeviceLinkPairingTokenStore {
     final expiry = _tokens.remove(token);
     if (expiry == null || !current.isBefore(expiry)) return false;
     return true;
-  }
-
-  bool contains(String token, {DateTime? now}) {
-    final current = now ?? DateTime.now().toUtc();
-    _purge(current);
-    return _tokens.containsKey(token);
   }
 
   void _purge(DateTime now) {
@@ -186,12 +167,13 @@ final class DeviceLinkServer {
   final InternetAddress bindAddress;
   final int requestedPort;
   final Duration pairingTokenTtl;
-  final DeviceLinkSessionListProvider sessionsProvider;
+
+  /// The sessions a phone can attach to. Production always supplies this;
+  /// [sessionsProvider] only lists sessions, for a server that never attaches.
   final DeviceLinkSessionTransportListProvider? sessionTransportsProvider;
-  final DeviceLinkSessionTransportResolver? sessionTransportResolver;
-  final DeviceLinkBinaryFrameHandler? onBinaryFrame;
-  final DeviceLinkPairedDeviceAuthenticator? pairedDeviceAuthenticator;
-  final DeviceLinkPairedDevicePersister? pairedDevicePersister;
+  final DeviceLinkSessionListProvider? sessionsProvider;
+  final DeviceLinkPairedDeviceAuthenticator pairedDeviceAuthenticator;
+  final DeviceLinkPairedDevicePersister pairedDevicePersister;
   final DeviceLinkPairedDeviceRemover? pairedDeviceRemover;
   final DeviceLinkPairingCompletedCallback? onPairingCompleted;
 
@@ -200,8 +182,6 @@ final class DeviceLinkServer {
 
   HttpServer? _httpServer;
   final Set<DeviceLinkServerConnection> _connections = {};
-  final Map<String, _PairedDevice> _pairedDevices = {};
-  final Random _random = Random.secure();
 
   DeviceLinkServer({
     required this.identity,
@@ -210,16 +190,13 @@ final class DeviceLinkServer {
     InternetAddress? bindAddress,
     this.requestedPort = 0,
     this.pairingTokenTtl = const Duration(seconds: 90),
-    DeviceLinkSessionListProvider? sessionsProvider,
     this.sessionTransportsProvider,
-    this.sessionTransportResolver,
-    this.onBinaryFrame,
-    this.pairedDeviceAuthenticator,
-    this.pairedDevicePersister,
+    this.sessionsProvider,
+    required this.pairedDeviceAuthenticator,
+    required this.pairedDevicePersister,
     this.pairedDeviceRemover,
     this.onPairingCompleted,
-  }) : bindAddress = bindAddress ?? InternetAddress.anyIPv4,
-       sessionsProvider = sessionsProvider ?? _emptySessions;
+  }) : bindAddress = bindAddress ?? InternetAddress.anyIPv4;
 
   bool get isRunning => _httpServer != null;
 
@@ -332,36 +309,18 @@ final class DeviceLinkServer {
       final sessions = await transports();
       return List.unmodifiable(sessions.map((transport) => transport.info));
     }
-    final sessions = await sessionsProvider();
-    return List.unmodifiable(sessions);
+    return List.unmodifiable(await sessionsProvider?.call() ?? const []);
   }
 
   Future<DeviceLinkSessionTransport?> _resolveTransport(
     String sessionId,
   ) async {
-    final resolver = sessionTransportResolver;
-    if (resolver != null) return resolver(sessionId);
     final listProvider = sessionTransportsProvider;
     if (listProvider == null) return null;
-    final transports = await listProvider();
-    for (final transport in transports) {
+    for (final transport in await listProvider()) {
       if (transport.info.id == sessionId) return transport;
     }
     return null;
-  }
-
-  Future<bool> _authenticate(String deviceId, String secret) async {
-    final authenticator = pairedDeviceAuthenticator;
-    if (authenticator != null) return authenticator(deviceId, secret);
-    // This is only the in-memory fallback used by pure transport tests. The
-    // production app injects the Argon2id-backed paired-device repository.
-    final paired = _pairedDevices[deviceId];
-    if (paired == null) return false;
-    final actual = CryptoUtils.getHashPlain(
-      Uint8List.fromList(utf8.encode(secret)),
-      algorithmName: 'SHA-256',
-    );
-    return _constantTimeBytesEqual(actual, paired.secretHash);
   }
 
   /// Removes the authorization rows a freshly paired phone says were its own.
@@ -375,158 +334,127 @@ final class DeviceLinkServer {
     String pairedDeviceId,
     List<DeviceLinkSupersededDevice> claims,
   ) async {
+    final remover = pairedDeviceRemover;
+    if (remover == null) return;
     final seen = <String>{pairedDeviceId};
     for (final claim in claims) {
       if (!seen.add(claim.deviceId)) continue;
       try {
-        if (!await _authenticate(claim.deviceId, claim.secret)) continue;
-        final remover = pairedDeviceRemover;
-        if (remover != null) {
-          await remover(claim.deviceId);
-        } else {
-          _pairedDevices.remove(claim.deviceId);
+        if (!await pairedDeviceAuthenticator(claim.deviceId, claim.secret)) {
+          continue;
         }
+        await remover(claim.deviceId);
       } on Object {
         // A failed removal must not cost the phone its new pairing.
       }
     }
   }
 
-  String _createSecret() {
-    final bytes = Uint8List.fromList(
-      List<int>.generate(32, (_) => _random.nextInt(256)),
-    );
-    return base64Url.encode(bytes).replaceAll('=', '');
-  }
-
   Future<void> _handleControl(
     DeviceLinkServerConnection connection,
     DeviceLinkControlMessage message,
   ) async {
-    if (message is DeviceLinkHello) {
-      if (connection.helloReceived) {
-        await connection._error('unexpected_message', 'Hello already received');
-        return;
-      }
-      connection._deviceId = message.deviceId;
-      connection._deviceName = message.deviceName;
-      connection._helloReceived = true;
-      if (message.secret != null) {
-        if (!await _authenticate(message.deviceId, message.secret!)) {
-          await connection._error(
-            'unauthorized',
-            'Device Link secret rejected',
-          );
-          await connection.close();
-          return;
-        }
-        connection._authenticated = true;
-      }
-      final sessions = connection.isAuthenticated
-          ? await _sessions()
-          : const <DeviceLinkSessionInfo>[];
-      await connection.sendControl(
-        DeviceLinkHelloAck(appVersion: appVersion, sessions: sessions),
-      );
-      return;
-    }
-
-    if (!connection.helloReceived) {
-      await connection._error('handshake_required', 'Hello is required first');
-      return;
-    }
-
-    if (message is DeviceLinkPair) {
-      if (!pairingTokens.consume(message.token)) {
-        await connection._error(
-          'pairing_token_invalid',
-          'Pairing token is invalid or expired',
-        );
-        return;
-      }
-      final secret = _createSecret();
-      final deviceId = connection.deviceId;
-      if (deviceId == null) {
+    switch (message) {
+      case final DeviceLinkHello hello:
+        await _onHello(connection, hello);
+      case _ when !connection.helloReceived:
         await connection._error(
           'handshake_required',
-          'A valid Device Link hello is required before pairing',
+          'Hello is required first',
         );
-        return;
-      }
-      final pairedAt = DateTime.now().toUtc();
-      final persister = pairedDevicePersister;
-      if (persister != null) {
-        try {
-          await persister(
-            DeviceLinkPairedDeviceRecord(
-              id: deviceId,
-              name: message.deviceName,
-              platform: message.platform ?? 'unknown',
-              secret: secret,
-              publicKey: message.devicePublicKey,
-              pairedAt: pairedAt,
-            ),
-          );
-        } catch (_) {
-          await connection._error(
-            'pairing_failed',
-            'The paired device could not be stored',
-          );
-          return;
-        }
-      } else {
-        // This is only the in-memory fallback used by pure transport tests.
-        // The production app persists an Argon2id hash through its repository.
-        final hash = CryptoUtils.getHashPlain(
-          Uint8List.fromList(utf8.encode(secret)),
-          algorithmName: 'SHA-256',
-        );
-        _pairedDevices[deviceId] = _PairedDevice(
-          secretHash: hash,
-          publicKey: message.devicePublicKey,
-        );
-      }
-      await _dropSupersededDevices(deviceId, message.supersedes);
-      connection._authenticated = true;
-      await connection.sendControl(
-        DeviceLinkPaired(secret: secret, hostName: hostName),
-      );
-      // The unauthenticated hello intentionally exposed no session metadata.
-      // Send the list only after the one-time pairing secret has authenticated
-      // this connection so the phone can choose its initial session.
-      await connection.sendControl(
-        DeviceLinkHelloAck(appVersion: appVersion, sessions: await _sessions()),
-      );
-      final pairingCompleted = onPairingCompleted;
-      if (pairingCompleted != null) await pairingCompleted();
-      return;
-    }
-
-    if (message is DeviceLinkAttach ||
-        message is DeviceLinkResize ||
-        message is DeviceLinkDetach) {
-      if (!connection.isAuthenticated) {
+      case final DeviceLinkPair pair:
+        await _onPair(connection, pair);
+      case DeviceLinkAttach() || DeviceLinkResize() || DeviceLinkDetach()
+          when !connection.isAuthenticated:
         await connection._error(
           'unauthorized',
           'Device Link authentication is required',
         );
-        return;
-      }
-      if (message case final DeviceLinkAttach attach) {
+      case final DeviceLinkAttach attach:
         await _attach(connection, attach);
-      } else if (message case final DeviceLinkResize resize) {
+      case final DeviceLinkResize resize:
         await _resize(connection, resize);
-      } else {
+      case DeviceLinkDetach():
         await _detach(connection);
-      }
+      case DeviceLinkError():
+        break;
+      default:
+        await connection._error(
+          'unexpected_message',
+          'Control message is not valid here',
+        );
+    }
+  }
+
+  Future<void> _onHello(
+    DeviceLinkServerConnection connection,
+    DeviceLinkHello hello,
+  ) async {
+    if (connection.helloReceived) {
+      await connection._error('unexpected_message', 'Hello already received');
       return;
     }
-
-    if (message is DeviceLinkError) return;
-    await connection._error(
-      'unexpected_message',
-      'Control message is not valid here',
+    connection._recordHello(hello.deviceId, hello.deviceName);
+    final secret = hello.secret;
+    if (secret != null) {
+      if (!await pairedDeviceAuthenticator(hello.deviceId, secret)) {
+        await connection._error('unauthorized', 'Device Link secret rejected');
+        await connection.close();
+        return;
+      }
+      connection._markAuthenticated();
+    }
+    // An unauthenticated hello exposes no session metadata.
+    final sessions = connection.isAuthenticated
+        ? await _sessions()
+        : const <DeviceLinkSessionInfo>[];
+    await connection.sendControl(
+      DeviceLinkHelloAck(appVersion: appVersion, sessions: sessions),
     );
+  }
+
+  Future<void> _onPair(
+    DeviceLinkServerConnection connection,
+    DeviceLinkPair pair,
+  ) async {
+    if (!pairingTokens.consume(pair.token)) {
+      await connection._error(
+        'pairing_token_invalid',
+        'Pairing token is invalid or expired',
+      );
+      return;
+    }
+    final secret = base64UrlNoPad(secureRandomBytes(32));
+    final deviceId = connection.deviceId!;
+    try {
+      await pairedDevicePersister(
+        DeviceLinkPairedDeviceRecord(
+          id: deviceId,
+          name: pair.deviceName,
+          platform: pair.platform ?? 'unknown',
+          secret: secret,
+          publicKey: pair.devicePublicKey,
+          pairedAt: DateTime.now().toUtc(),
+        ),
+      );
+    } catch (_) {
+      await connection._error(
+        'pairing_failed',
+        'The paired device could not be stored',
+      );
+      return;
+    }
+    await _dropSupersededDevices(deviceId, pair.supersedes);
+    connection._markAuthenticated();
+    await connection.sendControl(
+      DeviceLinkPaired(secret: secret, hostName: hostName),
+    );
+    // The session list follows only now that the one-time pairing secret has
+    // authenticated this connection, so the phone can choose its first session.
+    await connection.sendControl(
+      DeviceLinkHelloAck(appVersion: appVersion, sessions: await _sessions()),
+    );
+    await onPairingCompleted?.call();
   }
 
   Future<void> _attach(
@@ -665,23 +593,6 @@ final class DeviceLinkServer {
     DeviceLinkServerConnection connection,
     DeviceLinkBinaryFrame frame,
   ) async {
-    final transport = connection._attachedTransport;
-    if (frame.type == DeviceLinkBinaryFrameType.ptyInput && transport != null) {
-      try {
-        await transport.writeInput(
-          connection: connection,
-          bytes: frame.payload,
-        );
-      } on DeviceLinkSessionException catch (error) {
-        await connection._error(error.code, error.message);
-      } catch (_) {
-        await connection._error(
-          'input_failed',
-          'Device Link input could not be delivered',
-        );
-      }
-      return;
-    }
     if (frame.type != DeviceLinkBinaryFrameType.ptyInput) {
       await connection._error(
         'invalid_binary_direction',
@@ -689,19 +600,24 @@ final class DeviceLinkServer {
       );
       return;
     }
-    // Retain the Phase 1 diagnostic hook when no real session registry is
-    // configured. Once a registry is supplied, every client input must belong
-    // to an attached session and never fall through to a generic callback.
-    if (sessionTransportResolver == null &&
-        sessionTransportsProvider == null &&
-        onBinaryFrame != null) {
-      await onBinaryFrame!.call(connection, frame);
+    final transport = connection._attachedTransport;
+    if (transport == null) {
+      await connection._error(
+        'session_not_attached',
+        'Attach a terminal session before sending input',
+      );
       return;
     }
-    await connection._error(
-      'session_not_attached',
-      'Attach a terminal session before sending input',
-    );
+    try {
+      await transport.writeInput(connection: connection, bytes: frame.payload);
+    } on DeviceLinkSessionException catch (error) {
+      await connection._error(error.code, error.message);
+    } catch (_) {
+      await connection._error(
+        'input_failed',
+        'Device Link input could not be delivered',
+      );
+    }
   }
 
   /// Frees a session whose owner is gone but has not been noticed yet.
@@ -736,9 +652,6 @@ final class DeviceLinkServer {
   void _remove(DeviceLinkServerConnection connection) {
     _connections.remove(connection);
   }
-
-  static Future<List<DeviceLinkSessionInfo>> _emptySessions() async =>
-      <DeviceLinkSessionInfo>[];
 
   /// Local addresses the phone can dial for a listener bound to [bindAddress].
   ///
@@ -792,6 +705,15 @@ final class DeviceLinkServerConnection {
   bool get helloReceived => _helloReceived;
   bool get isAuthenticated => _authenticated;
   bool get isClosed => _closed;
+
+  void _recordHello(String deviceId, String deviceName) {
+    _deviceId = deviceId;
+    _deviceName = deviceName;
+    _helloReceived = true;
+  }
+
+  /// The peer proved it holds a paired-device secret, or was just issued one.
+  void _markAuthenticated() => _authenticated = true;
 
   void _listen() {
     _subscription = _socket.listen(
@@ -896,23 +818,6 @@ final class DeviceLinkServerConnection {
       await _socket.close(WebSocketStatus.normalClosure);
     } catch (_) {}
   }
-}
-
-final class _PairedDevice {
-  final Uint8List secretHash;
-  final String publicKey;
-
-  _PairedDevice({required List<int> secretHash, required this.publicKey})
-    : secretHash = Uint8List.fromList(secretHash);
-}
-
-bool _constantTimeBytesEqual(List<int> left, List<int> right) {
-  var difference = left.length ^ right.length;
-  final length = left.length < right.length ? left.length : right.length;
-  for (var i = 0; i < length; i++) {
-    difference |= left[i] ^ right[i];
-  }
-  return difference == 0;
 }
 
 /// Transport-level error that deliberately excludes sensitive values.

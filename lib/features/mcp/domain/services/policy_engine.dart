@@ -1,7 +1,6 @@
 import '../../../../shared/database/app_database.dart';
 import '../../../../shared/database/daos/mcp_dao.dart';
 import '../../data/repositories/mcp_approval_repository.dart';
-import '../../data/repositories/mcp_grant_repository.dart';
 import '../models/mcp_enums.dart';
 import '../models/mcp_models.dart';
 import 'command_classifier.dart';
@@ -14,13 +13,11 @@ import 'command_classifier.dart';
 /// class implements verbatim: the evaluation order, the risk-category
 /// decision matrix, and the production override.
 class PolicyEngine {
-  final McpGrantRepository grants;
   final McpApprovalRepository approvals;
   final McpDao dao;
   final CommandClassifier classifier;
 
   const PolicyEngine({
-    required this.grants,
     required this.approvals,
     required this.dao,
     this.classifier = const CommandClassifier(),
@@ -29,10 +26,9 @@ class PolicyEngine {
   /// Evaluates [ctx] against the full policy stack, in exactly this order
   /// (mirrors the plan's "Değerlendirme sırası" list — do not reorder):
   ///
-  /// 1. Does a live [McpGrantRepository] grant exist for (client, host)? If
-  ///    not, the agent never asked for access — throw
-  ///    [McpErrorCode.hostAccessRequired] rather than opening a dialog on its
-  ///    behalf.
+  /// 1. The grant. Checked by the caller (`run_command` throws
+  ///    `HOST_ACCESS_REQUIRED` and hands the live mode in as [CommandContext.mode])
+  ///    so the grant is read once per call, not once here and once there.
   /// 2. Is the command [RiskCategory.interactive]? If so, refuse with
   ///    [PolicyAction.rejectInteractive] and hand back the classifier's
   ///    batch-mode hint. This is checked *before* user policy rules on
@@ -64,20 +60,12 @@ class PolicyEngine {
     required String workspaceId,
     DateTime? now,
   }) async {
-    // 1. Grant.
-    final mode = await grants.effectiveMode(ctx.clientId, ctx.hostId, now: now);
-    if (mode == null) {
-      throw McpToolException(
-        McpErrorCode.hostAccessRequired,
-        'No access has been granted for this host yet. Call '
-        'request_host_access before running commands on it.',
-        details: {'hostId': ctx.hostId},
-      );
-    }
+    // 1. Grant — see the docstring; [ctx.mode] is the live grant.
+    final mode = ctx.mode;
 
     // Classified once, reused by both the interactive check (step 2) and the
     // matrix lookup (steps 5-6).
-    final classification = classifier.classify(ctx.command, cwd: ctx.cwd);
+    final classification = classifier.classify(ctx.command);
 
     // 2. Interactive commands are refused unconditionally, before any rule
     // gets a say.

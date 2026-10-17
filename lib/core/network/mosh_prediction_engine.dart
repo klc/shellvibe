@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../models/mosh_prediction_mode.dart';
+import '../utils/callback_sink.dart';
 
 /// One character the user typed, waiting to be confirmed by the server's echo.
 class _Prediction {
@@ -269,18 +270,6 @@ class MoshPredictionEngine {
   ByteConversionSink _newServerOutputDecoder() {
     return const Utf8Decoder(
       allowMalformed: true,
-    ).startChunkedConversion(_ServerOutputSink(_consumeServerOutput));
+    ).startChunkedConversion(CallbackSink(_consumeServerOutput));
   }
-}
-
-final class _ServerOutputSink implements Sink<String> {
-  const _ServerOutputSink(this._onChunk);
-
-  final void Function(String) _onChunk;
-
-  @override
-  void add(String chunk) => _onChunk(chunk);
-
-  @override
-  void close() {}
 }

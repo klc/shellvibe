@@ -37,51 +37,30 @@ class AppPaletteDefinition {
     // Every role a shadcn widget paints is pinned here. A role left out falls
     // back to Slate's own value — white popovers and cool grey hovers on a
     // warm palette, navy-black ones on a dark one.
-    if (isDark) {
-      return ShadSlateColorScheme.dark(
-        background: tokens.canvas,
-        foreground: tokens.textPrimary,
-        card: tokens.surface,
-        cardForeground: tokens.textPrimary,
-        popover: tokens.surfaceRaised,
-        popoverForeground: tokens.textPrimary,
-        primary: tokens.brand,
-        primaryForeground: tokens.brandInk,
-        secondary: tokens.surfaceLow,
-        secondaryForeground: tokens.textPrimary,
-        muted: tokens.surfaceLow,
-        mutedForeground: tokens.textMuted,
-        accent: tokens.textPrimary.withValues(alpha: 0.06),
-        accentForeground: tokens.textPrimary,
-        border: tokens.border,
-        input: tokens.border,
-        ring: tokens.brand.withValues(alpha: 0.4),
-        selection: tokens.brand.withValues(alpha: 0.3),
-        destructive: tokens.danger,
-      );
-    } else {
-      return ShadSlateColorScheme.light(
-        background: tokens.canvas,
-        foreground: tokens.textPrimary,
-        card: tokens.surface,
-        cardForeground: tokens.textPrimary,
-        popover: tokens.surfaceRaised,
-        popoverForeground: tokens.textPrimary,
-        primary: tokens.brand,
-        primaryForeground: tokens.brandInk,
-        secondary: tokens.surfaceLow,
-        secondaryForeground: tokens.textPrimary,
-        muted: tokens.surfaceLow,
-        mutedForeground: tokens.textMuted,
-        accent: tokens.textPrimary.withValues(alpha: 0.06),
-        accentForeground: tokens.textPrimary,
-        border: tokens.border,
-        input: tokens.border,
-        ring: tokens.brand.withValues(alpha: 0.4),
-        selection: tokens.brand.withValues(alpha: 0.3),
-        destructive: tokens.danger,
-      );
-    }
+    final make = isDark
+        ? ShadSlateColorScheme.dark
+        : ShadSlateColorScheme.light;
+    return make(
+      background: tokens.canvas,
+      foreground: tokens.textPrimary,
+      card: tokens.surface,
+      cardForeground: tokens.textPrimary,
+      popover: tokens.surfaceRaised,
+      popoverForeground: tokens.textPrimary,
+      primary: tokens.brand,
+      primaryForeground: tokens.brandInk,
+      secondary: tokens.surfaceLow,
+      secondaryForeground: tokens.textPrimary,
+      muted: tokens.surfaceLow,
+      mutedForeground: tokens.textMuted,
+      accent: tokens.textPrimary.withValues(alpha: 0.06),
+      accentForeground: tokens.textPrimary,
+      border: tokens.border,
+      input: tokens.border,
+      ring: tokens.brand.withValues(alpha: 0.4),
+      selection: tokens.brand.withValues(alpha: 0.3),
+      destructive: tokens.danger,
+    );
   }
 
   static final Map<AppPalette, AppPaletteDefinition> _registry = {

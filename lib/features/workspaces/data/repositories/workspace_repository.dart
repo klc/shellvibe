@@ -11,10 +11,6 @@ class WorkspaceRepository {
 
   WorkspaceRepository(this._dao);
 
-  Stream<List<WorkspaceModel>> watchWorkspaces() {
-    return _dao.watchAllWorkspaces().map((items) => items.map(_map).toList());
-  }
-
   Future<List<WorkspaceModel>> getWorkspaces() async {
     final items = await _dao.getAllWorkspaces();
     return items.map(_map).toList();

@@ -7,12 +7,90 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-10-17
+
+### Added
+
+- A template pane can start with a runbook instead of a snippet: its steps
+  are typed into the pane's own shell once it connects, so a layout can open
+  with one pane tailing a log, one in `supervisorctl` and one in the project
+  folder. A pane carries one startup action, snippet or runbook. Steps go
+  out as one block, a line each, so exit checks, retries and timeouts do not
+  apply; `${INPUT:…}` variables, approval steps and steps whose snippet was
+  deleted are skipped with a notice. Production hosts still ask first.
+- Hosts → "…" → Duplicate host opens the host form prefilled from that host,
+  labelled "<label> (copy)", so only the address needs changing. Tunnel
+  rules and host-key pins stay with the original server.
+- Linux: files dragged from a sandboxed (Flatpak or Snap) app are accepted.
+
+### Changed
+
+- Settings → Account → Delete Account… now deletes the account inside the
+  app: it says what is removed, asks for the password again and signs the
+  device out once the server confirms. Hosts and keys on the device are not
+  touched. The web panel is offered only when the server cannot be reached.
+- Hosts: the Parent Tag field is gone from the host form. Nothing displayed a
+  tag hierarchy; existing values are kept and still sync.
+- SFTP: the transfer dock panel gains Retry, like the queue sheet.
+
 ### Fixed
 
-- On iPhone and iPad, a snippet row no longer runs 8px past its edge, which
-  clipped its "…" menu.
+- After one failed sign-in, every later attempt failed with the same error
+  without reaching the server until the app was restarted.
+- Closing a local terminal tab left its shell running. The shell was sent
+  SIGTERM, which an interactive zsh or bash ignores, and a tab closed while
+  its shell was still starting was never told to stop at all. Closed tabs
+  now hang up their shell and wait for it to go.
+- Closing an SSH tab during the handshake no longer leaves the session it
+  had just opened connected.
+- Terminal: on phones, sticky Ctrl with `/` or `-` sent the wrong control
+  code when typed through the keyboard's IME path.
+- Terminal: an identity-less host opened from the tab view skipped the
+  credentials prompt that every other screen shows.
+- Tunnels: on macOS, unplugging a monitor, sleep/wake or moving the window
+  between screens could crash the app with "Null check operator used on a
+  null value".
+- Tunnels: the tunnels screen and form showed stale hosts after a host was
+  edited.
+- Sync and cloud backup: a settings change while a sync pass or scheduled
+  backup was running could start a second one alongside it. Unlocking the
+  vault no longer resets the backup frequency and last-backup time.
+- Settings → Terminal: the preview rendered the wrong font for every font
+  whose display name differs from its family name.
+- SFTP: a download from a fast server to a slow disk no longer buffers the
+  whole file in memory. A download that fails mid-way keeps its own error
+  instead of "File closed", and resuming it resets the progress bar.
+- Hosts: a host delete that failed was silently ignored; it now shows the
+  error.
+- Snippets and runbooks: adding, editing or deleting an item no longer
+  blanks the list to a spinner. A run started from the runbooks screen or
+  from "Run on hosts" while another run was already going is no longer
+  shown as yours.
+- On iPhone and iPad, a snippet or runbook row no longer runs 8px past its
+  edge, which clipped its "…" menu.
 - On Android phones, a port-forwarding rule card no longer runs off the
   screen: the route moves under the host and state line on a narrow screen.
+
+### Security
+
+- AI Access: a command with a redirection (`>`, `>>`) is no longer treated
+  as read-only, so `echo key >> ~/.ssh/authorized_keys` needs confirmation.
+  Command substitution (`$(…)`, backticks, `<(…)`) is treated as opaque, and
+  interactive editors and pagers are refused up front instead of hanging a
+  session (`sudo vim` used to).
+- AI Access: the Limits card now applies. Command timeout, output cap and
+  idle timeout were shown but never reached the sessions, and audit
+  retention never purged.
+- AI Access: "This session" grants and approvals are revoked every time AI
+  Access starts, including after the app was quit while they were live.
+- AI Access: revoking a client now also closes its open sessions.
+- Device link: the in-memory pairing store and other test-only fallbacks
+  are no longer part of the release build.
+
+### Removed
+
+- Four unused dependencies, among them the hotkey manager that pulled
+  `libkeybinder` into the Linux packages.
 
 ## [1.8.0] - 2026-10-08
 
@@ -611,7 +689,9 @@ entry describes what ShellVibe is rather than what changed.
 - iOS and Android are not released. The code builds for them and they are not
   part of this release.
 
-[Unreleased]: https://github.com/klc/shellvibe/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/klc/shellvibe/compare/v1.9.0...HEAD
+[1.9.0]: https://github.com/klc/shellvibe/compare/v1.8.0...v1.9.0
+[1.8.0]: https://github.com/klc/shellvibe/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/klc/shellvibe/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/klc/shellvibe/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/klc/shellvibe/compare/v1.4.0...v1.5.0

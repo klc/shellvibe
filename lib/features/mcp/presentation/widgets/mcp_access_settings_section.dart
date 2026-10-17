@@ -12,8 +12,9 @@ import '../../../../app/widgets/adaptive_modal.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../../../core/utils/platform_capabilities.dart';
 import '../../../../shared/database/app_database.dart';
-import '../../../../shared/providers/workspace_provider.dart';
+import '../../../workspaces/presentation/providers/workspace_provider.dart';
 import '../../data/mcp_server_controller.dart';
+import '../mcp_date_format.dart';
 import '../notifiers/mcp_settings_notifier.dart';
 import 'mcp_activity_panel.dart';
 
@@ -113,9 +114,7 @@ final class McpAccessSettingsSection extends ConsumerWidget {
                 'registered clients can connect to.',
               ),
               value: settings.masterEnabled,
-              onChanged: (value) => ref
-                  .read(mcpSettingsProvider.notifier)
-                  .setMasterEnabled(value),
+              onChanged: (value) => _setMasterEnabled(context, ref, value),
             ),
           ),
           const Divider(height: 1),
@@ -143,6 +142,24 @@ final class McpAccessSettingsSection extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _setMasterEnabled(
+    BuildContext context,
+    WidgetRef ref,
+    bool value,
+  ) async {
+    try {
+      await ref.read(mcpSettingsProvider.notifier).setMasterEnabled(value);
+    } catch (e) {
+      if (context.mounted) {
+        ShadToaster.of(context).show(
+          ShadToast.destructive(
+            description: Text('Could not start the MCP server: $e'),
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildClientsCard(
@@ -252,7 +269,7 @@ final class McpAccessSettingsSection extends ConsumerWidget {
         style: revoked ? TextStyle(color: tokens.textSubtle) : null,
       ),
       subtitle: Text(
-        'created ${_formatDate(client.createdAt)} · '
+        'created ${formatMcpDate(client.createdAt)} · '
         'last seen ${_formatDateOrNever(client.lastSeenAt)} · '
         'expires ${_formatDateOrNever(client.expiresAt)}',
         style: Theme.of(
@@ -629,14 +646,8 @@ final class McpAccessSettingsSection extends ConsumerWidget {
     return '${bytes ~/ 1024} KB';
   }
 
-  String _formatDate(DateTime date) {
-    final local = date.toLocal();
-    return '${local.year}-${local.month.toString().padLeft(2, '0')}-'
-        '${local.day.toString().padLeft(2, '0')}';
-  }
-
   String _formatDateOrNever(DateTime? date) =>
-      date == null ? 'never' : _formatDate(date);
+      date == null ? 'never' : formatMcpDate(date);
 }
 
 /// Marks AI Access as experimental, so a rough edge reads as known rather than

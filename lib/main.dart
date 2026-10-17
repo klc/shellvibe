@@ -15,6 +15,7 @@ import 'package:shellvibe/app/window/start_hidden.dart';
 import 'package:shellvibe/app/window/window_chrome.dart';
 import 'package:shellvibe/core/diagnostics/crash_log.dart';
 import 'package:shellvibe/core/perf/perf_overlay.dart';
+import 'package:shellvibe/core/utils/fnv1a.dart';
 import 'package:shellvibe/features/settings/data/repositories/settings_repository.dart';
 import 'package:shellvibe/shared/storage/secure_storage_service.dart';
 
@@ -49,7 +50,8 @@ Future<bool> _claimSingleInstance() async {
       directory: Directory(p.join(support.path, 'instance')),
       // One claim per install: a debug build beside the installed app, or two
       // installs, run side by side as they always have.
-      name: 'shellvibe-${_fnv1a(Platform.resolvedExecutable)}',
+      name:
+          'shellvibe-${fnv1a32(Platform.resolvedExecutable).toRadixString(16)}',
       onActivate: () => unawaited(showHostWindow()),
     );
     return _singleInstance != null;
@@ -57,15 +59,6 @@ Future<bool> _claimSingleInstance() async {
     debugPrint('[SingleInstance Warning] $e');
     return true;
   }
-}
-
-/// A hash that is the same in every process, unlike [String.hashCode].
-String _fnv1a(String value) {
-  var hash = 0x811c9dc5;
-  for (final unit in value.codeUnits) {
-    hash = ((hash ^ unit) * 0x01000193) & 0xffffffff;
-  }
-  return hash.toRadixString(16);
 }
 
 /// Whether this launch is a login item that should leave the window hidden.

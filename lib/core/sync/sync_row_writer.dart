@@ -380,6 +380,8 @@ final class SyncRowWriter {
         // skipped when the template runs. So it is written as it is.
         final paneSnippetId = str('startupSnippetId');
         final keepPaneSnippet = await exists(db.snippets, paneSnippetId);
+        final paneRunbookId = str('startupRunbookId');
+        final keepPaneRunbook = await exists(db.runbooks, paneRunbookId);
         await db
             .into(db.templatePanes)
             .insertOnConflictUpdate(
@@ -396,12 +398,14 @@ final class SyncRowWriter {
                 hostId: Value(str('hostId')),
                 title: Value(str('title')),
                 startupSnippetId: Value(keepPaneSnippet ? paneSnippetId : null),
+                startupRunbookId: Value(keepPaneRunbook ? paneRunbookId : null),
               ),
             );
 
         return RowWriteResult.ok(
           clearedReferences: [
             if (paneSnippetId != null && !keepPaneSnippet) 'startup snippet',
+            if (paneRunbookId != null && !keepPaneRunbook) 'startup runbook',
           ],
         );
 

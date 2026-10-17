@@ -9,7 +9,7 @@ import '../../../../core/sync/backup_envelope.dart';
 import '../../../../core/sync/backup_scope_store.dart';
 import '../../../settings/presentation/widgets/backup_scope_picker.dart';
 import '../../data/cloud_backup_api.dart';
-import '../../data/cloud_backup_store.dart';
+import '../../domain/backup_frequency.dart';
 import '../notifiers/cloud_backup_notifier.dart';
 
 /// Cloud backup surface in Settings → Sync.

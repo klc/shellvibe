@@ -2,9 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
-import '../../../features/mcp/domain/models/mcp_enums.dart';
-import '../../../features/mcp/domain/models/mcp_models.dart';
+import '../mcp_errors.dart';
 import 'shell_channel.dart';
+import 'shell_result.dart';
 import 'shell_output_framer.dart';
 
 /// A PTY-less remote shell kept alive across many commands, framed with a

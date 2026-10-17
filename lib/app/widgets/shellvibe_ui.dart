@@ -164,23 +164,18 @@ class ShellVibeOverlaySurface extends StatelessWidget {
     final tokens = ShellVibeTokens.resolve(context);
     return LayoutBuilder(
       builder: (context, constraints) {
-        final height = constraints.maxHeight.isFinite
-            ? constraints.maxHeight
-            : null;
-        final stop = height == null
-            ? 1.0
-            : (gradientExtent / height).clamp(0.05, 1.0).toDouble();
         final shape =
             borderRadius ?? BorderRadius.circular(tokens.radiusOverlay);
         return Container(
           padding: padding,
           clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [tokens.surfaceRaised, tokens.surfaceLow],
-              stops: [0, stop],
+            gradient: tokens.panelGradient(
+              gradientExtent: gradientExtent,
+              height: constraints.maxHeight.isFinite
+                  ? constraints.maxHeight
+                  : null,
+              top: tokens.surfaceRaised,
             ),
             borderRadius: shape,
             boxShadow: tokens.shadowOverlay,
@@ -1430,7 +1425,3 @@ class ShellVibeSurface extends StatelessWidget {
     );
   }
 }
-
-// -----------------------------------------------------------------------------
-// Backwards Compatibility Aliases
-// -----------------------------------------------------------------------------

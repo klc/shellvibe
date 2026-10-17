@@ -207,6 +207,9 @@ Future<bool> rerunOnHosts(
     return false;
   }
   if (!context.mounted) return false;
+  // The prompts above were awaited, so the answer to "is something running"
+  // is read again before committing.
+  if (notifier.isRunning) return false;
   unawaited(
     notifier.start(
       runbook,
@@ -246,8 +249,7 @@ class RunView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = ShellVibeTokens.resolve(context);
-    final steps = List<RunbookStepModel>.from(run.runbook.steps)
-      ..sort((a, b) => a.stepOrder.compareTo(b.stepOrder));
+    final steps = run.runbook.orderedSteps;
     final stopped = run.stoppedAfter;
 
     // Its own Material: the view is also shown inside a ShadDialog, which
@@ -814,8 +816,7 @@ Future<void> showRunOutputDialog(
   HostRunState host, {
   String? onlyStepId,
 }) {
-  final steps = List<RunbookStepModel>.from(runbook.steps)
-    ..sort((a, b) => a.stepOrder.compareTo(b.stepOrder));
+  final steps = runbook.orderedSteps;
   return showDialog<void>(
     context: context,
     builder: (dialogContext) => _RunOutputDialog(

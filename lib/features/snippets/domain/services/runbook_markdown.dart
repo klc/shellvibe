@@ -74,9 +74,7 @@ class RunbookMarkdown {
     out.writeln('defaults: ${jsonEncode(_builtIn)}');
     out.writeln('---');
 
-    final steps = [...runbook.steps]
-      ..sort((a, b) => a.stepOrder.compareTo(b.stepOrder));
-    for (final (index, step) in steps.indexed) {
+    for (final (index, step) in runbook.orderedSteps.indexed) {
       out.writeln();
       if (step.kind == StepKind.approval) {
         final lines = step.command.split('\n');

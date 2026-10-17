@@ -34,8 +34,8 @@ DateTime _wallClockNow() => (debugAutoLockClockOverride ?? DateTime.now)();
 
 /// Root application widget.
 ///
-/// Converts to [ConsumerStatefulWidget] to install an [AppLifecycleListener]
-/// that auto-locks the vault after it has been in the background too long.
+/// Stateful so it can observe the app lifecycle and auto-lock the vault after
+/// it has been in the background too long.
 class ShellVibeApp extends ConsumerStatefulWidget {
   const ShellVibeApp({super.key});
 
@@ -45,7 +45,6 @@ class ShellVibeApp extends ConsumerStatefulWidget {
 
 class _ShellVibeAppState extends ConsumerState<ShellVibeApp>
     with WidgetsBindingObserver {
-  late final AppLifecycleListener _lifecycleListener;
   Timer? _autoLockTimer;
 
   /// Wall-clock time the app went to the background, or null while it is in
@@ -62,9 +61,6 @@ class _ShellVibeAppState extends ConsumerState<ShellVibeApp>
   @override
   void initState() {
     super.initState();
-    _lifecycleListener = AppLifecycleListener(
-      onStateChange: _onLifecycleChange,
-    );
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _maybeOpenLaunchShell(ref.read(vaultProvider));
@@ -193,7 +189,9 @@ class _ShellVibeAppState extends ConsumerState<ShellVibeApp>
   /// trip and rebind every Mosh socket each time. The return is handled at
   /// the first state past hidden (inactive on the way to resumed), which is
   /// the earliest point the vault can be locked before it is looked at.
-  void _onLifecycleChange(AppLifecycleState state) {
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
     switch (state) {
       case AppLifecycleState.hidden:
       case AppLifecycleState.paused:
@@ -263,7 +261,6 @@ class _ShellVibeAppState extends ConsumerState<ShellVibeApp>
   @override
   void dispose() {
     _autoLockTimer?.cancel();
-    _lifecycleListener.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -275,7 +272,15 @@ class _ShellVibeAppState extends ConsumerState<ShellVibeApp>
     // an unavailable vault belongs to TerminalTabsNotifier, which owns the
     // server and watches the same provider; duplicating it here would race
     // against its own start/stop sequencing.
-    ref.listen(vaultProvider, (_, next) => _maybeOpenLaunchShell(next));
+    //
+    // The MCP server cannot start behind a locked vault either, so a launch
+    // that begins locked has to try again once it opens.
+    ref.listen(vaultProvider, (_, next) {
+      _maybeOpenLaunchShell(next);
+      unawaited(
+        ref.read(mcpSettingsProvider.notifier).ensureServerMatchesSetting(),
+      );
+    });
     ref.listen(settingsProvider, (_, _) => _syncWindowChrome());
 
     // Watched, not read: this is what builds the MCP settings at boot, which
@@ -298,14 +303,6 @@ class _ShellVibeAppState extends ConsumerState<ShellVibeApp>
     // for someone to open the settings screen -- an automatic backup that
     // only happens while its own settings page is visible is not automatic.
     ref.watch(cloudBackupProvider);
-
-    // The server cannot start behind a locked vault, so a launch that begins
-    // locked has to try again once it opens.
-    ref.listen(vaultProvider, (_, _) {
-      unawaited(
-        ref.read(mcpSettingsProvider.notifier).ensureServerMatchesSetting(),
-      );
-    });
 
     final router = ref.watch(appRouterProvider);
     final settingsAsync = ref.watch(settingsProvider);
@@ -346,5 +343,3 @@ class _ShellVibeAppState extends ConsumerState<ShellVibeApp>
 /// mobile platform with a foreground service to do it with.
 Widget _withForegroundService(Widget child) =>
     supportsForegroundService ? ForegroundServiceHost(child: child) : child;
-
-/// Backwards compatibility alias

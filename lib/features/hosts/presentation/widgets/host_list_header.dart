@@ -86,7 +86,7 @@ class HostListHeader extends StatelessWidget {
             ),
             Expanded(
               flex: kHostColumnFlex[3],
-              child: Text('LAST', style: style, maxLines: 1),
+              child: Text('STATUS', style: style, maxLines: 1),
             ),
           ],
           SizedBox(width: hostActionsWidth(tokens, compact: compact)),

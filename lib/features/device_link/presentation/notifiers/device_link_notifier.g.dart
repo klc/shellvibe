@@ -15,7 +15,7 @@ final deviceLinkProvider = DeviceLinkNotifierProvider._();
 
 /// Owns saved-pairing reconnects and their mobile terminal controllers.
 final class DeviceLinkNotifierProvider
-    extends $NotifierProvider<DeviceLinkNotifier, DeviceLinkState> {
+    extends $NotifierProvider<DeviceLinkNotifier, void> {
   /// Owns saved-pairing reconnects and their mobile terminal controllers.
   DeviceLinkNotifierProvider._()
     : super(
@@ -36,30 +36,30 @@ final class DeviceLinkNotifierProvider
   DeviceLinkNotifier create() => DeviceLinkNotifier();
 
   /// {@macro riverpod.override_with_value}
-  Override overrideWithValue(DeviceLinkState value) {
+  Override overrideWithValue(void value) {
     return $ProviderOverride(
       origin: this,
-      providerOverride: $SyncValueProvider<DeviceLinkState>(value),
+      providerOverride: $SyncValueProvider<void>(value),
     );
   }
 }
 
 String _$deviceLinkNotifierHash() =>
-    r'3f96af5fd10d3590240ea4f8ee4ce222ffcaf0b5';
+    r'6b9f34e1674dccb5ef33eaf67efa22c89463e68c';
 
 /// Owns saved-pairing reconnects and their mobile terminal controllers.
 
-abstract class _$DeviceLinkNotifier extends $Notifier<DeviceLinkState> {
-  DeviceLinkState build();
+abstract class _$DeviceLinkNotifier extends $Notifier<void> {
+  void build();
   @$mustCallSuper
   @override
   WhenComplete runBuild() {
-    final ref = this.ref as $Ref<DeviceLinkState, DeviceLinkState>;
+    final ref = this.ref as $Ref<void, void>;
     final element =
         ref.element
             as $ClassProviderElement<
-              AnyNotifier<DeviceLinkState, DeviceLinkState>,
-              DeviceLinkState,
+              AnyNotifier<void, void>,
+              void,
               Object?,
               Object?
             >;

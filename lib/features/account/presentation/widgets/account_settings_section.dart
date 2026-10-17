@@ -4,19 +4,21 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../app/theme/shellvibe_tokens.dart';
+import '../../../../app/widgets/adaptive_modal.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../../../core/api/api_exception.dart';
 import '../../../billing/domain/entitlement.dart';
+import '../../../device_link/presentation/platform_icon.dart';
 import '../../../billing/presentation/notifiers/entitlement_notifier.dart';
 import '../../domain/account_session.dart';
 import '../notifiers/account_notifier.dart';
 
-/// Where an account is deleted: the web panel's danger zone, which re-asks for
-/// the password and refuses while the account still owns a team.
+/// The web panel's danger zone, which deletes an account the same way the app
+/// does.
 ///
-/// App Store (5.1.1(v)) and Play both require that deletion can be started from
-/// inside the app; a direct link to the web flow satisfies both, and Play's
-/// Data safety form takes this same URL.
+/// The app deletes in place through the API. This URL is the fallback offered
+/// when that call gets no answer from the API, and the one Play's Data safety
+/// form takes.
 const String kAccountDeletionUrl = 'https://shellvibe.dev/panel/danger';
 
 /// Account surface in Settings: sign in, plan, devices, sign out, deletion.
@@ -66,13 +68,13 @@ class _AccountSettingsSectionState
     final tokens = ShellVibeTokens.resolve(context);
 
     return account.when(
-      loading: () => const _SectionCard(
+      loading: () => const ShadCard(
         child: Padding(
           padding: EdgeInsets.all(12),
           child: Center(child: CircularProgressIndicator.adaptive()),
         ),
       ),
-      error: (error, _) => _SectionCard(
+      error: (error, _) => ShadCard(
         child: _ErrorText('The account state could not be read: $error'),
       ),
       data: (state) {
@@ -92,7 +94,7 @@ class _AccountSettingsSectionState
     ShellVibeTokens tokens,
     AccountStatus status,
   ) {
-    return _SectionCard(
+    return ShadCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -182,7 +184,7 @@ class _AccountSettingsSectionState
   ) {
     final entitlement = ref.watch(entitlementProvider);
 
-    return _SectionCard(
+    return ShadCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -242,9 +244,9 @@ class _AccountSettingsSectionState
           ),
           const Divider(height: 20),
           Text(
-            'Deleting the account removes the cloud backup, sync data and '
-            'devices from the server. It is done in the web panel, which asks '
-            'for your password again. Hosts and keys on this device stay.',
+            'Deleting the account removes it from the server with its '
+            'devices, cloud backup and sync history. Hosts and keys on this '
+            'device stay.',
             style: TextStyle(fontSize: 12, color: tokens.textMuted),
           ),
           const SizedBox(height: 8),
@@ -252,7 +254,7 @@ class _AccountSettingsSectionState
             buttonKey: const Key('account_delete_button'),
             label: 'Delete Account…',
             icon: LucideIcons.userX,
-            onPressed: _openAccountDeletion,
+            onPressed: _busy ? null : () => _deleteAccount(session.email),
           ),
         ],
       ),
@@ -344,6 +346,32 @@ class _AccountSettingsSectionState
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _deleteAccount(String email) async {
+    final notifier = ref.read(accountProvider.notifier);
+
+    final deleted = await showDialog<bool>(
+      context: context,
+      builder: (_) => _DeleteAccountDialog(
+        email: email,
+        delete: (password) => notifier.deleteAccount(password: password),
+        openWebPanel: _openAccountDeletion,
+      ),
+    );
+    if (deleted != true || !mounted) return;
+
+    _emailController.clear();
+    await ref.read(entitlementProvider.notifier).clearCache();
+    if (!mounted) return;
+    ShadToaster.maybeOf(context)?.show(
+      const ShadToast(
+        description: Text(
+          'The account was deleted. Hosts and keys on this device are '
+          'unchanged.',
+        ),
+      ),
+    );
   }
 
   Future<void> _openAccountDeletion() async {
@@ -438,6 +466,187 @@ final class _PlanRow extends StatelessWidget {
       '${(bytes / (1024 * 1024)).toStringAsFixed(bytes % (1024 * 1024) == 0 ? 0 : 1)} MB';
 }
 
+/// Asks for the password and deletes the account in place, so a wrong
+/// password or a refusal is answered here rather than by reopening it.
+///
+/// Pops `true` once the server has erased the account.
+final class _DeleteAccountDialog extends StatefulWidget {
+  const _DeleteAccountDialog({
+    required this.email,
+    required this.delete,
+    required this.openWebPanel,
+  });
+
+  final String email;
+  final Future<void> Function(String password) delete;
+  final VoidCallback openWebPanel;
+
+  @override
+  State<_DeleteAccountDialog> createState() => _DeleteAccountDialogState();
+}
+
+class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
+  final _password = TextEditingController();
+
+  bool _busy = false;
+  String? _error;
+
+  /// True when the request got no answer from the API. Only then is the web
+  /// panel offered: it is the same deletion by another road, for when this one
+  /// is closed, not a second option to weigh.
+  bool _offerWebPanel = false;
+
+  @override
+  void dispose() {
+    _password.dispose();
+    super.dispose();
+  }
+
+  bool get _canSubmit => !_busy && _password.text.isNotEmpty;
+
+  Future<void> _submit() async {
+    if (!_canSubmit) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+      _offerWebPanel = false;
+    });
+
+    String? error;
+    var offerWebPanel = false;
+    try {
+      await widget.delete(_password.text);
+      if (mounted) Navigator.of(context).pop(true);
+      return;
+    } on ApiException catch (e) {
+      error = _messageFor(e);
+      offerWebPanel = e.statusCode >= 500;
+    } on ApiTransportException catch (e) {
+      error = e.timedOut
+          ? 'The server did not answer in time.'
+          : 'The server could not be reached.';
+      offerWebPanel = true;
+    } on Object catch (e) {
+      error = '$e';
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _error = error;
+      _offerWebPanel = offerWebPanel;
+    });
+  }
+
+  /// Branches on `code` only, like the sign-in form.
+  static String _messageFor(ApiException e) {
+    if (e.code == ApiErrorCode.invalidCredentials) {
+      return 'That password does not match this account.';
+    }
+
+    if (e.code == ApiErrorCode.accountOwnsSharedTeam) {
+      return 'You own a team other people still belong to, and deleting the '
+          'account would take their shared workspaces with it. Hand the team '
+          'over or remove its members first.';
+    }
+
+    if (e.isUnauthenticated) {
+      return 'This device is no longer signed in. Sign in again, then delete '
+          'the account.';
+    }
+
+    if (e.isThrottled) {
+      final seconds = e.retryAfterSeconds;
+
+      return seconds == null
+          ? 'Too many attempts. Wait a moment and try again.'
+          : 'Too many attempts. Try again in $seconds seconds.';
+    }
+
+    if (e.isValidationFailure) {
+      return e.validationErrors['password']?.first ?? 'Enter your password.';
+    }
+
+    return 'The account could not be deleted (${e.code}).'
+        '${e.requestId == null ? '' : ' Reference: ${e.requestId}.'}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = ShellVibeTokens.resolve(context);
+    final bodyStyle = TextStyle(fontSize: 13, color: tokens.textSecondary);
+    final account = widget.email.isEmpty ? 'the account' : widget.email;
+
+    // Held open while the request is out, so the result lands where the user
+    // can read it rather than after a tap outside has dismissed it.
+    return PopScope(
+      canPop: !_busy,
+      child: ShadDialog.alert(
+        key: const Key('account_delete_dialog'),
+        title: const Text('Delete Account?'),
+        description: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'This permanently deletes $account '
+              'from the ShellVibe server, with every device signed in to it, its '
+              'cloud backups and its sync history. It cannot be undone.',
+              style: bodyStyle,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Hosts, keys and settings on this device are not touched.',
+              style: bodyStyle,
+            ),
+            const SizedBox(height: 12),
+            ShadInput(
+              key: const Key('account_delete_password'),
+              controller: _password,
+              obscureText: true,
+              autofocus: true,
+              enabled: !_busy,
+              placeholder: const Text('Password'),
+              onChanged: (_) => setState(() {}),
+              onSubmitted: (_) => _submit(),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 8),
+              _ErrorText(_error!),
+            ],
+            if (_offerWebPanel) ...[
+              const SizedBox(height: 8),
+              ShellVibeButton.quiet(
+                buttonKey: const Key('account_delete_web_panel'),
+                label: 'Delete in the Web Panel',
+                icon: LucideIcons.externalLink,
+                onPressed: () {
+                  Navigator.of(context).pop(false);
+                  widget.openWebPanel();
+                },
+              ),
+            ],
+          ],
+        ),
+        actions: adaptiveDialogActions(context, [
+          ShellVibeButton.secondary(
+            buttonKey: const Key('account_delete_cancel'),
+            label: 'Cancel',
+            onPressed: _busy ? null : () => Navigator.of(context).pop(false),
+          ),
+          ShellVibeButton.danger(
+            buttonKey: const Key('account_delete_confirm'),
+            label: 'Delete Account',
+            busy: _busy,
+            onPressed: _canSubmit ? _submit : null,
+          ),
+        ]),
+        actionsAxis: adaptiveDialogActionsAxis(context),
+      ),
+    );
+  }
+}
+
 /// Device list, loaded when opened rather than kept in memory.
 final class _DeviceListSheet extends StatefulWidget {
   const _DeviceListSheet({required this.load, required this.onRevoke});
@@ -502,7 +711,7 @@ class _DeviceListSheetState extends State<_DeviceListSheet> {
                 for (final device in devices)
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    leading: Icon(_iconFor(device.platform), size: 18),
+                    leading: Icon(platformIcon(device.platform), size: 18),
                     title: Text(device.name),
                     subtitle: Text(
                       device.isRevoked
@@ -530,25 +739,6 @@ class _DeviceListSheetState extends State<_DeviceListSheet> {
       ),
     );
   }
-
-  /// Maps a platform string to a glyph, tolerating values this build has never
-  /// seen -- the contract allows new ones.
-  static IconData _iconFor(String platform) => switch (platform) {
-    'ios' || 'android' => LucideIcons.smartphone,
-    'macos' => LucideIcons.laptop,
-    'windows' || 'linux' => LucideIcons.monitor,
-    'web' => LucideIcons.globe,
-    _ => LucideIcons.circleHelp,
-  };
-}
-
-final class _SectionCard extends StatelessWidget {
-  const _SectionCard({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) => ShadCard(child: child);
 }
 
 final class _Field extends StatelessWidget {

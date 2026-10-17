@@ -10,6 +10,7 @@ import '../../features/settings/domain/models/app_settings_model.dart';
 import '../../features/settings/presentation/notifiers/settings_notifier.dart';
 import '../../features/terminal/domain/models/terminal_tab_session.dart';
 import '../../features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
+import '../../features/terminal/presentation/widgets/terminal_pane_helpers.dart';
 import '../../features/tunnels/presentation/providers/tunnels_providers.dart';
 import '../window/desktop_tray_menu.dart' show tunnelRouteLabel;
 import '../window/host_navigation.dart';
@@ -81,15 +82,8 @@ class _DesktopNotificationHostState
   /// The root of the pane tree [tabId] is in: what the tab strip selects.
   String _rootOf(String tabId) {
     final tabs = ref.read(terminalTabsProvider).tabs;
-    var current = tabId;
-    // Bounded by the tab count, so a parent cycle cannot hang this.
-    for (var i = 0; i <= tabs.length; i++) {
-      final tab = tabs.where((t) => t.id == current).firstOrNull;
-      final parent = tab?.splitParentId;
-      if (parent == null) return current;
-      current = parent;
-    }
-    return current;
+    final tab = tabs.where((t) => t.id == tabId).firstOrNull;
+    return tab == null ? tabId : rootOfPane(tabs, tab).id;
   }
 
   void _scanTabs(List<TerminalTabSession> tabs) {

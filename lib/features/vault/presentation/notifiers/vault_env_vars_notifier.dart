@@ -1,7 +1,7 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../shared/providers/database_providers.dart';
-import '../../../../shared/providers/workspace_provider.dart';
+import '../../../workspaces/presentation/providers/workspace_provider.dart';
 import '../../data/repositories/vault_env_repository.dart';
 import '../../domain/models/vault_env_var.dart';
 import 'identities_notifier.dart';
@@ -34,57 +34,35 @@ class VaultEnvVarsNotifier extends _$VaultEnvVarsNotifier {
     required String workspaceId,
     required String name,
     required String value,
-  }) async {
-    final previousState = state;
-    try {
-      final repo = ref.read(vaultEnvRepositoryProvider);
-      await repo.save(workspaceId: workspaceId, name: name, value: value);
-      final items = await repo.list(
-        workspaceId: ref.read(activeWorkspaceIdProvider),
-      );
-      state = AsyncData(items);
-    } catch (_) {
-      state = previousState;
-      // Rethrow so the caller (the add/edit form) can tell the user the save
-      // failed instead of closing as if it had succeeded.
-      rethrow;
-    }
-  }
+  }) => _mutate(
+    (repo) => repo.save(workspaceId: workspaceId, name: name, value: value),
+  );
 
   Future<void> updateVariable({
     required String id,
     required String workspaceId,
     required String name,
     required String value,
-  }) async {
-    final previousState = state;
-    try {
-      final repo = ref.read(vaultEnvRepositoryProvider);
-      await repo.save(
-        id: id,
-        workspaceId: workspaceId,
-        name: name,
-        value: value,
-      );
-      final items = await repo.list(
-        workspaceId: ref.read(activeWorkspaceIdProvider),
-      );
-      state = AsyncData(items);
-    } catch (_) {
-      state = previousState;
-      rethrow;
-    }
-  }
+  }) => _mutate(
+    (repo) =>
+        repo.save(id: id, workspaceId: workspaceId, name: name, value: value),
+  );
 
-  Future<void> deleteVariable(String id) async {
+  Future<void> deleteVariable(String id) => _mutate((repo) => repo.delete(id));
+
+  /// Runs [write], then re-reads the list. On failure the list is put back
+  /// and the error rethrown, so the caller (the add/edit form) can tell the
+  /// user the save failed instead of closing as if it had succeeded.
+  Future<void> _mutate(
+    Future<void> Function(VaultEnvRepository repo) write,
+  ) async {
     final previousState = state;
     try {
       final repo = ref.read(vaultEnvRepositoryProvider);
-      await repo.delete(id);
-      final items = await repo.list(
-        workspaceId: ref.read(activeWorkspaceIdProvider),
+      await write(repo);
+      state = AsyncData(
+        await repo.list(workspaceId: ref.read(activeWorkspaceIdProvider)),
       );
-      state = AsyncData(items);
     } catch (_) {
       state = previousState;
       rethrow;

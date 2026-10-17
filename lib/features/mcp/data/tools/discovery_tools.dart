@@ -313,7 +313,7 @@ class RequestHostAccessTool with McpArgReaders implements McpToolHandler {
         continue;
       }
 
-      if (await _inCooldown(ctx.clientId, hostId)) {
+      if (await grantRepository.isInCooldown(ctx.clientId, hostId)) {
         // Cooldown auto-denies WITHOUT opening a window — the whole point of
         // the cooldown is to stop a looping agent from re-prompting the user
         // for something it was just told no to.
@@ -379,12 +379,5 @@ class RequestHostAccessTool with McpArgReaders implements McpToolHandler {
       );
     }
     return McpAccessMode.fromName(raw);
-  }
-
-  Future<bool> _inCooldown(String clientId, String hostId) async {
-    final grant = await grantRepository.dao.findGrant(clientId, hostId);
-    final until = grant?.cooldownUntil;
-    if (until == null) return false;
-    return until.isAfter(DateTime.now().toUtc());
   }
 }

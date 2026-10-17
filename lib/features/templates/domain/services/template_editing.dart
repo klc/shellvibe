@@ -59,11 +59,24 @@ extension TemplateEditing on TemplateModel {
   }
 
   /// Gives [paneId] its own startup snippet, or hands it back to its host's
-  /// when [snippetId] is null.
+  /// when [snippetId] is null. Either way the pane loses its startup runbook.
   TemplateModel withPaneStartupSnippet(String paneId, String? snippetId) {
     return _withPanes([
       for (final pane in orderedPanes)
-        pane.id == paneId ? _pane(pane, startupSnippetId: snippetId) : pane,
+        pane.id == paneId
+            ? _pane(pane, startupSnippetId: snippetId, startupRunbookId: null)
+            : pane,
+    ]);
+  }
+
+  /// Gives [paneId] a runbook to type once it connects, in place of any
+  /// startup snippet.
+  TemplateModel withPaneStartupRunbook(String paneId, String runbookId) {
+    return _withPanes([
+      for (final pane in orderedPanes)
+        pane.id == paneId
+            ? _pane(pane, startupSnippetId: null, startupRunbookId: runbookId)
+            : pane,
     ]);
   }
 
@@ -244,6 +257,7 @@ TemplatePaneModel _pane(
   Object? hostId = _keep,
   Object? title = _keep,
   Object? startupSnippetId = _keep,
+  Object? startupRunbookId = _keep,
 }) {
   return TemplatePaneModel(
     id: pane.id,
@@ -260,5 +274,8 @@ TemplatePaneModel _pane(
     startupSnippetId: identical(startupSnippetId, _keep)
         ? pane.startupSnippetId
         : startupSnippetId as String?,
+    startupRunbookId: identical(startupRunbookId, _keep)
+        ? pane.startupRunbookId
+        : startupRunbookId as String?,
   );
 }

@@ -70,7 +70,6 @@ void main() {
         // Special bits are preserved: setuid+setgid+sticky (0o7000) on top of
         // rwxr-xr-t (0o755) → 0o7755 (displayed with the leading '0' prefix).
         expect(find.text('Octal Permissions: 07755'), findsOneWidget);
-        expect(item.octalPermissions, equals('7755'));
       },
     );
 

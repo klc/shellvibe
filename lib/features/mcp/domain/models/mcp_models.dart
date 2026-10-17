@@ -1,105 +1,14 @@
 import 'mcp_enums.dart';
 
+export '../../../../core/mcp/mcp_errors.dart' show McpToolException;
+export '../../../../core/mcp/shell/shell_result.dart';
+
 /// Value types exchanged between the MCP components.
 ///
 /// Every type here is plain data with no Flutter or database dependency, so
-/// the domain services can be unit tested without a widget binding.
-
-/// A failure an MCP tool reports back to the agent.
-///
-/// Carries a machine-readable [code] the agent can branch on and a
-/// human-readable [message] it can relay to the user or act on — the
-/// interactive-command hints depend on the agent actually reading this text.
-class McpToolException implements Exception {
-  final McpErrorCode code;
-  final String message;
-
-  /// Extra fields merged into the error payload, e.g. `category` on a policy
-  /// denial or `hint` on an interactive rejection.
-  final Map<String, Object?> details;
-
-  const McpToolException(this.code, this.message, {this.details = const {}});
-
-  Map<String, Object?> toJson() => {
-    'error': code.wireName,
-    'message': message,
-    ...details,
-  };
-
-  @override
-  String toString() => 'McpToolException(${code.wireName}): $message';
-}
-
-/// How much of a command's output was dropped to stay under the size cap.
-class OutputTruncation {
-  final int originalBytes;
-  final int keptBytes;
-
-  const OutputTruncation({
-    required this.originalBytes,
-    required this.keptBytes,
-  });
-
-  Map<String, Object?> toJson() => {
-    'originalBytes': originalBytes,
-    'keptBytes': keptBytes,
-  };
-}
-
-/// The result of running one command over a persistent shell session.
-class ShellCommandResult {
-  final String stdout;
-  final String stderr;
-  final int exitCode;
-
-  /// Working directory after the command ran, read from the sentinel line.
-  ///
-  /// Returned on every call so the agent always knows where it is; this alone
-  /// removes a large class of hallucinated paths.
-  final String cwd;
-
-  final int durationMs;
-
-  /// Set when output exceeded the cap and the middle was dropped.
-  final OutputTruncation? truncated;
-
-  /// Number of secrets masked in [stdout] and [stderr] combined.
-  ///
-  /// Reported even when zero-valued fields are omitted elsewhere: an agent
-  /// that does not know something was hidden will reason from incomplete data.
-  final int redactedCount;
-
-  /// The command did not finish on its own and was interrupted with Ctrl-C.
-  final bool interrupted;
-
-  /// The shell channel could not be recovered and was reopened, so any shell
-  /// state the agent had built up (variables, `cd`, background jobs) is gone.
-  final bool sessionReset;
-
-  const ShellCommandResult({
-    required this.stdout,
-    required this.stderr,
-    required this.exitCode,
-    required this.cwd,
-    required this.durationMs,
-    this.truncated,
-    this.redactedCount = 0,
-    this.interrupted = false,
-    this.sessionReset = false,
-  });
-
-  Map<String, Object?> toJson() => {
-    'stdout': stdout,
-    'stderr': stderr,
-    'exitCode': exitCode,
-    'cwd': cwd,
-    'durationMs': durationMs,
-    if (truncated != null) 'truncated': truncated!.toJson(),
-    if (redactedCount > 0) 'redacted': {'count': redactedCount},
-    if (interrupted) 'interrupted': true,
-    if (sessionReset) 'sessionReset': true,
-  };
-}
+/// the domain services can be unit tested without a widget binding. The
+/// types the shell layer itself produces or throws live in `core/mcp/` and
+/// are re-exported above so importers of this file see one surface.
 
 /// Text with its secrets masked, plus how many were masked.
 class RedactionResult {

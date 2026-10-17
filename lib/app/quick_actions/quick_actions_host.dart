@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../core/utils/platform_capabilities.dart';
 import '../../features/bookmarks/presentation/notifiers/bookmarks_notifier.dart';
@@ -12,9 +11,9 @@ import '../../features/hosts/presentation/notifiers/hosts_notifier.dart';
 import '../../features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import '../../features/terminal/presentation/widgets/select_host_panel.dart';
 import '../../features/vault/presentation/notifiers/vault_notifier.dart';
-import '../../shared/providers/workspace_provider.dart';
-import '../router/app_router.dart';
+import '../../features/workspaces/presentation/providers/workspace_provider.dart';
 import '../widgets/adaptive_modal.dart';
+import '../window/host_navigation.dart';
 import 'app_shortcuts.dart';
 import 'quick_actions_controller.dart';
 
@@ -76,24 +75,11 @@ class _QuickActionsHostState extends ConsumerState<QuickActionsHost> {
     super.dispose();
   }
 
-  VaultState? get _vault => ref.read(vaultProvider).value;
-
-  /// Whether the vault is closed, or closing. Unresolved is not locked — the
-  /// shortcuts wait for an answer rather than guess one.
-  bool get _vaultLocked {
-    final vault = _vault;
-    return vault != null &&
-        (vault.status == VaultStatus.locked || vault.isLocking);
-  }
-
   /// A press runs only once the vault has said it is open (or has no lock to
   /// open) and the router has a navigator to put the result on. Running it
   /// any sooner would either bypass the unlock screen or have nowhere to go.
-  bool _canRun() {
-    final vault = _vault;
-    if (vault == null || _vaultLocked) return false;
-    return rootNavigatorKey.currentContext?.mounted ?? false;
-  }
+  bool _canRun() =>
+      !isVaultLockedOrUnknown(ref) && hostNavigatorContext != null;
 
   /// Retries a waiting press on the coming frames: at a cold start the vault
   /// can be open before the first frame has built the navigator, and nothing
@@ -101,7 +87,7 @@ class _QuickActionsHostState extends ConsumerState<QuickActionsHost> {
   void _scheduleFlush() {
     if (!mounted) return;
     _dispatcher.flush();
-    if (!_dispatcher.hasPending || _vault == null || _vaultLocked) return;
+    if (!_dispatcher.hasPending || isVaultLockedOrUnknown(ref)) return;
     if (_flushFrames++ >= _maxFlushFrames) return;
     WidgetsBinding.instance
       ..addPostFrameCallback((_) => _scheduleFlush())
@@ -110,9 +96,10 @@ class _QuickActionsHostState extends ConsumerState<QuickActionsHost> {
 
   void _syncShortcuts() {
     if (!mounted) return;
-    final vault = _vault;
-    if (vault == null) return;
-    final locked = _vaultLocked;
+    // Unresolved is not locked: the shortcuts wait for an answer rather than
+    // guess one.
+    if (ref.read(vaultProvider).value == null) return;
+    final locked = isVaultLockedOrUnknown(ref);
 
     final hosts = ref.read(hostsProvider).value;
     final bookmarks = ref.read(bookmarksProvider).value;
@@ -141,8 +128,7 @@ class _QuickActionsHostState extends ConsumerState<QuickActionsHost> {
         case OpenLocalTerminalAction():
           if (!supportsLocalShell) return;
           ref.read(terminalTabsProvider.notifier).openLocalTab();
-          final context = _navigatorContext();
-          if (context != null) GoRouter.maybeOf(context)?.go('/terminal');
+          goToHostRoute('/terminal');
         case QuickConnectAction():
           _showQuickConnect();
       }
@@ -152,26 +138,22 @@ class _QuickActionsHostState extends ConsumerState<QuickActionsHost> {
     }
   }
 
-  BuildContext? _navigatorContext() {
-    final context = rootNavigatorKey.currentContext;
-    return context != null && context.mounted ? context : null;
-  }
-
   Future<void> _connectHost(String hostId) async {
     // By id, not from the list on screen: the shortcut was registered for
     // whichever workspace was active then, and the host may since have moved
     // on or been deleted — in which case there is nothing to do.
     final host = await ref.read(hostsRepositoryProvider).getHostById(hostId);
     if (host == null) return;
-    final context = rootNavigatorKey.currentContext;
+    final context = hostNavigatorContext;
+    // The getter already checks mounted; spelled out again for the lint.
     if (context == null || !context.mounted) return;
     await HostLauncher(context: context, ref: ref).connect(host);
   }
 
   void _showQuickConnect() {
-    final context = _navigatorContext();
+    final context = hostNavigatorContext;
     if (context == null) return;
-    GoRouter.maybeOf(context)?.go('/terminal');
+    goToHostRoute('/terminal');
     unawaited(
       showAdaptivePanel<void>(
         context: context,
@@ -180,7 +162,7 @@ class _QuickActionsHostState extends ConsumerState<QuickActionsHost> {
         builder: (panelContext) => SelectHostPanel(
           onSelected: (host) async {
             Navigator.of(panelContext).pop();
-            final launchContext = _navigatorContext();
+            final launchContext = hostNavigatorContext;
             if (launchContext == null) return;
             await HostLauncher(context: launchContext, ref: ref).connect(host);
           },

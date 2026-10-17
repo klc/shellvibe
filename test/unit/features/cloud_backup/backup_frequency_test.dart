@@ -1,6 +1,7 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/features/cloud_backup/data/cloud_backup_store.dart';
+import 'package:shellvibe/features/cloud_backup/domain/backup_frequency.dart';
 import 'package:shellvibe/shared/storage/secure_storage_service.dart';
 
 import '../../../support/cloud_backup_store.dart';

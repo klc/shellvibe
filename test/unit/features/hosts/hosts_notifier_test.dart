@@ -133,6 +133,26 @@ void main() {
       expect(currentState.requireValue, same(previousHosts));
     });
 
+    test('failed host delete rethrows and preserves the loaded list', () async {
+      final notifier = container.read(hostsProvider.notifier);
+      await notifier.addHost(
+        workspaceId: 'default',
+        label: 'Stable Host',
+        hostname: 'stable.example.com',
+      );
+      final previousHosts = container.read(hostsProvider).requireValue;
+
+      // A closed database fails every write; the screen must hear about it
+      // rather than keep showing a host that was never removed.
+      await db.close();
+      await expectLater(
+        notifier.deleteHost(previousHosts.single.id),
+        throwsA(anything),
+      );
+
+      expect(container.read(hostsProvider).requireValue, same(previousHosts));
+    });
+
     test('failed group update preserves the previously loaded list', () async {
       final notifier = container.read(hostGroupsProvider.notifier);
 

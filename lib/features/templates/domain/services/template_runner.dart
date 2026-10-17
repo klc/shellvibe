@@ -33,11 +33,12 @@ abstract class TemplateRunnerTarget {
   /// connection attempt settles, however it went.
   ///
   /// [startupSnippetId] is the pane's own startup snippet, taking precedence
-  /// over the host's.
+  /// over the host's; [startupRunbookId] a runbook typed in place of either.
   Future<void> openTabForHost(
     HostModel host, {
     IdentityModel? identity,
     String? startupSnippetId,
+    String? startupRunbookId,
   });
 
   void openLocalTab({String? title});
@@ -48,6 +49,7 @@ abstract class TemplateRunnerTarget {
     HostModel? host,
     IdentityModel? identity,
     String? startupSnippetId,
+    String? startupRunbookId,
   });
 
   void setSplitRatio(String tabId, double ratio);
@@ -171,6 +173,7 @@ class TemplateRunner {
               host,
               identity: identity,
               startupSnippetId: pane.startupSnippetId,
+              startupRunbookId: pane.startupRunbookId,
             ),
           );
         } else {
@@ -184,6 +187,7 @@ class TemplateRunner {
             host: host,
             identity: identity,
             startupSnippetId: pane.startupSnippetId,
+            startupRunbookId: pane.startupRunbookId,
           ),
         );
       }

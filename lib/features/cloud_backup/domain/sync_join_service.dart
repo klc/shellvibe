@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 
-import '../../../core/sync/e2ee_cloud_sync_service.dart';
 import '../../../core/sync/sync_engine.dart';
 import '../../../core/sync/sync_journal.dart';
 import '../../../features/vault/data/vault_key_service.dart';
@@ -40,9 +39,6 @@ final class SyncJoinResult {
   /// True when this device wrote the first ground for the account.
   final bool wroteFirstGround;
 
-  /// True when this device rewrote the ground after seeding.
-  final bool refreshedGround;
-
   /// References cleared because their target is on neither side.
   final int repaired;
 
@@ -54,7 +50,6 @@ final class SyncJoinResult {
     this.seeded = 0,
     this.pushed = 0,
     this.wroteFirstGround = false,
-    this.refreshedGround = false,
     this.repaired = 0,
     this.problem,
     this.message,
@@ -69,7 +64,6 @@ final class SyncJoinResult {
   }) : seeded = 0,
        pushed = 0,
        wroteFirstGround = false,
-       refreshedGround = false,
        repaired = 0;
 
   bool get succeeded => problem == null;
@@ -112,8 +106,6 @@ final class SyncJoinService {
     required String deviceId,
     required int maxSizeBytes,
     required Uint8List syncKey,
-    String? recoveryCode,
-    BackupUnlockMethod unlockWith = BackupUnlockMethod.passphrase,
   }) async {
     final state = await journal.readJoinState();
     if (state == SyncJoinState.done) return const SyncJoinResult();
@@ -129,14 +121,10 @@ final class SyncJoinService {
         deviceId: deviceId,
         maxSizeBytes: maxSizeBytes,
         syncKey: syncKey,
-        recoveryCode: recoveryCode,
       );
     }
 
-    final found = await ground.readGround(
-      secret: secret,
-      unlockWith: unlockWith,
-    );
+    final found = await ground.readGround(secret: secret);
 
     if (found.problem == SyncGroundProblem.cannotOpen) {
       return const SyncJoinResult.failed(
@@ -164,7 +152,6 @@ final class SyncJoinService {
         deviceId: deviceId,
         maxSizeBytes: maxSizeBytes,
         syncKey: syncKey,
-        recoveryCode: recoveryCode,
       );
     }
 
@@ -182,7 +169,6 @@ final class SyncJoinService {
           db: db,
           ground: found.ground!,
           secret: secret,
-          unlockWith: unlockWith,
         );
 
         // What the ground brought, counted from the versions the restore
@@ -228,7 +214,6 @@ final class SyncJoinService {
       deviceId: deviceId,
       maxSizeBytes: maxSizeBytes,
       syncKey: syncKey,
-      recoveryCode: recoveryCode,
     );
   }
 
@@ -241,7 +226,6 @@ final class SyncJoinService {
     required String deviceId,
     required int maxSizeBytes,
     required Uint8List syncKey,
-    String? recoveryCode,
   }) async {
     final int pushed;
     try {
@@ -264,21 +248,18 @@ final class SyncJoinService {
     // mention any of the rows just sent. Left alone, it stays the starting
     // point until the log is pruned past it -- and then a third device
     // restores it, misses everything this device contributed, and is not told.
-    var refreshed = false;
+    //
+    // A conflict here means another device refreshed it first, which is the
+    // same outcome. Never forced: overwriting a ground another device just
+    // wrote is the one move that can lose data.
     if (seeded > 0) {
-      final written = await ground.write(
+      await ground.write(
         db: db,
         passphrase: secret,
         deviceId: deviceId,
         maxSizeBytes: maxSizeBytes,
         syncKey: syncKey,
-        recoveryCode: recoveryCode,
       );
-
-      // A conflict here means another device refreshed it first, which is the
-      // same outcome. Never forced: overwriting a ground another device just
-      // wrote is the one move that can lose data.
-      refreshed = written.succeeded;
     }
 
     await journal.writeJoinState(SyncJoinState.done);
@@ -287,7 +268,6 @@ final class SyncJoinService {
       applied: applied,
       seeded: seeded,
       pushed: pushed,
-      refreshedGround: refreshed,
       repaired: repaired,
     );
   }
@@ -297,7 +277,6 @@ final class SyncJoinService {
     required String deviceId,
     required int maxSizeBytes,
     required Uint8List syncKey,
-    String? recoveryCode,
   }) async {
     final written = await ground.write(
       db: db,
@@ -305,7 +284,6 @@ final class SyncJoinService {
       deviceId: deviceId,
       maxSizeBytes: maxSizeBytes,
       syncKey: syncKey,
-      recoveryCode: recoveryCode,
     );
 
     if (!written.succeeded) {
