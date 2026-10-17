@@ -152,17 +152,6 @@ class McpDao extends DatabaseAccessor<AppDatabase> with _$McpDaoMixin {
         .get();
   }
 
-  Future<int> insertPolicyRule(McpPolicyRulesCompanion rule) =>
-      into(mcpPolicyRules).insert(rule);
-
-  Future<int> updatePolicyRule(String id, McpPolicyRulesCompanion rule) {
-    return (update(mcpPolicyRules)..where((t) => t.id.equals(id))).write(rule);
-  }
-
-  Future<int> deletePolicyRule(String id) {
-    return (delete(mcpPolicyRules)..where((t) => t.id.equals(id))).go();
-  }
-
   // --- Approvals ---
 
   /// Every approval stored for the exact tuple, in no particular order.

@@ -7,6 +7,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:uuid/uuid.dart';
 import 'package:xterm3/xterm.dart';
 
+import '../../../../app/router/app_router.dart';
 import '../../../../core/network/device_link/device_link_local_session_transport.dart';
 import '../../../../core/network/device_link/device_link_server.dart';
 import '../../../../core/network/device_link/device_link_session_transport.dart';
@@ -15,12 +16,14 @@ import '../../../../core/network/providers/network_providers.dart';
 import '../../../../core/network/ssh_session_manager.dart';
 import '../../../../core/utils/platform_capabilities.dart';
 import '../../../../shared/providers/database_providers.dart';
-import '../../../../shared/providers/workspace_provider.dart';
+import '../../../workspaces/presentation/providers/workspace_provider.dart';
 import '../../../hosts/domain/models/host_model.dart';
 import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
 import '../../../settings/domain/models/app_settings_model.dart';
 import '../../../settings/presentation/notifiers/settings_notifier.dart';
+import '../../../snippets/presentation/notifiers/runbooks_notifier.dart';
 import '../../../snippets/presentation/notifiers/snippets_notifier.dart';
+import '../../../snippets/presentation/widgets/prod_confirmation.dart';
 import '../../../device_link/data/repositories/device_link_pairing_repository.dart';
 import '../../../vault/data/repositories/vault_env_repository.dart';
 import '../../../vault/domain/models/identity_model.dart';
@@ -57,6 +60,9 @@ TerminalTargetPlatform _terminalTargetPlatform() {
     TargetPlatform.fuchsia => TerminalTargetPlatform.fuchsia,
   };
 }
+
+Terminal _newTerminal() =>
+    Terminal(maxLines: 10000, platform: _terminalTargetPlatform());
 
 @Riverpod(keepAlive: true)
 class TerminalTabsNotifier extends _$TerminalTabsNotifier {
@@ -194,6 +200,21 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       final all = await ref.read(snippetsRepositoryProvider).getAllSnippets();
       return all.where((s) => s.id == id).firstOrNull;
     },
+    loadRunbook: (id) async {
+      final all = await ref
+          .read(runbooksRepositoryProvider)
+          .getRunbooksByWorkspace(ref.read(activeWorkspaceIdProvider));
+      return all.where((r) => r.id == id).firstOrNull;
+    },
+    confirmProd: (runbook, host) async {
+      final context = rootNavigatorKey.currentContext;
+      if (context == null) return false;
+      return confirmProdRun(
+        context,
+        what: 'startup runbook "${runbook.title}"',
+        hosts: [host],
+      );
+    },
     send: (tab, code) {
       // Pasted, then Enter typed: inside a bracketed paste a newline is text.
       tab.terminal.paste(code);
@@ -208,23 +229,22 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     IdentityModel? identity,
     HostKeyPromptCallback? onHostKeyPrompt,
     String? startupSnippetId,
+    String? startupRunbookId,
   }) async {
     final tabId = const Uuid().v4();
-    final terminal = Terminal(
-      maxLines: 10000,
-      platform: _terminalTargetPlatform(),
-    );
-
-    final newTab = TerminalTabSession(
-      id: tabId,
-      title: host.label,
-      sessionType: TerminalSessionType.ssh,
-      host: host,
-      identity: identity,
-      terminal: terminal,
-      isConnecting: true,
-      hostKeyPromptCallback: onHostKeyPrompt,
-    )..startupSnippetOverrideId = startupSnippetId;
+    final newTab =
+        TerminalTabSession(
+            id: tabId,
+            title: host.label,
+            sessionType: TerminalSessionType.ssh,
+            host: host,
+            identity: identity,
+            terminal: _newTerminal(),
+            isConnecting: true,
+            hostKeyPromptCallback: onHostKeyPrompt,
+          )
+          ..startupSnippetOverrideId = startupSnippetId
+          ..startupRunbookId = startupRunbookId;
     _ownedTabs.add(newTab);
 
     final updatedTabs = [...state.tabs, newTab];
@@ -248,18 +268,14 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
 
   void openLocalTab({String? title}) {
     final tabId = const Uuid().v4();
-    final terminal = Terminal(
-      maxLines: 10000,
-      platform: _terminalTargetPlatform(),
-    );
-
     final newTab = TerminalTabSession(
       id: tabId,
       title: title ?? 'Local Shell',
       sessionType: TerminalSessionType.local,
-      terminal: terminal,
+      terminal: _newTerminal(),
       isConnecting: true,
     );
+    _ownedTabs.add(newTab);
 
     final updatedTabs = [...state.tabs, newTab];
     state = state.copyWith(tabs: updatedTabs, activeTabId: tabId);
@@ -340,10 +356,12 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
         columns: terminal.viewWidth,
       );
 
-      if (_notifierDisposed) {
-        // The pane went away while its process was starting; nothing is left
-        // to attach it to, and touching `state` past disposal throws.
-        await bridge?.dispose();
+      if (_notifierDisposed || tabById(tab.id) == null) {
+        // The pane went away while its process was starting (the notifier
+        // itself, or just this tab): its dispose ran with no bridge to kill,
+        // so the shell is killed here instead of outliving its pane. Past
+        // disposal touching `state` throws, hence the order of the checks.
+        await bridge?.dispose(killPty: true);
         return;
       }
 
@@ -389,7 +407,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       title: title,
       sessionType: TerminalSessionType.ssh,
       mcpSessionId: mcpSessionId,
-      terminal: Terminal(maxLines: 10000, platform: _terminalTargetPlatform()),
+      terminal: _newTerminal(),
       isConnected: true,
     );
     _ownedTabs.add(tab);
@@ -470,14 +488,20 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     _syncBroadcast();
 
     for (final tab in closingTabs) {
-      final onClose = _tabCloseCallbacks.remove(tab.id);
-      try {
-        await onClose?.call();
-      } finally {
-        await tab.dispose();
-        _deviceLinkTransports.remove(tab.id);
-        _ownedTabs.remove(tab);
-      }
+      await _teardown(tab);
+    }
+  }
+
+  /// Ends a tab's session once it has left `state`: the owner's close
+  /// callback first (a Device Link peer, the MCP pool), then the tab itself.
+  Future<void> _teardown(TerminalTabSession tab) async {
+    final onClose = _tabCloseCallbacks.remove(tab.id);
+    try {
+      await onClose?.call();
+    } finally {
+      await tab.dispose();
+      _deviceLinkTransports.remove(tab.id);
+      _ownedTabs.remove(tab);
     }
   }
 
@@ -517,8 +541,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     if (closing.isEmpty) return;
 
     final active = state.activeTab;
-    if (active != null &&
-        closing.contains(_paneLayout.rootIdOf(active, state.tabs))) {
+    if (active != null && closing.contains(rootOfPane(state.tabs, active).id)) {
       setActiveTab(tabId);
     }
     for (final id in closing) {
@@ -567,14 +590,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     );
     _syncBroadcast();
 
-    final onClose = _tabCloseCallbacks.remove(paneId);
-    try {
-      await onClose?.call();
-    } finally {
-      await pane.dispose();
-      _deviceLinkTransports.remove(paneId);
-      _ownedTabs.remove(pane);
-    }
+    await _teardown(pane);
   }
 
   /// Supplies stable live local-session adapters to the Device Link server.
@@ -582,9 +598,6 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
   /// BuildContext.
   List<DeviceLinkSessionTransport> deviceLinkSessionTransports() =>
       List.unmodifiable(_deviceLinkTransports.values);
-
-  DeviceLinkSessionTransport? deviceLinkSessionTransport(String sessionId) =>
-      _deviceLinkTransports[sessionId];
 
   Stream<void> get deviceLinkPairingEvents => _deviceLinkHost.pairingEvents;
 
@@ -678,7 +691,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     ];
     final active = state.activeTab;
     if (roots.length < 2 || active == null) return;
-    final index = roots.indexOf(_paneLayout.rootIdOf(active, state.tabs));
+    final index = roots.indexOf(rootOfPane(state.tabs, active).id);
     if (index == -1) return;
     setActiveTab(roots[(index + step) % roots.length]);
   }
@@ -794,16 +807,13 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     IdentityModel? identity,
     HostKeyPromptCallback? onHostKeyPrompt,
     String? startupSnippetId,
+    String? startupRunbookId,
   }) {
     final parentIndex = state.tabs.indexWhere((t) => t.id == parentTabId);
     if (parentIndex == -1) return null;
 
     final parentTab = state.tabs[parentIndex];
     final splitId = const Uuid().v4();
-    final terminal = Terminal(
-      maxLines: 10000,
-      platform: _terminalTargetPlatform(),
-    );
 
     // Without an explicit target a split pane mirrors the session type of the
     // pane it was created from. Splitting an SSH host session opens a second
@@ -815,31 +825,35 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
         (parentTab.sessionType == TerminalSessionType.ssh &&
             parentTab.host != null);
 
-    final splitTab = TerminalTabSession(
-      id: splitId,
-      // A pane on its own connection is titled after that host; an inherited
-      // pane keeps the parent's title with a marker.
-      title: host != null ? host.label : '${parentTab.title} (Split)',
-      sessionType: isSshSplit
-          ? TerminalSessionType.ssh
-          : TerminalSessionType.local,
-      host: targetHost,
-      identity: host != null ? identity : parentTab.identity,
-      terminal: terminal,
-      splitParentId: parentTabId,
-      splitDirection: direction,
-      isConnecting: isSshSplit,
-      hostKeyPromptCallback: onHostKeyPrompt,
-    )..startupSnippetOverrideId = startupSnippetId;
+    final splitTab =
+        TerminalTabSession(
+            id: splitId,
+            // A pane on its own connection is titled after that host; an inherited
+            // pane keeps the parent's title with a marker.
+            title: host != null ? host.label : '${parentTab.title} (Split)',
+            sessionType: isSshSplit
+                ? TerminalSessionType.ssh
+                : TerminalSessionType.local,
+            host: targetHost,
+            identity: host != null ? identity : parentTab.identity,
+            terminal: _newTerminal(),
+            splitParentId: parentTabId,
+            splitDirection: direction,
+            isConnecting: isSshSplit,
+            hostKeyPromptCallback: onHostKeyPrompt,
+          )
+          ..startupSnippetOverrideId = startupSnippetId
+          ..startupRunbookId = startupRunbookId;
     _ownedTabs.add(splitTab);
+    state = state.copyWith(
+      tabs: [...state.tabs, splitTab],
+      activeTabId: splitId,
+    );
 
+    // Returning the connection future lets callers (and tests) await the
+    // SSH handshake, or the local pane's process attaching once its reading
+    // isolate is up; UI call sites fire-and-forget via unawaited(...).
     if (isSshSplit) {
-      state = state.copyWith(
-        tabs: [...state.tabs, splitTab],
-        activeTabId: splitId,
-      );
-      // Returning the connection future lets callers (and tests) await the
-      // SSH handshake; UI call sites fire-and-forget via unawaited(...).
       return _sessionConnector.connectSshTab(
         splitTab,
         targetHost!,
@@ -847,52 +861,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
         onHostKeyPrompt,
       );
     }
-
-    state = state.copyWith(
-      tabs: [...state.tabs, splitTab],
-      activeTabId: splitId,
-    );
-    // Same shape as the SSH branch above: the pane is on screen and the
-    // process is attached to it once its reading isolate is up. Callers that
-    // care can await; UI call sites fire and forget.
-    return _attachLocalSplit(splitTab);
-  }
-
-  /// Starts the shell behind a local split pane and wires it up.
-  Future<void> _attachLocalSplit(TerminalTabSession splitTab) async {
-    final terminal = splitTab.terminal;
-    try {
-      final manager = ref.read(localPtyManagerProvider);
-      final bridge = await manager.startAndBridge(
-        terminal,
-        environment: await _localShellEnvironment(terminal),
-        rows: terminal.viewHeight,
-        columns: terminal.viewWidth,
-      );
-      if (_notifierDisposed) {
-        // The pane went away while its process was starting; nothing is left
-        // to attach it to, and touching `state` past disposal throws.
-        await bridge?.dispose();
-        return;
-      }
-
-      splitTab.ptyBridge = bridge;
-      if (bridge != null) _registerDeviceLinkTransport(splitTab, bridge);
-      bridge?.resizeTerminal(terminal.viewWidth, terminal.viewHeight);
-      splitTab.isConnected = bridge != null;
-      if (bridge == null) {
-        splitTab.errorMessage = 'Failed to start local terminal session';
-      }
-    } catch (e) {
-      if (_notifierDisposed) return;
-      splitTab.isConnected = false;
-      splitTab.errorMessage = e.toString();
-    }
-
-    if (_notifierDisposed) return;
-    state = state.copyWith(tabs: [...state.tabs]);
-    // Wire broadcast if this pane is already part of the selection.
-    _syncBroadcast();
+    return _attachLocalShell(splitTab);
   }
 }
 

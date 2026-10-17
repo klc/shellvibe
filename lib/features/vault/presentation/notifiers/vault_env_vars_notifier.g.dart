@@ -83,7 +83,7 @@ final class VaultEnvVarsNotifierProvider
 }
 
 String _$vaultEnvVarsNotifierHash() =>
-    r'03502a1adc870764b21268af285e59e69bce17d1';
+    r'5f0cfeafdc96e5d2079c043eda8730552efd87fd';
 
 abstract class _$VaultEnvVarsNotifier
     extends $AsyncNotifier<List<VaultEnvVarModel>> {

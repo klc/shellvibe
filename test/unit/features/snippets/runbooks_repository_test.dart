@@ -52,7 +52,7 @@ void main() {
           ],
         ),
       );
-      var loaded = (await repository.getAllRunbooks()).single;
+      var loaded = (await repository.getRunbooksByWorkspace('ws_1')).single;
       expect(loaded.defaultHostIds, ['h1', 'h2']);
       expect(loaded.steps[0].onFailure, StepFailurePolicy.continueRun);
       expect(loaded.steps[0].retries, 4);
@@ -60,17 +60,20 @@ void main() {
       expect(loaded.steps[1].retries, 0);
 
       await repository.setDefaultHostIds('rb_p', ['h3']);
-      loaded = (await repository.getAllRunbooks()).single;
+      loaded = (await repository.getRunbooksByWorkspace('ws_1')).single;
       expect(loaded.defaultHostIds, ['h3']);
       // Only the defaults changed.
       expect(loaded.steps, hasLength(2));
 
       await repository.setDefaultHostIds('rb_p', []);
-      expect((await repository.getAllRunbooks()).single.defaultHostIds, isEmpty);
+      expect(
+        (await repository.getRunbooksByWorkspace('ws_1')).single.defaultHostIds,
+        isEmpty,
+      );
     });
 
     test('Initial runbooks list is empty', () async {
-      final runbooks = await repository.getAllRunbooks();
+      final runbooks = await repository.getRunbooksByWorkspace('ws_1');
       expect(runbooks, isEmpty);
     });
 
@@ -99,7 +102,7 @@ void main() {
 
       await repository.addRunbook(runbook);
 
-      final runbooks = await repository.getAllRunbooks();
+      final runbooks = await repository.getRunbooksByWorkspace('ws_1');
       expect(runbooks.length, equals(1));
       expect(runbooks.first.title, equals('CI/CD Pipeline'));
       expect(runbooks.first.steps.length, equals(2));
@@ -124,10 +127,13 @@ void main() {
       );
 
       await repository.addRunbook(runbook);
-      expect((await repository.getAllRunbooks()).length, equals(1));
+      expect(
+        (await repository.getRunbooksByWorkspace('ws_1')).length,
+        equals(1),
+      );
 
       await repository.deleteRunbook('rb_1');
-      expect(await repository.getAllRunbooks(), isEmpty);
+      expect(await repository.getRunbooksByWorkspace('ws_1'), isEmpty);
     });
   });
 }

@@ -78,7 +78,7 @@ class McpHostConnector {
         for (final jumpHost in jumpChain) {
           final jumpIdentity = jumpHost.identityId == null
               ? null
-              : await vaultRepository.getIdentityById(jumpHost.identityId!);
+              : await _resolveIdentity(jumpHost);
           final jumpManager = SSHSessionManager(knownHostsDao: knownHostsDao);
           jumpManagers.add(jumpManager);
           final jumpConfig = _buildConnectConfig(jumpHost, jumpIdentity);
@@ -157,28 +157,6 @@ class McpHostConnector {
     return chain.reversed.toList();
   }
 
-  /// Builds the connect config for one hop (a jump host or the final
-  /// target): resolves the effective username from, in order, the host's own
-  /// `username` field, a `user@host` prefix embedded in the hostname, the
-  /// identity's username, and finally the local OS user — matching the
-  /// fallback order `ssh` itself uses rather than silently trying `root`.
-  /// Mirrors `TerminalTabsNotifier._buildConnectConfig` exactly, with one
-  /// deliberate exception:
-  ///
-  /// [onHostKeyPrompt] is always left `null`. It is not that MCP is stricter
-  /// than the terminal about a bad host key — the terminal already denies a
-  /// mismatch unconditionally too. The only case a callback changes is an
-  /// *unknown* host: `SSHSessionManager._verifyHostKey` denies that outright
-  /// when no callback is supplied, which is exactly the null-safe default
-  /// this connector wants. There is no UI surface on the MCP path for a host
-  /// key prompt, and there should not be one: the agent has no way to
-  /// independently verify a fingerprint, so it must never be put in a
-  /// position to vouch for one, and the user is not present to answer a
-  /// prompt synchronously the way they are in the terminal. Leaving the
-  /// parameter null turns that absence into fail-closed TOFU for free — a
-  /// host the user has already trusted from the terminal connects fine
-  /// because its fingerprint is in `known_hosts`; a host nobody has ever
-  /// verified is refused instead of silently trusted.
   /// Resolves the host's stored credential, translating a vault failure into
   /// something the agent can act on.
   ///
@@ -203,6 +181,28 @@ class McpHostConnector {
     }
   }
 
+  /// Builds the connect config for one hop (a jump host or the final
+  /// target): resolves the effective username from, in order, the host's own
+  /// `username` field, a `user@host` prefix embedded in the hostname, the
+  /// identity's username, and finally the local OS user — matching the
+  /// fallback order `ssh` itself uses rather than silently trying `root`.
+  /// Mirrors `TerminalTabsNotifier._buildConnectConfig` exactly, with one
+  /// deliberate exception:
+  ///
+  /// [onHostKeyPrompt] is always left `null`. It is not that MCP is stricter
+  /// than the terminal about a bad host key — the terminal already denies a
+  /// mismatch unconditionally too. The only case a callback changes is an
+  /// *unknown* host: `SSHSessionManager._verifyHostKey` denies that outright
+  /// when no callback is supplied, which is exactly the null-safe default
+  /// this connector wants. There is no UI surface on the MCP path for a host
+  /// key prompt, and there should not be one: the agent has no way to
+  /// independently verify a fingerprint, so it must never be put in a
+  /// position to vouch for one, and the user is not present to answer a
+  /// prompt synchronously the way they are in the terminal. Leaving the
+  /// parameter null turns that absence into fail-closed TOFU for free — a
+  /// host the user has already trusted from the terminal connects fine
+  /// because its fingerprint is in `known_hosts`; a host nobody has ever
+  /// verified is refused instead of silently trusted.
   SSHConnectConfig _buildConnectConfig(
     HostModel host,
     IdentityModel? identity,

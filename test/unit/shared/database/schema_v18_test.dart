@@ -80,7 +80,7 @@ void main() {
 
       final appDb = AppDatabase(NativeDatabase(dbFile));
       db = appDb;
-      expect(appDb.schemaVersion, 19);
+      expect(appDb.schemaVersion, 20);
 
       final snippet = (await appDb.select(appDb.snippets).get()).single;
       expect(snippet.variables, isNull);
@@ -185,7 +185,7 @@ void main() {
           ],
         ),
       );
-      final loaded = (await repo.getAllRunbooks()).single;
+      final loaded = (await repo.getRunbooksByWorkspace('default')).single;
       expect(loaded.tags, ['ops', 'prod']);
       expect(loaded.variables.single.required, isFalse);
       expect(loaded.steps.map((s) => s.kind), [

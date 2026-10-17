@@ -185,18 +185,18 @@ void main() {
     await tester.tap(find.byKey(const Key('step_snippet_pick_s1')));
     await tester.pumpAndSettle();
     await tester.enterText(
-      find.byKey(const Key('step_snippet_search')),
+      find.byKey(const Key('snippet_picker_search')),
       'disk',
     );
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('step_snippet_option_sn')), findsNothing);
+    expect(find.byKey(const Key('snippet_picker_sn')), findsNothing);
     await tester.enterText(
-      find.byKey(const Key('step_snippet_search')),
+      find.byKey(const Key('snippet_picker_search')),
       'restart',
     );
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('step_snippet_option_sn2')), findsNothing);
-    await tester.tap(find.byKey(const Key('step_snippet_option_sn')));
+    expect(find.byKey(const Key('snippet_picker_sn2')), findsNothing);
+    await tester.tap(find.byKey(const Key('snippet_picker_sn')));
     await tester.pumpAndSettle();
 
     final code = find.byKey(const Key('step_snippet_code_s1'));

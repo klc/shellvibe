@@ -30,12 +30,14 @@ class LiveTemplateRunnerTarget implements TemplateRunnerTarget {
     HostModel host, {
     IdentityModel? identity,
     String? startupSnippetId,
+    String? startupRunbookId,
   }) {
     return notifier.openTabForHost(
       host,
       identity: identity,
       onHostKeyPrompt: onHostKeyPrompt,
       startupSnippetId: startupSnippetId,
+      startupRunbookId: startupRunbookId,
     );
   }
 
@@ -49,6 +51,7 @@ class LiveTemplateRunnerTarget implements TemplateRunnerTarget {
     HostModel? host,
     IdentityModel? identity,
     String? startupSnippetId,
+    String? startupRunbookId,
   }) {
     // `splitTab` returns null for a local pane, which needs no awaiting: the
     // PTY is already wired by the time it returns.
@@ -59,6 +62,7 @@ class LiveTemplateRunnerTarget implements TemplateRunnerTarget {
           identity: identity,
           onHostKeyPrompt: onHostKeyPrompt,
           startupSnippetId: startupSnippetId,
+          startupRunbookId: startupRunbookId,
         ) ??
         Future.value();
   }

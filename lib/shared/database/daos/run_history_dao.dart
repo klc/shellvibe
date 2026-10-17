@@ -57,14 +57,6 @@ class RunHistoryDao extends DatabaseAccessor<AppDatabase>
     return q.get();
   }
 
-  Future<List<RunbookRun>> snippetRuns({int? limit}) {
-    final q = select(runbookRuns)
-      ..where((t) => t.kind.equals('snippet'))
-      ..orderBy([(t) => OrderingTerm.desc(t.startedAt)]);
-    if (limit != null) q.limit(limit);
-    return q.get();
-  }
-
   /// A snippet's own runs, newest first.
   Future<List<RunbookRun>> runsForSnippet(String snippetId, {int? limit}) {
     final q = select(runbookRuns)

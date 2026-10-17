@@ -9,31 +9,14 @@ import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../../../core/network/mosh_session_manager.dart';
 import '../../domain/models/terminal_tab_session.dart';
+import '../../domain/services/terminal_pane_layout.dart';
 import '../notifiers/terminal_tabs_notifier.dart';
+
+export '../../domain/services/terminal_pane_layout.dart' show rootOfPane;
 
 /// Pure helpers shared by the tab strip and the pane tree: neither owns a pane
 /// or a tab exclusively, so lookups like "which panes belong to this tab" are
 /// kept here instead of being copied into each build method.
-
-/// Root pane of the tab [pane] belongs to. The loop is bounded by the list
-/// length so a corrupted parent link cannot spin forever.
-TerminalTabSession rootOfPane(
-  List<TerminalTabSession> allTabs,
-  TerminalTabSession pane,
-) {
-  var current = pane;
-  for (var hops = 0; hops < allTabs.length; hops++) {
-    final parentId = current.splitParentId;
-    if (parentId == null) return current;
-    final parent = allTabs.firstWhere(
-      (t) => t.id == parentId,
-      orElse: () => current,
-    );
-    if (parent.id == current.id) return current;
-    current = parent;
-  }
-  return current;
-}
 
 /// Every pane of the tab rooted at [root], the root included.
 List<TerminalTabSession> panesOfTab(

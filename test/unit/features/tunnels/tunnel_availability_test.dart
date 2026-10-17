@@ -1,6 +1,16 @@
+import 'dart:ui' show Display, FlutterView;
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/features/tunnels/presentation/tunnel_availability.dart';
+
+/// A view whose display the engine has already dropped, as on macOS after a
+/// monitor is unplugged: the real getter throws "Null check operator used on a
+/// null value".
+class _OrphanedView extends Fake implements FlutterView {
+  @override
+  Display get display => (null as Display?)!;
+}
 
 const _iPhone = Size(390, 844);
 const _iPhoneLandscape = Size(844, 390);
@@ -72,4 +82,11 @@ void main() {
       }
     });
   });
+
+  test(
+    'an orphaned view falls back to the window size instead of crashing',
+    () {
+      expect(displaySizeOf(_OrphanedView(), fallback: _iPad), _iPad);
+    },
+  );
 }

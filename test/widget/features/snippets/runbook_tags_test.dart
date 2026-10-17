@@ -132,7 +132,7 @@ void main() {
     addTearDown(tester.view.reset);
     final existing = (await RunbooksRepository(
       db.runbooksDao,
-    ).getAllRunbooks()).firstWhere((r) => r.id == 'a');
+    ).getRunbooksByWorkspace('default')).firstWhere((r) => r.id == 'a');
     await tester.pumpWidget(
       app(
         Builder(

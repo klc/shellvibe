@@ -274,9 +274,8 @@ void main() {
 
       final desktop = await device('desktop');
       await desktop.addHosts(60);
-      final result = await desktop.joinSync(syncKey, passphrase);
+      await desktop.joinSync(syncKey, passphrase);
 
-      expect(result.refreshedGround, isTrue);
       expect(vault.stored, hasLength(2));
 
       // A third device, with the log gone.
@@ -351,7 +350,8 @@ void main() {
 
         expect(result.succeeded, isTrue);
         expect(result.pushed, 3);
-        expect(result.refreshedGround, isTrue);
+        // The desktop's first ground, plus the one the seeding phone wrote.
+        expect(vault.stored, hasLength(2));
         expect(await phone.journal.readJoinState(), SyncJoinState.done);
       },
     );

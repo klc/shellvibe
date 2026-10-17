@@ -4,7 +4,7 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:shellvibe/app/widgets/shellvibe_ui.dart';
 
 import '../../../../app/widgets/adaptive_modal.dart';
-import '../../../../shared/providers/workspace_provider.dart';
+import '../../../workspaces/presentation/providers/workspace_provider.dart';
 import '../../../vault/data/vault_key_service.dart';
 import '../../../vault/presentation/notifiers/vault_notifier.dart';
 import '../../data/services/ssh_config_import_service.dart';
@@ -421,7 +421,7 @@ class _HostChecklist extends StatelessWidget {
                                 ),
                               ),
                               Text(
-                                _hostSummary(host),
+                                host.address,
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: theme.colorScheme.outline,
                                 ),
@@ -440,11 +440,6 @@ class _HostChecklist extends StatelessWidget {
         ),
       ],
     );
-  }
-
-  String _hostSummary(ResolvedSshConfig host) {
-    final user = host.username == null ? '' : '${host.username}@';
-    return '$user${host.hostname}:${host.port}';
   }
 
   List<Widget> _badges(ResolvedSshConfig host, ThemeData theme) {

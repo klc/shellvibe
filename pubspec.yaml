@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.8.0+9
+version: 1.9.0+10
 
 environment:
   sdk: ^3.12.2
@@ -30,8 +30,6 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-
-  cupertino_icons: ^2.0.0
 
   # State management
   flutter_riverpod: ^3.3.1
@@ -97,15 +95,12 @@ dependencies:
   # Desktop & Window Management
   window_manager: ^0.5.2
   tray_manager: ^0.5.3
-  hotkey_manager: ^0.2.3
-  desktop_drop: ^0.8.0
-
-  flutter_localizations:
-    sdk: flutter
+  # 0.8.1 takes drops from sandboxed (Flatpak/Snap) sources on Linux. It needs
+  # dbus 0.7.x, so connectivity_plus stays on 7.3.1 until desktop_drop moves
+  # to dbus 0.8; without the floor pub drops this back to 0.8.0 instead.
+  desktop_drop: ^0.8.4
 
   # Utilities
-  # Pinned to 0.20.2 by flutter_localizations in the current Flutter SDK.
-  intl: ^0.20.2
   url_launcher: ^6.3.2
   path_provider: ^2.1.6
   path: ^1.9.1

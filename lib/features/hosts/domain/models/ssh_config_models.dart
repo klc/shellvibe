@@ -72,7 +72,6 @@ class SshForwardDraft {
   /// ShellVibe's tunnel model has no bind-address field, so this is only kept for
   /// the import warnings.
   final String? bindAddress;
-  final int line;
 
   const SshForwardDraft({
     required this.type,
@@ -80,7 +79,6 @@ class SshForwardDraft {
     this.remoteHost,
     this.remotePort,
     this.bindAddress,
-    required this.line,
   });
 }
 
@@ -103,10 +101,6 @@ class ResolvedSshConfig {
   /// Token/`~`/env-expanded `IdentityFile` paths, in config order.
   final List<String> identityFiles;
   final SshJumpHostDraft? jumpHost;
-
-  /// True when [jumpHost] was approximated from a `ProxyCommand ssh -W …`
-  /// form instead of a real `ProxyJump` directive.
-  final bool jumpViaProxyCommand;
   final List<SshForwardDraft> forwards;
   final List<SshConfigWarning> warnings;
 
@@ -117,10 +111,13 @@ class ResolvedSshConfig {
     this.port = 22,
     this.identityFiles = const [],
     this.jumpHost,
-    this.jumpViaProxyCommand = false,
     this.forwards = const [],
     this.warnings = const [],
   });
+
+  /// `user@hostname:port`, the user part omitted when there is none.
+  String get address =>
+      '${username == null ? '' : '$username@'}$hostname:$port';
 }
 
 /// Outcome of resolving a whole config file: one entry per concrete alias.

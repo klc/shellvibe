@@ -6,9 +6,10 @@ import 'package:shellvibe/app/widgets/shellvibe_ui.dart';
 import 'package:shellvibe/core/utils/platform_capabilities.dart';
 import 'package:shellvibe/features/vault/presentation/notifiers/identities_notifier.dart';
 
-import '../../../../shared/providers/workspace_provider.dart';
+import '../../../workspaces/presentation/providers/workspace_provider.dart';
 import '../../../snippets/presentation/notifiers/snippets_notifier.dart';
 import '../../domain/models/host_model.dart';
+import '../../domain/services/ssh_connect_planner.dart';
 import '../notifiers/host_groups_notifier.dart';
 import '../notifiers/hosts_notifier.dart';
 
@@ -16,7 +17,18 @@ class HostFormDialog extends ConsumerStatefulWidget {
   final HostModel? initialHost;
   final String? workspaceId;
 
-  const HostFormDialog({super.key, this.initialHost, this.workspaceId});
+  /// Saves [initialHost]'s settings as a new host instead of updating it, so
+  /// a server set up like an existing one only needs its address changed.
+  final bool duplicate;
+
+  const HostFormDialog({
+    super.key,
+    this.initialHost,
+    this.workspaceId,
+    this.duplicate = false,
+  });
+
+  bool get isEditing => initialHost != null && !duplicate;
 
   @override
   ConsumerState<HostFormDialog> createState() => _HostFormDialogState();
@@ -46,7 +58,13 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
   void initState() {
     super.initState();
     final init = widget.initialHost;
-    _labelController = TextEditingController(text: init?.label ?? '');
+    _labelController = TextEditingController(
+      text: init == null
+          ? ''
+          : widget.duplicate
+          ? '${init.label} (copy)'
+          : init.label,
+    );
     _hostnameController = TextEditingController(text: init?.hostname ?? '');
     _usernameController = TextEditingController(text: init?.username ?? '');
     _portController = TextEditingController(
@@ -110,16 +128,10 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
   }
 
   void _parseHostnameInput() {
-    final text = _hostnameController.text.trim();
-    if (text.contains('@')) {
-      final atIndex = text.indexOf('@');
-      final user = text.substring(0, atIndex).trim();
-      final host = text.substring(atIndex + 1).trim();
-      if (user.isNotEmpty) {
-        _usernameController.text = user;
-      }
-      _hostnameController.text = host;
-    }
+    final (:user, :host) = splitUserHost(_hostnameController.text);
+    if (user == null) return;
+    if (user.isNotEmpty) _usernameController.text = user;
+    _hostnameController.text = host;
   }
 
   Future<void> _save() async {
@@ -129,7 +141,7 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
 
     try {
       final notifier = ref.read(hostsProvider.notifier);
-      final isEditing = widget.initialHost != null;
+      final isEditing = widget.isEditing;
       final portVal = int.tryParse(_portController.text.trim()) ?? 22;
       final usernameVal = _usernameController.text.trim().isEmpty
           ? null
@@ -227,7 +239,7 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final isEditing = widget.initialHost != null;
+    final isEditing = widget.isEditing;
     final groupsAsync = ref.watch(hostGroupsProvider);
     final identitiesAsync = ref.watch(identitiesProvider);
     final hostsAsync = ref.watch(hostsProvider);
@@ -258,7 +270,11 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
           const SizedBox(width: 14),
           Flexible(
             child: Text(
-              isEditing ? 'Edit host' : 'New host',
+              isEditing
+                  ? 'Edit host'
+                  : widget.duplicate
+                  ? 'Duplicate host'
+                  : 'New host',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -589,25 +605,12 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                 else
                   hostsAsync.when(
                     data: (hosts) {
-                      final excludedJumpHostIds = <String>{};
-                      if (isEditing) {
-                        final editedId = widget.initialHost!.id;
-                        excludedJumpHostIds.add(editedId);
-                        final jumpTargets = {
-                          for (final h in hosts) h.id: h.jumpHostId,
-                        };
-                        for (final h in hosts) {
-                          final visited = <String>{};
-                          var current = h.jumpHostId;
-                          while (current != null && visited.add(current)) {
-                            if (current == editedId) {
-                              excludedJumpHostIds.add(h.id);
-                              break;
-                            }
-                            current = jumpTargets[current];
-                          }
-                        }
-                      }
+                      final excludedJumpHostIds = isEditing
+                          ? SshConnectPlanner.excludedJumpHostIds(
+                              widget.initialHost!.id,
+                              hosts,
+                            )
+                          : const <String>{};
                       final candidateJumpHosts = hosts
                           .where((h) => !excludedJumpHostIds.contains(h.id))
                           .toList();

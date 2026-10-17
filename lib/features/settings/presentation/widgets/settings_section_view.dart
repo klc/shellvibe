@@ -7,15 +7,10 @@ import 'package:xterm3/xterm.dart';
 import '../../../../app/notifications/notification_providers.dart';
 import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/theme/ui_font.dart';
-import '../../../../app/widgets/adaptive_modal.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/models/mosh_prediction_mode.dart';
-import '../../../../core/sync/backup_scope.dart';
-import '../../../../core/sync/backup_scope_store.dart';
 import '../../../../core/utils/platform_capabilities.dart';
-import '../../../../shared/providers/database_providers.dart';
-import '../../../../app/restored_data.dart';
 import '../../../account/presentation/widgets/account_settings_section.dart';
 import '../../../cloud_backup/presentation/widgets/cloud_backup_section.dart';
 import '../../../cloud_backup/presentation/widgets/sync_section.dart';
@@ -25,17 +20,15 @@ import '../../../terminal/domain/models/terminal_font.dart';
 import '../../../terminal/domain/models/terminal_palette.dart';
 import '../../../terminal/domain/models/terminal_palette_data.dart';
 import '../../../terminal/presentation/utils/terminal_font_resolver.dart';
-import '../../../vault/presentation/notifiers/identities_notifier.dart';
-import '../../../vault/presentation/notifiers/vault_notifier.dart';
 import '../../domain/models/app_settings_model.dart';
 import '../../domain/models/settings_section.dart';
-import '../../domain/services/backup_file_service.dart';
 import '../notifiers/settings_notifier.dart';
 import 'about_settings_section.dart';
-import 'backup_scope_picker.dart';
 import 'keyboard_shortcuts_settings_section.dart';
 import 'known_hosts_settings_section.dart';
+import 'file_backup_section.dart';
 import 'launch_at_login_tile.dart';
+import 'vault_master_password_section.dart';
 
 /// The controls of a single [SettingsSection], with nothing around them.
 ///
@@ -61,9 +54,6 @@ class SettingsSectionView extends ConsumerStatefulWidget {
 }
 
 class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
-  final _masterPasswordController = TextEditingController();
-  final _vaultPasswordController = TextEditingController();
-
   @override
   Widget build(BuildContext context) {
     final settingsAsync = ref.watch(settingsProvider);
@@ -83,13 +73,6 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
         ),
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    _masterPasswordController.dispose();
-    _vaultPasswordController.dispose();
-    super.dispose();
   }
 
   Future<void> _handleTestBiometrics() async {
@@ -122,148 +105,6 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
         ShadToaster.of(context).show(
           const ShadToast.destructive(
             description: Text('Biometric Authentication Failed/Cancelled.'),
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _handleExportE2EEBackup() async {
-    final password = _masterPasswordController.text.trim();
-    if (password.isEmpty) {
-      ShadToaster.of(context).show(
-        const ShadToast(
-          description: Text(
-            'Please enter a Master Password for Zero-Knowledge encryption.',
-          ),
-        ),
-      );
-      return;
-    }
-
-    try {
-      final db = ref.read(appDatabaseProvider);
-      final syncService = ref.read(e2eeCloudSyncServiceProvider);
-
-      // This picker's own scope. A file saved to disk and a backup uploaded
-      // to the vault are different acts with different risks, so narrowing
-      // one says nothing about the other.
-      final scope = await BackupScopeStore(
-        storage: ref.read(secureStorageServiceProvider),
-      ).read(BackupTarget.file);
-
-      final backupJson = await syncService.exportEncryptedBackup(
-        db: db,
-        masterPassword: password,
-        scope: scope,
-        settings: scope.contains(BackupCategory.settings)
-            ? (await ref.read(settingsRepositoryProvider).loadSettings())
-                  .toJson()
-            : null,
-      );
-
-      final path = await ref
-          .read(backupFileServiceProvider)
-          .saveBackup(backupJson);
-      // Null means the native save dialog was cancelled: nothing to report.
-      if (path == null) return;
-
-      if (mounted) {
-        ShadToaster.of(context).show(
-          ShadToast(
-            title: const Text('Backup Exported'),
-            description: Text('Saved to $path'),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ShadToaster.of(context).show(
-          ShadToast.destructive(
-            description: Text('Failed to export backup: $e'),
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _handleImportE2EEBackup() async {
-    final password = _masterPasswordController.text.trim();
-
-    if (password.isEmpty) {
-      ShadToaster.of(context).show(
-        const ShadToast(
-          description: Text(
-            'Please enter the Master Password the backup was encrypted with.',
-          ),
-        ),
-      );
-      return;
-    }
-
-    final PickedBackup? picked;
-    try {
-      picked = await ref.read(backupFileServiceProvider).pickBackup();
-    } catch (e) {
-      if (mounted) {
-        ShadToaster.of(context).show(
-          ShadToast.destructive(
-            description: Text('Could not read the backup file: $e'),
-          ),
-        );
-      }
-      return;
-    }
-    // Null means the file picker was cancelled.
-    if (picked == null) return;
-    final backupJson = picked.contents.trim();
-
-    try {
-      final db = ref.read(appDatabaseProvider);
-      final syncService = ref.read(e2eeCloudSyncServiceProvider);
-      final result = await syncService.importEncryptedBackup(
-        backupPackageJson: backupJson,
-        db: db,
-        masterPassword: password,
-      );
-
-      // Settings live in secure storage, so the sync service hands them back
-      // rather than applying them itself.
-      final restoredSettings = result.settings;
-      if (restoredSettings != null) {
-        await ref
-            .read(settingsProvider.notifier)
-            .applyRestoredSettings(restoredSettings);
-      }
-
-      // The import wrote straight to the database; the list notifiers are
-      // still holding what they read at startup and would keep showing the old
-      // hosts and identities until the app was restarted.
-      invalidateRestoredDataFor(ref);
-
-      if (mounted) {
-        ShadToaster.of(context).show(
-          result.secretsRecovered
-              ? const ShadToast(
-                  description: Text(
-                    'Zero-Knowledge Backup Imported & Restored Successfully!',
-                  ),
-                )
-              : ShadToast.destructive(
-                  description: Text(
-                    result.warning ??
-                        'Backup restored, but stored secrets could not be recovered.',
-                  ),
-                ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ShadToaster.of(context).show(
-          ShadToast.destructive(
-            description: Text(
-              'Import failed (wrong password or corrupted backup): $e',
-            ),
           ),
         );
       }
@@ -317,70 +158,11 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
                   trailing: ShadSelect<AppPalette>(
                     key: const Key('settings_palette_dropdown'),
                     initialValue: settings.palette,
-                    selectedOptionBuilder: (context, value) {
-                      switch (value) {
-                        case AppPalette.dark:
-                          return const Text('ShellVibe Graphite');
-                        case AppPalette.oled:
-                          return const Text('ShellVibe OLED');
-                        case AppPalette.teal:
-                          return const Text('ShellVibe Teal');
-                        case AppPalette.catppuccin:
-                          return const Text('Catppuccin');
-                        case AppPalette.nord:
-                          return const Text('Nord');
-                        case AppPalette.dracula:
-                          return const Text('Dracula');
-                        case AppPalette.solarizedDark:
-                          return const Text('Solarized Dark');
-                        case AppPalette.tokyoNight:
-                          return const Text('Tokyo Night');
-                        case AppPalette.gruvbox:
-                          return const Text('Gruvbox');
-                        case AppPalette.oneDark:
-                          return const Text('One Dark');
-                      }
-                    },
-                    options: const [
-                      // OLED leads because it is the default the app ships
-                      // with; the list under it stays alphabetical.
-                      ShadOption(
-                        value: AppPalette.oled,
-                        child: Text('ShellVibe OLED'),
-                      ),
-                      ShadOption(
-                        value: AppPalette.dark,
-                        child: Text('ShellVibe Graphite'),
-                      ),
-                      ShadOption(
-                        value: AppPalette.teal,
-                        child: Text('ShellVibe Teal'),
-                      ),
-                      ShadOption(
-                        value: AppPalette.catppuccin,
-                        child: Text('Catppuccin'),
-                      ),
-                      ShadOption(
-                        value: AppPalette.dracula,
-                        child: Text('Dracula'),
-                      ),
-                      ShadOption(
-                        value: AppPalette.gruvbox,
-                        child: Text('Gruvbox'),
-                      ),
-                      ShadOption(value: AppPalette.nord, child: Text('Nord')),
-                      ShadOption(
-                        value: AppPalette.oneDark,
-                        child: Text('One Dark'),
-                      ),
-                      ShadOption(
-                        value: AppPalette.solarizedDark,
-                        child: Text('Solarized Dark'),
-                      ),
-                      ShadOption(
-                        value: AppPalette.tokyoNight,
-                        child: Text('Tokyo Night'),
-                      ),
+                    selectedOptionBuilder: (context, value) =>
+                        Text(value.label),
+                    options: [
+                      for (final p in _kPaletteOrder)
+                        ShadOption(value: p, child: Text(p.label)),
                     ],
                     onChanged: (palette) {
                       if (palette != null) {
@@ -567,29 +349,11 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
                   trailing: ShadSelect<MoshPredictionMode>(
                     key: const Key('settings_mosh_prediction_dropdown'),
                     initialValue: settings.moshPrediction,
-                    selectedOptionBuilder: (context, value) {
-                      switch (value) {
-                        case MoshPredictionMode.never:
-                          return const Text('Never');
-                        case MoshPredictionMode.adaptive:
-                          return const Text('Adaptive');
-                        case MoshPredictionMode.always:
-                          return const Text('Always');
-                      }
-                    },
-                    options: const [
-                      ShadOption(
-                        value: MoshPredictionMode.never,
-                        child: Text('Never'),
-                      ),
-                      ShadOption(
-                        value: MoshPredictionMode.adaptive,
-                        child: Text('Adaptive'),
-                      ),
-                      ShadOption(
-                        value: MoshPredictionMode.always,
-                        child: Text('Always'),
-                      ),
+                    selectedOptionBuilder: (context, value) =>
+                        Text(value.label),
+                    options: [
+                      for (final m in MoshPredictionMode.values)
+                        ShadOption(value: m, child: Text(m.label)),
                     ],
                     onChanged: (mode) {
                       if (mode != null) {
@@ -707,26 +471,11 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
                   trailing: ShadSelect<AppCursorStyle>(
                     key: const Key('settings_cursor_style_dropdown'),
                     initialValue: settings.cursorStyle,
-                    selectedOptionBuilder: (context, value) {
-                      switch (value) {
-                        case AppCursorStyle.underline:
-                          return const Text('Underline');
-                        case AppCursorStyle.bar:
-                          return const Text('Bar');
-                        case AppCursorStyle.block:
-                          return const Text('Block');
-                      }
-                    },
-                    options: const [
-                      ShadOption(
-                        value: AppCursorStyle.block,
-                        child: Text('Block'),
-                      ),
-                      ShadOption(
-                        value: AppCursorStyle.underline,
-                        child: Text('Underline'),
-                      ),
-                      ShadOption(value: AppCursorStyle.bar, child: Text('Bar')),
+                    selectedOptionBuilder: (context, value) =>
+                        Text(value.label),
+                    options: [
+                      for (final c in AppCursorStyle.values)
+                        ShadOption(value: c, child: Text(c.label)),
                     ],
                     onChanged: (style) {
                       if (style != null) {
@@ -770,24 +519,11 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
                   trailing: ShadSelect<int>(
                     key: const Key('settings_autolock_dropdown'),
                     initialValue: settings.autoLockTimerSeconds,
-                    selectedOptionBuilder: (context, value) {
-                      switch (value) {
-                        case 30:
-                          return const Text('30 Seconds');
-                        case 60:
-                          return const Text('1 Minute');
-                        case 300:
-                          return const Text('5 Minutes');
-                        case 0:
-                        default:
-                          return const Text('Disabled');
-                      }
-                    },
-                    options: const [
-                      ShadOption(value: 0, child: Text('Disabled')),
-                      ShadOption(value: 30, child: Text('30 Seconds')),
-                      ShadOption(value: 60, child: Text('1 Minute')),
-                      ShadOption(value: 300, child: Text('5 Minutes')),
+                    selectedOptionBuilder: (context, value) =>
+                        Text(_kAutoLockLabels[value] ?? 'Disabled'),
+                    options: [
+                      for (final e in _kAutoLockLabels.entries)
+                        ShadOption(value: e.key, child: Text(e.value)),
                     ],
                     onChanged: (sec) {
                       if (sec != null) {
@@ -805,24 +541,11 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
                   trailing: ShadSelect<int>(
                     key: const Key('settings_clipboard_clear_dropdown'),
                     initialValue: settings.clipboardAutoClearSeconds,
-                    selectedOptionBuilder: (context, value) {
-                      switch (value) {
-                        case 15:
-                          return const Text('15 Seconds');
-                        case 30:
-                          return const Text('30 Seconds');
-                        case 60:
-                          return const Text('60 Seconds');
-                        case 0:
-                        default:
-                          return const Text('Disabled');
-                      }
-                    },
-                    options: const [
-                      ShadOption(value: 0, child: Text('Disabled')),
-                      ShadOption(value: 15, child: Text('15 Seconds')),
-                      ShadOption(value: 30, child: Text('30 Seconds')),
-                      ShadOption(value: 60, child: Text('60 Seconds')),
+                    selectedOptionBuilder: (context, value) =>
+                        Text(_kClipboardClearLabels[value] ?? 'Disabled'),
+                    options: [
+                      for (final e in _kClipboardClearLabels.entries)
+                        ShadOption(value: e.key, child: Text(e.value)),
                     ],
                     onChanged: (sec) {
                       if (sec != null) {
@@ -847,7 +570,7 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
         return [
           // --- Section 3: Vault Master Password ---
           _buildSectionHeader('Vault Master Password', LucideIcons.lockKeyhole),
-          _buildVaultMasterPasswordCard(),
+          const VaultMasterPasswordSection(),
         ];
       case SettingsSection.deviceLink:
         return [
@@ -876,55 +599,7 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
           const SizedBox(height: 24),
           // --- Section 4: Zero-Knowledge E2EE Cloud Sync ---
           _buildSectionHeader('Encrypted File Backup', LucideIcons.cloudCog),
-          ShadCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Encrypt database records locally with AES-256-GCM using Argon2id key derivation.',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: ShellVibeTokens.resolve(context).textMuted,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                ShadInput(
-                  key: const Key('sync_master_password_field'),
-                  controller: _masterPasswordController,
-                  obscureText: true,
-                  placeholder: const Text(
-                    'Enter password to encrypt/decrypt backup',
-                  ),
-                ),
-                const Divider(height: 24),
-                const BackupScopePicker(target: BackupTarget.file),
-                const SizedBox(height: 12),
-                ShellVibeButton(
-                  key: const Key('export_backup_button'),
-                  label: 'Export Encrypted Backup to File',
-                  icon: LucideIcons.download,
-                  onPressed: _handleExportE2EEBackup,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  isMobilePlatform
-                      ? 'Export writes a .$kBackupFileExtension file into the app documents folder; import reads one back.'
-                      : 'Export writes a .$kBackupFileExtension file you choose; import reads one back.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: ShellVibeTokens.resolve(context).textMuted,
-                  ),
-                ),
-                const Divider(height: 24),
-                ShellVibeButton.secondary(
-                  key: const Key('import_backup_button'),
-                  label: 'Import Encrypted Backup from File',
-                  icon: LucideIcons.upload,
-                  onPressed: _handleImportE2EEBackup,
-                ),
-              ],
-            ),
-          ),
+          const FileBackupSection(),
         ];
       case SettingsSection.about:
         return [
@@ -939,7 +614,9 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
   Widget _buildTerminalPreview(AppSettingsModel settings) {
     final tokens = ShellVibeTokens.resolve(context);
     final style = TextStyle(
-      fontFamily: settings.fontFamily,
+      // settings.fontFamily is a font id, not a family name.
+      fontFamily: resolveTerminalFontFamily(settings.fontFamily),
+      fontFamilyFallback: kTerminalFontFamilyFallback,
       fontSize: settings.fontSize,
       height: 1.55,
       fontFeatures: settings.enableLigatures
@@ -975,183 +652,6 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
     );
   }
 
-  Widget _buildVaultMasterPasswordCard() {
-    final vaultStatus = ref.watch(vaultProvider).value?.status;
-    final isConfigured =
-        vaultStatus != null && vaultStatus != VaultStatus.unconfigured;
-
-    return ShadCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            isConfigured
-                ? 'Your vault key is protected by a master password. It is required '
-                      'after every app restart before identity secrets can be used. '
-                      'Removing it returns the key to the operating system keychain, '
-                      'so the app stops asking — and stops being protected by the '
-                      'password.'
-                : 'Without a master password your vault key is protected only by the '
-                      'operating system keychain. Setting one wraps the key with '
-                      'Argon2id + AES-256-GCM. Existing identities stay readable.',
-            style: TextStyle(
-              fontSize: 13,
-              color: ShellVibeTokens.resolve(context).textMuted,
-            ),
-          ),
-          const SizedBox(height: 12),
-          if (isConfigured) ...[
-            ShellVibeButton.secondary(
-              key: const Key('lock_vault_button'),
-              label: vaultStatus == VaultStatus.locked
-                  ? 'Vault Locked'
-                  : 'Lock Vault Now',
-              icon: LucideIcons.lock,
-              onPressed: vaultStatus == VaultStatus.locked
-                  ? null
-                  : () => ref.read(vaultProvider.notifier).lock(),
-            ),
-            const SizedBox(height: 12),
-            ShadInput(
-              key: const Key('remove_master_password_field'),
-              controller: _vaultPasswordController,
-              obscureText: true,
-              placeholder: const Text('Current master password'),
-            ),
-            const SizedBox(height: 12),
-            ShellVibeButton.danger(
-              key: const Key('remove_master_password_button'),
-              label: 'Remove Master Password',
-              icon: LucideIcons.lockOpen,
-              onPressed: _handleRemoveMasterPassword,
-            ),
-          ] else ...[
-            ShadInput(
-              key: const Key('vault_master_password_field'),
-              controller: _vaultPasswordController,
-              obscureText: true,
-              placeholder: const Text('New master password (min 8 characters)'),
-            ),
-            const SizedBox(height: 12),
-            ShellVibeButton(
-              key: const Key('set_master_password_button'),
-              label: 'Set Master Password',
-              icon: LucideIcons.lockKeyhole,
-              onPressed: _handleSetMasterPassword,
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Future<void> _handleRemoveMasterPassword() async {
-    final password = _vaultPasswordController.text;
-    if (password.isEmpty) {
-      ShadToaster.of(context).show(
-        const ShadToast.destructive(
-          description: Text('Enter your current master password to remove it.'),
-        ),
-      );
-      return;
-    }
-
-    final confirmed = await showShadDialog<bool>(
-      context: context,
-      builder: (dialogContext) => ShadDialog.alert(
-        title: const Text('Remove master password?'),
-        description: const Text(
-          'Your vault key goes back to the operating system keychain. The app '
-          'will no longer ask for a password at startup, and anyone with '
-          'access to your unlocked account can use your identity secrets.',
-        ),
-        actions: adaptiveDialogActions(context, [
-          ShellVibeButton.secondary(
-            label: 'Cancel',
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-          ),
-          ShellVibeButton.danger(
-            key: const Key('confirm_remove_master_password_button'),
-            label: 'Remove',
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-          ),
-        ]),
-        actionsAxis: adaptiveDialogActionsAxis(context),
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-
-    try {
-      final removed = await ref
-          .read(vaultProvider.notifier)
-          .removeMasterPassword(password);
-      // The controller may already be disposed if the screen left the tree
-      // while the (isolate-backed) verification was running.
-      if (!mounted) return;
-      if (!removed) {
-        ShadToaster.of(context).show(
-          const ShadToast.destructive(
-            description: Text(
-              'Wrong master password, or too many failed attempts.',
-            ),
-          ),
-        );
-        return;
-      }
-      _vaultPasswordController.clear();
-      ShadToaster.of(context).show(
-        const ShadToast(
-          description: Text(
-            'Master password removed. The vault no longer locks on restart.',
-          ),
-        ),
-      );
-    } catch (e) {
-      if (mounted) {
-        ShadToaster.of(context).show(
-          ShadToast.destructive(
-            description: Text('Failed to remove master password: $e'),
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _handleSetMasterPassword() async {
-    final password = _vaultPasswordController.text;
-    if (password.length < 8) {
-      ShadToaster.of(context).show(
-        const ShadToast.destructive(
-          description: Text('Master password must be at least 8 characters.'),
-        ),
-      );
-      return;
-    }
-
-    try {
-      await ref.read(vaultProvider.notifier).setup(password);
-      // The controller may already be disposed if the screen left the tree
-      // while the (isolate-backed) setup was running.
-      if (!mounted) return;
-      _vaultPasswordController.clear();
-      ShadToaster.of(context).show(
-        const ShadToast(
-          description: Text(
-            'Master password set. The vault now locks on app restart.',
-          ),
-        ),
-      );
-    } catch (e) {
-      if (mounted) {
-        ShadToaster.of(context).show(
-          ShadToast.destructive(
-            description: Text('Failed to set master password: $e'),
-          ),
-        );
-      }
-    }
-  }
-
   Widget _buildSectionHeader(String title, IconData icon) {
     final tokens = ShellVibeTokens.resolve(context);
     return Padding(
@@ -1174,7 +674,36 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
   }
 }
 
-/// Compact 8-color ANSI strip used in the theme dropdown rows.
+/// OLED leads because it is the default the app ships with; the list under
+/// it stays alphabetical.
+const _kPaletteOrder = [
+  AppPalette.oled,
+  AppPalette.dark,
+  AppPalette.teal,
+  AppPalette.catppuccin,
+  AppPalette.dracula,
+  AppPalette.gruvbox,
+  AppPalette.nord,
+  AppPalette.oneDark,
+  AppPalette.solarizedDark,
+  AppPalette.tokyoNight,
+];
+
+/// Seconds to label, in menu order. Zero is off.
+const _kAutoLockLabels = {
+  0: 'Disabled',
+  30: '30 Seconds',
+  60: '1 Minute',
+  300: '5 Minutes',
+};
+
+const _kClipboardClearLabels = {
+  0: 'Disabled',
+  15: '15 Seconds',
+  30: '30 Seconds',
+  60: '60 Seconds',
+};
+
 /// A sun or a moon in front of a scheme's name, so light and dark schemes can
 /// be told apart in the alphabetical list without reading the swatches.
 IconData _brightnessIcon({required bool isLight}) =>
@@ -1221,6 +750,7 @@ class _ThemeModeLabel extends StatelessWidget {
   }
 }
 
+/// Compact 8-color ANSI strip used in the theme dropdown rows.
 class _PaletteSwatch extends StatelessWidget {
   const _PaletteSwatch({required this.theme});
 

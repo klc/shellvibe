@@ -13,8 +13,8 @@ part of 'mcp_settings_notifier.dart';
 ///
 /// Flipping the master switch is the one place this notifier reaches outside
 /// its own storage: on -> [McpServerController.start], off ->
-/// [McpServerController.stop]. Every other setter here only persists a value
-/// for whatever later reads it (the tool dispatcher's per-call defaults).
+/// [McpServerController.stop]. The "Limits" setters persist their value and
+/// push it onto the live session pool, which is where each one is read.
 
 @ProviderFor(McpSettingsNotifier)
 final mcpSettingsProvider = McpSettingsNotifierProvider._();
@@ -24,8 +24,8 @@ final mcpSettingsProvider = McpSettingsNotifierProvider._();
 ///
 /// Flipping the master switch is the one place this notifier reaches outside
 /// its own storage: on -> [McpServerController.start], off ->
-/// [McpServerController.stop]. Every other setter here only persists a value
-/// for whatever later reads it (the tool dispatcher's per-call defaults).
+/// [McpServerController.stop]. The "Limits" setters persist their value and
+/// push it onto the live session pool, which is where each one is read.
 final class McpSettingsNotifierProvider
     extends $AsyncNotifierProvider<McpSettingsNotifier, McpSettingsState> {
   /// Owns the current workspace's AI-access settings: the master switch, the
@@ -33,8 +33,8 @@ final class McpSettingsNotifierProvider
   ///
   /// Flipping the master switch is the one place this notifier reaches outside
   /// its own storage: on -> [McpServerController.start], off ->
-  /// [McpServerController.stop]. Every other setter here only persists a value
-  /// for whatever later reads it (the tool dispatcher's per-call defaults).
+  /// [McpServerController.stop]. The "Limits" setters persist their value and
+  /// push it onto the live session pool, which is where each one is read.
   McpSettingsNotifierProvider._()
     : super(
         from: null,
@@ -55,15 +55,15 @@ final class McpSettingsNotifierProvider
 }
 
 String _$mcpSettingsNotifierHash() =>
-    r'b0a675bde9b6f59ce263b8c7393cb51f5130441b';
+    r'344549270858fc5706dc9b24294a3691399bfc81';
 
 /// Owns the current workspace's AI-access settings: the master switch, the
 /// live server/client view, and the tunable numeric knobs.
 ///
 /// Flipping the master switch is the one place this notifier reaches outside
 /// its own storage: on -> [McpServerController.start], off ->
-/// [McpServerController.stop]. Every other setter here only persists a value
-/// for whatever later reads it (the tool dispatcher's per-call defaults).
+/// [McpServerController.stop]. The "Limits" setters persist their value and
+/// push it onto the live session pool, which is where each one is read.
 
 abstract class _$McpSettingsNotifier extends $AsyncNotifier<McpSettingsState> {
   FutureOr<McpSettingsState> build();

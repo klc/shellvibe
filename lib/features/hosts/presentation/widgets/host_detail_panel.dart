@@ -49,9 +49,7 @@ class HostDetailPanel extends StatelessWidget {
         if (host.groupIds.contains(candidate.id)) candidate.name,
     ]..sort();
 
-    final address =
-        '${host.username != null && host.username!.isNotEmpty ? '${host.username}@' : ''}'
-        '${host.hostname}:${host.port}';
+    final address = host.address;
 
     return ListView(
       key: const Key('host_detail_drawer'),

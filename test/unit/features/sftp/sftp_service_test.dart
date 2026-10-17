@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dartssh2/dartssh2.dart';
@@ -84,16 +83,6 @@ void main() {
       client = FakeSftpClient();
     });
 
-    test('readFileStream streams file content in chunks', () async {
-      final data = Uint8List.fromList(List.generate(100, (i) => i % 256));
-      client.files['/small.txt'] = data;
-
-      final chunks = await service.readFileStream(client, '/small.txt').toList();
-      final combined = Uint8List.fromList(chunks.expand((c) => c).toList());
-
-      expect(combined, equals(data));
-    });
-
     test('readFile succeeds under maxSizeBytes limit', () async {
       final data = Uint8List.fromList([1, 2, 3, 4, 5]);
       client.files['/small.txt'] = data;
@@ -113,58 +102,6 @@ void main() {
             (e) => e.toString(),
             'message',
             contains('exceeds maximum in-memory limit'),
-          ),
-        ),
-      );
-    });
-
-    test('downloadToFile writes remote file stream directly to disk', () async {
-      final data = Uint8List.fromList(List.generate(500, (i) => i % 256));
-      client.files['/remote.bin'] = data;
-
-      final tempDir = await Directory.systemTemp.createTemp('sftp_test_');
-      final localFilePath = '${tempDir.path}/downloaded.bin';
-
-      try {
-        int lastProgressCount = 0;
-        int lastProgressTotal = 0;
-
-        await service.downloadToFile(
-          client,
-          '/remote.bin',
-          localFilePath,
-          onProgress: (count, total) {
-            lastProgressCount = count;
-            lastProgressTotal = total;
-          },
-        );
-
-        final downloadedFile = File(localFilePath);
-        expect(await downloadedFile.exists(), isTrue);
-        final downloadedBytes = await downloadedFile.readAsBytes();
-        expect(downloadedBytes, equals(data));
-        expect(lastProgressCount, equals(500));
-        expect(lastProgressTotal, equals(500));
-      } finally {
-        await tempDir.delete(recursive: true);
-      }
-    });
-
-    test('uploadFromFile refuses a local file that does not exist', () async {
-      final tempDir = await Directory.systemTemp.createTemp('sftp_test_');
-      addTearDown(() => tempDir.delete(recursive: true));
-
-      await expectLater(
-        service.uploadFromFile(
-          client,
-          '${tempDir.path}/missing.bin',
-          '/remote/missing.bin',
-        ),
-        throwsA(
-          isA<Exception>().having(
-            (e) => e.toString(),
-            'message',
-            contains('Local file does not exist'),
           ),
         ),
       );

@@ -76,9 +76,9 @@ void main() {
       expect(
         shownTheme(),
         same(
-          TerminalPaletteData.themeOf(
+          TerminalPaletteData.of(
             const AppSettingsModel().resolvedTerminalPalette(Brightness.light),
-          ),
+          ).theme,
         ),
       );
 
@@ -94,7 +94,7 @@ void main() {
         await tester.pump();
         expect(
           shownTheme(),
-          same(TerminalPaletteData.themeOf(palette)),
+          same(TerminalPaletteData.of(palette).theme),
           reason: '$palette',
         );
       }

@@ -143,6 +143,25 @@ void main() {
       expect(current().lastPushed, greaterThan(0));
     });
 
+    test('a rebuild while a pass is running queues behind it', () async {
+      // A rebuild is a new instance. Its join and first pass used to start
+      // at once, beside the pass the old instance was still running, and
+      // the two pushed the same outbox twice.
+      final notifier = await started();
+      await joined(notifier);
+      await addHost('h1');
+
+      final pass = notifier.syncNow();
+      container.invalidate(syncProvider);
+      await container.read(syncProvider.future);
+      await pass;
+      await eventually(() => current().lastSyncAt != null);
+      await container.read(syncProvider.notifier).syncNow();
+
+      expect(server.operations, hasLength(1));
+      expect(current().blocker, isNull);
+    });
+
     test('switching it off stops sending', () async {
       final notifier = await started();
       await joined(notifier);

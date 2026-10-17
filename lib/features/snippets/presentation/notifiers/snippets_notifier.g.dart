@@ -81,7 +81,7 @@ final class SnippetsNotifierProvider
   SnippetsNotifier create() => SnippetsNotifier();
 }
 
-String _$snippetsNotifierHash() => r'2b1817aec5d3437b291894cb933db15f5eb4321a';
+String _$snippetsNotifierHash() => r'd121290cc06322a43cb9904976cae6c8f5586bda';
 
 abstract class _$SnippetsNotifier extends $AsyncNotifier<List<SnippetModel>> {
   FutureOr<List<SnippetModel>> build();

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui' show Display, FlutterView;
 
 import 'package:flutter/foundation.dart';
 
@@ -25,6 +26,22 @@ bool get supportsLocalShell => !isMobilePlatform;
 /// [isMobilePlatform] so the two can never disagree about it.
 TargetPlatform get runtimeTargetPlatform =>
     debugPlatformCapabilitiesOverride ?? defaultTargetPlatform;
+
+/// The display [view] is drawn on, or null when the engine has none on record.
+///
+/// `FlutterView.display` null-checks its own lookup and throws while the view
+/// still points at a display the platform has just dropped (macOS: a monitor
+/// unplugged, sleep/wake, a window moved between screens). Read it here only.
+Display? displayOf(FlutterView? view) {
+  if (view == null) return null;
+  try {
+    return view.display;
+    // The getter's failure is an engine-side race, not a bug of ours to surface.
+    // ignore: avoid_catching_errors
+  } on Error {
+    return null;
+  }
+}
 
 /// Overrides [isWindowsStorePackage] in tests.
 @visibleForTesting

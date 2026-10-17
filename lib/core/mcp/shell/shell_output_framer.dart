@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import '../../../features/mcp/domain/models/mcp_models.dart';
+import 'shell_result.dart';
 
 /// The three pieces of information carried by one sentinel line: the command
 /// finished, with this exit code, in this working directory.

@@ -80,7 +80,6 @@ final class DeviceLinkLinkedSessionController extends ChangeNotifier {
       id: terminalTabId ?? session.id,
       title: session.title,
       sessionType: TerminalSessionType.local,
-      isDeviceLink: true,
       terminal: actualTerminal,
       isConnecting: true,
     );

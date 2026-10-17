@@ -6,6 +6,8 @@ import 'package:flutter/foundation.dart';
 import 'package:xterm3/xterm.dart';
 
 import '../perf/write_path_metrics.dart';
+import '../utils/callback_sink.dart';
+import '../utils/platform_capabilities.dart';
 import 'coalescing_terminal_writer.dart';
 import 'pty_session.dart';
 
@@ -59,7 +61,6 @@ class TerminalLocalPtyBridge {
         onHandOff: _acknowledgeBatch,
       );
 
-
   /// Replaces the write stack so a test can drive it without a frame pipeline.
   ///
   /// Both stages hand over on the next frame, which never arrives under a
@@ -104,7 +105,7 @@ class TerminalLocalPtyBridge {
     // otherwise hold its credit forever.
     final decoder = const Utf8Decoder(
       allowMalformed: true,
-    ).startChunkedConversion(_TextSink(_onDecodedText));
+    ).startChunkedConversion(CallbackSink(_onDecodedText));
     _outputSubscription = session.output.listen(
       (Uint8List bytes) {
         if (_isDisposed) return;
@@ -245,26 +246,9 @@ class TerminalLocalPtyBridge {
   }
 }
 
-/// Forwards each piece of decoded text as it is produced.
-class _TextSink implements Sink<String> {
-  _TextSink(this._onText);
-
-  final void Function(String text) _onText;
-
-  @override
-  void add(String data) => _onText(data);
-
-  @override
-  void close() {}
-}
-
-/// Manages local shell process creation using `flutter_pty` across platforms
-/// (macOS, Windows, Linux, Android) with iOS sandbox restriction handling.
+/// Manages local shell process creation using `flutter_pty` on the desktop
+/// platforms; mobile has no local shell (see [supportsLocalShell]).
 class LocalPtyManager {
-  /// Returns true if the current operating system supports spawning local PTY processes.
-  /// Returns false on iOS due to Apple App Sandbox policies.
-  bool get isSupportedPlatform => !Platform.isIOS;
-
   /// Returns the default system shell executable path for the current OS.
   String getDefaultShell() {
     if (Platform.isWindows) {
@@ -278,7 +262,7 @@ class LocalPtyManager {
 
   /// Starts a local shell on its own reading isolate.
   ///
-  /// Throws [UnsupportedError] on iOS.
+  /// Throws [UnsupportedError] where [supportsLocalShell] is false.
   Future<PtySession> startSession({
     String? executable,
     List<String> arguments = const [],
@@ -287,9 +271,9 @@ class LocalPtyManager {
     int rows = 24,
     int columns = 80,
   }) {
-    if (!isSupportedPlatform) {
+    if (!supportsLocalShell) {
       throw UnsupportedError(
-        'Local shell execution is not supported on iOS due to Apple App Sandbox policy.',
+        'Local shell execution is not supported on this platform.',
       );
     }
 
@@ -353,7 +337,8 @@ class LocalPtyManager {
   }
 
   /// Spawns a local PTY process and binds it to [terminal].
-  /// If run on iOS, writes a user-friendly notice to [terminal] and returns null.
+  /// Where [supportsLocalShell] is false, writes a notice to [terminal] and
+  /// returns null.
   Future<TerminalLocalPtyBridge?> startAndBridge(
     Terminal terminal, {
     String? executable,
@@ -364,10 +349,10 @@ class LocalPtyManager {
     int columns = 80,
     void Function(Uint8List bytes)? outputTap,
   }) async {
-    if (!isSupportedPlatform) {
+    if (!supportsLocalShell) {
       terminal.write(
-        '\r\n\x1b[1;31m[iOS Sandbox Restriction]\x1b[0m '
-        'Local shell execution is disabled by Apple iOS app sandbox policy.\r\n'
+        '\r\n\x1b[1;31m[Local shell unavailable]\x1b[0m '
+        'Local shell execution is not supported on this platform.\r\n'
         'Please connect to a remote host via SSH or Mosh.\r\n',
       );
       return null;

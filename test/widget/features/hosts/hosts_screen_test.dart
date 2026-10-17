@@ -7,7 +7,6 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:shadcn_ui/shadcn_ui.dart';
 
-import 'package:shellvibe/features/hosts/domain/models/host_model.dart';
 import 'package:shellvibe/features/hosts/presentation/screens/hosts_screen.dart';
 import 'package:shellvibe/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import 'package:shellvibe/shared/database/app_database.dart';
@@ -33,7 +32,7 @@ void main() {
     await db.close();
   });
 
-  Widget createWidgetUnderTest({void Function(HostModel host)? onConnectHost}) {
+  Widget createWidgetUnderTest() {
     return ProviderScope(
       overrides: [appDatabaseProvider.overrideWithValue(db)],
       child: ShadTheme(
@@ -43,7 +42,7 @@ void main() {
         ),
         child: MaterialApp(
           builder: (context, child) => Material(child: child!),
-          home: HostsScreen(onConnectHost: onConnectHost),
+          home: const HostsScreen(),
         ),
       ),
     );
@@ -135,7 +134,7 @@ void main() {
     });
 
     testWidgets(
-      'Renders host tile when host exists in database and triggers onConnectHost on tap',
+      'Renders host tile when host exists in database and connects on tap',
       (tester) async {
         // Pre-insert a host into database
         await db.hostsDao.insertHost(
@@ -150,15 +149,7 @@ void main() {
           ),
         );
 
-        HostModel? connectedHost;
-
-        await tester.pumpWidget(
-          createWidgetUnderTest(
-            onConnectHost: (host) {
-              connectedHost = host;
-            },
-          ),
-        );
+        await tester.pumpWidget(createWidgetUnderTest());
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 200));
 
@@ -172,10 +163,10 @@ void main() {
 
         await tester.tap(connectButton);
         await tester.pump();
+        await tester.pump(const Duration(milliseconds: 200));
 
-        expect(connectedHost, isNotNull);
-        expect(connectedHost!.id, equals('host-1'));
-        expect(connectedHost!.label, equals('Production Server'));
+        // No identity is bound, so the connect flow asks for credentials.
+        expect(find.byKey(const Key('connect_password_input')), findsOneWidget);
       },
     );
 
@@ -605,7 +596,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('group_tag-prod')), findsNothing);
-      expect(await db.hostsDao.getAllHostGroups(), isEmpty);
+      expect(await db.hostsDao.getHostGroupsByWorkspace('default'), isEmpty);
       expect(await db.hostsDao.getMembershipsForHost('host-1'), isEmpty);
       expect(find.text('Production'), findsOneWidget);
     });
@@ -643,7 +634,7 @@ void main() {
     });
 
     testWidgets(
-      'Triggers defaultConnectHost opening tab when onConnectHost is null',
+      'Connecting opens a terminal tab once credentials are entered',
       (tester) async {
         await db.hostsDao.insertHost(
           HostsCompanion.insert(

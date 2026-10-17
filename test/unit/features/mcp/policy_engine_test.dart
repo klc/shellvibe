@@ -27,7 +27,7 @@ void main() {
     dao = db.mcpDao;
     grantRepo = McpGrantRepository(dao);
     approvalRepo = McpApprovalRepository(dao);
-    engine = PolicyEngine(grants: grantRepo, approvals: approvalRepo, dao: dao);
+    engine = PolicyEngine(approvals: approvalRepo, dao: dao);
 
     await db.hostsDao.insertHost(
       HostsCompanion.insert(
@@ -85,71 +85,6 @@ void main() {
     String hostId = 'host-1',
     required McpAccessMode mode,
   }) => grantRepo.grant(clientId: clientId, hostId: hostId, mode: mode);
-
-  group('grant gate', () {
-    test('no grant throws McpToolException(hostAccessRequired)', () async {
-        await expectLater(
-          engine.evaluate(ctx(), workspaceId: 'default'),
-          throwsA(
-            isA<McpToolException>().having(
-              (e) => e.code,
-              'code',
-              McpErrorCode.hostAccessRequired,
-            ),
-          ),
-        );
-    });
-
-    test('an expired grant behaves as no grant', () async {
-      final now = DateTime.utc(2026, 1, 1, 12);
-      await dao.upsertGrant(
-        McpHostGrantsCompanion.insert(
-          id: 'grant-1',
-          clientId: 'client-1',
-          hostId: 'host-1',
-          mode: McpAccessMode.autonomous.name,
-          grantedAt: now.subtract(const Duration(hours: 2)),
-          expiresAt: Value(now.subtract(const Duration(minutes: 1))),
-        ),
-      );
-
-      await expectLater(
-        engine.evaluate(ctx(), workspaceId: 'default', now: now),
-        throwsA(
-          isA<McpToolException>().having(
-            (e) => e.code,
-            'code',
-            McpErrorCode.hostAccessRequired,
-          ),
-        ),
-      );
-    });
-
-    test('a grant still in cooldown behaves as no grant', () async {
-      final now = DateTime.utc(2026, 1, 1, 12);
-      await dao.upsertGrant(
-        McpHostGrantsCompanion.insert(
-          id: 'grant-1',
-          clientId: 'client-1',
-          hostId: 'host-1',
-          mode: McpAccessMode.autonomous.name,
-          grantedAt: now.subtract(const Duration(hours: 2)),
-          cooldownUntil: Value(now.add(const Duration(minutes: 5))),
-        ),
-      );
-
-      await expectLater(
-        engine.evaluate(ctx(), workspaceId: 'default', now: now),
-        throwsA(
-          isA<McpToolException>().having(
-            (e) => e.code,
-            'code',
-            McpErrorCode.hostAccessRequired,
-          ),
-        ),
-      );
-    });
-  });
 
   group('decision matrix', () {
     // One representative command per RiskCategory, verified against
@@ -410,7 +345,7 @@ void main() {
       'auto-allow a destructive command — it must come back confirm',
       () async {
         await grant(mode: McpAccessMode.readonly);
-        await dao.insertPolicyRule(
+        await dao.into(dao.mcpPolicyRules).insert(
           McpPolicyRulesCompanion.insert(
             id: 'rule-1',
             workspaceId: 'default',
@@ -440,7 +375,7 @@ void main() {
   group('user policy rules', () {
     test('ascending priority — first match wins', () async {
       await grant(mode: McpAccessMode.readonly);
-      await dao.insertPolicyRule(
+      await dao.into(dao.mcpPolicyRules).insert(
         McpPolicyRulesCompanion.insert(
           id: 'rule-deny',
           workspaceId: 'default',
@@ -452,7 +387,7 @@ void main() {
           createdAt: DateTime.now(),
         ),
       );
-      await dao.insertPolicyRule(
+      await dao.into(dao.mcpPolicyRules).insert(
         McpPolicyRulesCompanion.insert(
           id: 'rule-allow',
           workspaceId: 'default',
@@ -479,7 +414,7 @@ void main() {
       'exact match requires the trimmed command to equal the pattern',
       () async {
       await grant(mode: McpAccessMode.readonly);
-      await dao.insertPolicyRule(
+      await dao.into(dao.mcpPolicyRules).insert(
         McpPolicyRulesCompanion.insert(
           id: 'rule-exact',
           workspaceId: 'default',
@@ -509,7 +444,7 @@ void main() {
 
     test('prefix match matches a leading prefix only', () async {
       await grant(mode: McpAccessMode.readonly);
-      await dao.insertPolicyRule(
+      await dao.into(dao.mcpPolicyRules).insert(
         McpPolicyRulesCompanion.insert(
           id: 'rule-prefix',
           workspaceId: 'default',
@@ -537,7 +472,7 @@ void main() {
 
     test('regex match', () async {
       await grant(mode: McpAccessMode.readonly);
-      await dao.insertPolicyRule(
+      await dao.into(dao.mcpPolicyRules).insert(
         McpPolicyRulesCompanion.insert(
           id: 'rule-regex',
           workspaceId: 'default',
@@ -565,7 +500,7 @@ void main() {
 
     test('a disabled rule is skipped', () async {
       await grant(mode: McpAccessMode.readonly);
-      await dao.insertPolicyRule(
+      await dao.into(dao.mcpPolicyRules).insert(
         McpPolicyRulesCompanion.insert(
           id: 'rule-disabled',
           workspaceId: 'default',
@@ -590,7 +525,7 @@ void main() {
 
     test('a malformed regex matches nothing rather than everything', () async {
         await grant(mode: McpAccessMode.autonomous);
-        await dao.insertPolicyRule(
+        await dao.into(dao.mcpPolicyRules).insert(
           McpPolicyRulesCompanion.insert(
             id: 'rule-bad-regex',
             workspaceId: 'default',
@@ -616,7 +551,7 @@ void main() {
     group('scope matching', () {
       test('a global rule matches any host', () async {
         await grant(mode: McpAccessMode.guarded);
-        await dao.insertPolicyRule(
+        await dao.into(dao.mcpPolicyRules).insert(
           McpPolicyRulesCompanion.insert(
             id: 'rule-global',
             workspaceId: 'default',
@@ -643,7 +578,7 @@ void main() {
       test('a host rule matches only its own hostId', () async {
         await grant(mode: McpAccessMode.guarded);
         await grant(mode: McpAccessMode.guarded, hostId: 'host-2');
-        await dao.insertPolicyRule(
+        await dao.into(dao.mcpPolicyRules).insert(
           McpPolicyRulesCompanion.insert(
             id: 'rule-host',
             workspaceId: 'default',
@@ -683,7 +618,7 @@ void main() {
       test('a group rule matches only when any of hostGroupIds equals its scopeId, '
           'and never matches a context with no group', () async {
           await grant(mode: McpAccessMode.guarded);
-          await dao.insertPolicyRule(
+          await dao.into(dao.mcpPolicyRules).insert(
             McpPolicyRulesCompanion.insert(
               id: 'rule-group',
               workspaceId: 'default',

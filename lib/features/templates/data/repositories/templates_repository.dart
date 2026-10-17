@@ -10,21 +10,10 @@ class TemplatesRepository {
 
   TemplatesRepository(this._dao);
 
-  Future<List<TemplateModel>> getAllTemplates() async {
-    return _loadModels(await _dao.getAllTemplates());
-  }
-
   Future<List<TemplateModel>> getTemplatesByWorkspace(
     String workspaceId,
   ) async {
     return _loadModels(await _dao.getTemplatesByWorkspace(workspaceId));
-  }
-
-  Future<TemplateModel?> getTemplate(String id) async {
-    final rows = await _dao.getAllTemplates();
-    final row = rows.where((t) => t.id == id).firstOrNull;
-    if (row == null) return null;
-    return _mapToModel(row, await _dao.getPanesForTemplate(row.id));
   }
 
   Future<List<TemplateModel>> _loadModels(List<Template> rows) async {
@@ -34,10 +23,6 @@ class TemplatesRepository {
       results.add(_mapToModel(row, panes));
     }
     return results;
-  }
-
-  Stream<List<TemplateModel>> watchAllTemplates() {
-    return _dao.watchAllTemplates().asyncMap(_loadModels);
   }
 
   Future<void> addTemplate(TemplateModel template) async {
@@ -90,6 +75,7 @@ class TemplatesRepository {
             hostId: Value(pane.hostId),
             title: Value(pane.title),
             startupSnippetId: Value(pane.startupSnippetId),
+            startupRunbookId: Value(pane.startupRunbookId),
           ),
         )
         .toList();
@@ -118,6 +104,7 @@ class TemplatesRepository {
               hostId: pane.hostId,
               title: pane.title,
               startupSnippetId: pane.startupSnippetId,
+              startupRunbookId: pane.startupRunbookId,
             ),
           )
           .toList(),

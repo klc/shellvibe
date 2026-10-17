@@ -5,6 +5,7 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../domain/models/mcp_enums.dart';
+import '../mcp_date_format.dart';
 import '../notifiers/mcp_activity_notifier.dart';
 import '../notifiers/mcp_settings_notifier.dart';
 import '../screens/mcp_audit_screen.dart';
@@ -381,7 +382,7 @@ class _ApprovalsManageList extends ConsumerWidget {
                   Text(
                     approval.expiresAt == null
                         ? 'no expiry'
-                        : 'until ${_formatClock(approval.expiresAt!)}',
+                        : 'until ${formatMcpClock(approval.expiresAt!)}',
                     style: shellvibeMono(
                       context,
                       size: 11,
@@ -420,14 +421,14 @@ class _TimelineRowTile extends StatelessWidget {
         entry.hostLabel ?? '—',
         entry.tool,
         summarizeMcpAuditArgs(entry.argsJson),
-        mcpAuditRowStatusForWire(entry.decision),
+        AuditDecision.fromName(entry.decision),
       ),
       McpActivityPendingRow(:final pending) => (
         pending.requestedAt,
         pending.request.hostLabel,
         'run_command',
         pending.request.command,
-        McpAuditRowStatus.pending,
+        null,
       ),
     };
 
@@ -438,7 +439,7 @@ class _TimelineRowTile extends StatelessWidget {
           SizedBox(
             width: 60,
             child: Text(
-              _formatClock(time),
+              formatMcpClock(time),
               style: shellvibeMono(context, size: 11, color: tokens.textSubtle),
             ),
           ),
@@ -478,7 +479,7 @@ class _TimelineRowTile extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 6),
-          McpDecisionChip(status: status),
+          McpDecisionChip(decision: status),
         ],
       ),
     );
@@ -504,76 +505,44 @@ class _PanicAction extends ConsumerWidget {
   }
 }
 
-String _formatClock(DateTime at) {
-  final local = at.toLocal();
-  String two(int v) => v.toString().padLeft(2, '0');
-  return '${two(local.hour)}:${two(local.minute)}:${two(local.second)}';
-}
-
-/// What one timeline row visually communicates. [pending] has no
-/// [AuditDecision] counterpart — it is a live wait, not yet a decision.
-enum McpAuditRowStatus {
-  allowed,
-  confirmed,
-  denied,
-  autoDenied,
-  error,
-  pending,
-}
-
-/// Maps [McpAuditLogData.decision] — stored as [AuditDecision.wireName], not
-/// as the enum itself — back to a [McpAuditRowStatus]. Takes the wire string
-/// directly rather than an [AuditDecision] because that is exactly what the
-/// drift row carries; [AuditDecision] itself exposes no reverse `fromName`
-/// (only [RiskCategory] and friends need one, for values a client sends in),
-/// so this is the one place that string is ever interpreted.
-McpAuditRowStatus mcpAuditRowStatusForWire(String decisionWireName) =>
-    switch (decisionWireName) {
-      'allowed' => McpAuditRowStatus.allowed,
-      'confirmed' => McpAuditRowStatus.confirmed,
-      'denied' => McpAuditRowStatus.denied,
-      'auto_denied' => McpAuditRowStatus.autoDenied,
-      // An unrecognized value must never read as a quiet success.
-      _ => McpAuditRowStatus.error,
-    };
-
 /// The one place a decision (or a still-pending wait) is turned into a
 /// color and an icon, shared by the panel and the full audit screen so the
 /// two surfaces never drift into disagreeing visual languages.
 class McpDecisionChip extends StatelessWidget {
-  final McpAuditRowStatus status;
+  /// Null is a live wait: not yet a decision.
+  final AuditDecision? decision;
 
-  const McpDecisionChip({super.key, required this.status});
+  const McpDecisionChip({super.key, required this.decision});
 
   @override
   Widget build(BuildContext context) {
-    final (icon, label, tone) = switch (status) {
-      McpAuditRowStatus.allowed => (
+    final (icon, label, tone) = switch (decision) {
+      AuditDecision.allowed => (
         LucideIcons.check,
         'allow',
         ShellVibeStatusTone.success,
       ),
-      McpAuditRowStatus.confirmed => (
+      AuditDecision.confirmed => (
         LucideIcons.checkCheck,
         'confirmed',
         ShellVibeStatusTone.success,
       ),
-      McpAuditRowStatus.denied => (
+      AuditDecision.denied => (
         LucideIcons.x,
         'denied',
         ShellVibeStatusTone.danger,
       ),
-      McpAuditRowStatus.autoDenied => (
+      AuditDecision.autoDenied => (
         LucideIcons.ban,
         'auto-denied',
         ShellVibeStatusTone.danger,
       ),
-      McpAuditRowStatus.error => (
+      AuditDecision.error => (
         LucideIcons.triangleAlert,
         'error',
         ShellVibeStatusTone.warning,
       ),
-      McpAuditRowStatus.pending => (
+      null => (
         LucideIcons.pause,
         'awaiting approval',
         ShellVibeStatusTone.warning,

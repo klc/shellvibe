@@ -56,21 +56,12 @@ class EncryptionEngine {
   }
 
   /// Generates a cryptographically secure random salt of [length] bytes (default 16 bytes).
-  Uint8List generateSalt([int length = 16]) => _randomBytes(length);
+  Uint8List generateSalt([int length = 16]) => secureRandomBytes(length);
 
   /// Generates a cryptographically secure random 256-bit Data Encryption Key.
   ///
   /// Use this — never [generateSalt] — when the bytes are used as key material.
-  Uint8List generateKey([int length = 32]) => _randomBytes(length);
-
-  Uint8List _randomBytes(int length) {
-    final random = Random.secure();
-    final bytes = Uint8List(length);
-    for (var i = 0; i < length; i++) {
-      bytes[i] = random.nextInt(256);
-    }
-    return bytes;
-  }
+  Uint8List generateKey([int length = 32]) => secureRandomBytes(length);
 
   /// Creates a self-contained Argon2id password record.
   ///
@@ -86,8 +77,8 @@ class EncryptionEngine {
     final digest = await key.extractBytes();
     return [
       argon2idHashPrefix,
-      base64Url.encode(salt).replaceAll('=', ''),
-      base64Url.encode(digest).replaceAll('=', ''),
+      base64UrlNoPad(salt),
+      base64UrlNoPad(digest),
     ].join(':');
   }
 
@@ -106,7 +97,7 @@ class EncryptionEngine {
         salt: salt,
       );
       final actual = await key.extractBytes();
-      return _constantTimeEquals(actual, expected);
+      return constantTimeEquals(actual, expected);
     } catch (_) {
       return false;
     }
@@ -117,15 +108,6 @@ class EncryptionEngine {
     return Uint8List.fromList(
       base64Url.decode('$value${List.filled(padding, '=').join()}'),
     );
-  }
-
-  static bool _constantTimeEquals(List<int> left, List<int> right) {
-    var difference = left.length ^ right.length;
-    final length = left.length < right.length ? left.length : right.length;
-    for (var i = 0; i < length; i++) {
-      difference |= left[i] ^ right[i];
-    }
-    return difference == 0;
   }
 
   /// Encrypts a UTF-8 plaintext string using AES-256-GCM.
@@ -231,4 +213,30 @@ class EncryptionEngine {
       throw CryptoException('Failed to decrypt payload using AES-256-GCM', e);
     }
   }
+}
+
+/// [length] bytes from the platform's secure random source.
+Uint8List secureRandomBytes(int length) {
+  final random = Random.secure();
+  final bytes = Uint8List(length);
+  for (var i = 0; i < length; i++) {
+    bytes[i] = random.nextInt(256);
+  }
+  return bytes;
+}
+
+/// base64url without the `=` padding: what goes into tokens, secrets and
+/// hash records that travel in URLs and JSON.
+String base64UrlNoPad(List<int> bytes) =>
+    base64Url.encode(bytes).replaceAll('=', '');
+
+/// Equality that takes the same time whether the inputs differ in the first
+/// byte or the last, so a comparison of secrets leaks nothing by timing.
+bool constantTimeEquals(List<int> left, List<int> right) {
+  var difference = left.length ^ right.length;
+  final length = left.length < right.length ? left.length : right.length;
+  for (var i = 0; i < length; i++) {
+    difference |= left[i] ^ right[i];
+  }
+  return difference == 0;
 }

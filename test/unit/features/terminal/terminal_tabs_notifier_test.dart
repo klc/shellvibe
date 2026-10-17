@@ -17,6 +17,7 @@ import 'package:shellvibe/features/terminal/domain/models/terminal_tab_session.d
 import 'package:shellvibe/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import 'package:shellvibe/features/vault/presentation/notifiers/vault_notifier.dart';
 import 'package:shellvibe/core/network/local_pty_manager.dart';
+import 'package:shellvibe/core/network/pty_session.dart';
 import 'package:shellvibe/core/network/providers/network_providers.dart';
 import 'package:shellvibe/core/utils/platform_capabilities.dart';
 import 'package:shellvibe/shared/database/app_database.dart';
@@ -269,7 +270,6 @@ void main() {
           id: 'device-link-test',
           title: 'Device Link',
           sessionType: TerminalSessionType.local,
-          isDeviceLink: true,
           terminal: Terminal(),
           isConnected: true,
         );
@@ -1021,17 +1021,17 @@ void main() {
 
       await reconnectFuture;
 
-      // The attempt failed (port 1 is unreachable) but the tab survived with
-      // a fresh session manager; closing the tab is no longer required to
-      // retry.
+      // The attempt failed (port 1 is unreachable) but the tab survived, with
+      // the dead manager torn down rather than left behind; closing the tab
+      // is no longer required to retry.
       final afterTab = container.read(terminalTabsProvider).tabs.last;
       expect(container.read(terminalTabsProvider).tabs.length, equals(1));
       expect(afterTab.id, equals(preTab.id));
       expect(afterTab.isConnecting, isFalse);
       expect(afterTab.isConnected, isFalse);
       expect(afterTab.errorMessage, isNotNull);
-      expect(afterTab.sshSessionManager, isNotNull);
-      expect(identical(afterTab.sshSessionManager, oldManager), isFalse);
+      expect(afterTab.sshSessionManager, isNull);
+      expect(oldManager, isNull);
     });
 
     test('reconnectTab clears modes the dead session left latched', () async {
@@ -1177,7 +1177,9 @@ void main() {
       final after = container.read(terminalTabsProvider).tabs.last;
       expect(after.host!.id, equals('host-never-saved'));
       expect(after.isConnecting, isFalse);
-      expect(after.sshSessionManager, isNotNull);
+      // The reconnect clears the error before dialing, so one being back
+      // means the attempt was actually made (port 1 refuses it).
+      expect(after.errorMessage, isNotNull);
     });
 
     test('rehomeMoshSessions is a no-op when no tab is running Mosh', () {
@@ -1388,6 +1390,31 @@ void main() {
       expect(firstPaneText, contains('2 environment variable(s)'));
     });
 
+    test('a tab closed while its shell spawns kills that shell', () async {
+      final manager = _RecordingPtyManager()..holdSpawn = true;
+      final scoped = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(database),
+          localPtyManagerProvider.overrideWithValue(manager),
+        ],
+      );
+      addTearDown(scoped.dispose);
+
+      final notifier = scoped.read(terminalTabsProvider.notifier);
+      notifier.openLocalTab();
+      final tabId = scoped.read(terminalTabsProvider).activeTabId!;
+      await notifier.closeTab(tabId);
+      expect(scoped.read(terminalTabsProvider).tabs, isEmpty);
+
+      // The process comes up after the pane is gone.
+      final pty = _KillablePty();
+      manager.spawn.complete(pty);
+      await pumpEventQueue();
+
+      expect(pty.killed, isTrue);
+      expect(notifier.deviceLinkSessionTransports(), isEmpty);
+    });
+
     test('a vault that fails to read still starts the shell', () async {
       final envs = await spawnedEnvironments(
         TerminalPalette.oled,
@@ -1435,10 +1462,16 @@ class _FixedSettingsNotifier extends SettingsNotifier {
   Future<AppSettingsModel> build() async => _settings;
 }
 
-/// Records the environment each shell was asked to start with, and starts
-/// none.
+/// Records the environment each shell was asked to start with. Starts none
+/// unless the test completes [spawn] with a session, which then backs every
+/// bridge handed out.
 class _RecordingPtyManager extends LocalPtyManager {
   final environments = <Map<String, String>?>[];
+  final spawn = Completer<PtySession?>();
+
+  /// Wait for [spawn] even when it has not completed yet, so a test can
+  /// complete it after the tab is already gone.
+  bool holdSpawn = false;
 
   @override
   Future<TerminalLocalPtyBridge?> startAndBridge(
@@ -1452,7 +1485,37 @@ class _RecordingPtyManager extends LocalPtyManager {
     void Function(Uint8List bytes)? outputTap,
   }) async {
     environments.add(environment);
-    return null;
+    if (!holdSpawn && !spawn.isCompleted) return null;
+    final session = await spawn.future;
+    if (session == null) return null;
+    return TerminalLocalPtyBridge(terminal: terminal, session: session);
+  }
+}
+
+/// A process that only records whether it was killed.
+class _KillablePty implements PtySession {
+  bool killed = false;
+  final _output = StreamController<Uint8List>();
+
+  @override
+  Stream<Uint8List> get output => _output.stream;
+
+  @override
+  Future<int> get exitCode => Completer<int>().future;
+
+  @override
+  void write(Uint8List data) {}
+
+  @override
+  void resize(int rows, int columns) {}
+
+  @override
+  void acknowledge() {}
+
+  @override
+  Future<void> dispose({bool kill = true}) async {
+    killed = kill;
+    await _output.close();
   }
 }
 

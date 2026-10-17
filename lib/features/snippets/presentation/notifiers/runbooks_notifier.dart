@@ -2,7 +2,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../shared/providers/database_providers.dart';
-import '../../../../shared/providers/workspace_provider.dart';
+import '../../../workspaces/presentation/providers/workspace_provider.dart';
 import '../../data/repositories/runbooks_repository.dart';
 import '../../domain/models/runbook_model.dart';
 import '../../domain/models/runbook_step_model.dart';
@@ -26,6 +26,18 @@ class RunbooksNotifier extends _$RunbooksNotifier {
     );
   }
 
+  /// Runs [op], then reloads the list in place: an add, edit or delete must
+  /// not blank the list to a spinner on the way through, and saving default
+  /// hosts happens as a run starts and must not blank it under the run.
+  Future<void> _mutate(Future<void> Function() op) async {
+    state = await AsyncValue.guard(() async {
+      await op();
+      return ref
+          .read(runbooksRepositoryProvider)
+          .getRunbooksByWorkspace(ref.read(activeWorkspaceIdProvider));
+    });
+  }
+
   Future<void> addRunbook({
     required String workspaceId,
     required String title,
@@ -33,57 +45,35 @@ class RunbooksNotifier extends _$RunbooksNotifier {
     List<RunbookStepModel> steps = const [],
     List<VariableDeclaration> variables = const [],
     List<String> tags = const [],
-  }) async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() async {
-      final repo = ref.read(runbooksRepositoryProvider);
-      final runbook = RunbookModel(
-        id: const Uuid().v4(),
-        workspaceId: workspaceId,
-        title: title,
-        description: description,
-        steps: steps,
-        variables: variables,
-        tags: tags,
-        createdAt: DateTime.now(),
-      );
-      await repo.addRunbook(runbook);
-      return await repo.getRunbooksByWorkspace(
-        ref.read(activeWorkspaceIdProvider),
-      );
-    });
-  }
+  }) => _mutate(
+    () => ref
+        .read(runbooksRepositoryProvider)
+        .addRunbook(
+          RunbookModel(
+            id: const Uuid().v4(),
+            workspaceId: workspaceId,
+            title: title,
+            description: description,
+            steps: steps,
+            variables: variables,
+            tags: tags,
+            createdAt: DateTime.now(),
+          ),
+        ),
+  );
 
-  Future<void> updateRunbook(RunbookModel runbook) async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() async {
-      final repo = ref.read(runbooksRepositoryProvider);
-      await repo.updateRunbook(runbook);
-      return await repo.getRunbooksByWorkspace(
-        ref.read(activeWorkspaceIdProvider),
-      );
-    });
-  }
+  Future<void> updateRunbook(RunbookModel runbook) => _mutate(
+    () => ref.read(runbooksRepositoryProvider).updateRunbook(runbook),
+  );
 
-  Future<void> deleteRunbook(String id) async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() async {
-      final repo = ref.read(runbooksRepositoryProvider);
-      await repo.deleteRunbook(id);
-      return await repo.getRunbooksByWorkspace(
-        ref.read(activeWorkspaceIdProvider),
-      );
-    });
-  }
+  Future<void> deleteRunbook(String id) =>
+      _mutate(() => ref.read(runbooksRepositoryProvider).deleteRunbook(id));
 
-  /// Saves the hosts the target sheet preselects for [runbookId]. Reloads in
-  /// place, without the loading state the editor's writes pass through: this
-  /// happens as a run starts and must not blank the list under it.
-  Future<void> setDefaultHostIds(String runbookId, List<String> hostIds) async {
-    final repo = ref.read(runbooksRepositoryProvider);
-    await repo.setDefaultHostIds(runbookId, hostIds);
-    state = AsyncData(
-      await repo.getRunbooksByWorkspace(ref.read(activeWorkspaceIdProvider)),
-    );
-  }
+  /// Saves the hosts the target sheet preselects for [runbookId].
+  Future<void> setDefaultHostIds(String runbookId, List<String> hostIds) =>
+      _mutate(
+        () => ref
+            .read(runbooksRepositoryProvider)
+            .setDefaultHostIds(runbookId, hostIds),
+      );
 }

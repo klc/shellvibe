@@ -1,10 +1,12 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show debugPrint;
+
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../shared/database/app_database.dart';
 import '../../../../shared/providers/database_providers.dart';
-import '../../../../shared/providers/workspace_provider.dart';
+import '../../../workspaces/presentation/providers/workspace_provider.dart';
 import '../../../../shared/storage/secure_storage_service.dart';
 import '../../../workspaces/domain/models/workspace_model.dart';
 import '../../data/mcp_providers.dart';
@@ -208,8 +210,8 @@ abstract final class McpSettingsBounds {
 ///
 /// Flipping the master switch is the one place this notifier reaches outside
 /// its own storage: on -> [McpServerController.start], off ->
-/// [McpServerController.stop]. Every other setter here only persists a value
-/// for whatever later reads it (the tool dispatcher's per-call defaults).
+/// [McpServerController.stop]. The "Limits" setters persist their value and
+/// push it onto the live session pool, which is where each one is read.
 @riverpod
 class McpSettingsNotifier extends _$McpSettingsNotifier {
   String _workspaceId = '';
@@ -226,6 +228,7 @@ class McpSettingsNotifier extends _$McpSettingsNotifier {
     final clients = await ref
         .watch(mcpClientRepositoryProvider)
         .listClients(workspaceId);
+    _applyLimits(persisted);
 
     // The persisted switch is the user's standing instruction, not a record
     // of what happened to be running last time. Reading it without acting on
@@ -267,7 +270,7 @@ class McpSettingsNotifier extends _$McpSettingsNotifier {
 
     try {
       if (current.masterEnabled) {
-        await controller.start();
+        await _start(controller, current);
       } else {
         await controller.stop();
       }
@@ -298,21 +301,67 @@ class McpSettingsNotifier extends _$McpSettingsNotifier {
     if (current == null || current.masterEnabled == enabled) return;
 
     final controller = ref.read(mcpServerControllerProvider);
-    if (enabled) {
-      await controller.start();
-    } else {
-      await controller.stop();
+    try {
+      if (enabled) {
+        await _start(controller, current);
+      } else {
+        await controller.stop();
+      }
+    } finally {
+      // Whatever happened (a locked vault, no free port, an endpoint file
+      // that could not be written), the switch must show what is true. The
+      // error itself travels on to the caller, which has a screen to show
+      // it on; the setting is persisted only when the server obeyed it.
+      if (ref.mounted) {
+        state = AsyncValue.data(
+          current.copyWith(
+            masterEnabled: controller.isRunning,
+            serverRunning: controller.isRunning,
+            serverPort: controller.port,
+            clearServerPort: !controller.isRunning,
+          ),
+        );
+      }
     }
-
     await _persist(current, masterEnabled: enabled);
-    state = AsyncValue.data(
-      current.copyWith(
-        masterEnabled: enabled,
-        serverRunning: controller.isRunning,
-        serverPort: controller.port,
-        clearServerPort: !controller.isRunning,
-      ),
-    );
+  }
+
+  /// Starts the server, then runs the retention sweeps: the audit log and
+  /// the expired remembered approvals are only ever pruned here, so a user
+  /// who never changes the retention knob still gets the default window.
+  Future<void> _start(
+    McpServerController controller,
+    McpSettingsState settings,
+  ) async {
+    await controller.start();
+    // Best-effort: the server is already up, a failed sweep must not make the
+    // start look failed or skip persisting the switch.
+    try {
+      await _purge(settings.auditRetentionDays);
+    } on Object catch (e) {
+      debugPrint('[MCP] audit purge failed: $e');
+    }
+  }
+
+  Future<void> _purge(int retentionDays) async {
+    await ref
+        .read(mcpAuditRepositoryProvider)
+        .purgeOlderThan(Duration(days: retentionDays));
+    await ref.read(mcpApprovalRepositoryProvider).purgeExpired();
+  }
+
+  /// Pushes the "Limits" knobs onto the live session pool, where each one is
+  /// read at the moment it applies (see `McpSessionPool.idleTimeout`).
+  // ponytail: the pool is global while these settings are per workspace, so
+  // the active workspace's limits apply to a server bound to another one;
+  // snapshot them at server start if that ever matters.
+  void _applyLimits(_PersistedMcpSettings persisted) {
+    ref.read(mcpSessionPoolProvider)
+      ..idleTimeout = Duration(minutes: persisted.sessionIdleTimeoutMinutes)
+      ..outputCapBytes = persisted.outputCapBytes
+      ..defaultCommandTimeout = Duration(
+        seconds: persisted.defaultCommandTimeoutSeconds,
+      );
   }
 
   Future<void> setDefaultCommandTimeoutSeconds(int seconds) async {
@@ -357,6 +406,8 @@ class McpSettingsNotifier extends _$McpSettingsNotifier {
         )
         .toInt();
     await _updateAndPersist((s) => s.copyWith(auditRetentionDays: clamped));
+    // A shorter window takes effect now, not at the next server start.
+    await _purge(clamped);
   }
 
   /// Registers a new client for the current workspace and returns its raw
@@ -365,15 +416,21 @@ class McpSettingsNotifier extends _$McpSettingsNotifier {
   /// mirroring [McpClientRepository.createClient]'s own contract.
   Future<String> addClient(String name) async {
     final repo = ref.read(mcpClientRepositoryProvider);
-    final (:clientId, :rawToken) = _asNamedRecord(
-      await repo.createClient(workspaceId: _workspaceId, name: name),
+    final (_, rawToken) = await repo.createClient(
+      workspaceId: _workspaceId,
+      name: name,
     );
     await _refreshClients();
     return rawToken;
   }
 
+  /// Revokes a client's token and, with it, everything it still holds: a
+  /// revoked token must not keep running commands over sessions it opened
+  /// before, nor keep grants a re-issued client could inherit.
   Future<void> revokeClient(String clientId) async {
     await ref.read(mcpClientRepositoryProvider).revokeClient(clientId);
+    await ref.read(mcpSessionPoolProvider).closeForClient(clientId);
+    await ref.read(mcpGrantRepositoryProvider).revokeAllForClient(clientId);
     await _refreshClients();
   }
 
@@ -438,44 +495,24 @@ class McpSettingsNotifier extends _$McpSettingsNotifier {
     final current = state.value;
     if (current == null) return;
     final updated = apply(current);
-    await _persist(
-      updated,
-      masterEnabled: updated.masterEnabled,
-      defaultCommandTimeoutSeconds: updated.defaultCommandTimeoutSeconds,
-      outputCapBytes: updated.outputCapBytes,
-      sessionIdleTimeoutMinutes: updated.sessionIdleTimeoutMinutes,
-      auditRetentionDays: updated.auditRetentionDays,
-    );
+    await _persist(updated);
+    _applyLimits(_fromState(updated));
     state = AsyncValue.data(updated);
   }
 
-  Future<void> _persist(
-    McpSettingsState base, {
-    bool? masterEnabled,
-    int? defaultCommandTimeoutSeconds,
-    int? outputCapBytes,
-    int? sessionIdleTimeoutMinutes,
-    int? auditRetentionDays,
-  }) {
+  Future<void> _persist(McpSettingsState base, {bool? masterEnabled}) {
     final store = _McpSettingsStore(ref.read(secureStorageServiceProvider));
     return store.save(
       _workspaceId,
-      _PersistedMcpSettings(
-        masterEnabled: masterEnabled ?? base.masterEnabled,
-        defaultCommandTimeoutSeconds:
-            defaultCommandTimeoutSeconds ?? base.defaultCommandTimeoutSeconds,
-        outputCapBytes: outputCapBytes ?? base.outputCapBytes,
-        sessionIdleTimeoutMinutes:
-            sessionIdleTimeoutMinutes ?? base.sessionIdleTimeoutMinutes,
-        auditRetentionDays: auditRetentionDays ?? base.auditRetentionDays,
-      ),
+      _fromState(base).copyWith(masterEnabled: masterEnabled),
     );
   }
 
-  /// [McpClientRepository.createClient] returns a positional record; this
-  /// gives the two fields names at the one call site that needs them, purely
-  /// for readability.
-  ({String clientId, String rawToken}) _asNamedRecord(
-    (String, String) record,
-  ) => (clientId: record.$1, rawToken: record.$2);
+  _PersistedMcpSettings _fromState(McpSettingsState s) => _PersistedMcpSettings(
+    masterEnabled: s.masterEnabled,
+    defaultCommandTimeoutSeconds: s.defaultCommandTimeoutSeconds,
+    outputCapBytes: s.outputCapBytes,
+    sessionIdleTimeoutMinutes: s.sessionIdleTimeoutMinutes,
+    auditRetentionDays: s.auditRetentionDays,
+  );
 }

@@ -705,7 +705,6 @@ void main() {
         expect(container.read(terminalTabsProvider).activeTabId, activeBefore);
         expect(container.read(terminalTabsProvider).tabs, hasLength(tabCount));
         expect(find.byType(ConnectCredentialsDialog), findsNothing);
-        expect(container.read(tunnelsProvider).error, isNull);
 
         await unpump(tester, container);
       });

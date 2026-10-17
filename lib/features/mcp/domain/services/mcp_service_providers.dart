@@ -14,7 +14,6 @@ part 'mcp_service_providers.g.dart';
 @riverpod
 PolicyEngine policyEngine(Ref ref) {
   return PolicyEngine(
-    grants: ref.watch(mcpGrantRepositoryProvider),
     approvals: ref.watch(mcpApprovalRepositoryProvider),
     dao: ref.watch(mcpDaoProvider),
   );

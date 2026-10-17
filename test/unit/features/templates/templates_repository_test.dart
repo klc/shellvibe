@@ -67,13 +67,13 @@ void main() {
 
   group('TemplatesRepository', () {
     test('initial template list is empty', () async {
-      expect(await repository.getAllTemplates(), isEmpty);
+      expect(await repository.getTemplatesByWorkspace('ws_1'), isEmpty);
     });
 
     test('round-trips a template with its panes', () async {
       await repository.addTemplate(_template(activePaneId: 'pane_split'));
 
-      final loaded = (await repository.getAllTemplates()).single;
+      final loaded = (await repository.getTemplatesByWorkspace('ws_1')).single;
       expect(loaded.name, equals('Prod triage'));
       expect(loaded.description, equals('Layout for the morning check'));
       expect(loaded.activePaneId, equals('pane_split'));
@@ -121,7 +121,9 @@ void main() {
           ),
         );
 
-        final loaded = (await repository.getAllTemplates()).single;
+        final loaded = (await repository.getTemplatesByWorkspace(
+          'ws_1',
+        )).single;
         expect(loaded.panes.map((p) => p.id), ['pane_a', 'pane_b', 'pane_c']);
       },
     );
@@ -131,7 +133,9 @@ void main() {
       () async {
         await repository.addTemplate(_template());
 
-        final loaded = (await repository.getAllTemplates()).single;
+        final loaded = (await repository.getTemplatesByWorkspace(
+          'ws_1',
+        )).single;
         await repository.updateTemplate(
           loaded.copyWith(
             name: 'Renamed',
@@ -147,7 +151,9 @@ void main() {
           ),
         );
 
-        final updated = (await repository.getAllTemplates()).single;
+        final updated = (await repository.getTemplatesByWorkspace(
+          'ws_1',
+        )).single;
         expect(updated.name, equals('Renamed'));
         expect(updated.panes.map((p) => p.id), ['pane_only']);
       },
@@ -157,7 +163,7 @@ void main() {
       await repository.addTemplate(_template());
       await repository.deleteTemplate('tpl_1');
 
-      expect(await repository.getAllTemplates(), isEmpty);
+      expect(await repository.getTemplatesByWorkspace('ws_1'), isEmpty);
       expect(await db.templatesDao.getPanesForTemplate('tpl_1'), isEmpty);
     });
 
@@ -189,7 +195,7 @@ void main() {
       // leaves the template intact and is reported at run time instead.
       await repository.addTemplate(_template());
 
-      final loaded = (await repository.getAllTemplates()).single;
+      final loaded = (await repository.getTemplatesByWorkspace('ws_1')).single;
       expect(loaded.panes.first.hostId, equals('host_1'));
     });
   });
@@ -225,7 +231,7 @@ void main() {
         ),
       );
 
-      var loaded = (await repository.getAllTemplates()).single;
+      var loaded = (await repository.getTemplatesByWorkspace('ws_1')).single;
       expect(loaded.onOpenRunbookId, 'rb');
       expect(loaded.onOpenConfirm, isFalse);
       expect(loaded.panes.first.startupSnippetId, 'sn');
@@ -241,7 +247,7 @@ void main() {
           ],
         ),
       );
-      loaded = (await repository.getAllTemplates()).single;
+      loaded = (await repository.getTemplatesByWorkspace('ws_1')).single;
       expect(loaded.onOpenRunbookId, isNull);
       expect(loaded.onOpenConfirm, isFalse);
       expect(loaded.panes.first.startupSnippetId, isNull);
@@ -252,7 +258,7 @@ void main() {
     'a template defaults to asking before its on-open runbook runs',
     () async {
       await repository.addTemplate(_template());
-      final loaded = (await repository.getAllTemplates()).single;
+      final loaded = (await repository.getTemplatesByWorkspace('ws_1')).single;
       expect(loaded.onOpenRunbookId, isNull);
       expect(loaded.onOpenConfirm, isTrue);
     },

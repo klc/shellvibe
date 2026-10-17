@@ -222,6 +222,19 @@ void main() {
       );
     });
 
+    test('a pane runs a snippet or a runbook, never both', () {
+      TemplatePaneModel a1(TemplateModel t) =>
+          t.panes.firstWhere((p) => p.id == 'a1');
+      final runbook = withSettings().withPaneStartupRunbook('a1', 'rb2');
+      expect(a1(runbook).startupRunbookId, 'rb2');
+      expect(a1(runbook).startupSnippetId, isNull);
+      final snippet = runbook.withPaneStartupSnippet('a1', 'sn');
+      expect(a1(snippet).startupSnippetId, 'sn');
+      expect(a1(snippet).startupRunbookId, isNull);
+      // Moving the pane keeps its runbook.
+      expect(a1(runbook.moveTab('b', 0)).startupRunbookId, 'rb2');
+    });
+
     test('moving, splitting and re-pointing keep every setting', () {
       var edited = withSettings()
           .withPaneHost('b', 'other')

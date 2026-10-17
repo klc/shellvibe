@@ -116,7 +116,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 19;
+  int get schemaVersion => 20;
 
   @override
   MigrationStrategy get migration {
@@ -323,6 +323,17 @@ class AppDatabase extends _$AppDatabase {
           )) {
             await m.addColumn(runbookRuns, runbookRuns.triggeredByClientId);
             await m.addColumn(runbookRuns, runbookRuns.triggeredByClientName);
+          }
+        }
+        if (from < 20) {
+          // A template pane can be given a runbook to type once it connects.
+          // Nullable reference, so every existing pane simply has none.
+          if (await _needsColumn(
+            templatePanes.actualTableName,
+            'startup_runbook_id',
+          )) {
+            await _ensureTable(runbooks);
+            await m.addColumn(templatePanes, templatePanes.startupRunbookId);
           }
         }
       },

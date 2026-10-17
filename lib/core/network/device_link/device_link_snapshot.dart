@@ -65,11 +65,7 @@ final class DeviceLinkSnapshot {
       rows.add(
         DeviceLinkSnapshotRow(
           isWrapped: line.isWrapped && index != firstLine,
-          runs: _serializeLine(
-            line,
-            terminal.viewWidth,
-            padToWidth: continues,
-          ),
+          runs: _serializeLine(line, terminal.viewWidth, padToWidth: continues),
         ),
       );
     }
@@ -199,9 +195,6 @@ final class DeviceLinkSnapshot {
     terminal.setCursorVisibleMode(cursorVisible);
     terminal.setCursor(cursorX, cursorY);
   }
-
-  /// Alias for call sites that use stream-oriented terminology.
-  void writeTo(Terminal terminal) => applyTo(terminal);
 
   static List<DeviceLinkAnsiRun> _serializeLine(
     BufferLine line,

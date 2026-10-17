@@ -2,7 +2,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../shared/database/models/workspace_usage.dart';
 import '../../../../shared/providers/database_providers.dart';
-import '../../../../shared/providers/workspace_provider.dart';
+import '../providers/workspace_provider.dart';
 import '../../data/repositories/workspace_repository.dart';
 import '../../domain/models/workspace_model.dart';
 

@@ -4,7 +4,7 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../../../../app/widgets/adaptive_modal.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
-import '../../../../shared/providers/workspace_provider.dart';
+import '../../../workspaces/presentation/providers/workspace_provider.dart';
 import '../../domain/models/host_group_model.dart';
 import '../notifiers/host_groups_notifier.dart';
 
@@ -24,7 +24,6 @@ class _HostGroupFormDialogState extends ConsumerState<HostGroupFormDialog> {
 
   late TextEditingController _nameController;
   late TextEditingController _colorTagController;
-  String? _selectedParentId;
   bool _isLoading = false;
 
   @override
@@ -33,7 +32,6 @@ class _HostGroupFormDialogState extends ConsumerState<HostGroupFormDialog> {
     final init = widget.initialGroup;
     _nameController = TextEditingController(text: init?.name ?? '');
     _colorTagController = TextEditingController(text: init?.colorTag ?? '');
-    _selectedParentId = init?.parentId;
   }
 
   @override
@@ -55,7 +53,9 @@ class _HostGroupFormDialogState extends ConsumerState<HostGroupFormDialog> {
         await notifier.updateGroup(
           id: widget.initialGroup!.id,
           workspaceId: widget.initialGroup!.workspaceId,
-          parentId: _selectedParentId,
+          // Nothing renders the hierarchy, but the column still syncs; keep
+          // whatever an older client set rather than clearing it on edit.
+          parentId: widget.initialGroup!.parentId,
           name: _nameController.text.trim(),
           colorTag: _colorTagController.text.trim().isEmpty
               ? null
@@ -65,7 +65,6 @@ class _HostGroupFormDialogState extends ConsumerState<HostGroupFormDialog> {
         await notifier.addGroup(
           workspaceId:
               widget.workspaceId ?? ref.read(activeWorkspaceIdProvider),
-          parentId: _selectedParentId,
           name: _nameController.text.trim(),
           colorTag: _colorTagController.text.trim().isEmpty
               ? null
@@ -90,7 +89,6 @@ class _HostGroupFormDialogState extends ConsumerState<HostGroupFormDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final groupsAsync = ref.watch(hostGroupsProvider);
     final isEditing = widget.initialGroup != null;
 
     return ShadDialog(
@@ -125,49 +123,6 @@ class _HostGroupFormDialogState extends ConsumerState<HostGroupFormDialog> {
                   placeholder: const Text('e.g. prod, staging, eu-west'),
                   validator: (v) =>
                       v.trim().isEmpty ? 'Tag name is required' : null,
-                ),
-                const SizedBox(height: 12),
-                groupsAsync.when(
-                  data: (groups) {
-                    final availableParents = groups
-                        .where(
-                          (g) => isEditing
-                              ? g.id != widget.initialGroup!.id
-                              : true,
-                        )
-                        .toList();
-
-                    return ShadSelectFormField<String?>(
-                      key: const Key('group_parent_dropdown'),
-                      initialValue: _selectedParentId,
-                      label: const Text('Parent Tag (Optional)'),
-                      selectedOptionBuilder: (context, value) {
-                        if (value == null) {
-                          return const Text('(Root Level - No Parent)');
-                        }
-                        final parent = availableParents
-                            .where((g) => g.id == value)
-                            .firstOrNull;
-                        return Text(parent?.name ?? value);
-                      },
-                      options: [
-                        const ShadOption<String?>(
-                          value: null,
-                          child: Text('(Root Level - No Parent)'),
-                        ),
-                        ...availableParents.map(
-                          (g) => ShadOption<String?>(
-                            value: g.id,
-                            child: Text(g.name),
-                          ),
-                        ),
-                      ],
-                      onChanged: (val) =>
-                          setState(() => _selectedParentId = val),
-                    );
-                  },
-                  loading: () => const LinearProgressIndicator(),
-                  error: (e, s) => Text('Error loading tags: $e'),
                 ),
                 const SizedBox(height: 12),
                 ShadInputFormField(

@@ -11,10 +11,6 @@ typedef DeviceLinkAttachCallback =
 typedef DeviceLinkDetachCallback = DeviceLinkAttachment? Function();
 typedef DeviceLinkResizeCallback = void Function(int columns, int rows);
 
-/// Resolves a session id after the authenticated hello handshake.
-typedef DeviceLinkSessionTransportResolver =
-    FutureOr<DeviceLinkSessionTransport?> Function(String sessionId);
-
 /// Supplies the sessions visible to the authenticated Device Link client.
 typedef DeviceLinkSessionTransportListProvider =
     FutureOr<List<DeviceLinkSessionTransport>> Function();

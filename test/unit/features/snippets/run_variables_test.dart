@@ -147,13 +147,11 @@ void main() {
         errorMessage: 'bad abcdef',
         command: 'login abcdef',
         attempts: 2,
-        attemptLog: const [StepAttempt(success: false, output: 'try abcdef')],
       );
       final masked = redactStepResult(result, {'abc', 'abcdef'});
       expect(masked.output, 'pw=[redacted] and [redacted]');
       expect(masked.errorMessage, 'bad [redacted]');
       expect(masked.command, 'login [redacted]');
-      expect(masked.attemptLog.single.output, 'try [redacted]');
       expect(masked.attempts, 2);
       expect(masked.exitCode, 1);
     });

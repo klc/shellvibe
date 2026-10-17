@@ -54,17 +54,6 @@ final class AccountState {
       session = null;
 
   bool get isSignedIn => status == AccountStatus.signedIn && session != null;
-
-  AccountState copyWith({
-    AccountStatus? status,
-    AccountSession? session,
-    String? lastEmail,
-    bool clearSession = false,
-  }) => AccountState(
-    status: status ?? this.status,
-    session: clearSession ? null : (session ?? this.session),
-    lastEmail: lastEmail ?? this.lastEmail,
-  );
 }
 
 /// Single owner of the account session.
@@ -173,13 +162,6 @@ class AccountNotifier extends _$AccountNotifier {
     });
   }
 
-  /// Forgets the device identity as well, so the next sign-in registers a new
-  /// device record.
-  Future<void> forgetThisDevice() async {
-    await signOut();
-    await _store.clearAll();
-  }
-
   /// Erases the account on the server, then forgets it on this device.
   ///
   /// The reverse order from [signOut]: nothing local changes until the server
@@ -200,23 +182,6 @@ class AccountNotifier extends _$AccountNotifier {
 
   /// Revokes another device.
   Future<void> revokeDevice(String deviceId) => _api.revokeDevice(deviceId);
-
-  /// Re-reads the session from the server, adopting whatever it reports.
-  ///
-  /// Used after a purchase or when the user opens the account screen.
-  Future<void> refresh() async {
-    final current = await future;
-    if (!current.isSignedIn) return;
-
-    final session = await _api.me();
-    state = AsyncValue.data(
-      current.copyWith(
-        status: AccountStatus.signedIn,
-        session: session,
-        lastEmail: session.email,
-      ),
-    );
-  }
 
   Future<void> _serialize(Future<AuthResult> Function() action) =>
       _enqueue(() async {
@@ -255,15 +220,4 @@ class AccountNotifier extends _$AccountNotifier {
       AccountState(status: AccountStatus.sessionExpired, lastEmail: lastEmail),
     );
   }
-}
-
-/// The API client of the current session, for feature repositories.
-///
-/// Watching this rather than constructing an [ApiClient] per feature keeps one
-/// token source and one `401` handler in the app.
-@Riverpod(keepAlive: true)
-Future<ApiClient> sessionApiClient(Ref ref) async {
-  await ref.watch(accountProvider.future);
-
-  return ref.watch(accountProvider.notifier).apiClient;
 }

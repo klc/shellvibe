@@ -40,25 +40,5 @@ void main() {
       );
       expect(itemDir.formattedSize, '--');
     });
-
-    test('octalPermissions correctly parses rwxr-xr-x to 755', () {
-      const item755 = SftpFileItem(
-        name: 'script.sh',
-        path: '/script.sh',
-        size: 100,
-        permissions: 'drwxr-xr-x',
-        isDirectory: true,
-      );
-      expect(item755.octalPermissions, '755');
-
-      const item644 = SftpFileItem(
-        name: 'file.txt',
-        path: '/file.txt',
-        size: 100,
-        permissions: '-rw-r--r--',
-        isDirectory: false,
-      );
-      expect(item644.octalPermissions, '644');
-    });
   });
 }

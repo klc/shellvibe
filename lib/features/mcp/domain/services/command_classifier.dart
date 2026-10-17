@@ -36,7 +36,7 @@ import '../models/mcp_models.dart';
 class CommandClassifier {
   const CommandClassifier();
 
-  CommandClassification classify(String command, {String cwd = '/'}) {
+  CommandClassification classify(String command) {
     final trimmed = command.trim();
     if (trimmed.isEmpty) {
       return const CommandClassification(
@@ -154,11 +154,10 @@ class CommandClassifier {
   /// `eval …` — runs a string the classifier cannot see into.
   static final RegExp _evalUsage = RegExp(r'\beval\b', caseSensitive: false);
 
-  /// `source <(…)` / `. <(…)` — sources a process-substitution stream.
-  static final RegExp _sourceProcessSubstitution = RegExp(
-    r'\b(?:source|\.)\s+<\(',
-    caseSensitive: false,
-  );
+  /// `$(…)`, backticks and `<(…)` — a nested command whose text the
+  /// segment splitter never sees, so ``ls `rm -rf /` `` would otherwise read
+  /// as a plain `ls`.
+  static final RegExp _commandSubstitution = RegExp(r'\$\(|`|<\(');
 
   /// `python[3] -c "…os.system(...)…"` or `…subprocess…` — shell text
   /// embedded in an interpreter's `-c` string. The scan between `-c` and the
@@ -183,9 +182,9 @@ class CommandClassifier {
     if (_evalUsage.hasMatch(command)) {
       return '`eval` executes an opaque string the classifier cannot read';
     }
-    if (_sourceProcessSubstitution.hasMatch(command)) {
-      return 'sources a process-substitution stream, whose contents the '
-          'classifier cannot see';
+    if (_commandSubstitution.hasMatch(command)) {
+      return 'embeds a command substitution (`\$(…)`, backticks or `<(…)`) '
+          'whose contents the classifier cannot see';
     }
     if (_pythonInlineShellOut.hasMatch(command)) {
       return 'runs shell commands from inside a Python `-c` string via '
@@ -205,9 +204,12 @@ class CommandClassifier {
   // ---------------------------------------------------------------------
 
   _SegmentResult _classifySegment(String segment) {
-    return _checkPrivilege(segment) ??
+    // Interactive goes first: `sudo vim x` or `less .env` must be refused as
+    // interactive (it cannot run on a PTY-less channel at all) rather than
+    // surfaced as a privilege/secret prompt that then hangs if approved.
+    return _checkInteractive(segment) ??
+        _checkPrivilege(segment) ??
         _checkSecretRead(segment) ??
-        _checkInteractive(segment) ??
         _checkDestructiveFs(segment) ??
         _checkServiceControl(segment) ??
         _checkPackage(segment) ??
@@ -216,6 +218,7 @@ class CommandClassifier {
         _checkDatabase(segment) ??
         _checkVcs(segment) ??
         _checkContainer(segment) ??
+        _checkRedirect(segment) ??
         _checkReadonlySafe(segment) ??
         const _SegmentResult(
           RiskCategory.unclassified,
@@ -256,8 +259,7 @@ class CommandClassifier {
   // -- secretRead -----------------------------------------------------------
 
   static final RegExp _secretReadCommand = RegExp(
-    r'^\s*(?:cat|less|more|head|tail|vim|vi|nvim|nano|grep|egrep|fgrep|'
-    r'strings|xxd|od|hexdump|cp|scp)\b',
+    r'^\s*(?:cat|head|tail|grep|egrep|fgrep|strings|xxd|od|hexdump|cp|scp)\b',
     caseSensitive: false,
   );
   static final RegExp _credentialPath = RegExp(
@@ -330,14 +332,24 @@ class CommandClassifier {
     caseSensitive: false,
   );
 
-  _SegmentResult? _checkInteractive(String s) {
+  /// `sudo vim` is still `vim`. Only bare flags are skipped; `sudo -u bob
+  /// vim` keeps its user argument in front and falls through to privilege,
+  /// which is the stricter of the two outcomes anyway.
+  static final RegExp _privilegeStrip = RegExp(
+    r'^\s*(?:sudo|doas)\b(?:\s+-\S+)*\s+',
+    caseSensitive: false,
+  );
+
+  _SegmentResult? _checkInteractive(String segment) {
+    final s = segment.replaceFirst(_privilegeStrip, '');
     if (_interactiveEditor.hasMatch(s)) {
       return const _SegmentResult(
         RiskCategory.interactive,
-        reason: 'opens an interactive terminal editor and blocks the session',
-        batchAlternative:
-            'use the sftp_read / sftp_write tools instead of an '
-            'interactive editor',
+        reason:
+            'opens an interactive terminal editor and blocks the session. '
+            'Read the file with `cat` instead, or write it with a heredoc '
+            '(`cat > file <<EOF … EOF`) through run_command',
+        batchAlternative: 'cat <file>',
       );
     }
     if (_lessMore.hasMatch(s)) {
@@ -816,6 +828,22 @@ class CommandClassifier {
       return const _SegmentResult(
         RiskCategory.container,
         reason: '`kubectl delete` removes a cluster object',
+      );
+    }
+    return null;
+  }
+
+  // -- redirection ------------------------------------------------------
+
+  /// `>`/`>>` writing anywhere but `/dev/null` or a file descriptor
+  /// (`2>&1`). Otherwise `echo … >> ~/.ssh/authorized_keys` is just `echo`.
+  static final RegExp _fileRedirect = RegExp(r'>>?(?!\s*/dev/null\b|&\d)');
+
+  _SegmentResult? _checkRedirect(String s) {
+    if (_fileRedirect.hasMatch(s)) {
+      return const _SegmentResult(
+        RiskCategory.unclassified,
+        reason: 'redirects output into a file, so it writes rather than reads',
       );
     }
     return null;

@@ -10,22 +10,22 @@ part of 'cloud_backup_notifier.dart';
 // ignore_for_file: type=lint, type=warning
 /// Drives the cloud backup surface.
 ///
-/// Rebuilds when the account or the entitlement changes, so signing out or a
-/// lapsed subscription closes the feature without anything having to listen.
+/// Rebuilds when the account or the plan's limits change, so signing out
+/// closes the feature without anything having to listen.
 
 @ProviderFor(CloudBackupNotifier)
 final cloudBackupProvider = CloudBackupNotifierProvider._();
 
 /// Drives the cloud backup surface.
 ///
-/// Rebuilds when the account or the entitlement changes, so signing out or a
-/// lapsed subscription closes the feature without anything having to listen.
+/// Rebuilds when the account or the plan's limits change, so signing out
+/// closes the feature without anything having to listen.
 final class CloudBackupNotifierProvider
     extends $AsyncNotifierProvider<CloudBackupNotifier, CloudBackupState> {
   /// Drives the cloud backup surface.
   ///
-  /// Rebuilds when the account or the entitlement changes, so signing out or a
-  /// lapsed subscription closes the feature without anything having to listen.
+  /// Rebuilds when the account or the plan's limits change, so signing out
+  /// closes the feature without anything having to listen.
   CloudBackupNotifierProvider._()
     : super(
         from: null,
@@ -46,12 +46,12 @@ final class CloudBackupNotifierProvider
 }
 
 String _$cloudBackupNotifierHash() =>
-    r'78de61ae445428490346028fc8fa3e955a3a2e52';
+    r'5aabb2936642c00021f0fd3bcdc90543aa6d1d05';
 
 /// Drives the cloud backup surface.
 ///
-/// Rebuilds when the account or the entitlement changes, so signing out or a
-/// lapsed subscription closes the feature without anything having to listen.
+/// Rebuilds when the account or the plan's limits change, so signing out
+/// closes the feature without anything having to listen.
 
 abstract class _$CloudBackupNotifier extends $AsyncNotifier<CloudBackupState> {
   FutureOr<CloudBackupState> build();

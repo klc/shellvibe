@@ -10,7 +10,7 @@ part of 'sync_notifier.dart';
 // ignore_for_file: type=lint, type=warning
 /// Runs automatic sync.
 ///
-/// Rebuilds when the account, the entitlement or the switch changes, so
+/// Rebuilds when the account, the plan's limits or the switch changes, so
 /// signing out or turning it off stops it without anything having to listen.
 ///
 /// `keepAlive` because it owns timers: a disposed instance would leave them
@@ -21,7 +21,7 @@ final syncProvider = SyncNotifierProvider._();
 
 /// Runs automatic sync.
 ///
-/// Rebuilds when the account, the entitlement or the switch changes, so
+/// Rebuilds when the account, the plan's limits or the switch changes, so
 /// signing out or turning it off stops it without anything having to listen.
 ///
 /// `keepAlive` because it owns timers: a disposed instance would leave them
@@ -30,7 +30,7 @@ final class SyncNotifierProvider
     extends $AsyncNotifierProvider<SyncNotifier, SyncState> {
   /// Runs automatic sync.
   ///
-  /// Rebuilds when the account, the entitlement or the switch changes, so
+  /// Rebuilds when the account, the plan's limits or the switch changes, so
   /// signing out or turning it off stops it without anything having to listen.
   ///
   /// `keepAlive` because it owns timers: a disposed instance would leave them
@@ -54,11 +54,11 @@ final class SyncNotifierProvider
   SyncNotifier create() => SyncNotifier();
 }
 
-String _$syncNotifierHash() => r'3b56a708a316dbc6f7ba97255e1cdf6b8c5ed97e';
+String _$syncNotifierHash() => r'030031de87ec808ba31b908e218545713593e012';
 
 /// Runs automatic sync.
 ///
-/// Rebuilds when the account, the entitlement or the switch changes, so
+/// Rebuilds when the account, the plan's limits or the switch changes, so
 /// signing out or turning it off stops it without anything having to listen.
 ///
 /// `keepAlive` because it owns timers: a disposed instance would leave them

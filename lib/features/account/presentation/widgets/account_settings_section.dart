@@ -8,6 +8,7 @@ import '../../../../app/widgets/adaptive_modal.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../../../core/api/api_exception.dart';
 import '../../../billing/domain/entitlement.dart';
+import '../../../device_link/presentation/platform_icon.dart';
 import '../../../billing/presentation/notifiers/entitlement_notifier.dart';
 import '../../domain/account_session.dart';
 import '../notifiers/account_notifier.dart';
@@ -67,13 +68,13 @@ class _AccountSettingsSectionState
     final tokens = ShellVibeTokens.resolve(context);
 
     return account.when(
-      loading: () => const _SectionCard(
+      loading: () => const ShadCard(
         child: Padding(
           padding: EdgeInsets.all(12),
           child: Center(child: CircularProgressIndicator.adaptive()),
         ),
       ),
-      error: (error, _) => _SectionCard(
+      error: (error, _) => ShadCard(
         child: _ErrorText('The account state could not be read: $error'),
       ),
       data: (state) {
@@ -93,7 +94,7 @@ class _AccountSettingsSectionState
     ShellVibeTokens tokens,
     AccountStatus status,
   ) {
-    return _SectionCard(
+    return ShadCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -183,7 +184,7 @@ class _AccountSettingsSectionState
   ) {
     final entitlement = ref.watch(entitlementProvider);
 
-    return _SectionCard(
+    return ShadCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -710,7 +711,7 @@ class _DeviceListSheetState extends State<_DeviceListSheet> {
                 for (final device in devices)
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    leading: Icon(_iconFor(device.platform), size: 18),
+                    leading: Icon(platformIcon(device.platform), size: 18),
                     title: Text(device.name),
                     subtitle: Text(
                       device.isRevoked
@@ -738,25 +739,6 @@ class _DeviceListSheetState extends State<_DeviceListSheet> {
       ),
     );
   }
-
-  /// Maps a platform string to a glyph, tolerating values this build has never
-  /// seen -- the contract allows new ones.
-  static IconData _iconFor(String platform) => switch (platform) {
-    'ios' || 'android' => LucideIcons.smartphone,
-    'macos' => LucideIcons.laptop,
-    'windows' || 'linux' => LucideIcons.monitor,
-    'web' => LucideIcons.globe,
-    _ => LucideIcons.circleHelp,
-  };
-}
-
-final class _SectionCard extends StatelessWidget {
-  const _SectionCard({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) => ShadCard(child: child);
 }
 
 final class _Field extends StatelessWidget {

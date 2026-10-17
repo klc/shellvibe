@@ -36,6 +36,11 @@ class HostModel {
 
   bool get isProd => environment == 'prod';
 
+  /// `user@hostname:port`, the user part omitted when there is none.
+  String get address =>
+      '${username != null && username!.isNotEmpty ? '$username@' : ''}'
+      '$hostname:$port';
+
   const HostModel({
     required this.id,
     required this.workspaceId,

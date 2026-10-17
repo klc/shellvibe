@@ -350,6 +350,7 @@ final class DeviceLinkClientConnection implements DeviceLinkConnection {
   ///
   /// Production callers should use [sendControl] so outbound messages are
   /// typed and versioned by the protocol model.
+  @visibleForTesting
   Future<void> sendRawText(String text) async {
     if (_closed) throw _closedError;
     // WebSocket owns this sink and closes it in [close].
@@ -422,6 +423,7 @@ final class DeviceLinkClientConnection implements DeviceLinkConnection {
     );
   }
 
+  @visibleForTesting
   Future<DeviceLinkBinaryFrame> nextBinary({
     Duration timeout = const Duration(seconds: 10),
   }) {

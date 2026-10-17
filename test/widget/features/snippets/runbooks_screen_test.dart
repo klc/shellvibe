@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
+import 'package:shellvibe/core/utils/platform_capabilities.dart';
 import 'package:shellvibe/features/snippets/presentation/screens/runbooks_screen.dart';
 import 'package:shellvibe/features/snippets/presentation/screens/snippets_screen.dart';
 import 'package:shellvibe/shared/database/app_database.dart';
@@ -43,6 +44,40 @@ void main() {
   }
 
   group('Runbooks section', () {
+    // The row's Run and menu controls grow to the touch target on a touch
+    // host; a slot measured under a pointer overflowed by the difference on an
+    // iPhone and an iPad.
+    for (final size in const [Size(430, 932), Size(1032, 1366)]) {
+      testWidgets('a row fits its controls on a touch host at $size', (
+        tester,
+      ) async {
+        await db.runbooksDao.insertRunbook(
+          RunbooksCompanion.insert(
+            id: 'seed',
+            workspaceId: 'default',
+            title: 'Nightly checks',
+            createdAt: DateTime.now(),
+          ),
+        );
+        debugPlatformCapabilitiesOverride = TargetPlatform.iOS;
+        addTearDown(() => debugPlatformCapabilitiesOverride = null);
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(
+          wrap(
+            const SnippetsScreen(initialSection: AutomationSection.runbooks),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(const Key('runbook_execute_seed')), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      });
+    }
+
     testWidgets('Renders the empty state when no runbook exists', (
       tester,
     ) async {
@@ -68,11 +103,7 @@ void main() {
       );
 
       await tester.pumpWidget(
-        wrap(
-          const SnippetsScreen(
-            initialSection: AutomationSection.runbooks,
-          ),
-        ),
+        wrap(const SnippetsScreen(initialSection: AutomationSection.runbooks)),
       );
       await tester.pumpAndSettle();
 

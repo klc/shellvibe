@@ -77,4 +77,4 @@ final class McpServerControllerProvider
 }
 
 String _$mcpServerControllerHash() =>
-    r'd2e636ec7d62cf431f9b7549ed14da55ca6578a1';
+    r'90ad7dd8c9a9554093197282e7f03afa9ff0acb7';

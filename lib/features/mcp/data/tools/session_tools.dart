@@ -7,25 +7,6 @@ import '../mcp_session_pool.dart';
 import '../repositories/mcp_grant_repository.dart';
 import 'mcp_tool_handler.dart';
 
-/// Shared session lookup: every session tool but `open_session` needs "find
-/// this id, and refuse it if it belongs to a different client" — a client
-/// must never be able to touch, list, or even learn of another client's
-/// session by guessing its id.
-McpSession _requireOwnedSession(
-  McpSessionPool pool,
-  McpToolContext ctx,
-  String sessionId,
-) {
-  final session = pool.find(sessionId);
-  if (session == null || session.clientId != ctx.clientId) {
-    throw McpToolException(
-      McpErrorCode.sessionNotFound,
-      'No open session with id "$sessionId" for this client.',
-    );
-  }
-  return session;
-}
-
 /// `open_session` — turns a host grant into a live, normalized shell.
 ///
 /// Deliberately does NOT prompt for access itself: `docs/mcp_plan.md`'s
@@ -205,7 +186,7 @@ class CloseSessionTool with McpArgReaders implements McpToolHandler {
   @override
   Future<Object?> execute(McpToolContext ctx, Map<String, Object?> args) async {
     final sessionId = requireString(args, 'sessionId');
-    _requireOwnedSession(sessionPool, ctx, sessionId);
+    sessionPool.requireOwned(ctx.clientId, sessionId);
     await sessionPool.close(sessionId);
     return {'ok': true};
   }
@@ -247,7 +228,7 @@ class InterruptTool with McpArgReaders implements McpToolHandler {
   @override
   Future<Object?> execute(McpToolContext ctx, Map<String, Object?> args) async {
     final sessionId = requireString(args, 'sessionId');
-    final session = _requireOwnedSession(sessionPool, ctx, sessionId);
+    final session = sessionPool.requireOwned(ctx.clientId, sessionId);
     await session.shell.interrupt();
     session.lastActivityAt = DateTime.now();
     final surfaceId = session.tabId;

@@ -11,7 +11,7 @@ import '../../../hosts/presentation/dialogs/host_form_dialog.dart';
 import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
 import '../../../templates/domain/models/template_model.dart';
 import '../../../templates/presentation/notifiers/templates_notifier.dart';
-import '../../../../shared/providers/workspace_provider.dart';
+import '../../../workspaces/presentation/providers/workspace_provider.dart';
 
 /// Host picker shown by the "Connect to Host" panel.
 ///

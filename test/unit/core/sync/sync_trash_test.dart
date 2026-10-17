@@ -83,8 +83,8 @@ void main() {
     await journal.restoreFromTrash(entityType: 'hosts', entityId: 'h1');
 
     expect(
-      await journal.isDeleted(entityType: 'hosts', entityId: 'h1'),
-      isFalse,
+      await journal.tombstoneFor(entityType: 'hosts', entityId: 'h1'),
+      isNull,
     );
   });
 
