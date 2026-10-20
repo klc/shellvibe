@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,6 +10,7 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:shellvibe/core/crypto/encryption_engine.dart';
+import 'package:shellvibe/features/vault/presentation/notifiers/vault_env_vars_notifier.dart';
 import 'package:shellvibe/features/vault/presentation/screens/vault_screen.dart';
 import 'package:shellvibe/shared/database/app_database.dart';
 import 'package:shellvibe/shared/providers/database_providers.dart';
@@ -366,6 +368,63 @@ void main() {
         expect(find.byKey(const Key('add_env_var_button')), findsOneWidget);
       },
     );
+
+    testWidgets('Copy value copies the stored value, not the revealed one', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1400, 1000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+      String? clipboard;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+            if (call.method == 'Clipboard.setData') {
+              clipboard = (call.arguments as Map)['text'] as String?;
+            }
+            return null;
+          });
+      addTearDown(
+        () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, null),
+      );
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pump();
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(VaultScreen)),
+      );
+      final repo = container.read(vaultEnvRepositoryProvider);
+      final id = (await tester.runAsync(
+        () => repo.save(
+          workspaceId: 'default',
+          name: 'TOKEN',
+          value: 'old-secret',
+        ),
+      ))!.id;
+      container.invalidate(vaultEnvVarsProvider);
+      await tester.tap(find.byKey(const Key('vault_nav_env')));
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.tap(find.byKey(Key('reveal_env_var_button_$id')));
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(find.text('old-secret'), findsOneWidget);
+
+      await tester.runAsync(
+        () => repo.save(
+          id: id,
+          workspaceId: 'default',
+          name: 'TOKEN',
+          value: 'new-secret',
+        ),
+      );
+      await tester.tap(find.byKey(Key('copy_env_var_button_$id')));
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(clipboard, 'new-secret');
+      // Let the auto-clear timer finish so the test ends clean.
+      await tester.pump(const Duration(minutes: 1));
+    });
 
     testWidgets('Add environment variable dialog validates the name', (
       tester,

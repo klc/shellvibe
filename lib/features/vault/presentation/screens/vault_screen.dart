@@ -806,22 +806,21 @@ class _EnvVarRowState extends ConsumerState<_EnvVarRow> {
   }
 
   Future<void> _copyValue() async {
-    var value = _revealedValue;
-    if (value == null) {
-      try {
-        value = await ref
-            .read(vaultEnvVarsProvider.notifier)
-            .decryptValue(widget.variable.id);
-      } catch (e) {
-        if (mounted) {
-          ShadToaster.of(context).show(
-            ShadToast.destructive(
-              description: Text('Cannot read this value: $e'),
-            ),
-          );
-        }
-        return;
+    // _revealedValue is only for display; the clipboard gets what is stored now.
+    final String? value;
+    try {
+      value = await ref
+          .read(vaultEnvVarsProvider.notifier)
+          .decryptValue(widget.variable.id);
+    } catch (e) {
+      if (mounted) {
+        ShadToaster.of(context).show(
+          ShadToast.destructive(
+            description: Text('Cannot read this value: $e'),
+          ),
+        );
       }
+      return;
     }
 
     if (value == null || value.isEmpty) {
@@ -868,7 +867,14 @@ class _EnvVarRowState extends ConsumerState<_EnvVarRow> {
           buttonKey: Key('edit_env_var_button_${variable.id}'),
           icon: LucideIcons.pencil,
           tooltip: 'Edit',
-          onPressed: widget.onEdit,
+          onPressed: () {
+            // The value may change in the editor; do not keep showing the old one.
+            setState(() {
+              _revealed = false;
+              _revealedValue = null;
+            });
+            widget.onEdit();
+          },
         ),
         ShellVibeIconButton(
           buttonKey: Key('delete_env_var_button_${variable.id}'),
