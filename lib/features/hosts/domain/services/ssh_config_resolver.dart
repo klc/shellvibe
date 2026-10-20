@@ -191,7 +191,7 @@ class SshConfigResolver {
       for (final pattern in d.args) {
         for (final alt in pattern.split('|')) {
           var p = alt;
-          if (p.startsWith('!')) p = p.substring(1);
+          if (p.startsWith('!')) continue;
           if (p.isEmpty) continue;
           if (p.contains('*') || p.contains('?')) continue;
           if (seen.add(p)) aliases.add(p);
