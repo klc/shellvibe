@@ -26,8 +26,17 @@ class BookmarksNotifier extends _$BookmarksNotifier {
   ///
   /// The toggle is one call because that is what the star in the host row does;
   /// asking the caller to read the current state first would let two taps in
-  /// quick succession decide from the same stale answer.
-  Future<void> toggleHost(String hostId) async {
+  /// quick succession decide from the same stale answer. Toggles are also
+  /// serialised, so the second of two quick taps sees the first's result.
+  Future<void> toggleHost(String hostId) =>
+      _chain = _chain.then((_) => _toggleHost(hostId));
+
+  Future<void> toggleTemplate(String templateId) =>
+      _chain = _chain.then((_) => _toggleTemplate(templateId));
+
+  Future<void> _chain = Future.value();
+
+  Future<void> _toggleHost(String hostId) async {
     final repo = ref.read(bookmarksRepositoryProvider);
     final workspaceId = ref.read(activeWorkspaceIdProvider);
     if (isHostBookmarked(hostId)) {
@@ -38,7 +47,7 @@ class BookmarksNotifier extends _$BookmarksNotifier {
     await _refresh(repo, workspaceId);
   }
 
-  Future<void> toggleTemplate(String templateId) async {
+  Future<void> _toggleTemplate(String templateId) async {
     final repo = ref.read(bookmarksRepositoryProvider);
     final workspaceId = ref.read(activeWorkspaceIdProvider);
     if (isTemplateBookmarked(templateId)) {
@@ -57,10 +66,7 @@ class BookmarksNotifier extends _$BookmarksNotifier {
     return state.value?.any((b) => b.templateId == templateId) ?? false;
   }
 
-  Future<void> _refresh(
-    BookmarksRepository repo,
-    String workspaceId,
-  ) async {
+  Future<void> _refresh(BookmarksRepository repo, String workspaceId) async {
     state = AsyncValue.data(await repo.getBookmarks(workspaceId));
   }
 }
