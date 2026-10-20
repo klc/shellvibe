@@ -432,9 +432,11 @@ class SyncNotifier extends _$SyncNotifier {
       if (result.applied > 0) invalidateRestoredData(ref.invalidate);
 
       if (!result.succeeded) {
-        // The one refusal that clears on its own. Letting the join start
-        // again is what lets unlocking finish it.
-        if (result.problem == SyncJoinProblem.vaultLocked) {
+        // Only a refusal that needs the user (no complete ground, a key that
+        // does not open it) stays closed; the rest clear on their own, so let
+        // the next pass start the join again.
+        if (result.problem != SyncJoinProblem.noCompleteGround &&
+            result.problem != SyncJoinProblem.cannotOpen) {
           _joinStarted = false;
         }
         if (kDebugMode) {
@@ -468,6 +470,8 @@ class SyncNotifier extends _$SyncNotifier {
         debugPrintStack(stackTrace: stackTrace);
       }
       _publish((s) => s.copyWith(error: '$e'));
+      // Offline or the like: the next pass tries the join again.
+      _joinStarted = false;
 
       return;
     }
@@ -551,6 +555,8 @@ class SyncNotifier extends _$SyncNotifier {
   Future<void> syncNow({bool pullFirst = false}) {
     final engine = _engine;
     if (engine == null) return Future.value();
+    // A device that has not joined must not sync; try the join first.
+    if (_join != null && !_joinStarted) return _startJoinOnce();
 
     return _serial(() async {
       // Queued behind another pass; this instance may have been rebuilt away

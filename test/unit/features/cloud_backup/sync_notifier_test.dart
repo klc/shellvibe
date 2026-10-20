@@ -226,6 +226,24 @@ void main() {
       );
     });
 
+    test('a join that failed is tried again by the next pass', () async {
+      server.intercept = (request) =>
+          request.method == 'PUT' &&
+              (jsonDecode(request.body!) as Map)['kind'] == 'sync'
+          ? FakeSyncServer.error(500, 'internal_error', 'The server failed.')
+          : null;
+
+      final notifier = await started();
+      await eventually(() => current().error != null);
+      expect(current().lastJoin, isNull);
+
+      server.intercept = null;
+      await notifier.syncNow();
+
+      await eventually(() => current().lastJoin != null);
+      expect(current().error, isNull);
+    });
+
     test('the pass after a join reports what it could not read', () async {
       // Sealed with a key this device does not hold. A join is where a
       // mismatched key shows itself first, and a pass that dropped the count
