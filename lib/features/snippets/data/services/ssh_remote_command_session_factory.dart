@@ -78,10 +78,13 @@ class _SshRemoteCommandSession implements RemoteCommandSession {
   @override
   Future<(String, int)> run(String command, Duration timeout) async {
     final result = await _shell.run(command, timeout: timeout);
-    if (result.interrupted) {
+    if (result.interrupted || result.sessionReset) {
       throw TimeoutException(
-        'Command did not finish within ${timeout.inSeconds}s and was '
-        'interrupted.',
+        result.sessionReset
+            ? 'Command hung; the shell was reset and earlier `cd`/exports '
+                  'are gone.'
+            : 'Command did not finish within ${timeout.inSeconds}s and was '
+                  'interrupted.',
         timeout,
       );
     }
