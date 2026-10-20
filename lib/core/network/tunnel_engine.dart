@@ -106,6 +106,9 @@ class TunnelEngine {
   final Map<String, Set<Socket>> _activeSockets = {};
   final Map<String, Set<SSHForwardChannel>> _activeChannels = {};
 
+  /// The client each running forward rides on; see [_watchClient].
+  final Map<String, SSHClient> _clients = {};
+
   final StreamController<List<ActiveTunnel>> _tunnelsController =
       StreamController<List<ActiveTunnel>>.broadcast();
 
@@ -170,13 +173,7 @@ class TunnelEngine {
       _activeSockets[ruleId] = {};
       _activeChannels[ruleId] = {};
       _publish(tunnel);
-      // The forward is only as alive as the client it rides on.
-      unawaited(
-        sshClient.done.then(
-          (_) => _onClientGone(ruleId, tunnel),
-          onError: (Object _) => _onClientGone(ruleId, tunnel),
-        ),
-      );
+      _watchClient(ruleId, sshClient);
 
       serverSocket.listen((clientSocket) async {
         _activeSockets[ruleId]?.add(clientSocket);
@@ -250,13 +247,7 @@ class TunnelEngine {
       _activeSockets[ruleId] = {};
       _activeChannels[ruleId] = {};
       _publish(tunnel);
-      // The forward is only as alive as the client it rides on.
-      unawaited(
-        sshClient.done.then(
-          (_) => _onClientGone(ruleId, tunnel),
-          onError: (Object _) => _onClientGone(ruleId, tunnel),
-        ),
-      );
+      _watchClient(ruleId, sshClient);
 
       _remoteSubscriptions[ruleId] = listener.connections.listen((
         connection,
@@ -324,24 +315,33 @@ class TunnelEngine {
       await socksServer.start();
       _socksServers[ruleId] = socksServer;
       _publish(tunnel);
-      // The forward is only as alive as the client it rides on.
-      unawaited(
-        sshClient.done.then(
-          (_) => _onClientGone(ruleId, tunnel),
-          onError: (Object _) => _onClientGone(ruleId, tunnel),
-        ),
-      );
+      _watchClient(ruleId, sshClient);
     } catch (e) {
       _publish(tunnel.failed(e));
       rethrow;
     }
   }
 
-  Future<void> _onClientGone(String ruleId, ActiveTunnel tunnel) async {
-    // Restarted or stopped since.
-    if (!identical(_activeTunnels[ruleId], tunnel)) return;
+  /// The forward is only as alive as the client it rides on.
+  void _watchClient(String ruleId, SSHClient client) {
+    _clients[ruleId] = client;
+    unawaited(
+      client.done.then(
+        (_) => _onClientGone(ruleId, client),
+        onError: (Object _) => _onClientGone(ruleId, client),
+      ),
+    );
+  }
+
+  Future<void> _onClientGone(String ruleId, SSHClient client) async {
+    // Restarted or stopped since. Not the tunnel's identity: byte and speed
+    // updates replace that object.
+    if (!identical(_clients[ruleId], client)) return;
+    final tunnel = _activeTunnels[ruleId];
     await stopTunnel(ruleId);
-    _publish(tunnel.failed(StateError('SSH connection closed')));
+    if (tunnel != null) {
+      _publish(tunnel.failed(StateError('SSH connection closed')));
+    }
   }
 
   void _publish(ActiveTunnel tunnel) {
@@ -351,6 +351,7 @@ class TunnelEngine {
 
   /// Stop a specific tunnel by ruleId
   Future<void> stopTunnel(String ruleId) async {
+    _clients.remove(ruleId);
     await _remoteSubscriptions.remove(ruleId)?.cancel();
 
     if (_localServers.containsKey(ruleId)) {
