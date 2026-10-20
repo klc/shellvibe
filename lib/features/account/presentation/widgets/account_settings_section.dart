@@ -291,20 +291,27 @@ class _AccountSettingsSectionState
         );
       }
 
+      if (!mounted) return;
       _passwordController.clear();
     } on ApiException catch (e) {
+      if (!mounted) return;
       setState(() {
         _fieldErrors = e.validationErrors;
         _formError = _messageFor(e);
       });
     } on ApiTransportException catch (e) {
+      if (!mounted) return;
       setState(
         () => _formError = e.timedOut
             ? 'The server did not answer in time.'
             : 'The server could not be reached.',
       );
     } on Object catch (e) {
-      setState(() => _formError = '$e');
+      debugPrint('Sign-in failed: $e');
+      if (!mounted) return;
+      setState(
+        () => _formError = 'Something went wrong. Please try again.',
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }

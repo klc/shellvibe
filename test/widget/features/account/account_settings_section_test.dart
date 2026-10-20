@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -89,6 +91,50 @@ void main() {
       expect(find.byKey(const Key('account_sign_out_button')), findsNothing);
       expect(find.textContaining('plan'), findsNothing);
     });
+  });
+
+  group('leaving during a sign-in', () {
+    for (final fails in [false, true]) {
+      testWidgets('a sign-in that ${fails ? 'fails' : 'succeeds'} late is '
+          'ignored', (tester) async {
+        final gate = Completer<void>();
+        tester.view.physicalSize = const Size(1080, 1920);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() => tester.view.resetPhysicalSize());
+        final container = ProviderContainer(
+          overrides: [
+            accountProvider.overrideWith(() => _HeldSignInNotifier(gate)),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: ShadTheme(
+              data: ShadThemeData(
+                colorScheme: const ShadSlateColorScheme.light(),
+                brightness: Brightness.light,
+              ),
+              child: const MaterialApp(
+                home: Scaffold(
+                  body: SingleChildScrollView(child: AccountSettingsSection()),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('account_submit_button')));
+        await tester.pump();
+
+        await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+        fails ? gate.completeError(StateError('late')) : gate.complete();
+        await tester.pump();
+
+        expect(tester.takeException(), isNull);
+      });
+    }
   });
 
   group('session expired', () {
@@ -478,6 +524,20 @@ final class _StubAccountNotifier extends AccountNotifier {
 
   @override
   Future<AccountState> build() async => _state;
+}
+
+/// Holds every sign-in until [gate] completes.
+final class _HeldSignInNotifier extends AccountNotifier {
+  _HeldSignInNotifier(this.gate);
+
+  final Completer<void> gate;
+
+  @override
+  Future<AccountState> build() async => const AccountState.signedOut();
+
+  @override
+  Future<void> signIn({required String email, required String password}) =>
+      gate.future;
 }
 
 /// Publishes a fixed [EntitlementState].
