@@ -130,6 +130,31 @@ void main() {
       );
     });
 
+    test('a forward stops when its SSH client ends with an error', () async {
+      final probe = await ServerSocket.bind('127.0.0.1', 0);
+      final port = probe.port;
+      await probe.close();
+      final client = FakeSSHClient();
+
+      await tunnelEngine.startLocalForward(
+        ruleId: 'r_reset',
+        hostId: 'h1',
+        sshClient: client,
+        localPort: port,
+        remoteHost: 'example.com',
+        remotePort: 80,
+      );
+
+      client.doneCompleter.completeError(StateError('reset'));
+      await pumpEventQueue();
+
+      expect(tunnelEngine.isTunnelActive('r_reset'), isFalse);
+      final tunnel = tunnelEngine.activeTunnelsList.singleWhere(
+        (t) => t.ruleId == 'r_reset',
+      );
+      expect(tunnel.error, contains('SSH connection closed'));
+    });
+
     test('startRemoteForward cleans up resources on error', () async {
       final fakeSshClient = FakeFailingSSHClient();
 
