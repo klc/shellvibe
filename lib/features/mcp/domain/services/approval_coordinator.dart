@@ -132,6 +132,13 @@ class ApprovalCoordinator {
   List<PendingHostAccessApproval> get currentHostAccess =>
       _hostAccess.values.map((h) => h.pending).toList(growable: false);
 
+  /// Whether [id] still waits on an answer. Unlike the streams, this is never
+  /// an event behind.
+  bool isPending(String id) =>
+      _commands.containsKey(id) ||
+      _hostAccess.containsKey(id) ||
+      _runbooks.containsKey(id);
+
   /// Registers one command approval and returns a [Future] that completes
   /// when the user answers, or with [ApprovalDecision.denied] if [timeout]
   /// elapses first.
@@ -305,6 +312,24 @@ class ApprovalCoordinator {
       final entry = _hostAccess[id];
       if (entry == null) continue;
       _completeHostAccess(id, _allDenied(entry.pending.request, 'cancelled'));
+    }
+  }
+
+  /// [cancelAll] for one client: a revoked client's open prompts are refused
+  /// now, so none of them can still be approved after the revoke.
+  void cancelForClient(String clientId) {
+    for (final e in _commands.entries.toList()) {
+      if (e.value.pending.request.clientId != clientId) continue;
+      _completeCommand(e.key, ApprovalDecision.denied);
+    }
+    for (final e in _runbooks.entries.toList()) {
+      if (e.value.pending.request.clientId != clientId) continue;
+      _completeRunbook(e.key, RunbookApprovalDecision.denied);
+    }
+    for (final e in _hostAccess.entries.toList()) {
+      final request = e.value.pending.request;
+      if (request.clientId != clientId) continue;
+      _completeHostAccess(e.key, _allDenied(request, 'cancelled'));
     }
   }
 

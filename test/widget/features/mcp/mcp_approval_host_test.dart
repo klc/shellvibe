@@ -230,6 +230,13 @@ void main() {
     await tester.pump();
 
     unawaited(coordinator.requestHostAccess(_hostAccessRequest()));
+    // A second prompt from the same client, queued behind the first.
+    HostAccessResult? queued;
+    unawaited(
+      coordinator
+          .requestHostAccess(_hostAccessRequest())
+          .then((r) => queued = r),
+    );
     await _pumpFrames(tester);
     await tester.pump(mcpApprovalArmDelay);
     tester
@@ -242,6 +249,13 @@ void main() {
     expect(clients.revoked, ['client-1']);
     expect(pool.closed, ['client-1']);
     expect(grants.revoked, ['client-1']);
+    // Refused with it, and never put on screen for a suspended client.
+    expect(queued?.granted, isEmpty);
+    expect(coordinator.currentHostAccess, isEmpty);
+    expect(
+      find.byKey(const Key('mcp_host_access_deny_suspend_button')),
+      findsNothing,
+    );
   });
 }
 

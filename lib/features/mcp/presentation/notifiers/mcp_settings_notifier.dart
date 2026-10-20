@@ -12,6 +12,7 @@ import '../../../workspaces/domain/models/workspace_model.dart';
 import '../../data/mcp_providers.dart';
 import '../../data/mcp_server_controller.dart';
 import '../../data/repositories/mcp_repository_providers.dart';
+import '../../domain/services/mcp_service_providers.dart';
 
 part 'mcp_settings_notifier.g.dart';
 
@@ -426,9 +427,11 @@ class McpSettingsNotifier extends _$McpSettingsNotifier {
 
   /// Revokes a client's token and, with it, everything it still holds: a
   /// revoked token must not keep running commands over sessions it opened
-  /// before, nor keep grants a re-issued client could inherit.
+  /// before, nor keep grants a re-issued client could inherit, nor an
+  /// approval prompt that could still be answered yes.
   Future<void> revokeClient(String clientId) async {
     await ref.read(mcpClientRepositoryProvider).revokeClient(clientId);
+    ref.read(approvalCoordinatorProvider).cancelForClient(clientId);
     await ref.read(mcpSessionPoolProvider).closeForClient(clientId);
     await ref.read(mcpGrantRepositoryProvider).revokeAllForClient(clientId);
     await _refreshClients();

@@ -228,6 +228,9 @@ class _McpApprovalHostState extends ConsumerState<McpApprovalHost> {
       if (!mounted) return;
 
       final coordinator = ref.read(approvalCoordinatorProvider);
+      // The snapshot that picked it can be a stream event behind: answered,
+      // cancelled or timed out by now, it must not get a dialog.
+      if (!coordinator.isPending(claimedId)) return;
 
       // NOT `context`: this widget is mounted through `ShadApp.router`'s
       // `builder`, which wraps the Navigator rather than living under it, so
@@ -265,13 +268,17 @@ class _McpApprovalHostState extends ConsumerState<McpApprovalHost> {
         );
         final result = outcome?.result ?? _allDenied(nextHostAccess.request);
         coordinator.resolveHostAccess(nextHostAccess.id, result);
+        final suspend = outcome?.suspendClient ?? false;
+        final clientId = nextHostAccess.request.clientId;
+        // Its other prompts go too, before the latch below frees the slot to
+        // show the next one of them.
+        if (suspend) coordinator.cancelForClient(clientId);
         // Release the latch before the revoke below: the coordinator's update
         // arrives while it is awaited, and with the id still active
         // [_closeActiveIfAbandoned] would pop a route that is not ours.
         release();
-        if (outcome?.suspendClient ?? false) {
-          // Same three steps as `McpSettingsNotifier.revokeClient`.
-          final clientId = nextHostAccess.request.clientId;
+        if (suspend) {
+          // Same steps as `McpSettingsNotifier.revokeClient`.
           await ref.read(mcpClientRepositoryProvider).revokeClient(clientId);
           await ref.read(mcpSessionPoolProvider).closeForClient(clientId);
           await ref
