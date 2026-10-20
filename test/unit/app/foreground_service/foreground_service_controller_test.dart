@@ -15,6 +15,7 @@ class FakeForegroundServiceGateway implements ForegroundServiceGateway {
   bool running = false;
   Error? failStartWith;
   Error? failUpdateWith;
+  Error? failStopWith;
   Error? failPermissionWith;
 
   /// Held open to stage a call still in flight.
@@ -49,6 +50,7 @@ class FakeForegroundServiceGateway implements ForegroundServiceGateway {
 
   @override
   Future<void> stop() async {
+    if (failStopWith != null) throw failStopWith!;
     if (!running) return;
     running = false;
     calls.add('stop');
@@ -204,6 +206,26 @@ void main() {
         async.elapse(const Duration(milliseconds: 200));
         expect(gateway.calls, isEmpty);
         async.elapse(const Duration(seconds: 1));
+        expect(gateway.calls, ['stop']);
+        expect(gateway.running, isFalse);
+      });
+    });
+
+    test('a failed stop is retried the next time nothing is left', () {
+      withController((async) {
+        controller.update(_one);
+        _settle(async);
+        gateway.calls.clear();
+
+        gateway.failStopWith = StateError('platform refused');
+        controller.update(ServiceCounts.idle);
+        async.elapse(const Duration(seconds: 2));
+        expect(gateway.running, isTrue);
+
+        gateway.failStopWith = null;
+        controller.update(_one);
+        controller.update(ServiceCounts.idle);
+        async.elapse(const Duration(seconds: 2));
         expect(gateway.calls, ['stop']);
         expect(gateway.running, isFalse);
       });

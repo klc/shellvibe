@@ -97,9 +97,10 @@ class ForegroundServiceController {
     } on Object catch (error, stackTrace) {
       debugPrint('[ForegroundService] could not run $command: $error');
       debugPrintStack(stackTrace: stackTrace);
-      // Unknown now: a failed update usually means the system ended the
-      // service, and the next attempt should start it afresh.
-      _shown = null;
+      // Unknown now: a failed start or update usually means the system ended
+      // the service, and the next attempt should start it afresh. A failed
+      // stop leaves it running, so it must still be stopped.
+      if (command is! StopService) _shown = null;
       return false;
     }
   }
