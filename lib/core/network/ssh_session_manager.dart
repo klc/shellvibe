@@ -90,6 +90,7 @@ class SSHSessionManager {
   final KnownHostsDao? knownHostsDao;
 
   SSHClient? _client;
+  bool _pingInFlight = false;
   SSHSocket? _socket;
   Timer? _keepAliveTimer;
   bool _isConnected = false;
@@ -408,11 +409,16 @@ class SSHSessionManager {
       _markDisconnected();
       return;
     }
+    if (_pingInFlight) return;
+    _pingInFlight = true;
     try {
-      await activeClient.ping();
+      // A reply that never comes is a dead link (half-open TCP).
+      await activeClient.ping().timeout(const Duration(seconds: 10));
     } catch (_) {
       // Ping failed, connection may have been dropped
       _markDisconnected();
+    } finally {
+      _pingInFlight = false;
     }
   }
 
