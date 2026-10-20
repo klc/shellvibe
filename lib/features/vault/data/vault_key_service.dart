@@ -172,7 +172,9 @@ class VaultKeyService {
     if (dek == null) throw const VaultLockedException();
 
     await secureStorageService.saveMasterKey(await dek.extractBytes());
-    await secureStorageService.delete(key: SecureStorageKeys.wrappedDek);
+    // The salt is the mode flag: drop it first. A crash after that leaves
+    // only a harmless stale wrapped key in plain mode.
     await secureStorageService.deleteMasterSalt();
+    await secureStorageService.delete(key: SecureStorageKeys.wrappedDek);
   }
 }
