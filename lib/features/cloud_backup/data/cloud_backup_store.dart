@@ -246,6 +246,9 @@ final class CloudBackupStore {
     value: '${at.toIso8601String()}:$clock',
   );
 
+  Future<void> clearAutoBackupMark() =>
+      storage.delete(key: _autoBackupMarkKey);
+
   /// When this device last wrote a backup that held everything.
   ///
   /// A vault whose whole history is partial only reveals that at restore
