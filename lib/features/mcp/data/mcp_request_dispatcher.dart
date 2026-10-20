@@ -196,11 +196,8 @@ class McpRequestDispatcher {
 
 /// A protocol-level failure that must be returned as a JSON-RPC error frame
 /// rather than as a tool result — an unknown method, or malformed params.
-class McpDispatchException implements Exception {
-  final int code;
-  final String message;
-
-  const McpDispatchException(this.code, this.message);
+class McpDispatchException extends JsonRpcErrorException {
+  const McpDispatchException(super.code, super.message);
 
   @override
   String toString() => 'McpDispatchException($code): $message';
