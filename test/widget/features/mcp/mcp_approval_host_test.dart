@@ -3,8 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/app/router/app_router.dart';
+import 'package:shellvibe/features/mcp/data/repositories/mcp_client_repository.dart';
+import 'package:shellvibe/features/mcp/data/repositories/mcp_repository_providers.dart';
 import 'package:shellvibe/features/mcp/domain/models/mcp_enums.dart';
 import 'package:shellvibe/features/mcp/domain/models/mcp_models.dart';
 import 'package:shellvibe/features/mcp/domain/services/approval_coordinator.dart';
@@ -32,16 +35,36 @@ HostAccessRequest _hostAccessRequest() => const HostAccessRequest(
 /// Mirrors how `ShellVibeApp` mounts the host: above the router's Navigator,
 /// which is the only Navigator the widget can reach (through
 /// [rootNavigatorKey]).
-Widget _harness(ApprovalCoordinator coordinator) {
+Widget _harness(
+  ApprovalCoordinator coordinator, {
+  GlobalKey<NavigatorState>? navigatorKey,
+  List<Override> overrides = const [],
+}) {
   return ProviderScope(
-    overrides: [approvalCoordinatorProvider.overrideWithValue(coordinator)],
+    overrides: [
+      approvalCoordinatorProvider.overrideWithValue(coordinator),
+      ...overrides,
+    ],
     child: ShadApp(
-      navigatorKey: rootNavigatorKey,
+      navigatorKey: navigatorKey ?? rootNavigatorKey,
       home: const Scaffold(body: SizedBox.shrink()),
       builder: (context, child) =>
           McpApprovalHost(child: child ?? const SizedBox.shrink()),
     ),
   );
+}
+
+/// Records the revoke and holds it open until [release] completes, so the
+/// host is observably "mid-suspend".
+class _FakeClientRepo extends Fake implements McpClientRepository {
+  final revoked = <String>[];
+  final release = Completer<void>();
+
+  @override
+  Future<void> revokeClient(String id) async {
+    revoked.add(id);
+    await release.future;
+  }
 }
 
 void main() {
@@ -65,18 +88,7 @@ void main() {
   testWidgets('answering a host-access prompt leaves no second dialog behind', (
     tester,
   ) async {
-    // The test binding renders every glyph as a full-em block, so the
-    // dialog's fixed-width rows overflow here in a way they do not with the
-    // app's real fonts. That is a rendering artifact of the harness, not the
-    // behaviour under test.
-    final reportError = FlutterError.onError!;
-    FlutterError.onError = (details) {
-      if (details.exceptionAsString().contains('A RenderFlex overflowed')) {
-        return;
-      }
-      reportError(details);
-    };
-    addTearDown(() => FlutterError.onError = reportError);
+    _ignoreOverflow(tester);
 
     await tester.pumpWidget(_harness(coordinator));
     await tester.pump();
@@ -114,6 +126,82 @@ void main() {
     // second dialog on screen, which the user had to dismiss again.
     expect(approveButton, findsNothing);
   });
+
+  testWidgets('a request seen while the navigator is missing does not wedge '
+      'the host', (tester) async {
+    _ignoreOverflow(tester);
+    // The host is mounted but `rootNavigatorKey` has no navigator yet.
+    await tester.pumpWidget(
+      _harness(coordinator, navigatorKey: GlobalKey<NavigatorState>()),
+    );
+    await tester.pump();
+    unawaited(coordinator.requestHostAccess(_hostAccessRequest()));
+    await _pumpFrames(tester);
+
+    // Navigator becomes reachable; the next request must get its dialog.
+    await tester.pumpWidget(_harness(coordinator));
+    await tester.pump();
+    unawaited(coordinator.requestHostAccess(_hostAccessRequest()));
+    await _pumpFrames(tester);
+
+    expect(
+      find.byKey(const Key('mcp_host_access_approve_button')),
+      findsOneWidget,
+    );
+    coordinator.cancelAll(); // clears the pending fail-closed timers
+    await _pumpFrames(tester);
+  });
+
+  testWidgets('deny and suspend does not pop the page under the dialog', (
+    tester,
+  ) async {
+    _ignoreOverflow(tester);
+    final clients = _FakeClientRepo();
+    await tester.pumpWidget(
+      _harness(
+        coordinator,
+        overrides: [mcpClientRepositoryProvider.overrideWithValue(clients)],
+      ),
+    );
+    await tester.pump();
+    unawaited(
+      rootNavigatorKey.currentState!.push(
+        MaterialPageRoute<void>(builder: (_) => const Text('user page')),
+      ),
+    );
+    await _pumpFrames(tester);
+
+    unawaited(coordinator.requestHostAccess(_hostAccessRequest()));
+    await _pumpFrames(tester);
+    final suspend = find.byKey(
+      const Key('mcp_host_access_deny_suspend_button'),
+    );
+    await tester.pump(mcpApprovalArmDelay);
+    tester.widget<ShellVibeButton>(suspend).onPressed!();
+    // The revoke is still running while the coordinator's update arrives.
+    await _pumpFrames(tester);
+    expect(clients.revoked, ['client-1']);
+    expect(find.text('user page'), findsOneWidget);
+
+    clients.release.complete();
+    await _pumpFrames(tester);
+    expect(find.text('user page'), findsOneWidget);
+  });
+}
+
+/// The test binding renders every glyph as a full-em block, so the dialog's
+/// fixed-width rows overflow here in a way they do not with the app's real
+/// fonts. That is a rendering artifact of the harness, not the behaviour
+/// under test.
+void _ignoreOverflow(WidgetTester tester) {
+  final reportError = FlutterError.onError!;
+  FlutterError.onError = (details) {
+    if (details.exceptionAsString().contains('A RenderFlex overflowed')) {
+      return;
+    }
+    reportError(details);
+  };
+  addTearDown(() => FlutterError.onError = reportError);
 }
 
 /// Advances enough frames for a dialog route to finish animating in or out,

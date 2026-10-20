@@ -202,75 +202,82 @@ class _McpApprovalHostState extends ConsumerState<McpApprovalHost> {
     if (!_dialogsOnScreen.add(claimedId)) return;
     _activeId = claimedId;
 
-    await bringMcpApprovalWindowForward();
-    if (!mounted) {
+    // Every exit below — including an early return or a throw — must
+    // release the latch, or no approval dialog is ever shown again.
+    void release() {
+      // Drop the request we just resolved from the local snapshots *before*
+      // releasing the latch. The coordinator's pending lists are broadcast
+      // streams, so the updated list that no longer contains this request
+      // only arrives in a later microtask — until then `_commands` and
+      // `_hostAccess` still hold it. Re-entering `_maybeShowNext` against
+      // that stale snapshot re-claims the same id (the latch having just been
+      // released) and puts a second, identical dialog on screen for a request
+      // that is already answered: the user approves, the agent gets its
+      // answer, and the prompt stays up until it is dismissed a second time.
+      _commands = _commands.where((c) => c.id != claimedId).toList();
+      _hostAccess = _hostAccess.where((h) => h.id != claimedId).toList();
+      _runbooks = _runbooks.where((r) => r.id != claimedId).toList();
       _dialogsOnScreen.remove(claimedId);
-      return;
+      // May run twice; a later dialog's latch is not ours to clear.
+      if (_activeId == claimedId) _activeId = null;
     }
 
-    final coordinator = ref.read(approvalCoordinatorProvider);
+    try {
+      await bringMcpApprovalWindowForward();
+      if (!mounted) return;
 
-    // NOT `context`: this widget is mounted through `ShadApp.router`'s
-    // `builder`, which wraps the Navigator rather than living under it, so
-    // `Navigator.of(context)` from here throws "context does not include a
-    // Navigator" and no dialog ever appears — the request then times out and
-    // fails closed with nothing on screen to explain it.
-    final navigatorContext = rootNavigatorKey.currentContext;
-    if (navigatorContext == null || !navigatorContext.mounted) {
-      _dialogsOnScreen.remove(claimedId);
-      return;
-    }
+      final coordinator = ref.read(approvalCoordinatorProvider);
 
-    if (nextCommand != null) {
-      final decision = await McpCommandApprovalDialog.show(
-        navigatorContext,
-        request: nextCommand.request,
-        expiresAt: nextCommand.expiresAt,
-      );
-      coordinator.resolveCommand(
-        nextCommand.id,
-        decision ?? ApprovalDecision.denied,
-      );
-    } else if (nextRunbook != null) {
-      final decision = await McpRunbookApprovalDialog.show(
-        navigatorContext,
-        request: nextRunbook.request,
-        expiresAt: nextRunbook.expiresAt,
-      );
-      coordinator.resolveRunbook(
-        nextRunbook.id,
-        decision ?? RunbookApprovalDecision.denied,
-      );
-    } else if (nextHostAccess != null) {
-      final outcome = await McpHostAccessDialog.show(
-        navigatorContext,
-        request: nextHostAccess.request,
-        expiresAt: nextHostAccess.expiresAt,
-      );
-      final result = outcome?.result ?? _allDenied(nextHostAccess.request);
-      coordinator.resolveHostAccess(nextHostAccess.id, result);
-      if (outcome?.suspendClient ?? false) {
-        await ref
-            .read(mcpClientRepositoryProvider)
-            .revokeClient(nextHostAccess.request.clientId);
+      // NOT `context`: this widget is mounted through `ShadApp.router`'s
+      // `builder`, which wraps the Navigator rather than living under it, so
+      // `Navigator.of(context)` from here throws "context does not include a
+      // Navigator" and no dialog ever appears — the request then times out
+      // and fails closed with nothing on screen to explain it.
+      final navigatorContext = rootNavigatorKey.currentContext;
+      if (navigatorContext == null || !navigatorContext.mounted) return;
+
+      if (nextCommand != null) {
+        final decision = await McpCommandApprovalDialog.show(
+          navigatorContext,
+          request: nextCommand.request,
+          expiresAt: nextCommand.expiresAt,
+        );
+        coordinator.resolveCommand(
+          nextCommand.id,
+          decision ?? ApprovalDecision.denied,
+        );
+      } else if (nextRunbook != null) {
+        final decision = await McpRunbookApprovalDialog.show(
+          navigatorContext,
+          request: nextRunbook.request,
+          expiresAt: nextRunbook.expiresAt,
+        );
+        coordinator.resolveRunbook(
+          nextRunbook.id,
+          decision ?? RunbookApprovalDecision.denied,
+        );
+      } else if (nextHostAccess != null) {
+        final outcome = await McpHostAccessDialog.show(
+          navigatorContext,
+          request: nextHostAccess.request,
+          expiresAt: nextHostAccess.expiresAt,
+        );
+        final result = outcome?.result ?? _allDenied(nextHostAccess.request);
+        coordinator.resolveHostAccess(nextHostAccess.id, result);
+        // Release the latch before the revoke below: the coordinator's update
+        // arrives while it is awaited, and with the id still active
+        // [_closeActiveIfAbandoned] would pop a route that is not ours.
+        release();
+        if (outcome?.suspendClient ?? false) {
+          await ref
+              .read(mcpClientRepositoryProvider)
+              .revokeClient(nextHostAccess.request.clientId);
+        }
       }
+    } finally {
+      release();
+      if (mounted) unawaited(_maybeShowNext());
     }
-
-    // Drop the request we just resolved from the local snapshots *before*
-    // releasing the latch. The coordinator's pending lists are broadcast
-    // streams, so the updated list that no longer contains this request only
-    // arrives in a later microtask — until then `_commands`/`_hostAccess`
-    // still hold it. Re-entering `_maybeShowNext` against that stale
-    // snapshot re-claims the same id (the latch having just been released)
-    // and puts a second, identical dialog on screen for a request that is
-    // already answered: the user approves, the agent gets its answer, and
-    // the prompt stays up until it is dismissed a second time.
-    _commands = _commands.where((c) => c.id != claimedId).toList();
-    _hostAccess = _hostAccess.where((h) => h.id != claimedId).toList();
-    _runbooks = _runbooks.where((r) => r.id != claimedId).toList();
-    _dialogsOnScreen.remove(claimedId);
-    _activeId = null;
-    if (mounted) unawaited(_maybeShowNext());
   }
 
   T? _oldest<T>(List<T> items, DateTime Function(T) requestedAt) {
