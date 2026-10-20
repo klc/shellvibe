@@ -201,9 +201,9 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       return all.where((s) => s.id == id).firstOrNull;
     },
     loadRunbook: (id) async {
-      final all = await ref
-          .read(runbooksRepositoryProvider)
-          .getRunbooksByWorkspace(ref.read(activeWorkspaceIdProvider));
+      // A pane's startup runbook is bound by id, not by whichever workspace
+      // is open when the shell appears.
+      final all = await ref.read(runbooksRepositoryProvider).getAllRunbooks();
       return all.where((r) => r.id == id).firstOrNull;
     },
     confirmProd: (runbook, host) async {

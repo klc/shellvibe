@@ -18,6 +18,10 @@ class RunbooksRepository {
     return _loadModels(runbooks);
   }
 
+  Future<List<RunbookModel>> getAllRunbooks() async {
+    return _loadModels(await _dao.getAllRunbooks());
+  }
+
   Future<List<RunbookModel>> _loadModels(List<Runbook> runbooks) async {
     final results = <RunbookModel>[];
     for (final r in runbooks) {
