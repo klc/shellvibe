@@ -248,6 +248,9 @@ class _DeviceLinkScanPairScreenState extends State<DeviceLinkScanPairScreen> {
       final value = jsonDecode(raw);
       final payload = DeviceLinkQrPayload.fromJson(value);
       await widget.onPayload(payload);
+      // The flow came back without handing the screen off, e.g. the session
+      // picker was dismissed: scanning again must be possible.
+      if (mounted) await _retry();
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
