@@ -586,7 +586,10 @@ class E2EECloudSyncService {
                   jumpHostId: Value(item['jumpHostId'] as String?),
                   // Snippets are restored after hosts: the reference is filled
                   // in once they are there (step 7b), as a foreign key cannot
-                  // point at a row that does not exist yet.
+                  // point at a row that does not exist yet. Cleared here so a
+                  // host the backup shows without one does not keep the local
+                  // one on an existing row.
+                  startupSnippetId: const Value(null),
                   environment: Value(item['environment'] as String? ?? 'dev'),
                   mcpVisible: Value(item['mcpVisible'] as bool? ?? true),
                   mcpDefaultMode: Value(

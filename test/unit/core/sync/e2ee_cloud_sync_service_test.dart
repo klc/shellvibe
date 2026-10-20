@@ -315,5 +315,51 @@ void main() {
       expect(db2Snippets.length, equals(1));
       expect(db2Snippets.first.title, equals('Sync Test Snippet'));
     });
+
+    test('a restored host without a startup snippet drops the local one', () async {
+      const password = 'SuperSecretMasterPassword123!';
+
+      // db2 already knows the host, with a startup snippet the backup lacks.
+      await db2.workspacesDao.insertWorkspace(
+        WorkspacesCompanion.insert(
+          id: 'ws_test',
+          name: 'Production Workspace',
+          createdAt: DateTime.now(),
+        ),
+      );
+      await db2.snippetsDao.insertSnippet(
+        SnippetsCompanion.insert(
+          id: 'snip_sync',
+          workspaceId: 'ws_test',
+          title: 'Sync Test Snippet',
+          code: 'echo "Sync OK"',
+        ),
+      );
+      await db2.hostsDao.insertHost(
+        HostsCompanion.insert(
+          id: 'host_sync',
+          workspaceId: 'ws_test',
+          label: 'Sync Host',
+          hostname: 'sync.local',
+          startupSnippetId: const Value('snip_sync'),
+          createdAt: DateTime.now(),
+        ),
+      );
+
+      final backupJson = await syncService.exportEncryptedBackup(
+        db: db1,
+        masterPassword: password,
+      );
+      await syncService.importEncryptedBackup(
+        backupPackageJson: backupJson,
+        db: db2,
+        masterPassword: password,
+      );
+
+      final host = await (db2.select(
+        db2.hosts,
+      )..where((h) => h.id.equals('host_sync'))).getSingle();
+      expect(host.startupSnippetId, equals(null));
+    });
   });
 }
