@@ -149,6 +149,17 @@ void main() {
       expect(await bundled().read(key: SecureStorageKeys.masterSalt), 'salt');
     });
 
+    test('delete also removes the legacy terly2 twin', () async {
+      FlutterSecureStorage.setMockInitialValues({'terly2_foo': 'v'});
+      final storage = bundled();
+
+      expect(await storage.read(key: 'shellvibe_foo'), 'v');
+      await storage.delete(key: 'shellvibe_foo');
+
+      expect(await storage.read(key: 'shellvibe_foo'), isNull);
+      expect(await storage.containsKey(key: 'shellvibe_foo'), isFalse);
+    });
+
     test('writes racing each other all survive', () async {
       final storage = bundled();
       await Future.wait([
