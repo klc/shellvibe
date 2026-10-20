@@ -212,6 +212,29 @@ final class CloudBackupService {
         ciphertextSha256: checksum,
       );
 
+      // The server matched the id to an upload whose reply never arrived and
+      // handed back what it stored then. That write is this device's own, so
+      // it is the base for the current content, which has not been stored yet.
+      if (pendingUploadId != null &&
+          revision.ciphertextSha256.isNotEmpty &&
+          revision.ciphertextSha256.toLowerCase() != checksum) {
+        await writePendingUploadId(null);
+
+        return await upload(
+          db: db,
+          passphrase: passphrase,
+          deviceId: deviceId,
+          maxSizeBytes: maxSizeBytes,
+          recoveryCode: recoveryCode,
+          expectedRevision: revision.revision,
+          force: force,
+          scope: scope,
+          settings: settings,
+          syncKey: syncKey,
+          syncClock: syncClock,
+        );
+      }
+
       await writePendingUploadId(null);
 
       return CloudBackupUploadResult.success(revision: revision.revision);

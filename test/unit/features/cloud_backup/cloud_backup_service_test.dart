@@ -79,7 +79,7 @@ void main() {
     );
   }
 
-  void enqueueUploadAccepted({int revision = 1}) {
+  void enqueueUploadAccepted({int revision = 1, String? sha}) {
     transport.enqueue(
       status: 201,
       body: {
@@ -92,7 +92,7 @@ void main() {
           'upload_id': 'upload-1',
           'schema_version': kBackupSchemaVersion,
           'encryption_version': kEncryptionVersion,
-          'ciphertext_sha256': 'x' * 64,
+          'ciphertext_sha256': sha ?? 'x' * 64,
           'size_bytes': 42,
           'created_at': '2026-09-18T10:00:00Z',
         },
@@ -271,7 +271,7 @@ void main() {
       );
 
       enqueueHead();
-      enqueueUploadAccepted();
+      enqueueUploadAccepted(sha: '');
 
       await service.upload(
         db: db,
@@ -385,7 +385,7 @@ void main() {
       // Only the server can recognise the id and hand that revision back.
       pendingUploadId = 'upload-9';
       enqueueHead(currentRevision: 8);
-      enqueueUploadAccepted(revision: 8);
+      enqueueUploadAccepted(revision: 8, sha: '');
 
       final result = await service.upload(
         db: db,
@@ -398,6 +398,37 @@ void main() {
       expect(result.succeeded, isTrue);
       expect(transport.lastBody['upload_id'], 'upload-9');
       expect(transport.lastBody['base_revision'], 7);
+    });
+
+    test('a reserved id consumed by an earlier upload is not reused for new '
+        'content', () async {
+      // The server answers the id with the revision it stored back then,
+      // whose content is not what was just sealed.
+      pendingUploadId = 'upload-9';
+      enqueueHead(currentRevision: 8);
+      enqueueUploadAccepted(revision: 8);
+      enqueueHead(currentRevision: 8);
+      enqueueUploadAccepted(revision: 9);
+
+      final result = await service.upload(
+        db: db,
+        passphrase: passphrase,
+        deviceId: deviceId,
+        maxSizeBytes: 5 * 1024 * 1024,
+        expectedRevision: 7,
+      );
+
+      final uploads = [
+        for (final r in transport.sent)
+          if (r.method == 'PUT') jsonDecode(r.body!) as Map<String, Object?>,
+      ];
+      expect(uploads, hasLength(2));
+      expect(uploads[0]['upload_id'], 'upload-9');
+      expect(uploads[1]['upload_id'], 'upload-1');
+      expect(uploads[1]['base_revision'], 8);
+      expect(result.succeeded, isTrue);
+      expect(result.revision, 9);
+      expect(pendingUploadId, isNull);
     });
 
     test('force ignores the known revision', () async {
