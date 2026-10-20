@@ -358,16 +358,22 @@ class SSHSessionManager {
       if (stored.fingerprintSha256 == fingerprint) return true;
       return reject();
     }
-    await dao?.insertOrUpdateKnownHost(
-      KnownHostsCompanion.insert(
-        id: const Uuid().v4(),
-        hostname: hostname,
-        port: port,
-        keyType: keyType,
-        fingerprintSha256: fingerprint,
-        firstSeenAt: DateTime.now(),
-      ),
-    );
+    try {
+      await dao?.insertOrUpdateKnownHost(
+        KnownHostsCompanion.insert(
+          id: const Uuid().v4(),
+          hostname: hostname,
+          port: port,
+          keyType: keyType,
+          fingerprintSha256: fingerprint,
+          firstSeenAt: DateTime.now(),
+        ),
+      );
+    } catch (_) {
+      // Lost a race on UNIQUE(hostname, port): fine if it stored this key.
+      final stored = await dao?.findKnownHost(hostname, port);
+      if (stored == null || stored.fingerprintSha256 != fingerprint) rethrow;
+    }
     return true;
   }
 

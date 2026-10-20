@@ -237,6 +237,37 @@ void main() {
     );
 
     test(
+      'Two first connections answered in the same turn both succeed',
+      () async {
+        const fingerprint = 'SHA256:samesame';
+        final gates = <Completer<bool>>[];
+
+        Future<bool> verify() => sessionManager.verifyHostKey(
+          hostname: 'race2.example.com',
+          port: 22,
+          keyType: 'ssh-ed25519',
+          fingerprint: fingerprint,
+          promptCallback: (_, _, _, _, _) {
+            final gate = Completer<bool>();
+            gates.add(gate);
+            return gate.future;
+          },
+        );
+
+        final first = verify();
+        final second = verify();
+        while (gates.length < 2) {
+          await Future<void>.delayed(Duration.zero);
+        }
+        for (final gate in gates) {
+          gate.complete(true);
+        }
+        expect(await Future.wait([first, second]), [isTrue, isTrue]);
+        expect(await db.select(db.knownHosts).get(), hasLength(1));
+      },
+    );
+
+    test(
       'Invalid private key format throws FormatException on connect attempt',
       () {
         const config = SSHConnectConfig(
