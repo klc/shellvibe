@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../../../app/router/app_router.dart';
+import '../../data/mcp_providers.dart';
 import '../../data/repositories/mcp_repository_providers.dart';
 import '../../domain/models/mcp_models.dart';
 import '../../domain/services/approval_coordinator.dart';
@@ -269,9 +270,13 @@ class _McpApprovalHostState extends ConsumerState<McpApprovalHost> {
         // [_closeActiveIfAbandoned] would pop a route that is not ours.
         release();
         if (outcome?.suspendClient ?? false) {
+          // Same three steps as `McpSettingsNotifier.revokeClient`.
+          final clientId = nextHostAccess.request.clientId;
+          await ref.read(mcpClientRepositoryProvider).revokeClient(clientId);
+          await ref.read(mcpSessionPoolProvider).closeForClient(clientId);
           await ref
-              .read(mcpClientRepositoryProvider)
-              .revokeClient(nextHostAccess.request.clientId);
+              .read(mcpGrantRepositoryProvider)
+              .revokeAllForClient(clientId);
         }
       }
     } finally {

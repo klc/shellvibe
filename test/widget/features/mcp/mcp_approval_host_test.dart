@@ -6,7 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/app/router/app_router.dart';
+import 'package:shellvibe/features/mcp/data/mcp_providers.dart';
+import 'package:shellvibe/features/mcp/data/mcp_session_pool.dart';
 import 'package:shellvibe/features/mcp/data/repositories/mcp_client_repository.dart';
+import 'package:shellvibe/features/mcp/data/repositories/mcp_grant_repository.dart';
 import 'package:shellvibe/features/mcp/data/repositories/mcp_repository_providers.dart';
 import 'package:shellvibe/features/mcp/domain/models/mcp_enums.dart';
 import 'package:shellvibe/features/mcp/domain/models/mcp_models.dart';
@@ -65,6 +68,21 @@ class _FakeClientRepo extends Fake implements McpClientRepository {
     revoked.add(id);
     await release.future;
   }
+}
+
+class _FakePool extends Fake implements McpSessionPool {
+  final closed = <String>[];
+
+  @override
+  Future<void> closeForClient(String clientId) async => closed.add(clientId);
+}
+
+class _FakeGrants extends Fake implements McpGrantRepository {
+  final revoked = <String>[];
+
+  @override
+  Future<void> revokeAllForClient(String clientId) async =>
+      revoked.add(clientId);
 }
 
 void main() {
@@ -160,7 +178,11 @@ void main() {
     await tester.pumpWidget(
       _harness(
         coordinator,
-        overrides: [mcpClientRepositoryProvider.overrideWithValue(clients)],
+        overrides: [
+          mcpClientRepositoryProvider.overrideWithValue(clients),
+          mcpSessionPoolProvider.overrideWithValue(_FakePool()),
+          mcpGrantRepositoryProvider.overrideWithValue(_FakeGrants()),
+        ],
       ),
     );
     await tester.pump();
@@ -186,6 +208,40 @@ void main() {
     clients.release.complete();
     await _pumpFrames(tester);
     expect(find.text('user page'), findsOneWidget);
+  });
+
+  testWidgets('deny and suspend also closes the client\'s sessions and grants', (
+    tester,
+  ) async {
+    _ignoreOverflow(tester);
+    final clients = _FakeClientRepo()..release.complete();
+    final pool = _FakePool();
+    final grants = _FakeGrants();
+    await tester.pumpWidget(
+      _harness(
+        coordinator,
+        overrides: [
+          mcpClientRepositoryProvider.overrideWithValue(clients),
+          mcpSessionPoolProvider.overrideWithValue(pool),
+          mcpGrantRepositoryProvider.overrideWithValue(grants),
+        ],
+      ),
+    );
+    await tester.pump();
+
+    unawaited(coordinator.requestHostAccess(_hostAccessRequest()));
+    await _pumpFrames(tester);
+    await tester.pump(mcpApprovalArmDelay);
+    tester
+        .widget<ShellVibeButton>(
+          find.byKey(const Key('mcp_host_access_deny_suspend_button')),
+        )
+        .onPressed!();
+    await _pumpFrames(tester);
+
+    expect(clients.revoked, ['client-1']);
+    expect(pool.closed, ['client-1']);
+    expect(grants.revoked, ['client-1']);
   });
 }
 
