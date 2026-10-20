@@ -135,6 +135,34 @@ void main() {
       expect(result.category, RiskCategory.destructiveFs);
     });
 
+    test('echo hi & rm -rf /srv/app is not readonlySafe', () {
+      final result = classifier.classify('echo hi & rm -rf /srv/app');
+      expect(result.category, isNot(RiskCategory.readonlySafe));
+      expect(result.category, RiskCategory.destructiveFs);
+    });
+
+    test('ls & sudo reboot and ls |& rm -rf / are not readonlySafe', () {
+      expect(
+        classifier.classify('ls & sudo reboot').category,
+        isNot(RiskCategory.readonlySafe),
+      );
+      expect(
+        classifier.classify('ls |& rm -rf /').category,
+        RiskCategory.destructiveFs,
+      );
+    });
+
+    test('fd redirects are not split', () {
+      expect(
+        classifier.classify('cat f 2>&1').category,
+        RiskCategory.readonlySafe,
+      );
+      expect(
+        classifier.classify('cat f >&2').category,
+        RiskCategory.readonlySafe,
+      );
+    });
+
     test('cat a.txt; shutdown -h now is not readonlySafe', () {
       final result = classifier.classify('cat a.txt; shutdown -h now');
       expect(result.category, isNot(RiskCategory.readonlySafe));
