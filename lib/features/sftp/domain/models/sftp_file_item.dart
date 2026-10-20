@@ -25,6 +25,18 @@ class SftpFileItem {
     this.groupId,
   });
 
+  SftpFileItem copyWith({bool? isDirectory}) => SftpFileItem(
+    name: name,
+    path: path,
+    size: size,
+    permissions: permissions,
+    modifyTime: modifyTime,
+    isDirectory: isDirectory ?? this.isDirectory,
+    isSymlink: isSymlink,
+    ownerId: ownerId,
+    groupId: groupId,
+  );
+
   /// Factory from dartssh2 [SftpName]
   factory SftpFileItem.fromSftpName(SftpName sftpName, String parentPath) {
     final filename = sftpName.filename;
