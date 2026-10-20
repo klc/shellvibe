@@ -351,6 +351,13 @@ class SSHSessionManager {
     // one to confirm the key, so deny instead of blind TOFU — and with no
     // known_hosts store either, nothing can vouch for it at all.
     if (!await prompt(HostKeyVerificationStatus.unknown)) return reject();
+    // The lookup above ran before the user answered; another connection may
+    // have answered first and stored the key.
+    final stored = await dao?.findKnownHost(hostname, port);
+    if (stored != null) {
+      if (stored.fingerprintSha256 == fingerprint) return true;
+      return reject();
+    }
     await dao?.insertOrUpdateKnownHost(
       KnownHostsCompanion.insert(
         id: const Uuid().v4(),
