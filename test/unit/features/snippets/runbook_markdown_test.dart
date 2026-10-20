@@ -330,4 +330,18 @@ echo b
       );
     });
   });
+
+  test(
+    'copyWith with an empty pattern clears it (how the editor clears it)',
+    () {
+      expect(
+        step(
+          1,
+          'echo a',
+          pattern: 'Running',
+        ).copyWith(expectedOutputPattern: '').expectedOutputPattern,
+        '',
+      );
+    },
+  );
 }
