@@ -39,7 +39,7 @@ final class BackupScopeStore {
   /// holds less than the user assumes is discovered at restore time.
   Future<BackupScope> read(BackupTarget target) async {
     final value = await storage.read(key: target.storageKey);
-    if (value != null && value.isNotEmpty) {
+    if (value != null) {
       return BackupScope.fromManifest(value.split(','));
     }
 
@@ -47,7 +47,7 @@ final class BackupScopeStore {
     // who had already narrowed their backups does not silently get everything
     // again on the next upgrade.
     final legacy = await storage.read(key: _legacyKey);
-    if (legacy != null && legacy.isNotEmpty) {
+    if (legacy != null) {
       return BackupScope.fromManifest(legacy.split(','));
     }
 

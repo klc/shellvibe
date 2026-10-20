@@ -39,6 +39,20 @@ void main() {
     expect(await store.read(BackupTarget.autoSync), BackupScope.full);
   });
 
+  test('turning every category off survives a restart', () async {
+    // An empty scope is stored as '', which must not read back as "never
+    // chosen" and quietly turn everything on again.
+    await store.write(BackupTarget.autoSync, BackupScope.of(const []));
+
+    final restarted = BackupScopeStore(storage: SecureStorageService());
+    final scope = await restarted.read(BackupTarget.autoSync);
+
+    expect(scope.categories, isEmpty);
+    expect(scope.isFull, isFalse);
+    expect(await restarted.read(BackupTarget.file), BackupScope.full);
+    expect(await restarted.read(BackupTarget.cloud), BackupScope.full);
+  });
+
   test('each target keeps its own selection', () async {
     await store.write(
       BackupTarget.file,
