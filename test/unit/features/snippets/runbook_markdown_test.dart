@@ -276,6 +276,10 @@ echo b
       );
     }
 
+    test(
+      'a frontmatter title that is not text',
+      () => fails('---\ntitle: 2024\n---\n\n```sh\necho hi\n```\n', 'title'),
+    );
     test('no steps', () => fails('# Just prose\n', 'No steps found'));
     test(
       'an unclosed frontmatter',
