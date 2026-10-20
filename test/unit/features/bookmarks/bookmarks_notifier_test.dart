@@ -72,6 +72,18 @@ void main() {
       );
     });
 
+    test('a failed toggle does not block the ones after it', () async {
+      final hostId = await addHost('web');
+      final notifier = container.read(bookmarksProvider.notifier);
+      await container.read(bookmarksProvider.future);
+
+      // No such host: the foreign key refuses the row.
+      await expectLater(notifier.toggleHost('missing-host'), throwsA(anything));
+
+      await notifier.toggleHost(hostId);
+      expect(notifier.isHostBookmarked(hostId), isTrue);
+    });
+
     test('bookmarks come back in the order they were added', () async {
       final first = await addHost('alpha');
       final second = await addHost('bravo');
