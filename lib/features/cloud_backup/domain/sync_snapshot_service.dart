@@ -264,6 +264,13 @@ final class SyncSnapshotService {
       final ciphertext = stored.ciphertext;
       if (ciphertext == null || ciphertext.isEmpty) continue;
 
+      // The wrapped key sits outside the authenticated part, so it can be
+      // stripped; the clock is inside and only written together with it.
+      if (payload['sync_clock'] != null && opened.syncKey == null) {
+        sawSomethingUnopenable = true;
+        continue;
+      }
+
       return (
         ground: SyncGround(
           revision: revision.revision,

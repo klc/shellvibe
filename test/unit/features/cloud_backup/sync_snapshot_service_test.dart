@@ -324,6 +324,21 @@ void main() {
       expect(result.problem, SyncGroundProblem.allPartial);
     });
 
+    test('a ground whose sync key was stripped is not accepted', () async {
+      final envelope = await sealed(scope: BackupScope.syncGround);
+      final json = jsonDecode(envelope) as Map<String, dynamic>
+        ..remove('sync_key_wrapped');
+
+      enqueueRevisionList([1]);
+      enqueueRevision(1, jsonEncode(json));
+      enqueueRevision(1, jsonEncode(json));
+
+      final result = await ground.readGround(secret: passphrase);
+
+      expect(result.ground, isNull);
+      expect(result.problem, SyncGroundProblem.cannotOpen);
+    });
+
     test('a wrong secret is told apart from a partial vault', () async {
       final complete = await sealed(scope: BackupScope.syncGround);
 
