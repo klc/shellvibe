@@ -117,6 +117,20 @@ void main() {
       },
     );
 
+    test('a restore or delete in flight holds the schedule', () async {
+      await configured();
+      final notifier = await ready();
+      // ignore: invalid_use_of_protected_member
+      notifier.state = AsyncValue.data(
+        current().copyWith(busy: true, frequency: BackupFrequency.daily),
+      );
+
+      await notifier.maybeBackUpOnSchedule();
+      await pumpEventQueue();
+
+      expect(uploads(), isEmpty);
+    });
+
     test('a conflict holds the schedule until the user settles it', () async {
       await server.seedRevision('backup', 'another device wrote this');
       await configured(lastKnown: 0);

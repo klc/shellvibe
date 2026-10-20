@@ -758,6 +758,10 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
   }
 
   Future<void> _backUpIfDue() async {
+    // A restore or delete in flight owns the store; the next tick will come
+    // round.
+    if (state.value?.busy == true) return;
+
     final frequency = state.value?.frequency ?? BackupFrequency.off;
     final interval = frequency.interval;
     if (interval == null) return;
