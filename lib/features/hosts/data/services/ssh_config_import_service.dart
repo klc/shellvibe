@@ -352,9 +352,12 @@ class SshConfigImportService {
             if (options.importTunnels) {
               // Overwrite replaces the host's forwarding rules rather than
               // stacking duplicates next to the old ones.
-              await (db.delete(
+              final oldRules = await (db.select(
                 db.portForwardRules,
-              )..where((t) => t.hostId.equals(target.id))).go();
+              )..where((t) => t.hostId.equals(target.id))).get();
+              for (final rule in oldRules) {
+                await db.tunnelsDao.deleteRule(rule.id);
+              }
             }
             hostIdByAlias[draft.alias] = target.id;
             hostIdByLowerLabel[draft.alias.toLowerCase()] = target.id;

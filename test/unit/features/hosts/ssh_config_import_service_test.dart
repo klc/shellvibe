@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/core/crypto/encryption_engine.dart';
 import 'package:shellvibe/features/hosts/data/services/ssh_config_import_service.dart';
 import 'package:shellvibe/features/vault/data/vault_key_service.dart';
+import 'package:shellvibe/core/sync/sync_journal.dart';
 import 'package:shellvibe/shared/database/app_database.dart';
 import 'package:shellvibe/shared/storage/secure_storage_service.dart';
 
@@ -388,6 +389,42 @@ void main() {
       final rules = await db.tunnelsDao.getRulesForHost(hostId);
       expect(rules, hasLength(1));
       expect(rules.single.localPort, 8080);
+    });
+
+    test('overwrite journals the deleted tunnels', () async {
+      db.syncJournal = SyncJournal(db: db, deviceId: 'device-a');
+      const content = 'Host web\n  LocalForward 8080 localhost:80\n';
+      await service.importConfig(
+        path: 'config',
+        content: content,
+        options: options(keys: false),
+      );
+      final hostId = (await hosts()).single.id;
+      final oldIds = (await db.tunnelsDao.getRulesForHost(
+        hostId,
+      )).map((r) => r.id).toSet();
+      expect(oldIds, hasLength(1));
+
+      await service.importConfig(
+        path: 'config',
+        content: content,
+        options: options(
+          conflict: SshConfigConflictPolicy.overwrite,
+          keys: false,
+        ),
+      );
+
+      final deleted = (await db.syncJournal!.pending())
+          .where(
+            (o) =>
+                o.entityType == 'port_forward_rules' && o.operation == 'delete',
+          )
+          .map((o) => o.entityId)
+          .toSet();
+      expect(deleted, oldIds);
+      final rules = await db.tunnelsDao.getRulesForHost(hostId);
+      expect(rules, hasLength(1));
+      expect(oldIds, isNot(contains(rules.single.id)));
     });
 
     test('tunnels are skipped when importTunnels is false', () async {
