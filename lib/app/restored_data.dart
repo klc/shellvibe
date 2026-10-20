@@ -10,6 +10,7 @@ import '../features/tunnels/presentation/providers/tunnels_providers.dart';
 import '../features/vault/presentation/notifiers/identities_notifier.dart';
 import '../features/vault/presentation/notifiers/vault_env_vars_notifier.dart';
 import '../features/workspaces/presentation/notifiers/workspaces_notifier.dart';
+import '../features/workspaces/presentation/providers/workspace_provider.dart';
 
 /// Re-reads everything a backup restore rewrote underneath the app.
 ///
@@ -37,6 +38,9 @@ void invalidateRestoredData(void Function(ProviderOrFamily) invalidate) {
   // Workspaces first: the lists below are scoped by the selected workspace, so
   // a stale selection would filter freshly restored rows straight back out.
   invalidate(workspaceManagerProvider);
+  // The switcher and the active-workspace fallback read this one, not the
+  // manager's list; left stale, a restored workspace stays invisible.
+  invalidate(workspacesProvider);
 
   invalidate(hostsProvider);
   invalidate(hostGroupsProvider);

@@ -7,6 +7,7 @@ import 'package:shellvibe/app/restored_data.dart';
 import 'package:shellvibe/features/bookmarks/presentation/notifiers/bookmarks_notifier.dart';
 import 'package:shellvibe/features/templates/presentation/notifiers/templates_notifier.dart';
 import 'package:shellvibe/features/vault/presentation/notifiers/vault_env_vars_notifier.dart';
+import 'package:shellvibe/features/workspaces/presentation/providers/workspace_provider.dart';
 import 'package:shellvibe/shared/database/app_database.dart';
 import 'package:shellvibe/shared/providers/database_providers.dart';
 
@@ -101,4 +102,32 @@ void main() {
       );
     },
   );
+
+  // The switcher and the active-workspace fallback read `workspacesProvider`,
+  // not the manager's list. A workspace that arrived with a restore must show
+  // up there too, or it stays invisible until the app restarts.
+  test('re-reads the workspace list after a restore', () async {
+    container.listen(workspacesProvider, (_, _) {});
+    expect(
+      (await container.read(workspacesProvider.future)).map((w) => w.id),
+      ['default'],
+    );
+
+    await db
+        .into(db.workspaces)
+        .insert(
+          WorkspacesCompanion.insert(
+            id: 'prod',
+            name: 'Prod',
+            createdAt: DateTime.now(),
+          ),
+        );
+
+    container.read(_restore)();
+
+    expect(
+      (await container.read(workspacesProvider.future)).map((w) => w.id),
+      containsAll(['default', 'prod']),
+    );
+  });
 }
