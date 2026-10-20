@@ -59,8 +59,12 @@ class TerminalOutputChain {
     return _base;
   }
 
-  /// True when a link with [key] is currently in the chain.
-  bool has(Object key) => _links.any((l) => l.key == key);
+  /// True when a link with [key] is currently in the chain. Adopts first, so
+  /// asking is enough to repair a slot a bridge has since reassigned.
+  bool has(Object key) {
+    _adopt();
+    return _links.any((l) => l.key == key);
+  }
 
   /// Adds (or replaces, by [key]) an interceptor. The most recently added link
   /// runs first, so a later feature sees the data before the earlier ones.
