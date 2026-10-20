@@ -136,8 +136,8 @@ class TunnelSshPool {
       );
       // A dropped keep-alive means this pooled client is gone. Forget it here
       // so the next start dials a fresh one instead of handing out a corpse;
-      // the forwards riding on it surface their own failure through the
-      // engine.
+      // the engine stops the forwards riding on it when the client's `done`
+      // completes.
       session.clientChangesSub = manager.clientChanges.listen((c) {
         if (c == null || c.isClosed) {
           unawaited(_closeSession(host.id));

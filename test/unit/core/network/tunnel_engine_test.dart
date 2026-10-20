@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -99,6 +100,36 @@ void main() {
       expect(fakeListener2.isClosed, isTrue);
     });
 
+    test('a forward stops and is marked failed when its SSH client closes', () async {
+      final probe = await ServerSocket.bind('127.0.0.1', 0);
+      final port = probe.port;
+      await probe.close();
+      final client = FakeSSHClient();
+
+      await tunnelEngine.startLocalForward(
+        ruleId: 'r_gone',
+        hostId: 'h1',
+        sshClient: client,
+        localPort: port,
+        remoteHost: 'example.com',
+        remotePort: 80,
+      );
+      expect(tunnelEngine.isTunnelActive('r_gone'), isTrue);
+
+      client.doneCompleter.complete();
+      await pumpEventQueue();
+
+      expect(tunnelEngine.isTunnelActive('r_gone'), isFalse);
+      final tunnel = tunnelEngine.activeTunnelsList.singleWhere(
+        (t) => t.ruleId == 'r_gone',
+      );
+      expect(tunnel.error, contains('SSH connection closed'));
+      await expectLater(
+        Socket.connect('127.0.0.1', port),
+        throwsA(isA<SocketException>()),
+      );
+    });
+
     test('startRemoteForward cleans up resources on error', () async {
       final fakeSshClient = FakeFailingSSHClient();
 
@@ -151,7 +182,12 @@ class FakeSSHRemoteForward extends Fake implements SSHRemoteForward {
 class FakeSSHClient extends Fake implements SSHClient {
   final SSHRemoteForward? remoteForwardResult;
 
+  final Completer<void> doneCompleter = Completer<void>();
+
   FakeSSHClient({this.remoteForwardResult});
+
+  @override
+  Future<void> get done => doneCompleter.future;
 
   @override
   Future<SSHRemoteForward?> forwardRemote({
