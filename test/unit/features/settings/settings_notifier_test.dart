@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/core/models/mosh_prediction_mode.dart';
+import 'package:shellvibe/features/settings/data/repositories/settings_repository.dart';
 import 'package:shellvibe/features/settings/domain/models/app_settings_model.dart';
 import 'package:shellvibe/features/settings/presentation/notifiers/settings_notifier.dart';
 import 'package:shellvibe/features/terminal/domain/models/terminal_palette.dart';
+import 'package:shellvibe/shared/storage/secure_storage_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -40,4 +42,45 @@ void main() {
     expect(restored.autoLockTimerSeconds, 600);
     expect(restored.moshPrediction, MoshPredictionMode.never);
   });
+
+  test('a change never puts the provider into loading', () async {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    await container.read(settingsProvider.future);
+
+    final seen = <AsyncValue<AppSettingsModel>>[];
+    container.listen(settingsProvider, (_, next) => seen.add(next));
+
+    await container.read(settingsProvider.notifier).setFontSize(16);
+
+    expect(seen, isNotEmpty);
+    expect(seen.any((s) => s.isLoading), isFalse);
+    expect(seen.last.value!.fontSize, 16);
+  });
+
+  test('a failed write throws and restores the stored value', () async {
+    final container = ProviderContainer(
+      overrides: [
+        settingsRepositoryProvider.overrideWithValue(_FailingRepository()),
+      ],
+    );
+    addTearDown(container.dispose);
+    final before = await container.read(settingsProvider.future);
+    final notifier = container.read(settingsProvider.notifier);
+
+    await expectLater(notifier.setFontSize(16), throwsA(isA<StateError>()));
+
+    final state = container.read(settingsProvider);
+    expect(state.hasValue, isTrue);
+    expect(state.hasError, isFalse);
+    expect(state.value!.fontSize, before.fontSize);
+  });
+}
+
+class _FailingRepository extends SettingsRepository {
+  _FailingRepository() : super(SecureStorageService());
+
+  @override
+  Future<void> saveSettings(AppSettingsModel settings) async =>
+      throw StateError('storage refused');
 }

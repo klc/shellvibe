@@ -53,15 +53,24 @@ class SettingsNotifier extends _$SettingsNotifier {
   }
 
   Future<void> updateSettings(AppSettingsModel updated) async {
+    final previous = _base;
     _lastKnown = updated;
-    state = const AsyncValue.loading();
+    state = AsyncValue.data(updated);
     final result = _writeChain.then((_) async {
       final repo = ref.read(settingsRepositoryProvider);
       await repo.saveSettings(updated);
       return updated;
     });
     _writeChain = result.then((_) {}, onError: (_) {});
-    state = await AsyncValue.guard(() => result);
+    try {
+      await result;
+    } catch (e, st) {
+      // The write failed: show what is actually stored, and let the caller
+      // know.
+      _lastKnown = previous;
+      state = AsyncValue.data(previous);
+      Error.throwWithStackTrace(e, st);
+    }
   }
 
   AppSettingsModel get _base =>
