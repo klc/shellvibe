@@ -28,13 +28,20 @@ class BookmarksNotifier extends _$BookmarksNotifier {
   /// asking the caller to read the current state first would let two taps in
   /// quick succession decide from the same stale answer. Toggles are also
   /// serialised, so the second of two quick taps sees the first's result.
-  Future<void> toggleHost(String hostId) =>
-      _chain = _chain.then((_) => _toggleHost(hostId));
+  Future<void> toggleHost(String hostId) => _serial(() => _toggleHost(hostId));
 
   Future<void> toggleTemplate(String templateId) =>
-      _chain = _chain.then((_) => _toggleTemplate(templateId));
+      _serial(() => _toggleTemplate(templateId));
 
   Future<void> _chain = Future.value();
+
+  /// Runs [op] after the previous toggle. A failed toggle reaches its own
+  /// caller but does not stop the ones queued behind it.
+  Future<void> _serial(Future<void> Function() op) {
+    final result = _chain.then((_) => op());
+    _chain = result.then((_) {}, onError: (_) {});
+    return result;
+  }
 
   Future<void> _toggleHost(String hostId) async {
     final repo = ref.read(bookmarksRepositoryProvider);
