@@ -642,6 +642,10 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
   /// mDNS advertisement. See [DeviceLinkServerHost.stop].
   Future<void> stopDeviceLinkServer() => _deviceLinkHost.stop();
 
+  /// Drops a revoked Device Link device's live connections.
+  Future<void> disconnectDeviceLinkDevice(String id) =>
+      _deviceLinkHost.disconnectDevice(id);
+
   @visibleForTesting
   bool get isDeviceLinkServerRunning => _deviceLinkHost.isRunning;
 
