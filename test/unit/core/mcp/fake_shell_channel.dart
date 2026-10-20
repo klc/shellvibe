@@ -58,7 +58,7 @@ class FakeShellChannel implements ShellChannel {
 
   /// The command text inside an envelope, i.e. what the agent actually asked
   /// for. Used to assert that the session sends what the caller passed.
-  static final _commandPattern = RegExp(r'^\{ (.*) ; \} ;');
+  static final _commandPattern = RegExp(r'^\{ (.*)\n\} ;');
 
   @override
   Stream<List<int>> get stdout => _stdout.stream;
