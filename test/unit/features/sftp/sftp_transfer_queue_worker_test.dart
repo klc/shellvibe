@@ -128,6 +128,31 @@ void main() {
     },
   );
 
+  test('a burst of progress is broadcast at a throttled rate', () async {
+    final events = <List<TransferItem>>[];
+    final subscription = worker.watchQueue().listen(events.add);
+    final id = worker.enqueueDownload(
+      client: client,
+      remotePath: '/remote/burst.bin',
+      localPath: '${dir.path}/burst.bin',
+      size: 1000,
+    );
+    await _eventually(() => client.opened['/remote/burst.bin'] != null);
+
+    final remote = client.opened['/remote/burst.bin']!.single;
+    for (var i = 0; i < 1000; i++) {
+      remote.send([i % 256]);
+    }
+    await remote.bytes.close();
+    await _eventually(() => item(id).status == TransferStatus.completed);
+    await subscription.cancel();
+
+    // One broadcast per chunk would be over a thousand events.
+    expect(events.length, lessThan(50));
+    expect(events.last.single.status, TransferStatus.completed);
+    expect(events.last.single.transferredBytes, 1000);
+  });
+
   test(
     'a remote read that fails mid-transfer reports the remote error',
     () async {

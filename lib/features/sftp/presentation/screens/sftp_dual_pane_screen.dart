@@ -208,11 +208,15 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     final targetHost = targetTab?.host;
     final canPop = Navigator.of(context).canPop();
 
-    final queue =
-        ref.watch(transferQueueStreamProvider).value ?? const <TransferItem>[];
-    final queuedCount = queue
-        .where((item) => item.status != TransferStatus.completed)
-        .length;
+    // Select the count, not the queue: the queue changes with every progress
+    // tick, and watching it rebuilt both file panes for each one.
+    final queuedCount = ref.watch(
+      transferQueueStreamProvider.select(
+        (queue) => (queue.value ?? const <TransferItem>[])
+            .where((item) => item.status != TransferStatus.completed)
+            .length,
+      ),
+    );
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -315,11 +319,17 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
 
   Widget _buildStatusBar(BuildContext context, SftpState state) {
     final connected = state.remoteClient != null;
-    final queue =
-        ref.watch(transferQueueStreamProvider).value ?? const <TransferItem>[];
-    final active = queue
-        .where((item) => item.status == TransferStatus.inProgress)
-        .length;
+    final (active: active, total: total) = ref.watch(
+      transferQueueStreamProvider.select((queue) {
+        final items = queue.value ?? const <TransferItem>[];
+        return (
+          active: items
+              .where((item) => item.status == TransferStatus.inProgress)
+              .length,
+          total: items.length,
+        );
+      }),
+    );
 
     return ShellVibeStatusBar(
       segments: [
@@ -344,7 +354,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
           ),
         ),
         Text('$active transferring'),
-        Text('${queue.length} in queue'),
+        Text('$total in queue'),
       ],
     );
   }
