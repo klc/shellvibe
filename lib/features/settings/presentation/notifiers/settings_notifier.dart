@@ -66,9 +66,12 @@ class SettingsNotifier extends _$SettingsNotifier {
       await result;
     } catch (e, st) {
       // The write failed: show what is actually stored, and let the caller
-      // know.
-      _lastKnown = previous;
-      state = AsyncValue.data(previous);
+      // know. A newer edit queued behind this one carries it forward and
+      // owns the state now.
+      if (identical(_lastKnown, updated)) {
+        _lastKnown = previous;
+        state = AsyncValue.data(previous);
+      }
       Error.throwWithStackTrace(e, st);
     }
   }

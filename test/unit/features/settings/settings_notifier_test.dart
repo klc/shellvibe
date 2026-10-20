@@ -75,6 +75,27 @@ void main() {
     expect(state.hasError, isFalse);
     expect(state.value!.fontSize, before.fontSize);
   });
+
+  test('a failed write does not undo a newer edit queued behind it', () async {
+    final repo = _FailsFirstRepository();
+    final container = ProviderContainer(
+      overrides: [settingsRepositoryProvider.overrideWithValue(repo)],
+    );
+    addTearDown(container.dispose);
+    await container.read(settingsProvider.future);
+    final notifier = container.read(settingsProvider.notifier);
+
+    final failed = notifier.setFontSize(16);
+    final later = notifier.setThemeMode(ThemeMode.light);
+    await expectLater(failed, throwsA(isA<StateError>()));
+    await later;
+
+    // The second write stored both changes; the page must show that.
+    final shown = container.read(settingsProvider).value!;
+    expect(repo.saved!.fontSize, 16);
+    expect(shown.fontSize, 16);
+    expect(shown.themeMode, ThemeMode.light);
+  });
 }
 
 class _FailingRepository extends SettingsRepository {
@@ -83,4 +104,17 @@ class _FailingRepository extends SettingsRepository {
   @override
   Future<void> saveSettings(AppSettingsModel settings) async =>
       throw StateError('storage refused');
+}
+
+class _FailsFirstRepository extends SettingsRepository {
+  _FailsFirstRepository() : super(SecureStorageService());
+
+  var _calls = 0;
+  AppSettingsModel? saved;
+
+  @override
+  Future<void> saveSettings(AppSettingsModel settings) async {
+    if (_calls++ == 0) throw StateError('storage refused');
+    saved = settings;
+  }
 }
