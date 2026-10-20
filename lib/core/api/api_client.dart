@@ -184,7 +184,7 @@ final class ApiClient {
       retryAfterSeconds: int.tryParse(raw.header('retry-after') ?? ''),
     );
 
-    if (failure.isUnauthenticated) {
+    if (authenticated && failure.isUnauthenticated) {
       await onUnauthenticated?.call();
     }
 

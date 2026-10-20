@@ -135,6 +135,30 @@ void main() {
       expect(sessionDropped, isTrue);
     });
 
+    test('a 401 from a public call does not drop the session', () async {
+      final fixture = ContractFixture.load('error.unauthenticated');
+      transport.enqueue(status: fixture.status, body: fixture.body);
+
+      var sessionDropped = false;
+
+      await expectLater(
+        client(onUnauthenticated: () async => sessionDropped = true).post(
+          '/auth/login',
+          body: const {'email': 'a@b.c', 'password': 'x'},
+          authenticated: false,
+        ),
+        throwsA(
+          isA<ApiException>().having(
+            (e) => e.isUnauthenticated,
+            'isUnauthenticated',
+            isTrue,
+          ),
+        ),
+      );
+
+      expect(sessionDropped, isFalse);
+    });
+
     test('maps the pinned validation body onto field errors', () async {
       final fixture = ContractFixture.load('error.validation');
       transport.enqueue(status: fixture.status, body: fixture.body);

@@ -5,6 +5,7 @@ import 'package:shellvibe/core/api/api_exception.dart';
 import 'package:shellvibe/features/account/presentation/notifiers/account_notifier.dart';
 import 'package:shellvibe/shared/storage/secure_storage_service.dart';
 
+import '../../../support/contract_fixture.dart';
 import '../../../support/fake_api_transport.dart';
 
 void main() {
@@ -87,6 +88,21 @@ void main() {
       );
       expect(container.read(accountProvider).value!.isSignedIn, isTrue);
       expect(await stored(SecureStorageKeys.accountToken), 'test-token');
+    });
+  });
+
+  group('signOut', () {
+    test('a 401 from logout leaves the account signed out', () async {
+      await container.read(accountProvider.future);
+      final fixture = ContractFixture.load('error.unauthenticated');
+      transport.enqueue(status: fixture.status, body: fixture.body);
+
+      await container.read(accountProvider.notifier).signOut();
+
+      expect(
+        container.read(accountProvider).value!.status,
+        AccountStatus.signedOut,
+      );
     });
   });
 }
