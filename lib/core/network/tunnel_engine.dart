@@ -234,14 +234,12 @@ class TunnelEngine {
         port: remotePort,
       );
       if (listener == null) {
-        // dartssh2 reports a refused -R request by returning null. Surface it
-        // as an inactive tunnel with an error instead of a phantom "active".
-        _publish(
-          tunnel.failed(
-            'Remote forward (port $remotePort) was refused by the server',
-          ),
+        // dartssh2 reports a refused -R request by returning null. Throw so
+        // the catch below publishes it as a failed tunnel and the caller
+        // releases its pool claim, instead of a phantom "active".
+        throw StateError(
+          'Remote forward (port $remotePort) was refused by the server',
         );
-        return;
       }
       _remoteListeners[ruleId] = listener;
       _activeSockets[ruleId] = {};

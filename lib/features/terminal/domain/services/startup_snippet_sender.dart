@@ -89,7 +89,15 @@ class StartupSnippetSender {
       );
       return StartupSnippetOutcome.needsInput;
     }
-    send(tab, snippet.code);
+    var code = snippet.code;
+    final host = tab.host;
+    if (host != null) {
+      code = SnippetVariableParser.substituteBuiltins(
+        code,
+        builtinValuesFor(host),
+      );
+    }
+    send(tab, code);
     return StartupSnippetOutcome.sent;
   }
 
