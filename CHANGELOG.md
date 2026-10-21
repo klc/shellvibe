@@ -7,12 +7,84 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.9.2] - 2026-10-21
+
 ### Fixed
 
 - SFTP uploads and downloads no longer pin a CPU core. Connections now prefer
   ChaCha20-Poly1305, which runs about 25 times faster in ShellVibe's SSH stack
   than the AES-GCM cipher picked before, and the transfer queue redraws a few
   times a second instead of for every 16 KB acknowledged.
+- SFTP: a symlink to a directory opens as a directory instead of in the text
+  editor. A failed save keeps the editor and what was typed, and deleting a
+  file or folder asks first.
+- SSH: a dead connection is now noticed; the keep-alive ping waited forever
+  on a half-open link. Two first connections to a new host no longer fail
+  with a database error after both trusted its key.
+- Tunnels: a forward stops when its SSH connection closes or drops, instead
+  of staying "Active" with its local port bound. Deleting a host stops its
+  running tunnels.
+- Terminal: broadcast keeps reaching a pane after it reconnects. A template
+  pane's startup runbook runs even when the workspace is switched while the
+  pane connects.
+- Sync and cloud backup: turning every backup category off no longer goes
+  back to backing up everything after a restart. Edits made after a
+  timed-out upload were reported as backed up but never uploaded. A
+  scheduled backup no longer starts during a restore or a vault delete, and
+  deleting the cloud vault no longer leaves the schedule skipping every
+  backup. A device whose join failed on a network error tries again.
+- Restore: a workspace that arrives with a restore or a sync pull shows up
+  without a restart, and one deleted elsewhere is no longer kept selected. A
+  host the backup shows without a startup snippet no longer keeps this
+  device's one. Importing a backup file shows the same notes and repairs as
+  a cloud restore.
+- Import: re-importing over a host no longer leaves its old port-forward
+  rules on other devices. `Host * !github.com` no longer imports github.com
+  as a host.
+- Runbooks: a step's output pattern can be cleared in the editor. A step
+  that hangs until the shell resets is reported as a timeout, and a runbook
+  whose title is a number shows an import error instead of doing nothing.
+- Settings: changing a setting no longer swaps the page for a spinner,
+  breaks slider drags or resets the scroll. A failed write restores the
+  stored value without undoing a newer edit.
+- Vault: removing the master password could, if it failed half-way, leave a
+  vault that rejected every password. Copying an env var after editing it
+  copies the new value.
+- Favorites: two quick taps on a star no longer leave it stuck.
+- Account: a wrong password at sign-in, or signing out with a token revoked
+  elsewhere, no longer shows "session expired". A response that drops or
+  stalls mid-way is reported as a network error instead of hanging. A
+  corrupt cached plan no longer shows an error on every launch.
+- Device link: the scan screen can scan again after pairing is abandoned.
+  Terminal output that arrived just before a phone attached is no longer
+  lost.
+- Android: the background-session notification no longer stays up after
+  every session closed when the first attempt to stop it failed.
+- AI Access: a command ending in a `#` comment no longer hangs until the
+  timeout. Asking again for an approved host no longer locks the agent out
+  of it for ten minutes. Approval dialogs keep appearing after a request
+  that arrived while no window was ready. Unknown methods get the standard
+  JSON-RPC error codes.
+
+### Security
+
+- AI Access: `&` now separates commands, so `echo hi & rm -rf dir` is no
+  longer classed as read-only.
+- AI Access: `"password": "…"` in JSON or YAML output, and quoted values
+  with spaces, are now masked in full.
+- AI Access: revoking a client, or "Deny and suspend", refuses its other
+  waiting prompts. "Deny and suspend" also closes the client's sessions and
+  grants, as revoking from Settings does.
+- Terminal: Cmd+V and the other paste shortcuts go through "Paste and run?"
+  like the context menu.
+- Runbooks: a secret declared on a snippet that a step runs is masked in the
+  run view.
+- Vault: on installs from before the rename to ShellVibe, a deleted secret
+  came back on the next read, which could bring back the plaintext vault key
+  after a master password was set.
+- Device link: removing a paired device drops its live connection.
+- Sync: a stored backup whose sync key was stripped is refused instead of
+  making a joining device create a second key.
 
 ## [1.9.1] - 2026-10-17
 
@@ -705,7 +777,8 @@ entry describes what ShellVibe is rather than what changed.
 - iOS and Android are not released. The code builds for them and they are not
   part of this release.
 
-[Unreleased]: https://github.com/klc/shellvibe/compare/v1.9.1...HEAD
+[Unreleased]: https://github.com/klc/shellvibe/compare/v1.9.2...HEAD
+[1.9.2]: https://github.com/klc/shellvibe/compare/v1.9.1...v1.9.2
 [1.9.1]: https://github.com/klc/shellvibe/compare/v1.9.0...v1.9.1
 [1.9.0]: https://github.com/klc/shellvibe/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/klc/shellvibe/compare/v1.7.0...v1.8.0
