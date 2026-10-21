@@ -7,6 +7,13 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- SFTP uploads and downloads no longer pin a CPU core. Connections now prefer
+  ChaCha20-Poly1305, which runs about 25 times faster in ShellVibe's SSH stack
+  than the AES-GCM cipher picked before, and the transfer queue redraws a few
+  times a second instead of for every 16 KB acknowledged.
+
 ## [1.9.1] - 2026-10-17
 
 ### Changed

@@ -9,6 +9,10 @@ import '../domain/models/transfer_item.dart';
 /// Worker managing background SFTP file uploads and downloads queue.
 class SftpTransferQueueWorker {
   static const int _maxConcurrentTransfers = 3;
+  static const Duration _progressNotifyInterval = Duration(milliseconds: 100);
+
+  /// Time since progress was last broadcast; see [_updateProgress].
+  final Stopwatch _sinceProgressNotify = Stopwatch()..start();
 
   final Map<String, TransferItem> _queue = {};
   final Map<String, bool> _cancelFlags = {};
@@ -508,7 +512,14 @@ class SftpTransferQueueWorker {
         transferredBytes: transferredBytes,
         speedBytesPerSec: speedBytesPerSec,
       );
-      _notifyQueue();
+      // Progress arrives once per 16 KB chunk, which is thousands of events a
+      // second on a fast link, and publishing each one rebuilt the transfer UI
+      // that often. The queue itself stays exact; only the broadcast is
+      // throttled. Status changes still publish at once through _notifyQueue.
+      if (_sinceProgressNotify.elapsed >= _progressNotifyInterval) {
+        _sinceProgressNotify.reset();
+        _notifyQueue();
+      }
     }
   }
 

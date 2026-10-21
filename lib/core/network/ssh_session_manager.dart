@@ -188,6 +188,20 @@ class SSHSessionManager {
     final client = SSHClient(
       _socket!,
       username: config.username,
+      // ChaCha20-Poly1305 first. dartssh2 prefers AES-GCM, but every cipher
+      // runs in pure Dart on this isolate and pointycastle's GCM computes
+      // GHASH bit by bit: about 1.2 MB/s against ChaCha20's 30 MB/s, so an
+      // SFTP upload pinned a core at that rate. OpenSSH prefers ChaCha20
+      // too; GCM and CTR stay as fallbacks for servers that disable it.
+      algorithms: const SSHAlgorithms(
+        cipher: [
+          SSHCipherType.chacha20poly1305,
+          SSHCipherType.aes256gcm,
+          SSHCipherType.aes128gcm,
+          SSHCipherType.aes256ctr,
+          SSHCipherType.aes128ctr,
+        ],
+      ),
       identities: identities,
       onPasswordRequest: config.password != null
           ? () => config.password!
