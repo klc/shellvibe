@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 import 'package:dartssh2/dartssh2.dart';
+import 'package:uuid/uuid.dart';
 import '../domain/models/sftp_file_item.dart';
 
 /// Wrapper service over [SftpClient] providing high-level file system operations.
@@ -99,18 +100,61 @@ class SftpService {
     String path,
     Uint8List content,
   ) async {
-    final file = await client.open(
-      path,
-      mode:
-          SftpFileOpenMode.create |
-          SftpFileOpenMode.write |
-          SftpFileOpenMode.truncate,
-    );
+    final mode =
+        SftpFileOpenMode.create |
+        SftpFileOpenMode.write |
+        SftpFileOpenMode.truncate;
+
+    // Keep the destination's permission bits: the rename below replaces the
+    // inode, so a fresh temp file would otherwise come up with the umask.
+    int? existingPermissions;
     try {
-      // dartssh2 chunks and pipelines the writes itself.
-      await file.write(Stream.value(content));
-    } finally {
-      await file.close();
+      // Permission bits only; the type bits are not setstat's business.
+      existingPermissions = (await client.stat(path)).mode?.value;
+      if (existingPermissions != null) existingPermissions &= 0xFFF;
+    } catch (_) {
+      // New file, or stat unsupported: nothing to preserve.
+    }
+
+    // Same pattern as the upload worker: never truncate the user's file in
+    // place, or a dropped connection mid-write leaves it empty. The temp file
+    // sits in the same directory so the rename stays atomic.
+    final temporaryPath = '$path.shellvibe-part-${const Uuid().v4()}';
+    SftpFile file;
+    try {
+      file = await client.open(temporaryPath, mode: mode);
+    } catch (_) {
+      // Directory not writable but the file is: fall back to the in-place
+      // write so the editor keeps working there.
+      file = await client.open(path, mode: mode);
+      try {
+        await file.write(Stream.value(content));
+      } finally {
+        await file.close();
+      }
+      return;
+    }
+
+    try {
+      try {
+        // dartssh2 chunks and pipelines the writes itself.
+        await file.write(Stream.value(content));
+      } finally {
+        await file.close();
+      }
+      await client.rename(temporaryPath, path);
+    } catch (_) {
+      try {
+        await client.remove(temporaryPath);
+      } catch (_) {}
+      rethrow;
+    }
+
+    if (existingPermissions != null) {
+      await client.setStat(
+        path,
+        SftpFileAttrs(mode: SftpFileMode.value(existingPermissions)),
+      );
     }
   }
 
