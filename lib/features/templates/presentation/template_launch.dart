@@ -78,7 +78,11 @@ Future<OnOpenOutcome> runTemplateOnOpen(
   if (template.onOpenRunbookId == null) return OnOpenOutcome.notConfigured;
 
   final runbooks = await ref.read(runbooksProvider.future);
-  final hosts = await ref.read(hostsProvider.future);
+  final hostsById = await templateHostsById(
+    template,
+    hosts: await ref.read(hostsProvider.future),
+    repo: ref.read(hostsRepositoryProvider),
+  );
   final snippets = await ref.read(snippetsProvider.future);
   if (!context.mounted) return OnOpenOutcome.notConfigured;
 
@@ -118,7 +122,7 @@ Future<OnOpenOutcome> runTemplateOnOpen(
   return onOpen.run(
     template,
     runbooks: runbooks,
-    hostsById: {for (final host in hosts) host.id: host},
+    hostsById: hostsById,
     snippets: {for (final s in snippets) s.id: s},
   );
 }

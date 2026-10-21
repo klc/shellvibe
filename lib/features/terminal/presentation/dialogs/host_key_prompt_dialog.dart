@@ -51,12 +51,27 @@ class HostKeyPromptDialog extends StatelessWidget {
 
   bool get _isMismatch => status == HostKeyVerificationStatus.mismatch;
 
+  /// OpenSSH's host key file stem for a wire key type: `ssh-ed25519`,
+  /// `rsa-sha2-256`/`ssh-rsa` and `ecdsa-sha2-nistp*` live in
+  /// `ssh_host_{ed25519,rsa,ecdsa}_key.pub`. Null for anything else.
+  static String? _hostKeyFileStem(String keyType) {
+    if (keyType.contains('ed25519')) return 'ed25519';
+    if (keyType.startsWith('ecdsa-')) return 'ecdsa';
+    if (keyType.contains('rsa')) return 'rsa';
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final tokens = ShellVibeTokens.resolve(context);
     final accent = _isMismatch ? tokens.danger : tokens.brand;
     // Size and tracking stay on the ramp; only the colour is a token decision.
     final bodyStyle = Theme.of(context).textTheme.bodySmall;
+    final keyFileStem = _hostKeyFileStem(keyType);
+    final verifyHint = keyFileStem == null
+        ? ''
+        : '(e.g. `ssh-keygen -lf /etc/ssh/ssh_host_${keyFileStem}_key.pub` '
+              'on the server) ';
 
     return ShadDialog.alert(
       title: Row(
@@ -82,8 +97,7 @@ class HostKeyPromptDialog extends StatelessWidget {
                       'connection (man-in-the-middle attack).'
                 : 'The authenticity of $hostname:$port cannot be established. '
                       'Verify the fingerprint below through a trusted channel '
-                      '(e.g. `ssh-keygen -lf /etc/ssh/ssh_host_${keyType}_key.pub` '
-                      'on the server) before trusting it.',
+                      '${verifyHint}before trusting it.',
             style: bodyStyle?.copyWith(
               color: _isMismatch ? tokens.danger : tokens.textSecondary,
             ),
