@@ -8,6 +8,7 @@ import '../../domain/models/run_strategy.dart';
 import '../../domain/models/runbook_model.dart';
 import '../../domain/services/run_variables.dart';
 import '../../domain/services/runbook_run_service.dart';
+import 'snippets_notifier.dart';
 
 part 'runbook_run_notifier.g.dart';
 
@@ -50,6 +51,10 @@ class RunbookRunNotifier extends _$RunbookRunNotifier {
     String? runId,
   }) async {
     if (isRunning) return;
+    final snippets = {
+      for (final s in await ref.read(snippetsProvider.future)) s.id: s,
+    };
+    if (!ref.mounted || isRunning) return;
     state = ActiveRun(
       id: runId,
       triggeredBy: triggeredBy,
@@ -70,7 +75,12 @@ class RunbookRunNotifier extends _$RunbookRunNotifier {
           runbook,
           hosts,
           variableValues: variableValues,
-          secretValues: secretValuesOf(runbook.variables, variableValues),
+          // Snippet steps declare their own variables; a secret declared there
+          // is one too.
+          secretValues: secretValuesOf(
+            collectRunVariables(runbook, snippets: snippets).declarations,
+            variableValues,
+          ),
           strategy: strategy,
           onEvent: _apply,
         );

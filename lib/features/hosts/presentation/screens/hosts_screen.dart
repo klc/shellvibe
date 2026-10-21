@@ -14,6 +14,8 @@ import '../../../../app/widgets/adaptive_modal.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../../../app/widgets/workspace_switcher.dart';
 import '../../../../core/utils/platform_capabilities.dart';
+import '../../../../shared/providers/database_providers.dart';
+import '../../../tunnels/presentation/providers/tunnels_providers.dart';
 import '../../../workspaces/presentation/providers/workspace_provider.dart';
 import '../../../templates/domain/models/template_model.dart';
 import '../../../templates/presentation/widgets/template_editor_panel.dart';
@@ -988,6 +990,14 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
       setState(() => _selectedHostId = null);
     }
     try {
+      // The rules cascade away with the host; the forwards riding on them
+      // would not, and would be left running with nothing to stop them from.
+      final rules = await ref
+          .read(tunnelsDaoProvider)
+          .getRulesForHost(host.id);
+      for (final rule in rules) {
+        await ref.read(tunnelsProvider.notifier).stopRule(rule.id);
+      }
       await ref.read(hostsProvider.notifier).deleteHost(host.id);
     } catch (e) {
       if (!mounted) return;

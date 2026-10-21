@@ -78,7 +78,12 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
   /// keymap tests). Built once: the platform does not change under a pane.
   late final Map<ShortcutActivator, Intent> _terminalShortcuts = {
     ...appKeymap(terminalFocused: true),
-    ...defaultTerminalShortcuts,
+    // xterm's own paste action pastes unchecked; the keyboard must go
+    // through the same "Paste and run?" guard as the context menu.
+    for (final e in defaultTerminalShortcuts.entries)
+      e.key: e.value is PasteTextIntent
+          ? const ConfirmedPasteIntent()
+          : e.value,
   };
 
   bool _searchOpen = false;
@@ -504,6 +509,13 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
       actions: {
         FindInTerminalIntent: CallbackAction<FindInTerminalIntent>(
           onInvoke: (_) => _openSearch(),
+        ),
+        ConfirmedPasteIntent: CallbackAction<ConfirmedPasteIntent>(
+          onInvoke: (_) {
+            _flushTerminalInput();
+            unawaited(_pasteFromClipboard());
+            return null;
+          },
         ),
       },
       child: Column(

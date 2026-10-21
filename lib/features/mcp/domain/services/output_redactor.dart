@@ -62,7 +62,8 @@ class OutputRedactor {
   // pattern above already replaced with a placeholder), so it runs last —
   // see the ordering note on [redact].
   static final RegExp _assignmentPattern = RegExp(
-    r'(?<key>password|passwd|secret|token|api[_-]?key)\s*[:=]\s*(?<value>\S+)',
+    r'''(?<key>password|passwd|secret|token|api[_-]?key)["']?\s*[:=]\s*'''
+    r'''(?<value>"[^"]*"|'[^']*'|\S+)''',
     caseSensitive: false,
   );
 

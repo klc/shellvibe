@@ -115,6 +115,21 @@ void main() {
     expect(result.text, isNot(contains('hunter2')));
   });
 
+  test('quoted JSON keys and values are masked', () {
+    final result = redactor.redact(
+      '{"password": "hunter2", "api_key": "abc123"}',
+    );
+    expect(result.text, isNot(contains('hunter2')));
+    expect(result.text, isNot(contains('abc123')));
+    expect(result.count, 2);
+  });
+
+  test('a quoted value with spaces is masked whole', () {
+    final result = redactor.redact('password: "a b c"');
+    expect(result.text, isNot(contains('b c')));
+    expect(result.count, 1);
+  });
+
   test('a postgres URL keeps scheme and host, masks only the credentials', () {
     final result = redactor.redact('postgres://user:pw@host/db');
     expect(result.text, 'postgres://[REDACTED:db_url]@host/db');

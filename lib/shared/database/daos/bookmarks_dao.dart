@@ -20,16 +20,14 @@ class BookmarksDao extends DatabaseAccessor<AppDatabase>
         .get();
   }
 
-  Future<Bookmark?> getBookmarkForHost(String hostId) {
-    return (select(
-      bookmarks,
-    )..where((tbl) => tbl.hostId.equals(hostId))).getSingleOrNull();
+  Future<List<Bookmark>> getBookmarksForHost(String hostId) {
+    return (select(bookmarks)..where((tbl) => tbl.hostId.equals(hostId))).get();
   }
 
-  Future<Bookmark?> getBookmarkForTemplate(String templateId) {
+  Future<List<Bookmark>> getBookmarksForTemplate(String templateId) {
     return (select(
       bookmarks,
-    )..where((tbl) => tbl.templateId.equals(templateId))).getSingleOrNull();
+    )..where((tbl) => tbl.templateId.equals(templateId))).get();
   }
 
   Future<int> insertBookmark(BookmarksCompanion bookmark) => db.recordUpsert(

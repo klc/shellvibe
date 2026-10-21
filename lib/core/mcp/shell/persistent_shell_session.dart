@@ -471,11 +471,13 @@ class PersistentShellSession {
 
   /// Wraps [command] so its completion, exit code and resulting cwd can be
   /// read back deterministically, as
-  /// `{ CMD ; } ; printf '\n__TERLY_%s__%s|%s\n' "NONCE" "$?" "$PWD"`.
-  /// The braces mean `$?` reflects the command's own exit status even when
+  /// `{ CMD\n} ; printf '\n__TERLY_%s__%s|%s\n' "NONCE" "$?" "$PWD"`.
+  /// The closing brace starts its own line so a trailing `# comment` or
+  /// heredoc terminator in CMD cannot swallow it. The braces mean `$?`
+  /// reflects the command's own exit status even when
   /// the command spans multiple statements.
   String _buildEnvelope(String command, String nonce) {
-    return '{ $command ; } ; printf \'\\n__TERLY_%s__%s|%s\\n\' "$nonce" "\$?" "\$PWD"\n';
+    return '{ $command\n} ; printf \'\\n__TERLY_%s__%s|%s\\n\' "$nonce" "\$?" "\$PWD"\n';
   }
 
   /// POSIX single-quote escaping for interpolating [value] (a path) into a

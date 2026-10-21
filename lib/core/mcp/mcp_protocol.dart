@@ -19,6 +19,19 @@ class McpProtocolException implements Exception {
   String toString() => 'McpProtocolException($code): $message';
 }
 
+/// A failure the transport must answer with this exact JSON-RPC error code
+/// (unknown method, bad params) instead of a generic `-32603`.
+class JsonRpcErrorException implements Exception {
+  final int code;
+  final String message;
+  final Object? data;
+
+  const JsonRpcErrorException(this.code, this.message, {this.data});
+
+  @override
+  String toString() => 'JsonRpcErrorException($code): $message';
+}
+
 /// Base class for JSON-RPC 2.0 frames exchanged over the MCP transport.
 ///
 /// MCP layers its own methods (`initialize`, `tools/list`, ...) on top of

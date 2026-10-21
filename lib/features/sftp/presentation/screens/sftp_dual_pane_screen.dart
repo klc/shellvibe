@@ -375,7 +375,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
             notifier.loadLocalDirectory(item.path);
           }
         },
-        onDelete: notifier.deleteLocalItem,
+        onDelete: (item) => _confirmDelete(item, notifier.deleteLocalItem),
         onUpload: (item) => notifier.uploadLocalItem(item.path),
       ),
     );
@@ -409,7 +409,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
             _openFileEditor(item);
           }
         },
-        onDelete: notifier.deleteRemoteItem,
+        onDelete: (item) => _confirmDelete(item, notifier.deleteRemoteItem),
         onDownload: (item) => notifier.downloadItem(item),
         onEditPermissions: _openPermissionsDialog,
         onEditContent: _openFileEditor,
@@ -822,6 +822,35 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _confirmDelete(
+    SftpFileItem item,
+    Future<void> Function(SftpFileItem) delete,
+  ) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => ShadDialog.alert(
+        title: Text('Delete ${item.name}?'),
+        description: item.isDirectory
+            ? const Text('This folder and everything in it will be deleted.')
+            : null,
+        actions: adaptiveDialogActions(context, [
+          ShellVibeButton.secondary(
+            label: 'Cancel',
+            onPressed: () => Navigator.of(ctx).pop(false),
+          ),
+          ShellVibeButton.danger(
+            buttonKey: const Key('sftp_delete_confirm'),
+            label: 'Delete',
+            onPressed: () => Navigator.of(ctx).pop(true),
+          ),
+        ]),
+        actionsAxis: adaptiveDialogActionsAxis(context),
+      ),
+    );
+    if (confirm != true || !mounted) return;
+    await delete(item);
   }
 
   void _openFileEditor(SftpFileItem item) {

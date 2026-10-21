@@ -365,6 +365,18 @@ final class McpHttpTransport {
         Object? result;
         try {
           result = await onRequest(clientId, message);
+        } on JsonRpcErrorException catch (error) {
+          await _respondJson(
+            request,
+            HttpStatus.ok,
+            JsonRpcError(
+              id: message.id,
+              code: error.code,
+              message: error.message,
+              data: error.data,
+            ).toJson(),
+          );
+          return;
         } on Object catch (error, stackTrace) {
           stderr.writeln(
             'McpHttpTransport: onRequest threw for method '

@@ -636,7 +636,7 @@ class _RunbookStepTile extends StatelessWidget {
                       fontSize: 12,
                     ),
                   ),
-                if (step.expectedOutputPattern != null) ...[
+                if (step.expectedOutputPattern?.isNotEmpty ?? false) ...[
                   const SizedBox(height: 4),
                   ShellVibeStatusChip(
                     label: 'expects ${step.expectedOutputPattern}',

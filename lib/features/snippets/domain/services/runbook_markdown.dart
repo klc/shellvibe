@@ -286,10 +286,11 @@ class RunbookMarkdown {
       );
     }
 
-    final title = (front['title'] as String?)?.trim().isNotEmpty ?? false
-        ? (front['title'] as String).trim()
+    final fmTitle = _text(front, 'title')?.trim();
+    final title = fmTitle != null && fmTitle.isNotEmpty
+        ? fmTitle
         : (heading ?? 'Imported runbook');
-    final description = front['description'] as String?;
+    final description = _text(front, 'description');
     return RunbookModel(
       id: runbookId,
       workspaceId: workspaceId,
@@ -383,6 +384,12 @@ class RunbookMarkdown {
         into[key] = _scalar(value);
       }
     }
+  }
+
+  static String? _text(Map<String, Object?> front, String key) {
+    final v = front[key];
+    if (v == null || v is String) return v as String?;
+    throw RunbookMarkdownException('"$key" must be text.');
   }
 
   static Object? _scalar(String value) {

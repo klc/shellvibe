@@ -276,6 +276,10 @@ echo b
       );
     }
 
+    test(
+      'a frontmatter title that is not text',
+      () => fails('---\ntitle: 2024\n---\n\n```sh\necho hi\n```\n', 'title'),
+    );
     test('no steps', () => fails('# Just prose\n', 'No steps found'));
     test(
       'an unclosed frontmatter',
@@ -330,4 +334,18 @@ echo b
       );
     });
   });
+
+  test(
+    'copyWith with an empty pattern clears it (how the editor clears it)',
+    () {
+      expect(
+        step(
+          1,
+          'echo a',
+          pattern: 'Running',
+        ).copyWith(expectedOutputPattern: '').expectedOutputPattern,
+        '',
+      );
+    },
+  );
 }

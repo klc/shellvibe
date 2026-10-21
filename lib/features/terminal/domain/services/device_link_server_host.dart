@@ -73,6 +73,10 @@ class DeviceLinkServerHost {
     await _ensureServer();
   }
 
+  /// Closes a revoked device's live connections, if the server is running.
+  Future<void> disconnectDevice(String id) =>
+      _deviceLinkServer?.disconnectDevice(id) ?? Future.value();
+
   /// Stops the listener, all authenticated connections, and its mDNS
   /// advertisement. The lifecycle generation also cancels a startup that is
   /// still loading the identity or registering mDNS, preventing an orphan

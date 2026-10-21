@@ -297,6 +297,13 @@ class RequestHostAccessTool with McpArgReaders implements McpToolHandler {
     final denied = <HostAccessDenial>[];
     final candidates = <HostAccessCandidate>[];
 
+    final live = {
+      for (final g in await grantRepository.activeGrantsForClient(
+        ctx.clientId,
+      ))
+        g.hostId: g,
+    };
+
     for (final hostId in hostIds) {
       final host = await hostsRepository.getHostById(hostId);
       if (host == null || host.workspaceId != ctx.workspaceId) {
@@ -310,6 +317,21 @@ class RequestHostAccessTool with McpArgReaders implements McpToolHandler {
       final row = await _hostRow(hostsDao, hostId);
       if (!_isMcpVisible(row)) {
         denied.add(HostAccessDenial(hostId: hostId, reason: 'not_visible'));
+        continue;
+      }
+
+      final held = live[hostId];
+      if (held != null) {
+        // Already approved: no prompt, and a denial of a repeat request must
+        // not put the existing grant into cooldown.
+        granted.add(
+          HostAccessGrant(
+            hostId: hostId,
+            mode: McpAccessMode.fromName(held.mode),
+            expiresAt: held.expiresAt,
+            sessionScoped: held.connectionScopeId != null,
+          ),
+        );
         continue;
       }
 

@@ -6,6 +6,7 @@ import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../../../core/utils/platform_capabilities.dart';
 import '../../../../shared/database/app_database.dart';
 import '../../../../shared/providers/database_providers.dart';
+import '../../../terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import '../../data/repositories/device_link_pairing_repository.dart';
 import '../../data/repositories/device_link_pairing_storage.dart';
 import '../../domain/models/device_link_pairing_profile.dart';
@@ -47,6 +48,9 @@ class _PairedDevicesSettingsSectionState
 
   Future<void> _removeDesktopDevice(String id) async {
     await ref.read(deviceLinkPairingRepositoryProvider).remove(id);
+    await ref
+        .read(terminalTabsProvider.notifier)
+        .disconnectDeviceLinkDevice(id);
     if (mounted) ref.invalidate(pairedDevicesProvider);
   }
 

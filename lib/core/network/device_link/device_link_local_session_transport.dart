@@ -104,6 +104,10 @@ final class DeviceLinkLocalSessionTransport
         },
       );
       ptyBridge.outputTap = _batcher!.add;
+      // Bytes that passed the tap before this point may still sit in the
+      // terminal writer. Push them into the terminal so the snapshot below
+      // holds them; otherwise they are in neither the snapshot nor the stream.
+      ptyBridge.flush();
       // The phone is attached to a process, not to a window. When that process
       // exits nothing else tells it, and the desktop would keep a "shared"
       // badge for a session that no longer exists.

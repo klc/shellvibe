@@ -78,7 +78,7 @@ final class EntitlementCache {
         fetchedAt: fetchedAt,
         userId: userId,
       );
-    } on FormatException catch (e) {
+    } on Object catch (e) {
       if (kDebugMode) debugPrint('EntitlementCache: corrupt payload: $e');
 
       return null;

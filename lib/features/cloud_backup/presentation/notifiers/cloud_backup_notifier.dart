@@ -119,6 +119,7 @@ final class CloudBackupState {
     bool clearBlocker = false,
     bool clearMessage = false,
     bool clearConflict = false,
+    bool clearLastAutoBackupAt = false,
   }) => CloudBackupState(
     blocker: clearBlocker ? null : (blocker ?? this.blocker),
     head: head ?? this.head,
@@ -133,7 +134,9 @@ final class CloudBackupState {
     recoveryCodeMissing: recoveryCodeMissing ?? this.recoveryCodeMissing,
     lastFullBackupAt: lastFullBackupAt ?? this.lastFullBackupAt,
     frequency: frequency ?? this.frequency,
-    lastAutoBackupAt: lastAutoBackupAt ?? this.lastAutoBackupAt,
+    lastAutoBackupAt: clearLastAutoBackupAt
+        ? null
+        : (lastAutoBackupAt ?? this.lastAutoBackupAt),
   );
 }
 
@@ -649,8 +652,10 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
     await _run((state) async {
       await service.deleteVault();
       await _store.writeLastKnownRevision(0);
+      await _store.clearAutoBackupMark();
 
       return state.copyWith(
+        clearLastAutoBackupAt: true,
         head: VaultHead.empty,
         lastKnownRevision: 0,
         revisions: const [],
@@ -758,6 +763,10 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
   }
 
   Future<void> _backUpIfDue() async {
+    // A restore or delete in flight owns the store; the next tick will come
+    // round.
+    if (state.value?.busy == true) return;
+
     final frequency = state.value?.frequency ?? BackupFrequency.off;
     final interval = frequency.interval;
     if (interval == null) return;

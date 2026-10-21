@@ -585,9 +585,8 @@ class _RunbookEditorDialogState extends ConsumerState<RunbookEditorDialog> {
                 },
                 onChanged: (val) => _update(
                   idx,
-                  (s) => s.copyWith(
-                    expectedOutputPattern: val.isEmpty ? null : val,
-                  ),
+                  // copyWith keeps the old value on null; '' means "no pattern".
+                  (s) => s.copyWith(expectedOutputPattern: val),
                 ),
               ),
             ),

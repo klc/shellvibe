@@ -96,7 +96,8 @@ void main() {
         'Host web1|web3\n  User alt\n'
         'Host web*\n  User wild\n'
         'Host WEB1\n  User upper\n'
-        'Host !web2\n  User negated\n',
+        'Host !web2\n  User negated\n'
+        'Host web2\n',
       );
 
       String userOf(String alias) =>
@@ -108,6 +109,14 @@ void main() {
       expect(userOf('web3'), 'alt');
       expect(userOf('WEB1'), 'upper', reason: 'patterns are case-sensitive '
           'in both directions');
+    });
+
+    test('negated-only patterns do not declare a host', () async {
+      final res = await Harness().resolve(
+        'Host *\n  User all\n'
+        'Host * !skipme\n  User notme\n',
+      );
+      expect(res.hosts, isEmpty);
     });
 
     test('negation vetoes a stanza regardless of other patterns', () async {

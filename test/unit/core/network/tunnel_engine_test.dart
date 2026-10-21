@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -99,6 +101,96 @@ void main() {
       expect(fakeListener2.isClosed, isTrue);
     });
 
+    test('a forward stops and is marked failed when its SSH client closes', () async {
+      final probe = await ServerSocket.bind('127.0.0.1', 0);
+      final port = probe.port;
+      await probe.close();
+      final client = FakeSSHClient();
+
+      await tunnelEngine.startLocalForward(
+        ruleId: 'r_gone',
+        hostId: 'h1',
+        sshClient: client,
+        localPort: port,
+        remoteHost: 'example.com',
+        remotePort: 80,
+      );
+      expect(tunnelEngine.isTunnelActive('r_gone'), isTrue);
+
+      client.doneCompleter.complete();
+      await pumpEventQueue();
+
+      expect(tunnelEngine.isTunnelActive('r_gone'), isFalse);
+      final tunnel = tunnelEngine.activeTunnelsList.singleWhere(
+        (t) => t.ruleId == 'r_gone',
+      );
+      expect(tunnel.error, contains('SSH connection closed'));
+      await expectLater(
+        Socket.connect('127.0.0.1', port),
+        throwsA(isA<SocketException>()),
+      );
+    });
+
+    test('a forward that carried traffic still stops when its client closes', () async {
+      final probe = await ServerSocket.bind('127.0.0.1', 0);
+      final port = probe.port;
+      await probe.close();
+      final client = FakeSSHClient();
+
+      await tunnelEngine.startLocalForward(
+        ruleId: 'r_busy',
+        hostId: 'h1',
+        sshClient: client,
+        localPort: port,
+        remoteHost: 'example.com',
+        remotePort: 80,
+      );
+      // Bytes through the forward replace the published tunnel object.
+      final socket = await Socket.connect('127.0.0.1', port);
+      socket.add([1, 2, 3]);
+      await socket.flush();
+      await pumpEventQueue();
+      expect(
+        tunnelEngine.activeTunnelsList.single.bytesTransferred,
+        greaterThan(0),
+      );
+
+      client.doneCompleter.complete();
+      await pumpEventQueue();
+      socket.destroy();
+
+      expect(tunnelEngine.isTunnelActive('r_busy'), isFalse);
+      expect(
+        tunnelEngine.activeTunnelsList.single.error,
+        contains('SSH connection closed'),
+      );
+    });
+
+    test('a forward stops when its SSH client ends with an error', () async {
+      final probe = await ServerSocket.bind('127.0.0.1', 0);
+      final port = probe.port;
+      await probe.close();
+      final client = FakeSSHClient();
+
+      await tunnelEngine.startLocalForward(
+        ruleId: 'r_reset',
+        hostId: 'h1',
+        sshClient: client,
+        localPort: port,
+        remoteHost: 'example.com',
+        remotePort: 80,
+      );
+
+      client.doneCompleter.completeError(StateError('reset'));
+      await pumpEventQueue();
+
+      expect(tunnelEngine.isTunnelActive('r_reset'), isFalse);
+      final tunnel = tunnelEngine.activeTunnelsList.singleWhere(
+        (t) => t.ruleId == 'r_reset',
+      );
+      expect(tunnel.error, contains('SSH connection closed'));
+    });
+
     test('startRemoteForward cleans up resources on error', () async {
       final fakeSshClient = FakeFailingSSHClient();
 
@@ -151,7 +243,20 @@ class FakeSSHRemoteForward extends Fake implements SSHRemoteForward {
 class FakeSSHClient extends Fake implements SSHClient {
   final SSHRemoteForward? remoteForwardResult;
 
+  final Completer<void> doneCompleter = Completer<void>();
+
   FakeSSHClient({this.remoteForwardResult});
+
+  @override
+  Future<void> get done => doneCompleter.future;
+
+  @override
+  Future<SSHForwardChannel> forwardLocal(
+    String remoteHost,
+    int remotePort, {
+    String localHost = 'localhost',
+    int localPort = 0,
+  }) async => _FakeForwardChannel();
 
   @override
   Future<SSHRemoteForward?> forwardRemote({
@@ -163,3 +268,28 @@ class FakeSSHClient extends Fake implements SSHClient {
   }
 }
 
+
+/// A forward channel whose remote end never answers; what is written to it
+/// is buffered.
+class _FakeForwardChannel extends Fake implements SSHForwardChannel {
+  final _incoming = StreamController<Uint8List>();
+  final _outgoing = StreamController<List<int>>();
+
+  @override
+  Stream<Uint8List> get stream => _incoming.stream;
+
+  @override
+  StreamSink<List<int>> get sink => _outgoing.sink;
+
+  @override
+  Future<void> get done => _incoming.done;
+
+  @override
+  Future<void> close() async {
+    await _outgoing.close();
+    await _incoming.close();
+  }
+
+  @override
+  void destroy() {}
+}

@@ -31,6 +31,19 @@ class SftpService {
         .map((item) => SftpFileItem.fromSftpName(item, path))
         .toList();
 
+    // readdir attributes do not follow links: ask where a symlink leads.
+    // ponytail: one stat per symlink, in order; batch if a folder has many.
+    for (var i = 0; i < items.length; i++) {
+      final item = items[i];
+      if (!item.isSymlink || item.isDirectory) continue;
+      try {
+        final target = await client.stat(item.path);
+        if (target.isDirectory) items[i] = item.copyWith(isDirectory: true);
+      } catch (_) {
+        // Dangling or unreadable link: leave it as a file.
+      }
+    }
+
     // Sort: Directories first, then files alphabetically
     items.sort((a, b) {
       if (a.isDirectory && !b.isDirectory) return -1;

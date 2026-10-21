@@ -62,8 +62,7 @@ abstract interface class ApiTransport {
 final class IoApiTransport implements ApiTransport {
   final HttpClient _client;
 
-  IoApiTransport({HttpClient? client})
-    : _client = client ?? _createClient();
+  IoApiTransport({HttpClient? client}) : _client = client ?? _createClient();
 
   static HttpClient _createClient() {
     final client = HttpClient()
@@ -104,8 +103,13 @@ final class IoApiTransport implements ApiTransport {
     }
 
     final HttpClientResponse ioResponse;
+    final String text;
     try {
       ioResponse = await ioRequest.close().timeout(ApiConfig.responseTimeout);
+      text = await ioResponse
+          .transform(utf8.decoder)
+          .join()
+          .timeout(ApiConfig.responseTimeout);
     } on SocketException catch (e) {
       throw ApiTransportException('Connection dropped.', cause: e);
     } on HttpException catch (e) {
@@ -116,14 +120,14 @@ final class IoApiTransport implements ApiTransport {
         cause: e,
         timedOut: true,
       );
+    } on FormatException catch (e) {
+      throw ApiTransportException('Malformed response body.', cause: e);
     }
 
     final headers = <String, String>{};
     ioResponse.headers.forEach((name, values) {
       if (values.isNotEmpty) headers[name.toLowerCase()] = values.first;
     });
-
-    final text = await ioResponse.transform(utf8.decoder).join();
 
     return ApiRawResponse(
       statusCode: ioResponse.statusCode,

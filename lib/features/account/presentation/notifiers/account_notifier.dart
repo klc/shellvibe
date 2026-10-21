@@ -211,6 +211,10 @@ class AccountNotifier extends _$AccountNotifier {
 
   /// Invoked by [ApiClient] when the server answers `401` to any call.
   Future<void> _onServerRejectedToken() async {
+    // Only a stored session can expire. A 401 while already signed out
+    // (a sign-out whose token was revoked elsewhere) changes nothing.
+    if (state.value?.status == AccountStatus.signedOut) return;
+
     await _store.clearSession();
 
     final lastEmail = await _store.readEmail();

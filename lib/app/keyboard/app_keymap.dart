@@ -58,6 +58,12 @@ class FindInTerminalIntent extends Intent {
   const FindInTerminalIntent();
 }
 
+/// Pastes the clipboard into the focused terminal through the unsafe-paste
+/// guard, in place of xterm's own unchecked paste.
+class ConfirmedPasteIntent extends Intent {
+  const ConfirmedPasteIntent();
+}
+
 /// Closes the host window.
 class CloseWindowIntent extends Intent {
   const CloseWindowIntent();

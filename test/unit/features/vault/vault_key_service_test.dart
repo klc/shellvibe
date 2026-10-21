@@ -8,6 +8,14 @@ import 'package:shellvibe/core/crypto/encryption_engine.dart';
 import 'package:shellvibe/features/vault/data/vault_key_service.dart';
 import 'package:shellvibe/shared/storage/secure_storage_service.dart';
 
+class _FailingWrappedDekDelete extends SecureStorageService {
+  @override
+  Future<void> delete({required String key}) {
+    if (key == SecureStorageKeys.wrappedDek) throw StateError('keychain');
+    return super.delete(key: key);
+  }
+}
+
 class _DelayedEncryptionEngine extends EncryptionEngine {
   final EncryptionEngine delegate;
   final Completer<void> started = Completer<void>();
@@ -182,6 +190,23 @@ void main() {
 
       await service.configureMasterPassword('correct horse battery');
       await service.removeMasterPassword();
+
+      expect(await service.isMasterPasswordConfigured(), isFalse);
+      final reopened = buildService();
+      expect(await (await reopened.getDek()).extractBytes(), equals(original));
+    });
+
+    test('a failure while removing the password leaves plain mode', () async {
+      final setup = buildService();
+      final original = await (await setup.getDek()).extractBytes();
+      await setup.configureMasterPassword('correct horse battery');
+      final service = VaultKeyService(
+        encryptionEngine: engine,
+        secureStorageService: _FailingWrappedDekDelete(),
+      );
+      expect(await service.unlock('correct horse battery'), isTrue);
+
+      await expectLater(service.removeMasterPassword(), throwsStateError);
 
       expect(await service.isMasterPasswordConfigured(), isFalse);
       final reopened = buildService();

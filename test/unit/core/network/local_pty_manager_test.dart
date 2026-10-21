@@ -4,6 +4,7 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -207,6 +208,31 @@ void main() {
         await bridge.dispose();
       },
     );
+
+    test('flush writes output still buffered for the next frame', () async {
+      final terminal = Terminal();
+      final session = FakePtySession(exitCode: 0);
+      final never = Completer<void>();
+      final bridge = TerminalLocalPtyBridge(
+        terminal: terminal,
+        session: session,
+        writerOverride: CoalescingTerminalWriter(
+          PacedTerminalWriter(terminal),
+          maxWriteChars: 8 * 1024 * 1024,
+          waitForFrame: () => never.future,
+        ),
+      );
+
+      session.emitOutput(utf8.encode('hello'));
+      await pumpEventQueue();
+      expect(terminal.buffer.lines[0].toString(), isNot(contains('hello')));
+
+      bridge.flush();
+
+      expect(terminal.buffer.lines[0].toString(), contains('hello'));
+
+      await bridge.dispose();
+    });
 
     test('nothing is acknowledged while a batch is still buffered', () async {
       // A batch that never reaches the writer is a batch the reader must not

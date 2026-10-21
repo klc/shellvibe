@@ -316,6 +316,41 @@ void main() {
     );
   }, timeout: const Timeout(_timeout));
 
+  test('disconnectDevice closes only that device\'s connections', () async {
+    Future<DeviceLinkClientConnection> pairAs(String deviceId) async {
+      final payload = await server.createPairingPayload(
+        addresses: const ['127.0.0.1'],
+      );
+      final connection = await _connect(identity, server.port);
+      addTearDown(connection.close);
+      await connection.sendHello(
+        DeviceLinkHello(deviceId: deviceId, deviceName: 'Phone'),
+      );
+      await connection.nextControl(timeout: _timeout);
+      await connection.sendPair(
+        DeviceLinkPair(
+          token: payload.token,
+          deviceName: 'Phone',
+          devicePublicKey: 'phone-public-key',
+        ),
+      );
+      await connection.nextControl(timeout: _timeout);
+      await connection.nextControl(timeout: _timeout);
+      return connection;
+    }
+
+    final a = await pairAs('phone-a');
+    final b = await pairAs('phone-b');
+
+    await server.disconnectDevice('phone-a');
+    for (var i = 0; i < 50 && !a.isClosed; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+
+    expect(a.isClosed, isTrue);
+    expect(b.isClosed, isFalse);
+  }, timeout: const Timeout(_timeout));
+
   test('rejects wrong and second-use pairing tokens', () async {
     final payload = await server.createPairingPayload(
       addresses: const ['127.0.0.1'],

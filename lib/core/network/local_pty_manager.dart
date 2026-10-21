@@ -212,6 +212,9 @@ class TerminalLocalPtyBridge {
     exited?.call();
   }
 
+  /// Writes output still buffered in the terminal writer into the terminal now.
+  void flush() => _writer.flush();
+
   /// Resizes local PTY dimensions to [height] rows and [width] columns.
   void resizeTerminal(int width, int height) {
     if (_isDisposed) return;

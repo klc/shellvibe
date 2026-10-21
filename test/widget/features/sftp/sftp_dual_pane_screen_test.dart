@@ -4,8 +4,33 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:shellvibe/app/widgets/window_chrome_frame.dart';
 import 'package:shellvibe/app/window/window_chrome.dart';
+import 'package:shellvibe/features/sftp/domain/models/sftp_file_item.dart';
+import 'package:shellvibe/features/sftp/presentation/providers/sftp_providers.dart';
 import 'package:shellvibe/features/sftp/presentation/screens/sftp_dual_pane_screen.dart';
 import 'package:window_manager/window_manager.dart';
+
+/// Serves one local row and records what is deleted.
+class _FakeSftpNotifier extends SftpNotifier {
+  final deleted = <String>[];
+
+  @override
+  SftpState build() => const SftpState(
+    localPath: '/tmp',
+    localFiles: [
+      SftpFileItem(
+        name: 'notes.txt',
+        path: '/tmp/notes.txt',
+        size: 1,
+        permissions: '-rw-r--r--',
+        isDirectory: false,
+      ),
+    ],
+  );
+
+  @override
+  Future<void> deleteLocalItem(SftpFileItem item) async =>
+      deleted.add(item.path);
+}
 
 void main() {
   group('SftpDualPaneScreen Widget Tests', () {
@@ -206,6 +231,50 @@ void main() {
 
       expect(find.text('SFTP Transfer Queue'), findsOneWidget);
       expect(tester.takeException(), isNull, reason: 'queue sheet header');
+    });
+
+    testWidgets('Delete asks first and only deletes once confirmed', (
+      WidgetTester tester,
+    ) async {
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+      final fake = _FakeSftpNotifier();
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [sftpProvider.overrideWith(() => fake)],
+          child: ShadTheme(
+            data: ShadThemeData(
+              colorScheme: const ShadSlateColorScheme.light(),
+              brightness: Brightness.light,
+            ),
+            child: const MaterialApp(
+              home: SftpDualPaneScreen(hostLabel: 'Test Server'),
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 200));
+
+      Future<void> openConfirm() async {
+        await tester.tap(find.byTooltip('File actions').first);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Delete'));
+        await tester.pumpAndSettle();
+        expect(find.text('Delete notes.txt?'), findsOneWidget);
+      }
+
+      await openConfirm();
+      expect(fake.deleted, isEmpty);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(fake.deleted, isEmpty);
+
+      await openConfirm();
+      await tester.tap(find.byKey(const Key('sftp_delete_confirm')));
+      await tester.pumpAndSettle();
+      expect(fake.deleted, ['/tmp/notes.txt']);
     });
   });
 }

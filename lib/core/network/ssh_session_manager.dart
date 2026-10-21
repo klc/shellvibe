@@ -90,6 +90,7 @@ class SSHSessionManager {
   final KnownHostsDao? knownHostsDao;
 
   SSHClient? _client;
+  bool _pingInFlight = false;
   SSHSocket? _socket;
   Timer? _keepAliveTimer;
   bool _isConnected = false;
@@ -364,16 +365,29 @@ class SSHSessionManager {
     // one to confirm the key, so deny instead of blind TOFU — and with no
     // known_hosts store either, nothing can vouch for it at all.
     if (!await prompt(HostKeyVerificationStatus.unknown)) return reject();
-    await dao?.insertOrUpdateKnownHost(
-      KnownHostsCompanion.insert(
-        id: const Uuid().v4(),
-        hostname: hostname,
-        port: port,
-        keyType: keyType,
-        fingerprintSha256: fingerprint,
-        firstSeenAt: DateTime.now(),
-      ),
-    );
+    // The lookup above ran before the user answered; another connection may
+    // have answered first and stored the key.
+    final stored = await dao?.findKnownHost(hostname, port);
+    if (stored != null) {
+      if (stored.fingerprintSha256 == fingerprint) return true;
+      return reject();
+    }
+    try {
+      await dao?.insertOrUpdateKnownHost(
+        KnownHostsCompanion.insert(
+          id: const Uuid().v4(),
+          hostname: hostname,
+          port: port,
+          keyType: keyType,
+          fingerprintSha256: fingerprint,
+          firstSeenAt: DateTime.now(),
+        ),
+      );
+    } catch (_) {
+      // Lost a race on UNIQUE(hostname, port): fine if it stored this key.
+      final stored = await dao?.findKnownHost(hostname, port);
+      if (stored == null || stored.fingerprintSha256 != fingerprint) rethrow;
+    }
     return true;
   }
 
@@ -422,11 +436,16 @@ class SSHSessionManager {
       _markDisconnected();
       return;
     }
+    if (_pingInFlight) return;
+    _pingInFlight = true;
     try {
-      await activeClient.ping();
+      // A reply that never comes is a dead link (half-open TCP).
+      await activeClient.ping().timeout(const Duration(seconds: 10));
     } catch (_) {
       // Ping failed, connection may have been dropped
       _markDisconnected();
+    } finally {
+      _pingInFlight = false;
     }
   }
 

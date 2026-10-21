@@ -253,6 +253,27 @@ void main() {
       expect(bOld, isEmpty); // ...never the dead pre-disconnect closure
     });
 
+    test('a selected pane that reconnects keeps broadcasting its typing', () {
+      final aOld = <String>[];
+      final b = <String>[];
+      final tabA = session('a', captured: aOld);
+      final tabB = session('b', captured: b);
+      final tabs = [tabA, tabB];
+      final live = {'a', 'b'};
+      wireForward(router, live, tabs);
+      router.sync(selectedIds: live, tabs: tabs);
+
+      // a's new bridge assigns its raw handler behind the chain's back.
+      final aNew = <String>[];
+      tabA.terminal.onOutput = (data) => aNew.add(data);
+      router.sync(selectedIds: live, tabs: tabs);
+
+      tabA.terminal.onOutput!('x');
+
+      expect(aNew, ['x']);
+      expect(b, ['x']);
+    });
+
     test('deselect after a reconnect leaves the live handler intact', () {
       final a = <String>[];
       final tabA = session('a', captured: a);

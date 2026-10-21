@@ -7,10 +7,19 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:shadcn_ui/shadcn_ui.dart';
 
+import 'package:shellvibe/core/network/tunnel_engine.dart';
 import 'package:shellvibe/features/hosts/presentation/screens/hosts_screen.dart';
+import 'package:shellvibe/features/tunnels/presentation/providers/tunnels_providers.dart';
 import 'package:shellvibe/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import 'package:shellvibe/shared/database/app_database.dart';
 import 'package:shellvibe/shared/providers/database_providers.dart';
+
+class _RecordingEngine extends TunnelEngine {
+  final stopped = <String>[];
+
+  @override
+  Future<void> stopTunnel(String ruleId) async => stopped.add(ruleId);
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -480,6 +489,53 @@ void main() {
       expect(find.text('Edit host'), findsOneWidget);
       expect(find.text('Delete host'), findsOneWidget);
       expect(tester.takeException(), isNull, reason: 'action menu layout');
+    });
+
+    testWidgets('Deleting a host stops the tunnels running on it', (
+      tester,
+    ) async {
+      await seedHost('host-t', 'tunnel-host', '10.0.0.9');
+      await db.tunnelsDao.insertRule(
+        PortForwardRulesCompanion.insert(
+          id: 'rule-1',
+          hostId: 'host-t',
+          type: 'local',
+          localPort: 8080,
+        ),
+      );
+      final engine = _RecordingEngine();
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            appDatabaseProvider.overrideWithValue(db),
+            tunnelEngineProvider.overrideWithValue(engine),
+          ],
+          child: ShadTheme(
+            data: ShadThemeData(
+              colorScheme: const ShadSlateColorScheme.light(),
+              brightness: Brightness.light,
+            ),
+            child: MaterialApp(
+              builder: (context, child) =>
+                  ShadToaster(child: Material(child: child!)),
+              home: const HostsScreen(),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      await tester.tap(find.byIcon(LucideIcons.ellipsis));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete host'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+
+      expect(engine.stopped, ['rule-1']);
+      await engine.dispose();
     });
 
     testWidgets('Selecting a host on a phone width does not overflow the row', (

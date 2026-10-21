@@ -55,7 +55,7 @@ final class McpSettingsNotifierProvider
 }
 
 String _$mcpSettingsNotifierHash() =>
-    r'344549270858fc5706dc9b24294a3691399bfc81';
+    r'b1033c82a368d0dba07af53d533107b9b2f65866';
 
 /// Owns the current workspace's AI-access settings: the master switch, the
 /// live server/client view, and the tunable numeric knobs.

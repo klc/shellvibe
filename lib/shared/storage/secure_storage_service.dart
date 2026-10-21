@@ -297,12 +297,22 @@ class SecureStorageService {
 
   /// Deletes an arbitrary key from secure storage.
   Future<void> delete({required String key}) async {
+    // read() falls back to the pre-rename twin, so it must go too or the
+    // deleted value comes back on the next read.
+    final legacyKey = key.startsWith('shellvibe_')
+        ? 'terly2_${key.substring('shellvibe_'.length)}'
+        : null;
     try {
       await _storeDelete(key);
       _inMemoryFallback.remove(key);
+      if (legacyKey != null) {
+        await _storeDelete(legacyKey);
+        _inMemoryFallback.remove(legacyKey);
+      }
     } catch (e) {
       if (_isEntitlementError(e)) {
         _inMemoryFallback.remove(key);
+        _inMemoryFallback.remove(legacyKey);
       } else {
         rethrow;
       }

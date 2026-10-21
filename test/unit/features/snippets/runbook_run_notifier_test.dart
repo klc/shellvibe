@@ -7,9 +7,12 @@ import 'package:shellvibe/features/hosts/domain/models/host_model.dart';
 import 'package:shellvibe/features/snippets/data/run_providers.dart';
 import 'package:shellvibe/features/snippets/domain/models/runbook_model.dart';
 import 'package:shellvibe/features/snippets/domain/models/runbook_step_model.dart';
+import 'package:shellvibe/features/snippets/domain/models/snippet_model.dart';
+import 'package:shellvibe/features/snippets/domain/models/variable_declaration.dart';
 import 'package:shellvibe/features/snippets/domain/services/remote_command_session.dart';
 import 'package:shellvibe/features/snippets/domain/services/runbook_run_service.dart';
 import 'package:shellvibe/features/snippets/presentation/notifiers/runbook_run_notifier.dart';
+import 'package:shellvibe/features/snippets/presentation/notifiers/snippets_notifier.dart';
 import 'package:shellvibe/shared/database/app_database.dart';
 import 'package:shellvibe/shared/providers/database_providers.dart';
 
@@ -33,6 +36,31 @@ class _HangingSession implements RemoteCommandSession {
 
   @override
   Future<void> close() async => closes++;
+}
+
+class _EchoSession implements RemoteCommandSession {
+  @override
+  Future<(String, int)> run(String command, Duration timeout) async =>
+      ('ran $command', 0);
+
+  @override
+  Future<void> interrupt() async {}
+
+  @override
+  Future<void> close() async {}
+}
+
+class _EchoFactory implements RemoteCommandSessionFactory {
+  @override
+  Future<RemoteCommandSession> open(HostModel host) async => _EchoSession();
+}
+
+class _FakeSnippets extends SnippetsNotifier {
+  _FakeSnippets(this.list);
+  final List<SnippetModel> list;
+
+  @override
+  Future<List<SnippetModel>> build() async => list;
 }
 
 class _Factory implements RemoteCommandSessionFactory {
@@ -68,6 +96,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         remoteCommandSessionFactoryProvider.overrideWithValue(factory),
+        snippetsProvider.overrideWith(() => _FakeSnippets(const [])),
       ],
     );
     addTearDown(container.dispose);
@@ -101,6 +130,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           remoteCommandSessionFactoryProvider.overrideWithValue(factory),
+          snippetsProvider.overrideWith(() => _FakeSnippets(const [])),
         ],
       );
       final notifier = container.read(runbookRunProvider.notifier);
@@ -114,6 +144,57 @@ void main() {
       expect(factory.sessions.single.closes, greaterThanOrEqualTo(1));
     },
   );
+
+  test('a secret declared on a snippet step is masked in the result', () async {
+    const snippet = SnippetModel(
+      id: 'sn',
+      workspaceId: 'w',
+      title: 'sn',
+      code: 'login \${INPUT:TOKEN}',
+      variables: [
+        VariableDeclaration(name: 'TOKEN', type: VariableType.secret),
+      ],
+    );
+    final snippetRunbook = RunbookModel(
+      id: 'rb2',
+      workspaceId: 'w',
+      title: 'rb2',
+      createdAt: DateTime(2026),
+      steps: const [
+        RunbookStepModel(
+          id: 's1',
+          runbookId: 'rb2',
+          stepOrder: 1,
+          command: '',
+          kind: StepKind.snippet,
+          snippetId: 'sn',
+        ),
+      ],
+    );
+    final container = ProviderContainer(
+      overrides: [
+        snippetsProvider.overrideWith(() => _FakeSnippets([snippet])),
+        runbookRunServiceProvider.overrideWithValue(
+          RunbookRunService(
+            sessionFactory: _EchoFactory(),
+            lookupSnippet: (_) async => snippet.code,
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await container
+        .read(runbookRunProvider.notifier)
+        .start(snippetRunbook, [host], variableValues: {'TOKEN': 'hunter2'});
+
+    final result = container.read(runbookRunProvider)!.hosts.single.results;
+    expect(result, isNotEmpty);
+    for (final r in result.values) {
+      expect(r.command, isNot(contains('hunter2')));
+      expect(r.output, isNot(contains('hunter2')));
+    }
+  });
 
   group('history', () {
     late AppDatabase db;
@@ -135,6 +216,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           remoteCommandSessionFactoryProvider.overrideWithValue(factory),
+          snippetsProvider.overrideWith(() => _FakeSnippets(const [])),
           appDatabaseProvider.overrideWithValue(db),
         ],
       );

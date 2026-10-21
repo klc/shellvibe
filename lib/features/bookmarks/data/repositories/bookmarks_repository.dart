@@ -21,8 +21,8 @@ class BookmarksRepository {
     required String workspaceId,
     required String hostId,
   }) async {
-    final existing = await bookmarksDao.getBookmarkForHost(hostId);
-    if (existing != null) return _toModel(existing);
+    final existing = await bookmarksDao.getBookmarksForHost(hostId);
+    if (existing.isNotEmpty) return _toModel(existing.first);
     return _insert(workspaceId: workspaceId, hostId: hostId);
   }
 
@@ -30,21 +30,23 @@ class BookmarksRepository {
     required String workspaceId,
     required String templateId,
   }) async {
-    final existing = await bookmarksDao.getBookmarkForTemplate(templateId);
-    if (existing != null) return _toModel(existing);
+    final existing = await bookmarksDao.getBookmarksForTemplate(templateId);
+    if (existing.isNotEmpty) return _toModel(existing.first);
     return _insert(workspaceId: workspaceId, templateId: templateId);
   }
 
   Future<void> removeForHost(String hostId) async {
-    final existing = await bookmarksDao.getBookmarkForHost(hostId);
-    if (existing == null) return;
-    await bookmarksDao.deleteBookmark(existing.id);
+    final existing = await bookmarksDao.getBookmarksForHost(hostId);
+    for (final b in existing) {
+      await bookmarksDao.deleteBookmark(b.id);
+    }
   }
 
   Future<void> removeForTemplate(String templateId) async {
-    final existing = await bookmarksDao.getBookmarkForTemplate(templateId);
-    if (existing == null) return;
-    await bookmarksDao.deleteBookmark(existing.id);
+    final existing = await bookmarksDao.getBookmarksForTemplate(templateId);
+    for (final b in existing) {
+      await bookmarksDao.deleteBookmark(b.id);
+    }
   }
 
   Future<BookmarkModel> _insert({

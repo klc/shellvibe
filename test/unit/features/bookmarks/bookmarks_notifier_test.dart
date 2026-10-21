@@ -53,6 +53,37 @@ void main() {
       expect(container.read(bookmarksProvider).value, isEmpty);
     });
 
+    test('two quick taps cancel out and leave no duplicate rows', () async {
+      final hostId = await addHost('web');
+      final notifier = container.read(bookmarksProvider.notifier);
+      await container.read(bookmarksProvider.future);
+
+      final a = notifier.toggleHost(hostId);
+      final b = notifier.toggleHost(hostId);
+      await Future.wait([a, b]);
+
+      expect(notifier.isHostBookmarked(hostId), isFalse);
+      expect(await database.bookmarksDao.getBookmarksForHost(hostId), isEmpty);
+
+      await notifier.toggleHost(hostId);
+      expect(
+        await database.bookmarksDao.getBookmarksForHost(hostId),
+        hasLength(1),
+      );
+    });
+
+    test('a failed toggle does not block the ones after it', () async {
+      final hostId = await addHost('web');
+      final notifier = container.read(bookmarksProvider.notifier);
+      await container.read(bookmarksProvider.future);
+
+      // No such host: the foreign key refuses the row.
+      await expectLater(notifier.toggleHost('missing-host'), throwsA(anything));
+
+      await notifier.toggleHost(hostId);
+      expect(notifier.isHostBookmarked(hostId), isTrue);
+    });
+
     test('bookmarks come back in the order they were added', () async {
       final first = await addHost('alpha');
       final second = await addHost('bravo');
@@ -98,9 +129,7 @@ void main() {
         panes: const [],
         createdAt: DateTime.utc(2026),
       );
-      await container
-          .read(templatesRepositoryProvider)
-          .addTemplate(template);
+      await container.read(templatesRepositoryProvider).addTemplate(template);
       final notifier = container.read(bookmarksProvider.notifier);
       await container.read(bookmarksProvider.future);
 

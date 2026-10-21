@@ -117,6 +117,31 @@ void main() {
       },
     );
 
+    test('a restore or delete in flight holds the schedule', () async {
+      await configured();
+      final notifier = await ready();
+      // ignore: invalid_use_of_protected_member
+      notifier.state = AsyncValue.data(
+        current().copyWith(busy: true, frequency: BackupFrequency.daily),
+      );
+
+      await notifier.maybeBackUpOnSchedule();
+      await pumpEventQueue();
+
+      expect(uploads(), isEmpty);
+    });
+
+    test('deleting the vault forgets the auto-backup mark', () async {
+      await configured();
+      await store().writeAutoBackupMark(at: DateTime.now(), clock: 3);
+      final notifier = await ready();
+
+      await notifier.deleteVault();
+
+      expect(await store().readAutoBackupMark(), isNull);
+      expect(current().lastAutoBackupAt, isNull);
+    });
+
     test('a conflict holds the schedule until the user settles it', () async {
       await server.seedRevision('backup', 'another device wrote this');
       await configured(lastKnown: 0);

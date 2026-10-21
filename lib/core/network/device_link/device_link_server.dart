@@ -265,6 +265,14 @@ final class DeviceLinkServer {
     _httpServer = null;
   }
 
+  /// Closes every live connection of [deviceId], e.g. once its pairing is gone.
+  Future<void> disconnectDevice(String deviceId) async {
+    final matching = _connections.where((c) => c.deviceId == deviceId).toList();
+    for (final connection in matching) {
+      await connection.close();
+    }
+  }
+
   Future<void> _handleRequest(HttpRequest request) async {
     if (request.uri.path != '/device-link' ||
         !WebSocketTransformer.isUpgradeRequest(request)) {
@@ -344,6 +352,7 @@ final class DeviceLinkServer {
           continue;
         }
         await remover(claim.deviceId);
+        await disconnectDevice(claim.deviceId);
       } on Object {
         // A failed removal must not cost the phone its new pairing.
       }

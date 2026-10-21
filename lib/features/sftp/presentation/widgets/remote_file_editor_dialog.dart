@@ -101,10 +101,13 @@ class _RemoteFileEditorDialogState
       }
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _isSaving = false;
-          _errorMessage = 'Failed to save file: $e';
-        });
+        setState(() => _isSaving = false);
+        ShadToaster.of(context).show(
+          ShadToast.destructive(
+            title: const Text('Could not save file'),
+            description: Text('$e'),
+          ),
+        );
       }
     }
   }

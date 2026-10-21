@@ -127,9 +127,13 @@ class CommandClassifier {
   // ---------------------------------------------------------------------
 
   /// Shell operators that chain independent commands: `;`, `&&`, `||`, `|`,
-  /// and newline. `||` is listed before the bare `|` alternative so the
-  /// regex engine prefers the longer match at each position.
-  static final RegExp _operatorSplit = RegExp(r'\|\||&&|;|\||\r?\n');
+  /// `|&`, `&` and newline. `||` is listed before the bare `|` alternative so
+  /// the regex engine prefers the longer match at each position.
+  /// `&` ends a command too (background list). A `&` that is part of a
+  /// redirect (`2>&1`, `>&2`, `&>`, `<&3`) is not a separator.
+  static final RegExp _operatorSplit = RegExp(
+    r'\|\||&&|;|\|&|\||(?<![<>&])&(?![>&])|\r?\n',
+  );
 
   List<String> _splitSegments(String command) => command.split(_operatorSplit);
 

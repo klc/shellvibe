@@ -73,6 +73,26 @@ class FakeSftpClient implements SftpClient {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+class FakeLinkClient implements SftpClient {
+  @override
+  Stream<List<SftpName>> readdir(String path) async* {
+    yield [
+      SftpName(
+        filename: 'alias',
+        longname: '',
+        attr: SftpFileAttrs(mode: const SftpFileMode.value(0xA1FF)),
+      ),
+    ];
+  }
+
+  @override
+  Future<SftpFileAttrs> stat(String path, {bool followLink = true}) async =>
+      SftpFileAttrs(mode: const SftpFileMode.value(0x41FF));
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 void main() {
   group('SftpService Large File & Stream Tests', () {
     late SftpService service;
@@ -111,6 +131,12 @@ void main() {
       await service.changePermissions(client, '/test.txt', 0644);
       expect(client.lastSetStatPath, equals('/test.txt'));
       expect(client.lastSetStatAttrs?.mode?.value, equals(0644));
+    });
+
+    test('listDirectory shows a symlink to a directory as a directory', () async {
+      final items = await service.listDirectory(FakeLinkClient(), '/');
+      expect(items.single.isSymlink, isTrue);
+      expect(items.single.isDirectory, isTrue);
     });
   });
 }

@@ -3,9 +3,12 @@ import 'package:shellvibe/features/mcp/domain/models/mcp_enums.dart';
 import 'package:shellvibe/features/mcp/domain/models/mcp_models.dart';
 import 'package:shellvibe/features/mcp/domain/services/approval_coordinator.dart';
 
-CommandApprovalRequest _commandRequest({bool canRemember = true}) {
+CommandApprovalRequest _commandRequest({
+  bool canRemember = true,
+  String clientId = 'client-1',
+}) {
   return CommandApprovalRequest(
-    clientId: 'client-1',
+    clientId: clientId,
     clientName: 'Claude Desktop',
     hostId: 'host-1',
     hostLabel: 'prod-web-01',
@@ -257,6 +260,22 @@ void main() {
       expect(result.denied.length, 2);
       expect(result.denied.map((d) => d.reason).toSet(), {'cancelled'});
     });
+  });
+
+  test('cancelForClient refuses only that client\'s prompts', () async {
+    final mine = coordinator.requestCommandApproval(_commandRequest());
+    final access = coordinator.requestHostAccess(_hostAccessRequest());
+    coordinator.requestCommandApproval(_commandRequest(clientId: 'client-2'));
+
+    coordinator.cancelForClient('client-1');
+
+    expect((await mine).approved, isFalse);
+    expect((await access).granted, isEmpty);
+    expect(coordinator.currentHostAccess, isEmpty);
+    expect(
+      coordinator.currentCommands.map((c) => c.request.clientId),
+      ['client-2'],
+    );
   });
 
   test('dispose resolves anything still pending rather than hanging', () async {

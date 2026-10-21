@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/core/network/ssh_session_manager.dart';
@@ -195,6 +197,73 @@ void main() {
         final savedHost = await db.knownHostsDao.findKnownHost(hostname, port);
         expect(savedHost, isNotNull);
         expect(savedHost!.fingerprintSha256, equals(originalFingerprint));
+      },
+    );
+
+    test(
+      'Two concurrent first connections trusting the same key both succeed',
+      () async {
+        const hostname = 'race.example.com';
+        const port = 22;
+        const fingerprint = 'SHA256:racerace';
+        final gates = <Completer<bool>>[];
+
+        Future<bool> verify() => sessionManager.verifyHostKey(
+          hostname: hostname,
+          port: port,
+          keyType: 'ssh-ed25519',
+          fingerprint: fingerprint,
+          promptCallback: (_, _, _, _, _) {
+            final gate = Completer<bool>();
+            gates.add(gate);
+            return gate.future;
+          },
+        );
+
+        final first = verify();
+        final second = verify();
+        // Let both lookups run (both see the host as unknown) before the
+        // user answers either prompt.
+        while (gates.length < 2) {
+          await Future<void>.delayed(Duration.zero);
+        }
+        gates[0].complete(true);
+        expect(await first, isTrue);
+        gates[1].complete(true);
+        expect(await second, isTrue);
+        final rows = await db.select(db.knownHosts).get();
+        expect(rows, hasLength(1));
+      },
+    );
+
+    test(
+      'Two first connections answered in the same turn both succeed',
+      () async {
+        const fingerprint = 'SHA256:samesame';
+        final gates = <Completer<bool>>[];
+
+        Future<bool> verify() => sessionManager.verifyHostKey(
+          hostname: 'race2.example.com',
+          port: 22,
+          keyType: 'ssh-ed25519',
+          fingerprint: fingerprint,
+          promptCallback: (_, _, _, _, _) {
+            final gate = Completer<bool>();
+            gates.add(gate);
+            return gate.future;
+          },
+        );
+
+        final first = verify();
+        final second = verify();
+        while (gates.length < 2) {
+          await Future<void>.delayed(Duration.zero);
+        }
+        for (final gate in gates) {
+          gate.complete(true);
+        }
+        expect(await Future.wait([first, second]), [isTrue, isTrue]);
+        expect(await db.select(db.knownHosts).get(), hasLength(1));
       },
     );
 

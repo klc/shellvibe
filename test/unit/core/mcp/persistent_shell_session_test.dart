@@ -127,6 +127,17 @@ void main() {
       expect(result.exitCode, 2);
     });
 
+    test('a trailing comment cannot swallow the closing brace', () async {
+      final channel = FakeShellChannel();
+      final session = await _session(channel);
+
+      await session.run('echo hi # trailing comment');
+      expect(
+        channel.envelopes[1],
+        matches(RegExp(r'echo hi # trailing comment\n\} ; printf')),
+      );
+    });
+
     test('a multi-line command is sent inside one envelope', () async {
       final channel = FakeShellChannel();
       final session = await _session(channel);

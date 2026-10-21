@@ -26,6 +26,39 @@ void main() {
   });
 
   group('RunbooksRepository Unit Tests', () {
+    test('getAllRunbooks spans workspaces and loads steps', () async {
+      await db.workspacesDao.insertWorkspace(
+        WorkspacesCompanion.insert(
+          id: 'ws_2',
+          name: 'Other',
+          createdAt: DateTime.now(),
+        ),
+      );
+      for (final (id, ws) in [('rb_1', 'ws_1'), ('rb_2', 'ws_2')]) {
+        await repository.addRunbook(
+          RunbookModel(
+            id: id,
+            workspaceId: ws,
+            title: id,
+            createdAt: DateTime.now(),
+            steps: [
+              RunbookStepModel(
+                id: 's_$id',
+                runbookId: id,
+                stepOrder: 1,
+                command: 'ls',
+              ),
+            ],
+          ),
+        );
+      }
+
+      final all = await repository.getAllRunbooks();
+
+      expect(all.map((r) => r.id), unorderedEquals(['rb_1', 'rb_2']));
+      expect(all.every((r) => r.steps.length == 1), isTrue);
+    });
+
     test('step policy and default targets round-trip', () async {
       await repository.addRunbook(
         RunbookModel(

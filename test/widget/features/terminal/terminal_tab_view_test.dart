@@ -539,6 +539,77 @@ void main() {
       await tester.pumpAndSettle();
     });
 
+    testWidgets('the paste shortcut asks before running multi-line text', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(2400, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final clipboard = 'echo one\necho two\n';
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.getData') return {'text': clipboard};
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+
+      final container = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          localPtyManagerProvider.overrideWithValue(_NoShellPtyManager()),
+        ],
+      );
+      final notifier = container.read(terminalTabsProvider.notifier);
+      notifier.openLocalTab(title: 'A');
+
+      // The pane has no shell behind it here, so the terminal's output slot
+      // stands in for the PTY that would normally receive the paste.
+      final written = <String>[];
+      container.read(terminalTabsProvider).tabs.single.terminal.onOutput =
+          written.add;
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: ShadTheme(
+            data: ShadThemeData(
+              colorScheme: const ShadSlateColorScheme.dark(),
+              brightness: Brightness.dark,
+            ),
+            child: const MaterialApp(home: TerminalTabView()),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      // The terminal is focused on mount; Ctrl+Shift+V is the paste chord
+      // on the test platform.
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Paste and run?'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('unsafe_paste_cancel_button')));
+      await tester.pumpAndSettle();
+      expect(written, isEmpty);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('a split tab offers Close Pane in the menu', (tester) async {
       tester.view.physicalSize = const Size(2400, 1600);
       tester.view.devicePixelRatio = 1.0;

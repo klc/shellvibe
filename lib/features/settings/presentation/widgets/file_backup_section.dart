@@ -184,11 +184,16 @@ class _FileBackupSectionState extends ConsumerState<FileBackupSection> {
       // Settings live in secure storage, so the sync service hands them back
       // rather than applying them itself.
       final restoredSettings = result.settings;
-      if (restoredSettings != null) {
-        await ref
-            .read(settingsProvider.notifier)
-            .applyRestoredSettings(restoredSettings);
-      }
+      final settingsNotes = restoredSettings == null
+          ? const <String>[]
+          : await ref
+                .read(settingsProvider.notifier)
+                .applyRestoredSettings(restoredSettings);
+      final notes = [
+        result.warning,
+        ...result.repairs.messages,
+        ...settingsNotes,
+      ].nonNulls.toList();
 
       // The import wrote straight to the database; the list notifiers are
       // still holding what they read at startup and would keep showing the old
@@ -198,15 +203,23 @@ class _FileBackupSectionState extends ConsumerState<FileBackupSection> {
       if (mounted) {
         ShadToaster.of(context).show(
           result.secretsRecovered
-              ? const ShadToast(
+              ? (result.warning == null
+                    ? ShadToast.new
+                    : ShadToast.destructive)(
                   description: Text(
-                    'Zero-Knowledge Backup Imported & Restored Successfully!',
+                    [
+                      'Zero-Knowledge Backup Imported & Restored Successfully!',
+                      ...notes,
+                    ].join(' '),
                   ),
                 )
               : ShadToast.destructive(
                   description: Text(
-                    result.warning ??
+                    [
+                      if (result.warning == null)
                         'Backup restored, but stored secrets could not be recovered.',
+                      ...notes,
+                    ].join(' '),
                   ),
                 ),
         );

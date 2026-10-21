@@ -61,7 +61,10 @@ class SshShellChannel implements ShellChannel {
     // the network dropping — without anyone calling [close] first. Without
     // this listener, [isClosed] would keep reporting false forever and the
     // hang-recovery chain would never realize the channel is already dead.
-    _session.done.then((_) => _closed = true);
+    _session.done.then(
+      (_) => _closed = true,
+      onError: (Object _) => _closed = true,
+    );
   }
 
   final SSHSession _session;

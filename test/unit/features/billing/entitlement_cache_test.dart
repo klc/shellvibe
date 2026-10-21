@@ -105,6 +105,16 @@ void main() {
     expect(await cache.read(forUserId: userId), isNull);
   });
 
+  test('a wrongly typed field reads as no cache, not an error', () async {
+    FlutterSecureStorage.setMockInitialValues({
+      'shellvibe_entitlement_snapshot':
+          '{"user_id":"$userId","fetched_at":123,"entitlement":{}}',
+    });
+    cache = EntitlementCache(storage: SecureStorageService());
+
+    expect(await cache.read(forUserId: userId), isNull);
+  });
+
   test('a payload without a timestamp reads as no cache', () async {
     FlutterSecureStorage.setMockInitialValues({
       'shellvibe_entitlement_snapshot':

@@ -201,9 +201,9 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       return all.where((s) => s.id == id).firstOrNull;
     },
     loadRunbook: (id) async {
-      final all = await ref
-          .read(runbooksRepositoryProvider)
-          .getRunbooksByWorkspace(ref.read(activeWorkspaceIdProvider));
+      // A pane's startup runbook is bound by id, not by whichever workspace
+      // is open when the shell appears.
+      final all = await ref.read(runbooksRepositoryProvider).getAllRunbooks();
       return all.where((r) => r.id == id).firstOrNull;
     },
     confirmProd: (runbook, host) async {
@@ -641,6 +641,10 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
   /// Stops the Device Link listener, all authenticated connections, and its
   /// mDNS advertisement. See [DeviceLinkServerHost.stop].
   Future<void> stopDeviceLinkServer() => _deviceLinkHost.stop();
+
+  /// Drops a revoked Device Link device's live connections.
+  Future<void> disconnectDeviceLinkDevice(String id) =>
+      _deviceLinkHost.disconnectDevice(id);
 
   @visibleForTesting
   bool get isDeviceLinkServerRunning => _deviceLinkHost.isRunning;
