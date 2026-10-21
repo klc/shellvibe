@@ -798,6 +798,10 @@ class _FakeSshClient extends Fake implements SSHClient {
     String? host,
     int? port,
   }) async => _FakeSshRemoteForward();
+
+  /// Never completes: the client stays connected for the whole test.
+  @override
+  Future<void> get done => Completer<void>().future;
 }
 
 /// A vault whose state the test sets directly, with no key service behind it.
