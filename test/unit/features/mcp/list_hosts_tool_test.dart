@@ -88,6 +88,31 @@ void main() {
     expect(hosts.map((h) => h['id']), ['nfs-dev']);
   });
 
+  test('never hands out a hostname or port, only the opaque id', () async {
+    await insertHost(id: 'nfs-dev', workspaceId: 'novus');
+    final describe = DescribeHostTool(
+      hostsRepository: HostsRepository(hostsDao: db.hostsDao),
+      hostsDao: db.hostsDao,
+      grantRepository: McpGrantRepository(db.mcpDao),
+    );
+
+    final listed =
+        await tool.execute(ctx, const {}) as Map<String, Object?>;
+    final described =
+        await describe.execute(ctx, const {'hostId': 'nfs-dev'})
+            as Map<String, Object?>;
+
+    for (final host in [
+      (listed['hosts'] as List).single as Map<String, Object?>,
+      described,
+    ]) {
+      expect(host['id'], 'nfs-dev');
+      expect(host.keys, isNot(contains('hostname')));
+      expect(host.keys, isNot(contains('port')));
+      expect(host.values, isNot(contains('nfs-dev.example.test')));
+    }
+  });
+
   test('falls back to the workspace id when the row is gone', () async {
     const orphan = McpToolContext(
       clientId: 'client-1',

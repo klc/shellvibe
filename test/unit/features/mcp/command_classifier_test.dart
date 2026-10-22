@@ -285,6 +285,42 @@ void main() {
     }
   });
 
+  test('cd and the stdout-only text tools are readonlySafe', () {
+    for (final command in <String>[
+      'cd /var/log',
+      'cd',
+      'seq 1 5',
+      'cut -d: -f1 /etc/passwd',
+      'ps aux | sort -k3 -rn | head',
+      'sort -u names.txt',
+      'cut -f1 a | sort | uniq -c',
+      'basename /a/b.txt',
+      'dirname /a/b.txt',
+    ]) {
+      expect(
+        classifier.classify(command).category,
+        RiskCategory.readonlySafe,
+        reason: '`$command` only reads',
+      );
+    }
+  });
+
+  test('sort and uniq forms that write or exec are not readonlySafe', () {
+    for (final command in <String>[
+      'sort -o out.txt in.txt',
+      'sort -uo out.txt in.txt',
+      'sort --output=out.txt in.txt',
+      'sort --compress-program=sh big.txt',
+      'uniq in.txt out.txt',
+    ]) {
+      expect(
+        classifier.classify(command).category,
+        isNot(RiskCategory.readonlySafe),
+        reason: '`$command` writes a file or runs a program',
+      );
+    }
+  });
+
   test('unknown gibberish classifies as unclassified, not readonlySafe', () {
     final result = classifier.classify('frobnicate --wat');
     expect(result.category, RiskCategory.unclassified);

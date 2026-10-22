@@ -7,6 +7,25 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- AI Access: `interrupt` and `list_sessions` no longer wait behind a running
+  command. The `shellvibe-mcp` bridge relayed one request at a time, so an
+  agent could not stop a command before it timed out, and `busy` never read
+  true. The bridge also stopped answering notifications with an error.
+- AI Access: read-only mode allows `cd`, `seq`, `cut`, `tr`, `basename`,
+  `dirname`, and `sort` and `uniq` in a pipe.
+- AI Access: `run_command` reports a timeout (`timedOut`) and output that is
+  not text (`binary`) instead of returning it silently garbled. The `less`
+  hint keeps the file (`cat <file>`), and `list_sessions` gives `openedAt`
+  in UTC.
+
+### Security
+
+- AI Access: `list_hosts` and `describe_host` no longer return a host's
+  address and port. Agents only get the opaque host id, as the tool
+  descriptions already said.
+
 ## [1.9.2] - 2026-10-21
 
 ### Fixed

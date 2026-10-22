@@ -145,7 +145,7 @@ class ListSessionsTool implements McpToolHandler {
             'hostId': session.hostId,
             'hostLabel': session.hostLabel,
             'cwd': session.shell.cwd,
-            'openedAt': session.openedAt.toIso8601String(),
+            'openedAt': session.openedAt.toUtc().toIso8601String(),
             'busy': session.busy,
           },
         )

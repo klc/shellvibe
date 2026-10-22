@@ -40,16 +40,17 @@ Future<void> main(List<String> arguments) async {
   final endpointPath = _resolveEndpointPath(arguments);
   final orphanWatch = _watchForOrphaning();
 
-  // Sequential by design: the bridge is a 1:1 relay, not a scheduler. MCP
-  // clients send one request and await one response before sending the
-  // next in practice, and processing lines in arrival order keeps the
-  // stdout stream trivially well-formed (no interleaving to reason about).
+  // Not awaited: a client does send the next request while one is still
+  // open (parallel tool calls, a subagent), and `interrupt` or
+  // `list_sessions` must not queue behind the `run_command` they are about.
+  // Replies carry their request's id, so they may go out in any order;
+  // [_writeFrame] keeps each one a whole line.
   final lines = stdin.transform(utf8.decoder).transform(const LineSplitter());
   await for (final line in lines) {
     if (line.trim().isEmpty) {
       continue;
     }
-    await _handleLine(line, endpointPath);
+    unawaited(_handleLine(line, endpointPath));
   }
 
   orphanWatch?.cancel();
@@ -125,9 +126,17 @@ Future<void> _handleLine(String line, String endpointPath) async {
 
   final id = decoded['id'];
 
+  // A notification has no id and is never answered, not even with an error:
+  // the app acknowledges it with an empty 202, and a frame with a null id
+  // would reach the client as an error it cannot match to anything.
+  final isNotification = !decoded.containsKey('id');
+  Future<void> reply(Map<String, dynamic> frame) async {
+    if (!isNotification) await _writeFrame(frame);
+  }
+
   final endpoint = await _loadEndpoint(endpointPath);
   if (endpoint == null) {
-    await _writeFrame(
+    await reply(
       _errorFrame(
         id: id,
         code: _internalErrorCode,
@@ -150,7 +159,7 @@ Future<void> _handleLine(String line, String endpointPath) async {
     // meantime (an exited bridge gets marked permanently dead by most
     // clients).
     stderr.writeln('shellvibe-mcp: request to ShellVibe failed: $e');
-    await _writeFrame(
+    await reply(
       _errorFrame(
         id: id,
         code: _internalErrorCode,
@@ -160,7 +169,7 @@ Future<void> _handleLine(String line, String endpointPath) async {
     return;
   }
 
-  await _writeFrame(_frameFromHttpResult(id: id, result: result));
+  await reply(_frameFromHttpResult(id: id, result: result));
 }
 
 /// Turns a completed HTTP response into the JSON-RPC frame to relay.
@@ -207,14 +216,20 @@ Map<String, dynamic> _frameFromHttpResult({
   );
 }
 
-Future<void> _writeFrame(Map<String, dynamic> frame) async {
-  stdout.writeln(jsonEncode(frame));
-  // The client reads line-by-line; buffered output would leave it waiting
-  // on a response that already "happened" from this process's point of
-  // view. Must be awaited: an unawaited flush can still be in flight when
-  // the next line's write starts, and stdout's IOSink rejects overlapping
-  // operations outright.
-  await stdout.flush();
+/// The last write to stdout. Every frame chains onto it, because requests
+/// finish concurrently and stdout's IOSink rejects a write that overlaps a
+/// flush still in flight.
+Future<void> _stdoutTail = Future<void>.value();
+
+Future<void> _writeFrame(Map<String, dynamic> frame) {
+  final line = jsonEncode(frame);
+  return _stdoutTail = _stdoutTail.then((_) async {
+    stdout.writeln(line);
+    // The client reads line-by-line; buffered output would leave it waiting
+    // on a response that already "happened" from this process's point of
+    // view.
+    await stdout.flush();
+  });
 }
 
 Map<String, dynamic> _errorFrame({

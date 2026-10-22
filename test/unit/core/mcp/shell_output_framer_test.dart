@@ -216,6 +216,41 @@ void main() {
       expect(() => framer.stdout, returnsNormally);
     });
 
+    test('bytes that are not UTF-8 mark the output binary', () async {
+      final framer = ShellOutputFramer(nonce: _nonce);
+      framer.feedStdout(_bytes('PNG'));
+      framer.feedStderr([0x89, 0x50, 0xFF]);
+      framer.feedStdout(_bytes(_sentinelLine(0, '/')));
+
+      await framer.sentinel;
+      expect(framer.binary, isTrue);
+    });
+
+    test('a character split across chunks is not binary', () async {
+      final framer = ShellOutputFramer(nonce: _nonce);
+      // One byte at a time, long enough to get past the marker hold-back, so
+      // the two bytes of each `é` reach the accumulator separately.
+      for (final byte in _bytes('é' * 40)) {
+        framer.feedStdout([byte]);
+      }
+      framer.feedStdout(_bytes(_sentinelLine(0, '/')));
+
+      await framer.sentinel;
+      expect(framer.binary, isFalse);
+      expect(framer.stdout, 'é' * 40);
+    });
+
+    test('a truncation cut through a character is not binary', () async {
+      // Keeps 2 bytes of head: `a` plus the first byte of `é`.
+      final framer = ShellOutputFramer(nonce: _nonce, capBytes: 10);
+      framer.feedStdout(_bytes('aé' * 10));
+      framer.feedStdout(_bytes(_sentinelLine(0, '/')));
+
+      await framer.sentinel;
+      expect(framer.truncation, isNotNull);
+      expect(framer.binary, isFalse);
+    });
+
     test('chunks fed after the sentinel are ignored', () async {
       final framer = ShellOutputFramer(nonce: _nonce);
       framer.feedStdout(_bytes(_sentinelLine(0, '/')));

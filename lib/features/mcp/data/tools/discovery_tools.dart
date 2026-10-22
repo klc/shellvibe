@@ -98,8 +98,6 @@ class ListHostsTool with McpArgReaders implements McpToolHandler {
       result.add({
         'id': host.id,
         'label': host.label,
-        'hostname': host.hostname,
-        'port': host.port,
         'environment': _environmentOf(row).name,
         'groups': groupNames,
         'access': mode == null ? 'none' : 'granted',
@@ -204,8 +202,6 @@ class DescribeHostTool with McpArgReaders implements McpToolHandler {
     return {
       'id': host.id,
       'label': host.label,
-      'hostname': host.hostname,
-      'port': host.port,
       'environment': _environmentOf(row).name,
       'protocol': host.protocol,
       'groups': groupNames,

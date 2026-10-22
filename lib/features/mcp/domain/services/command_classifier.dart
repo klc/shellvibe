@@ -360,7 +360,7 @@ class CommandClassifier {
       return const _SegmentResult(
         RiskCategory.interactive,
         reason: 'is an interactive pager and blocks the session',
-        batchAlternative: 'cat',
+        batchAlternative: 'cat <file>',
       );
     }
     if (_htopLead.hasMatch(s)) {
@@ -857,7 +857,19 @@ class CommandClassifier {
 
   static final RegExp _readonlyLead = RegExp(
     r'^\s*(?:ls|cat|head|grep|egrep|fgrep|du|df|ps|free|uptime|uname|id|stat|'
-    r'wc|pwd|whoami|hostname|date|echo|printf|which|type)\b',
+    r'wc|pwd|whoami|hostname|date|echo|printf|which|type|cd|seq|cut|tr|tac|'
+    r'nl|basename|dirname|realpath)\b',
+    caseSensitive: false,
+  );
+  // `sort` and `uniq` read, except for the forms that write a file or run a
+  // program: `sort -o`/`--output`/`--compress-program`, and `uniq IN OUT`.
+  // `uniq` is only taken with flags alone, which is how it sits in a pipe.
+  static final RegExp _sortReadonly = RegExp(
+    r'^\s*sort\b(?!.*(?:\s-[a-z]*o|--output|--compress-program))',
+    caseSensitive: false,
+  );
+  static final RegExp _uniqReadonly = RegExp(
+    r'^\s*uniq(?:\s+-[a-z]+)*\s*$',
     caseSensitive: false,
   );
   static final RegExp _systemctlStatus = RegExp(
@@ -895,6 +907,8 @@ class CommandClassifier {
         _gitReadonly.hasMatch(s) ||
         _findLead.hasMatch(s) ||
         _sedLead.hasMatch(s) ||
+        _sortReadonly.hasMatch(s) ||
+        _uniqReadonly.hasMatch(s) ||
         (_topLead.hasMatch(s) && _batchFlag.hasMatch(s)) ||
         _tailLead.hasMatch(s)) {
       return const _SegmentResult(RiskCategory.readonlySafe);
