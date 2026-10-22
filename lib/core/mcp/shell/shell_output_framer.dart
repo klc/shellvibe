@@ -90,6 +90,10 @@ class ShellOutputFramer {
   /// single combined byte budget would require interleaving them by
   /// arrival time, which would make the kept prefix/suffix of each stream
   /// dependent on network timing instead of content.
+  /// Whether stdout or stderr carried bytes that are not UTF-8 — binary
+  /// output, which [stdout]/[stderr] can only show as U+FFFD.
+  bool get binary => _stdoutAcc.malformed || _stderrAcc.malformed;
+
   OutputTruncation? get truncation {
     if (!_stdoutAcc.truncated && !_stderrAcc.truncated) return null;
     return OutputTruncation(
@@ -213,8 +217,24 @@ class _CappedAccumulator {
 
   int get keptBytes => _head.length + _tailKept.length;
 
+  // Fed every byte, not only the kept ones, so neither a chunk boundary nor
+  // the truncation cut can split a character and read as bad input.
+  final _validator = const Utf8Decoder().startChunkedConversion(
+    _DiscardSink(),
+  );
+  bool _malformed = false;
+
+  bool get malformed => _malformed;
+
   void add(List<int> bytes) {
     _originalBytes += bytes.length;
+    if (!_malformed) {
+      try {
+        _validator.add(bytes);
+      } on FormatException {
+        _malformed = true;
+      }
+    }
     var remaining = bytes;
 
     if (_head.length < _keepBytes) {
@@ -253,6 +273,14 @@ class _CappedAccumulator {
         _formatDroppedMarker(droppedBytes) +
         utf8.decode(tailKept, allowMalformed: true);
   }
+}
+
+class _DiscardSink implements Sink<String> {
+  @override
+  void add(String data) {}
+
+  @override
+  void close() {}
 }
 
 /// Formats the dropped-bytes marker with a human-readable size, e.g.

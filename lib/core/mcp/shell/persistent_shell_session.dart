@@ -239,7 +239,9 @@ class PersistentShellSession {
     // Waiting for the rebuild before returning keeps the queue honest: the
     // next command must not be handed a channel that is still being
     // re-normalized.
-    Future<ShellCommandResult> interruptedResult() async {
+    Future<ShellCommandResult> interruptedResult({
+      bool timedOut = false,
+    }) async {
       await _reset;
       return ShellCommandResult(
         stdout: framer.stdout,
@@ -250,6 +252,8 @@ class PersistentShellSession {
         truncated: framer.truncation,
         interrupted: true,
         sessionReset: true,
+        timedOut: timedOut,
+        binary: framer.binary,
       );
     }
 
@@ -290,9 +294,12 @@ class PersistentShellSession {
           match,
           stopwatch.elapsedMilliseconds,
           interrupted: true,
+          timedOut: true,
         );
       }
-      if (_interruptCount != epoch) return await interruptedResult();
+      if (_interruptCount != epoch) {
+        return await interruptedResult(timedOut: true);
+      }
 
       // Step 2: probe with a fresh sentinel. Ctrl-C can land on a subshell
       // or a process that ignores SIGINT while the outer shell is actually
@@ -318,9 +325,12 @@ class PersistentShellSession {
             SentinelMatch(exitCode: -1, cwd: probeMatch.cwd),
             stopwatch.elapsedMilliseconds,
             interrupted: true,
+            timedOut: true,
           );
         }
-        if (_interruptCount != epoch) return await interruptedResult();
+        if (_interruptCount != epoch) {
+          return await interruptedResult(timedOut: true);
+        }
       } finally {
         _liveFramers.remove(probeFramer);
       }
@@ -340,6 +350,8 @@ class PersistentShellSession {
         durationMs: stopwatch.elapsedMilliseconds,
         truncated: framer.truncation,
         sessionReset: true,
+        timedOut: true,
+        binary: framer.binary,
       );
     } finally {
       _liveFramers.remove(framer);
@@ -451,6 +463,7 @@ class PersistentShellSession {
     SentinelMatch match,
     int durationMs, {
     bool interrupted = false,
+    bool timedOut = false,
   }) {
     return ShellCommandResult(
       stdout: framer.stdout,
@@ -460,6 +473,8 @@ class PersistentShellSession {
       durationMs: durationMs,
       truncated: framer.truncation,
       interrupted: interrupted,
+      timedOut: timedOut,
+      binary: framer.binary,
     );
   }
 

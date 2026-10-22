@@ -44,6 +44,13 @@ class ShellCommandResult {
   /// state the agent had built up (variables, `cd`, background jobs) is gone.
   final bool sessionReset;
 
+  /// The command was still running when its timeout ran out.
+  final bool timedOut;
+
+  /// The output was not valid UTF-8, so [stdout]/[stderr] hold U+FFFD where
+  /// those bytes were.
+  final bool binary;
+
   const ShellCommandResult({
     required this.stdout,
     required this.stderr,
@@ -54,6 +61,8 @@ class ShellCommandResult {
     this.redactedCount = 0,
     this.interrupted = false,
     this.sessionReset = false,
+    this.timedOut = false,
+    this.binary = false,
   });
 
   Map<String, Object?> toJson() => {
@@ -66,5 +75,7 @@ class ShellCommandResult {
     if (redactedCount > 0) 'redacted': {'count': redactedCount},
     if (interrupted) 'interrupted': true,
     if (sessionReset) 'sessionReset': true,
+    if (timedOut) 'timedOut': true,
+    if (binary) 'binary': true,
   };
 }

@@ -64,7 +64,10 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
         'to approve it. `cd` and environment persist across calls on the '
         'same session; the response always reports the resulting working '
         'directory. stdout/stderr are scanned and secrets are masked as '
-        '`[REDACTED:type]` before being returned.',
+        '`[REDACTED:type]` before being returned. A command still running '
+        'when the timeout runs out comes back with `timedOut: true`. Output '
+        'that is not valid UTF-8 comes back lossy with `binary: true`; pipe '
+        'it through `base64` or `xxd` to read the bytes.',
     inputSchema: const {
       'type': 'object',
       'properties': {
@@ -304,6 +307,8 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
         redactedCount: stdoutRedaction.count + stderrRedaction.count,
         interrupted: raw.interrupted,
         sessionReset: raw.sessionReset,
+        timedOut: raw.timedOut,
+        binary: raw.binary,
       );
 
       _mirror(session)?.writeResult(

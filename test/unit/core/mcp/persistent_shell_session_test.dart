@@ -98,6 +98,8 @@ void main() {
       expect(result.cwd, '/var/log');
       expect(result.interrupted, isFalse);
       expect(result.sessionReset, isFalse);
+      expect(result.timedOut, isFalse);
+      expect(result.binary, isFalse);
       expect(channel.commandAt(1), 'df -h');
     });
 
@@ -270,6 +272,7 @@ void main() {
       expect(channel.interruptCount, greaterThanOrEqualTo(1));
       expect(result.interrupted, isTrue);
       expect(result.sessionReset, isFalse);
+      expect(result.timedOut, isTrue);
     }, timeout: const Timeout(Duration(seconds: 30)));
 
     test(
@@ -287,6 +290,7 @@ void main() {
 
         expect(reopened, hasLength(1), reason: 'the channel was rebuilt');
         expect(result.sessionReset, isTrue);
+        expect(result.timedOut, isTrue);
         expect(
           result.exitCode,
           -1,
@@ -408,6 +412,7 @@ void main() {
         final result = await future;
         expect(result.interrupted, isTrue);
         expect(result.sessionReset, isTrue);
+        expect(result.timedOut, isFalse, reason: 'stopped, not timed out');
         expect(result.exitCode, -1);
         expect(channel.isClosed, isTrue);
         expect(reopened, hasLength(1));
