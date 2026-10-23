@@ -200,6 +200,20 @@ final class CloudBackupStore {
   Future<void> writeSyncAccount(String userId) =>
       storage.write(key: _syncAccountKey, value: userId);
 
+  /// The account the cloud backup on this device was set up under, by user
+  /// id.
+  ///
+  /// Kept apart from [readSyncAccount]: a different account forgets the
+  /// backup setup at once, while sync waits to be asked.
+  Future<String?> readBackupAccount() async {
+    final value = await storage.read(key: _backupAccountKey);
+
+    return (value == null || value.isEmpty) ? null : value;
+  }
+
+  Future<void> writeBackupAccount(String userId) =>
+      storage.write(key: _backupAccountKey, value: userId);
+
   /// Forgets the sync key and this device's place in the account's ground,
   /// keeping the passphrase and the manual backup's settings.
   Future<void> forgetSyncKey() async {
@@ -381,4 +395,5 @@ final class CloudBackupStore {
   /// Not removed by [clear]. Forgetting the passphrase leaves the journal's
   /// state where it was, and that state still belongs to this account.
   static const String _syncAccountKey = 'shellvibe_sync_account';
+  static const String _backupAccountKey = 'shellvibe_backup_account';
 }
