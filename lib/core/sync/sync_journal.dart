@@ -516,6 +516,27 @@ final class SyncJournal {
     );
   }
 
+  /// Forgets what ties this device to the account it synced with, so the next
+  /// join starts from nothing.
+  ///
+  /// The versions go because the seed step skips every row that has one: left
+  /// in place, rows the old account already held would never reach the new
+  /// one. The outbox was meant for the old account, and the cursors are
+  /// positions in its log. The clock stays, because it only moves forward. So
+  /// does the trash, which is the user's to empty.
+  Future<void> forgetAccount() => db.transaction(() async {
+    await db.delete(db.syncEntityVersions).go();
+    await db.delete(db.pendingOperations).go();
+    await readState();
+    await (db.update(db.syncState)..where((t) => t.id.equals(1))).write(
+      SyncStateCompanion(
+        pulledThroughClock: const Value(0),
+        pulledThroughSeq: const Value(null),
+        joinState: Value(SyncJoinState.none.wireName),
+      ),
+    );
+  });
+
   /// Marks the log as pulled through [clock].
   ///
   /// Only ever called after the operations it covers are durably written. A

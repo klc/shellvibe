@@ -9,6 +9,10 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Sync: signing in to a different account no longer carries on with the
+  previous account's sync. It used to keep that account's key and position,
+  so its changes were unreadable to the new account's devices. Sync now stops
+  and asks whether this device's data should be added to the new account.
 - AI Access: `interrupt` and `list_sessions` no longer wait behind a running
   command. The `shellvibe-mcp` bridge relayed one request at a time, so an
   agent could not stop a command before it timed out, and `busy` never read
