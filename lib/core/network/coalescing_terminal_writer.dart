@@ -8,8 +8,8 @@ import 'package:xterm3/xterm.dart';
 ///
 /// [PacedTerminalWriter] bounds how long a *drain pass* may run, and yields
 /// between the chunks it has queued. That only helps when a queue forms. On
-/// the local PTY path one never does: `flutter_pty` reads the descriptor into
-/// a 1024-byte stack buffer and posts every read as its own Dart port message,
+/// the local PTY path one never does: `flutter_pty2` posts every read as its
+/// own Dart port message, and macOS hands over at most 1024 bytes per read,
 /// so each chunk arrives as a separate event, is drained inside that event,
 /// and leaves the queue empty again. Measured over a termbench run: 180,697
 /// chunks, every one of them exactly 1024 characters, queue depth never above

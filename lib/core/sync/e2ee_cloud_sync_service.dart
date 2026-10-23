@@ -1168,6 +1168,12 @@ class E2EECloudSyncService {
   /// Re-encrypts one secret from the backup key to this device's vault key.
   ///
   /// Returns the ciphertext unchanged when the backup carries no key (v1).
+  ///
+  /// Also unchanged when the backup's own key cannot open it -- a secret the
+  /// exporting device already could not read, after keychain loss or from
+  /// another device's operation. It is kept as it is, which is what sync does
+  /// with it too, and the identities list flags it for repair. Throwing here
+  /// rolled back the whole restore over one unreadable secret.
   Future<String?> _rewrapSecret(
     String? ciphertext,
     SecretKey? backupDek,
@@ -1176,10 +1182,15 @@ class E2EECloudSyncService {
     if (ciphertext == null) return null;
     if (backupDek == null || localDek == null) return ciphertext;
 
-    final plaintext = await _cryptoEngine.decrypt(
-      encryptedBase64: ciphertext,
-      secretKey: backupDek,
-    );
+    final String plaintext;
+    try {
+      plaintext = await _cryptoEngine.decrypt(
+        encryptedBase64: ciphertext,
+        secretKey: backupDek,
+      );
+    } on CryptoException {
+      return ciphertext;
+    }
     return _cryptoEngine.encrypt(plaintext: plaintext, secretKey: localDek);
   }
 }

@@ -13,7 +13,7 @@ import 'device_link_snapshot.dart';
 
 /// Adapter for the current local PTY session.
 ///
-/// This file deliberately owns the `flutter_pty` dependency. The server and
+/// This file deliberately owns the `flutter_pty2` dependency. The server and
 /// transport contract stay pure Dart so the loopback smoke harness can run
 /// with `dart run` without loading a platform FFI plugin.
 ///

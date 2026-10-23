@@ -53,6 +53,11 @@ enum SyncBlocker {
   /// A master password keeps the vault locked, and the passphrase and sync key
   /// are sealed under the vault key. Unlocking it starts sync.
   vaultLocked,
+
+  /// Sync on this device ran under another account. Whether this device's
+  /// data goes into the account signed in now is the user's call, so it waits
+  /// for [SyncNotifier.joinSignedInAccount].
+  accountChanged,
 }
 
 /// What automatic sync is doing.
@@ -234,6 +239,22 @@ class SyncNotifier extends _$SyncNotifier {
       vaultKey: ref.watch(vaultKeyServiceProvider).getDek,
     );
 
+    // What sync keeps here belongs to the account it ran under. Carrying on
+    // under another would seal the new account's log with the old key and
+    // send it the old account's rows, so it stops and asks instead.
+    final owner = await store.readSyncAccount();
+    final userId = account.session!.userId;
+    if (owner == null) {
+      // Builds before this one kept no record. The account signed in now is
+      // the one the device almost certainly synced with, and asking every
+      // existing device would be a question with one answer.
+      await store.writeSyncAccount(userId);
+    } else if (owner != userId) {
+      _stop();
+
+      return const SyncState(blocker: SyncBlocker.accountChanged);
+    }
+
     if (!await store.isConfigured()) {
       _stop();
 
@@ -397,6 +418,34 @@ class SyncNotifier extends _$SyncNotifier {
     // An account with no ground, or one whose ground predates the key. This
     // device mints it and the first ground it writes carries it onward.
     return (await store.syncKeyForUpload(autoSyncEnabled: true))!;
+  }
+
+  /// Starts sync over under the account signed in now, bringing this device's
+  /// data into it. The answer to [SyncBlocker.accountChanged].
+  ///
+  /// What sync kept for the previous account goes: its key, its cursors, its
+  /// outbox and the versions that would make the join skip rows. The join
+  /// that follows the rebuild merges this device's data into the new account.
+  Future<void> joinSignedInAccount() async {
+    final userId = (await ref.read(accountProvider.future)).session?.userId;
+    if (userId == null) return;
+
+    final db = ref.read(appDatabaseProvider);
+    final store = CloudBackupStore(
+      storage: ref.read(secureStorageServiceProvider),
+      vaultKey: ref.read(vaultKeyServiceProvider).getDek,
+    );
+
+    // Behind any pass an earlier instance still has running, which would
+    // otherwise move a cursor this is resetting.
+    await _serial(() async {
+      await db.syncJournal!.forgetAccount();
+      await store.forgetSyncKey();
+      // Last: a reset cut short asks again rather than carrying on half done.
+      await store.writeSyncAccount(userId);
+    });
+
+    ref.invalidateSelf();
   }
 
   /// Runs the join once per build.

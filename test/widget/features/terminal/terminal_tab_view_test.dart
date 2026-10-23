@@ -361,7 +361,7 @@ void main() {
 
       expect(find.textContaining('· BROADCAST'), findsNWidgets(2));
       // Each selected pane's header reports deliverable/selected.
-      // flutter_pty's native library is not loadable under `flutter test`, so
+      // flutter_pty2's native library is not loadable under `flutter test`, so
       // no pane has a live session here and nothing is deliverable — the
       // counter has to say so rather than count panes that would silently
       // swallow the input.

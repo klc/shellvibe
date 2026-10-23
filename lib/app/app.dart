@@ -117,7 +117,7 @@ class _ShellVibeAppState extends ConsumerState<ShellVibeApp>
 
   /// The app launches straight into the terminal screen (see the router's
   /// initialLocation). On desktop, open a local shell there right away;
-  /// flutter_pty cannot run on mobile (iOS sandbox / no local shell on
+  /// flutter_pty2 cannot run on mobile (iOS sandbox / no local shell on
   /// Android), so mobile starts on the terminal's empty state and connects via
   /// SSH instead.
   ///
