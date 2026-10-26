@@ -7,6 +7,13 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Terminal: split panes and move between them from the keyboard. ⌘D /
+  Ctrl+Shift+D splits side by side, ⇧⌘D / Ctrl+Shift+O splits top and bottom,
+  and ⌥⌘ + arrow / Alt + arrow focuses the neighbouring pane. The shortcut
+  list has a new Panes group.
+
 ### Fixed
 
 - Sync: signing in to a different account no longer carries on with the
