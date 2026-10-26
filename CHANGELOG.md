@@ -9,6 +9,31 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- SFTP: the file browser no longer reopens its channel every time a terminal
+  tab changes, which used to cut off transfers in progress.
+- Remote editor: Save writes to a temporary file and renames it over the
+  original, so a failed save can no longer leave the file truncated. File
+  permissions are kept.
+- SSH: a connection whose keep-alive fails is now closed, along with its jump
+  hosts, and tunnels no longer reuse it.
+- Tunnels: a remote forward the server refuses now reports the error and
+  frees its SSH session instead of failing silently.
+- Snippets: `${SV:...}` builtins are filled in when a snippet is sent from
+  the terminal snippet picker or as a startup snippet.
+- Host keys: the key type already in known_hosts is preferred, so a server
+  that adds a second host key type is no longer reported as a changed key.
+- Run history: single-character inputs are no longer masked, which used to
+  redact every matching character in the output.
+- ssh_config: an `Include` with a Windows absolute path is no longer read as
+  relative to `~/.ssh`.
+- Billing: signing out and back in no longer leaves backup and sync broken
+  until restart.
+- Device Link: setting or removing the master password no longer disconnects
+  paired phones.
+- Links: bare `www.host:port/...` links in the terminal open again.
+- Host keys: the verification hint names the right `ssh_host_*_key.pub` file.
+- Templates: a template saved in another workspace can be replayed instead of
+  failing with "host no longer exists".
 - AI Access: `interrupt` and `list_sessions` no longer wait behind a running
   command. The `shellvibe-mcp` bridge relayed one request at a time, so an
   agent could not stop a command before it timed out, and `busy` never read
