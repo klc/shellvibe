@@ -4,6 +4,7 @@ import '../../../../core/network/ssh_session_manager.dart';
 import '../../../../core/utils/platform_capabilities.dart';
 import '../../../../shared/providers/database_providers.dart';
 import '../../../workspaces/presentation/providers/workspace_provider.dart';
+import '../../../hosts/data/repositories/hosts_repository.dart';
 import '../../../hosts/domain/models/host_model.dart';
 import '../../../hosts/presentation/notifiers/hosts_notifier.dart';
 import '../../../terminal/presentation/notifiers/terminal_tabs_notifier.dart';
@@ -26,6 +27,24 @@ TemplateCapture templateCapture(Ref ref) => const TemplateCapture();
 
 @riverpod
 TemplateRunner templateRunner(Ref ref) => const TemplateRunner();
+
+/// [hosts] keyed by id, plus any pane host of [template] missing from them.
+///
+/// Tabs outlive a workspace switch, so a captured pane may point at another
+/// workspace's host that the active-workspace list does not carry.
+Future<Map<String, HostModel>> templateHostsById(
+  TemplateModel template, {
+  required List<HostModel> hosts,
+  required HostsRepository repo,
+}) async {
+  final hostsById = {for (final host in hosts) host.id: host};
+  for (final id in template.panes.map((pane) => pane.hostId).nonNulls) {
+    if (hostsById.containsKey(id)) continue;
+    final host = await repo.getHostById(id);
+    if (host != null) hostsById[id] = host;
+  }
+  return hostsById;
+}
 
 /// Kept alive deliberately: saving and running a template are fired from
 /// toolbars that do not watch this provider, so an auto-disposing notifier
@@ -98,10 +117,11 @@ class TemplatesNotifier extends _$TemplatesNotifier {
     HostKeyPromptCallback? onHostKeyPrompt,
   }) async {
     final runner = ref.read(templateRunnerProvider);
-    final hosts = await ref.read(hostsProvider.future);
-    final hostsById = <String, HostModel>{
-      for (final host in hosts) host.id: host,
-    };
+    final hostsById = await templateHostsById(
+      template,
+      hosts: await ref.read(hostsProvider.future),
+      repo: ref.read(hostsRepositoryProvider),
+    );
 
     // Panes that use stored credentials must not connect behind a locked vault
     // — the same gate the launch shell runs through. Refusing the whole run

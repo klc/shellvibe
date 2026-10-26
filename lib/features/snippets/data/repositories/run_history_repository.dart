@@ -95,7 +95,10 @@ class RunHistoryRepository {
     final runId = run.id;
     final isSnippet = RunbookRunService.isSnippetRunbook(run.runbook);
     final steps = run.runbook.orderedSteps;
-    final secrets = run.variableValues.values;
+    // ponytail: a length floor, not a secrecy flag — a 1-char input would mask
+    // every digit in the output; use secretValuesOf() if only declared secrets
+    // should be masked.
+    final secrets = run.variableValues.values.where((v) => v.length >= 4);
 
     final hostRows = <RunbookRunHostsCompanion>[];
     final stepRows = <RunbookRunStepsCompanion>[];

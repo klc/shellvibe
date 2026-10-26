@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:path/path.dart' as p;
+
 import '../models/ssh_config_models.dart';
 import 'ssh_config_parser.dart';
 
@@ -160,18 +162,18 @@ class SshConfigResolver {
       if (expanded == null) continue;
       // "Files without absolute paths are assumed to be in ~/.ssh if
       // included in a user configuration file."
-      if (!expanded.startsWith('/')) {
+      if (!p.isAbsolute(expanded)) {
         expanded = '$homePath/.ssh/$expanded';
       }
       if (_hasGlobChars(expanded)) {
-        final dir = _dirname(expanded);
+        final dir = p.dirname(expanded);
         final entries = await lister(dir);
         if (entries == null) continue;
-        final pattern = _basename(expanded);
+        final pattern = p.basename(expanded);
         final matches =
             entries.where((e) => _globMatch(pattern, e, classes: true)).toList()
               ..sort();
-        result.addAll(matches.map((e) => _join(dir, e)));
+        result.addAll(matches.map((e) => p.join(dir, e)));
       } else {
         result.add(expanded);
       }
@@ -925,19 +927,6 @@ class SshConfigResolver {
 
   static bool _hasGlobChars(String s) =>
       s.contains('*') || s.contains('?') || s.contains('[');
-
-  String _dirname(String path) {
-    final slash = path.lastIndexOf('/');
-    if (slash <= 0) return '.';
-    return path.substring(0, slash);
-  }
-
-  String _basename(String path) {
-    final slash = path.lastIndexOf('/');
-    return slash == -1 ? path : path.substring(slash + 1);
-  }
-
-  String _join(String dir, String name) => dir == '.' ? name : '$dir/$name';
 
   /// Case-sensitive `*`/`?` glob; [classes] additionally enables `[...]`
   /// character classes (glob(7) for Include paths).

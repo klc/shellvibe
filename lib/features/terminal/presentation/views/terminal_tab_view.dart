@@ -16,6 +16,7 @@ import '../../../settings/presentation/notifiers/settings_notifier.dart';
 import '../../../snippets/domain/models/snippet_model.dart';
 import '../../../snippets/domain/services/snippet_variable_parser.dart';
 import '../../../snippets/presentation/widgets/snippet_picker_sheet.dart';
+import '../../../snippets/presentation/widgets/terminal_send.dart';
 import '../../../snippets/presentation/widgets/variable_input_dialog.dart';
 import '../../../templates/domain/models/template_model.dart';
 import '../../../templates/presentation/dialogs/save_template_dialog.dart';
@@ -399,10 +400,22 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
       values = entered;
     }
     if (!mounted) return;
-    _sendToPanes(
-      ref.read(terminalTabsProvider),
+    final tabsState = ref.read(terminalTabsProvider);
+    final filled = fillPaneBuiltins(
+      tabsState,
       SnippetVariableParser.substituteVariables(snippet.code, values),
     );
+    _sendToPanes(tabsState, filled.code);
+    if (filled.unresolved) {
+      ShadToaster.of(context).show(
+        ShadToast(
+          description: Text(
+            '"${snippet.title}" uses \${SV:...} and the pane has no host, so '
+            'those were left as written.',
+          ),
+        ),
+      );
+    }
   }
 
   /// A tab's right-click menu: close it, or the tabs around it.

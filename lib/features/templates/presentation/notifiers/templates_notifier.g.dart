@@ -174,7 +174,7 @@ final class TemplatesNotifierProvider
   TemplatesNotifier create() => TemplatesNotifier();
 }
 
-String _$templatesNotifierHash() => r'af38eca2997c3d2f62f7020ac8521efc78767ed8';
+String _$templatesNotifierHash() => r'f24d0b07cef1cc0c62f2c08cac426b5f85a7ce74';
 
 /// Kept alive deliberately: saving and running a template are fired from
 /// toolbars that do not watch this provider, so an auto-disposing notifier

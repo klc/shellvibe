@@ -252,8 +252,13 @@ class TunnelsNotifier extends _$TunnelsNotifier {
     for (final tab in ref.read(terminalTabsProvider).tabs) {
       if (tab.sessionType != TerminalSessionType.ssh) continue;
       if (tab.host?.id != hostId) continue;
-      final client = tab.sshSessionManager?.client;
-      if (client != null && !client.isClosed) return client;
+      // `isClosed` stays false after a failed keep-alive ping; the manager's
+      // `isConnected` is what flips on a dropped link.
+      final manager = tab.sshSessionManager;
+      final client = manager?.client;
+      if (manager?.isConnected == true && client != null && !client.isClosed) {
+        return client;
+      }
     }
     return null;
   }

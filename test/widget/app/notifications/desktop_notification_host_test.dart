@@ -324,16 +324,21 @@ void main() {
     testWidgets('is notified with its error', (tester) async {
       final container = await pumpHost(tester);
 
-      await container
-          .read(tunnelEngineProvider)
-          .startRemoteForward(
-            ruleId: 'r1',
-            hostId: 'h',
-            sshClient: _RefusingSshClient(),
-            remotePort: 9000,
-            localHost: '127.0.0.1',
-            localPort: 8000,
-          );
+      // A refused -R forward throws (so the caller can drop its pool claim)
+      // after publishing the failed tunnel the host is listening for.
+      await expectLater(
+        container
+            .read(tunnelEngineProvider)
+            .startRemoteForward(
+              ruleId: 'r1',
+              hostId: 'h',
+              sshClient: _RefusingSshClient(),
+              remotePort: 9000,
+              localHost: '127.0.0.1',
+              localPort: 8000,
+            ),
+        throwsStateError,
+      );
       await settle(tester);
 
       expect(presenter.shown, hasLength(1));
