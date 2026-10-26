@@ -3,7 +3,7 @@ import 'dart:io';
 import 'dart:isolate';
 import 'dart:typed_data';
 
-import 'package:flutter_pty/flutter_pty.dart';
+import 'package:flutter_pty2/flutter_pty2.dart';
 
 /// What a terminal bridge needs from a local shell process.
 ///
@@ -95,7 +95,7 @@ class _Wire {
 
 /// Runs the PTY on its own isolate and delivers its output in batches.
 ///
-/// The UI isolate cannot be the one reading a PTY. `flutter_pty` posts every
+/// The UI isolate cannot be the one reading a PTY. `flutter_pty2` posts every
 /// read as its own port message and macOS caps a read at 1024 bytes, so a
 /// process producing at any speed buries the isolate in messages — measured at
 /// 27,332 a second, which is an event loop that never empties long enough for
@@ -340,8 +340,17 @@ class _Reader {
     final command = message! as List<Object?>;
     switch (command[0]) {
       case _Wire.write:
+        final data = command[1]! as Uint8List;
         try {
-          pty.write(command[1]! as Uint8List);
+          // Queued natively, so a paste never blocks this isolate's
+          // acknowledgements. False means the PTY refused it: the process is
+          // gone or ~8 MiB of input is already waiting.
+          if (!pty.write(data) && data.isNotEmpty) {
+            events.send([
+              _Wire.failure,
+              'write: the PTY refused ${data.length} bytes of input',
+            ]);
+          }
         } catch (e) {
           events.send([_Wire.failure, 'write: $e']);
         }

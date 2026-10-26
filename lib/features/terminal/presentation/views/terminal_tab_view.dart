@@ -116,6 +116,27 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
             onInvoke: (intent) =>
                 ref.read(terminalTabsProvider.notifier).cycleTab(intent.step),
           ),
+          SplitPaneIntent: CallbackAction<SplitPaneIntent>(
+            onInvoke: (intent) {
+              if (activeTab != null) {
+                unawaited(
+                  ref
+                      .read(terminalTabsProvider.notifier)
+                      .splitTab(
+                        activeTab.id,
+                        direction: intent.direction,
+                        onHostKeyPrompt: _launcher.promptHostKey,
+                      ),
+                );
+              }
+              return null;
+            },
+          ),
+          FocusPaneIntent: CallbackAction<FocusPaneIntent>(
+            onInvoke: (intent) => ref
+                .read(terminalTabsProvider.notifier)
+                .focusPane(intent.direction),
+          ),
           // Here rather than app-wide: the size is the terminal's, and a zoom
           // pressed on the Hosts screen would change something not in view.
           ZoomTerminalFontIntent: CallbackAction<ZoomTerminalFontIntent>(
@@ -235,6 +256,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
         itemKey: const Key('terminal_menu_split_vertical'),
         icon: LucideIcons.columns2,
         label: 'Split Side by Side',
+        shortcut: shortcutLabel(AppCommand.splitSideBySide),
         value: () => unawaited(
           notifier.splitTab(
             pane.id,
@@ -247,6 +269,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
         itemKey: const Key('terminal_menu_split_horizontal'),
         icon: LucideIcons.rows2,
         label: 'Split Top / Bottom',
+        shortcut: shortcutLabel(AppCommand.splitTopBottom),
         value: () => unawaited(
           notifier.splitTab(
             pane.id,

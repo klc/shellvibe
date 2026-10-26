@@ -700,6 +700,15 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     setActiveTab(roots[(index + step) % roots.length]);
   }
 
+  /// Focuses the pane against the active one on the [direction] side, within
+  /// its tab. See [TerminalPaneLayout.neighborPane].
+  void focusPane(AxisDirection direction) {
+    final active = state.activeTabId;
+    if (active == null) return;
+    final neighbor = _paneLayout.neighborPane(state.tabs, active, direction);
+    if (neighbor != null) setActiveTab(neighbor);
+  }
+
   /// Moves the tab rooted at [tabId] so it becomes the [toIndex]th tab of the
   /// strip, counting root tabs only. See [TerminalPaneLayout.reorderRoots].
   void moveTab(String tabId, int toIndex) {

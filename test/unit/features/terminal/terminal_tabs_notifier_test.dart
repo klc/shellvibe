@@ -690,6 +690,55 @@ void main() {
       );
     });
 
+    test('focusPane moves to the pane against the active one', () {
+      final notifier = container.read(terminalTabsProvider.notifier);
+      String active() => container.read(terminalTabsProvider).activeTabId!;
+
+      // left | top-right (30%) over bottom-right (70%)
+      notifier.openLocalTab(title: 'Main Tab');
+      final left = active();
+      notifier.splitTab(left, direction: Axis.horizontal);
+      final topRight = active();
+      notifier.splitTab(topRight, direction: Axis.vertical);
+      final bottomRight = active();
+      notifier.setSplitRatio(bottomRight, 0.7);
+
+      notifier.focusPane(AxisDirection.up);
+      expect(active(), topRight);
+      notifier.focusPane(AxisDirection.up);
+      expect(active(), topRight, reason: 'top edge of the tab');
+      notifier.focusPane(AxisDirection.left);
+      expect(active(), left);
+      notifier.focusPane(AxisDirection.left);
+      expect(active(), left, reason: 'left edge of the tab');
+      // Both right panes touch it; the taller one is in line with its centre.
+      notifier.focusPane(AxisDirection.right);
+      expect(active(), bottomRight);
+
+      // A second split of the left pane cuts the left pane's own rectangle,
+      // so the new pane sits between it and the right column.
+      notifier.splitTab(left, direction: Axis.horizontal);
+      final middle = active();
+      notifier.setActiveTab(left);
+      notifier.focusPane(AxisDirection.right);
+      expect(active(), middle);
+      notifier.focusPane(AxisDirection.right);
+      expect(active(), bottomRight);
+    });
+
+    test('focusPane stays inside the active tab', () {
+      final notifier = container.read(terminalTabsProvider.notifier);
+
+      notifier.openLocalTab(title: 'One');
+      notifier.openLocalTab(title: 'Two');
+      final two = container.read(terminalTabsProvider).activeTabId!;
+
+      for (final direction in AxisDirection.values) {
+        notifier.focusPane(direction);
+        expect(container.read(terminalTabsProvider).activeTabId, two);
+      }
+    });
+
     test('closePane promotes the children of a closed root pane', () async {
       final notifier = container.read(terminalTabsProvider.notifier);
 
