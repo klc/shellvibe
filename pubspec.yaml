@@ -68,7 +68,10 @@ dependencies:
   # negotiate rather than connecting weakly, and has to be re-enabled through
   # `SSHAlgorithms` if we ever need to talk to one.
   dartssh2: ^4.0.1
-  flutter_pty: ^0.4.2
+  # Queues input natively instead of blocking in write(): flutter_pty 0.4.2's
+  # blocking write deadlocked the ackRead reader on a large paste. 2.x drops
+  # ackRead, so moving to it is its own migration.
+  flutter_pty2: ^1.0.2
   # Mosh UDP transport. Pinned to our fork by commit, not to the pub.dev
   # release: the package is at 0.0.x, so protocol fixes have to be able to land
   # here without waiting on upstream. Sync with upstream before bumping the ref.

@@ -40,11 +40,11 @@ class TerminalLocalPtyBridge {
   /// going straight to [Terminal.write].
   ///
   /// A local PTY hands over data as fast as the process can produce it, which
-  /// is far faster than the terminal can parse it, and `flutter_pty` hands it
-  /// over 1024 bytes at a time — one Dart port message per read. Writing each
-  /// one as it lands is what put macOS's spinning wait cursor up during a
-  /// benchmark: not a blocked isolate but a flooded one, an event loop that
-  /// never empties long enough for a frame to run.
+  /// is far faster than the terminal can parse it, and `flutter_pty2` hands it
+  /// over one Dart port message per read, 1024 bytes at a time on macOS.
+  /// Writing each one as it lands is what put macOS's spinning wait cursor up
+  /// during a benchmark: not a blocked isolate but a flooded one, an event
+  /// loop that never empties long enough for a frame to run.
   ///
   /// [CoalescingTerminalWriter] gathers a frame's worth of those reads into
   /// one write; [PacedTerminalWriter] then bounds how long parsing the result
@@ -139,7 +139,7 @@ class TerminalLocalPtyBridge {
     );
 
     // 3. Wire window resize event from xterm Terminal -> Local PTY resize
-    // Note: flutter_pty resize takes (rows, cols)
+    // Note: flutter_pty2 resize takes (rows, cols)
     terminal.onResize =
         (int width, int height, int pixelWidth, int pixelHeight) {
           resizeTerminal(width, height);
@@ -249,7 +249,7 @@ class TerminalLocalPtyBridge {
   }
 }
 
-/// Manages local shell process creation using `flutter_pty` on the desktop
+/// Manages local shell process creation using `flutter_pty2` on the desktop
 /// platforms; mobile has no local shell (see [supportsLocalShell]).
 class LocalPtyManager {
   /// Returns the default system shell executable path for the current OS.
