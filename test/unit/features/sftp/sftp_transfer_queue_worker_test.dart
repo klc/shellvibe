@@ -80,7 +80,11 @@ void main() {
 
   tearDown(() async {
     worker.dispose();
-    await dir.delete(recursive: true);
+    // A transfer still unwinding after dispose can hold a file open, which
+    // Windows will not delete under it.
+    await dir
+        .delete(recursive: true)
+        .catchError((_) => dir, test: (e) => e is FileSystemException);
   });
 
   TransferItem item(String id) =>

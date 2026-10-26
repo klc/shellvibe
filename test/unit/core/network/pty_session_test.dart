@@ -57,7 +57,10 @@ void main() {
 
   tearDownAll(() async {
     Directory.current = originalCwd;
-    await nativeDir.delete(recursive: true);
+    // Windows refuses to delete a DLL this process still has loaded.
+    await nativeDir
+        .delete(recursive: true)
+        .catchError((_) => nativeDir, test: (e) => e is FileSystemException);
   });
 
   test(
