@@ -212,6 +212,38 @@ void main() {
     );
   });
 
+  group('another account', () {
+    test('a setup from another account is forgotten, not uploaded', () async {
+      // The other account's passphrase, its revision number and its
+      // schedule. Kept, the schedule ran on opening and, with the revision
+      // numbers equal, sealed a backup this account's devices cannot open on
+      // top of their vault without a word.
+      await server.seedRevision('backup', 'this account\'s own backup');
+      await configured(lastKnown: 1);
+      await store().writeBackupFrequency(BackupFrequency.daily);
+      await store().writeBackupAccount('user-0');
+
+      await ready();
+      await pumpEventQueue();
+
+      expect(current().blocker, CloudBackupBlocker.needsExistingPassphrase);
+      expect(uploads(), isEmpty);
+      expect(await store().isConfigured(), isFalse);
+      expect(await store().readBackupAccount(), 'user-1');
+    });
+
+    test('a device with no record keeps its setup', () async {
+      // Builds before the record existed, on the account they set up.
+      await configured(lastKnown: 1);
+
+      await ready();
+
+      expect(current().blocker, isNull);
+      expect(await store().isConfigured(), isTrue);
+      expect(await store().readBackupAccount(), 'user-1');
+    });
+  });
+
   group('which revision an upload builds on', () {
     test(
       'the one this device last knew, so a newer backup is not buried',

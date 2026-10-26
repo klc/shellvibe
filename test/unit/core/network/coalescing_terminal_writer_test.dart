@@ -55,7 +55,7 @@ void main() {
 
   test('a frame of small chunks becomes one write', () async {
     final writer = build();
-    // What flutter_pty actually delivers: 1 KiB per Dart port message.
+    // What flutter_pty2 delivers on macOS: 1 KiB per Dart port message.
     for (var i = 0; i < 64; i++) {
       writer.write('x' * 1024);
     }

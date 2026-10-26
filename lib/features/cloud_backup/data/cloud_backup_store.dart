@@ -184,6 +184,45 @@ final class CloudBackupStore {
     return minted;
   }
 
+  /// The account automatic sync on this device ran under, by user id.
+  ///
+  /// Everything sync keeps -- the key, the cursors, the versions, the outbox --
+  /// belongs to one account, and signing out leaves all of it behind. Without
+  /// this, the next account to sign in would have its log sealed with the old
+  /// account's key and be sent the old account's rows. Not a secret, so kept
+  /// in the clear: it has to answer behind a locked vault.
+  Future<String?> readSyncAccount() async {
+    final value = await storage.read(key: _syncAccountKey);
+
+    return (value == null || value.isEmpty) ? null : value;
+  }
+
+  Future<void> writeSyncAccount(String userId) =>
+      storage.write(key: _syncAccountKey, value: userId);
+
+  /// The account the cloud backup on this device was set up under, by user
+  /// id.
+  ///
+  /// Kept apart from [readSyncAccount]: a different account forgets the
+  /// backup setup at once, while sync waits to be asked.
+  Future<String?> readBackupAccount() async {
+    final value = await storage.read(key: _backupAccountKey);
+
+    return (value == null || value.isEmpty) ? null : value;
+  }
+
+  Future<void> writeBackupAccount(String userId) =>
+      storage.write(key: _backupAccountKey, value: userId);
+
+  /// Forgets the sync key and this device's place in the account's ground,
+  /// keeping the passphrase and the manual backup's settings.
+  Future<void> forgetSyncKey() async {
+    await storage.delete(key: _syncKeyKey);
+    await storage.delete(key: _sealed(_syncKeyKey));
+    await storage.delete(key: _groundMarkKey);
+    await storage.delete(key: _pendingSyncUploadKey);
+  }
+
   /// The sync ground this device last wrote or started from.
   ///
   /// Two numbers: which revision it was, and the clock it recorded. The clock
@@ -352,4 +391,9 @@ final class CloudBackupStore {
   static const String _frequencyKey = 'shellvibe_backup_frequency';
   static const String _autoBackupMarkKey = 'shellvibe_backup_auto_mark';
   static const String _syncKeyKey = 'shellvibe_sync_key';
+
+  /// Not removed by [clear]. Forgetting the passphrase leaves the journal's
+  /// state where it was, and that state still belongs to this account.
+  static const String _syncAccountKey = 'shellvibe_sync_account';
+  static const String _backupAccountKey = 'shellvibe_backup_account';
 }

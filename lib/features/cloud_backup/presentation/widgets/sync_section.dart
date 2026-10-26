@@ -110,6 +110,14 @@ final class _SyncStatus extends ConsumerWidget {
             tooltip: 'Sync now',
             onPressed: () => ref.read(syncProvider.notifier).syncNow(),
           ),
+        if (value(state)?.blocker == SyncBlocker.accountChanged)
+          ShellVibeButton.secondary(
+            buttonKey: const Key('sync_join_signed_in_account_button'),
+            label: 'Add to This Account',
+            icon: LucideIcons.cloudUpload,
+            onPressed: () =>
+                ref.read(syncProvider.notifier).joinSignedInAccount(),
+          ),
       ],
     );
   }
@@ -162,6 +170,15 @@ final class _SyncStatus extends ConsumerWidget {
         LucideIcons.lock,
         tokens.warning,
         'Unlock the vault to sync.',
+      ),
+      // Asked, not decided: carrying on would hand one account's servers to
+      // another without a word.
+      SyncBlocker.accountChanged => (
+        LucideIcons.circleAlert,
+        tokens.warning,
+        'Sync on this device was set up under another account. Add this '
+            'device\'s data to the account signed in now, or turn automatic '
+            'sync off to keep them apart.',
       ),
       null when value.running => (
         LucideIcons.refreshCw,

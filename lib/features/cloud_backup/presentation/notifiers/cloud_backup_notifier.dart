@@ -183,6 +183,19 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
       return const CloudBackupState(blocker: CloudBackupBlocker.signedOut);
     }
 
+    // The passphrase, the recovery code and the revision this device last
+    // knew belong to the account they were set up under. Kept under another,
+    // the schedule seals backups that account's devices cannot open and
+    // uploads them over its vault. Forgotten, setup starts over against the
+    // vault this account actually has.
+    final owner = await _store.readBackupAccount();
+    final userId = account.session!.userId;
+    if (owner != userId) {
+      // No record means a build before this one, on the account it set up.
+      if (owner != null) await _store.clear();
+      await _store.writeBackupAccount(userId);
+    }
+
     // Read for its limits, not for permission: cloud backup is free, and
     // the upload size the server will accept is the one thing here the
     // client cannot know on its own. Only the limit: the entitlement
