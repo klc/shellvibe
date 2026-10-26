@@ -77,6 +77,20 @@ class CycleTabIntent extends Intent {
   const CycleTabIntent(this.step);
 }
 
+/// Splits the active pane, side by side ([Axis.horizontal]) or stacked.
+class SplitPaneIntent extends Intent {
+  final Axis direction;
+
+  const SplitPaneIntent(this.direction);
+}
+
+/// Focuses the pane of the active tab next to the active one in [direction].
+class FocusPaneIntent extends Intent {
+  final AxisDirection direction;
+
+  const FocusPaneIntent(this.direction);
+}
+
 /// Opens Settings.
 class OpenSettingsIntent extends Intent {
   const OpenSettingsIntent();
@@ -100,6 +114,12 @@ enum AppCommand {
   closeTab('Close tab', CloseTabIntent()),
   nextTab('Next tab', CycleTabIntent(1)),
   previousTab('Previous tab', CycleTabIntent(-1)),
+  splitSideBySide('Split side by side', SplitPaneIntent(Axis.horizontal)),
+  splitTopBottom('Split top / bottom', SplitPaneIntent(Axis.vertical)),
+  focusPaneLeft('Pane on the left', FocusPaneIntent(AxisDirection.left)),
+  focusPaneRight('Pane on the right', FocusPaneIntent(AxisDirection.right)),
+  focusPaneUp('Pane above', FocusPaneIntent(AxisDirection.up)),
+  focusPaneDown('Pane below', FocusPaneIntent(AxisDirection.down)),
   find('Find', FindInTerminalIntent()),
   openSnippets('Send snippet', OpenSnippetPickerIntent()),
   zoomIn('Bigger text', ZoomTerminalFontIntent(1)),
@@ -196,6 +216,35 @@ List<SingleActivator> shortcutsFor(
       if (!apple)
         const SingleActivator(LogicalKeyboardKey.pageUp, control: true),
     ],
+    // ⌘D / ⇧⌘D as in iTerm. Off Apple the stacked split cannot add Shift the
+    // same way — Ctrl+Shift+Alt is AltGr+Shift on Windows — so it takes
+    // Terminator's Ctrl+Shift+O.
+    AppCommand.splitSideBySide => [_primary(LogicalKeyboardKey.keyD, target)],
+    AppCommand.splitTopBottom => [
+      if (apple)
+        const SingleActivator(LogicalKeyboardKey.keyD, meta: true, shift: true)
+      else
+        const SingleActivator(
+          LogicalKeyboardKey.keyO,
+          control: true,
+          shift: true,
+        ),
+    ],
+    // ⌥⌘ + arrow is iTerm's, Alt + arrow Windows Terminal's. Plain Ctrl +
+    // arrow is not free: macOS gives it to Spaces and Mission Control, and
+    // shells bind ⌃← / ⌃→ to moving by word.
+    AppCommand.focusPaneLeft => [
+      SingleActivator(LogicalKeyboardKey.arrowLeft, alt: true, meta: apple),
+    ],
+    AppCommand.focusPaneRight => [
+      SingleActivator(LogicalKeyboardKey.arrowRight, alt: true, meta: apple),
+    ],
+    AppCommand.focusPaneUp => [
+      SingleActivator(LogicalKeyboardKey.arrowUp, alt: true, meta: apple),
+    ],
+    AppCommand.focusPaneDown => [
+      SingleActivator(LogicalKeyboardKey.arrowDown, alt: true, meta: apple),
+    ],
     // ⌘, everywhere on a Mac. Ctrl+, has no control code either, and it is
     // what Windows Terminal and VS Code use.
     AppCommand.openSettings => [
@@ -277,7 +326,13 @@ Map<ShortcutActivator, Intent> appKeymap({
 /// `Ctrl+Shift+S` elsewhere.
 String describeShortcut(SingleActivator activator, {TargetPlatform? platform}) {
   final target = platform ?? runtimeTargetPlatform;
-  final key = activator.trigger.keyLabel;
+  final key = switch (activator.trigger) {
+    LogicalKeyboardKey.arrowLeft => '←',
+    LogicalKeyboardKey.arrowRight => '→',
+    LogicalKeyboardKey.arrowUp => '↑',
+    LogicalKeyboardKey.arrowDown => '↓',
+    final other => other.keyLabel,
+  };
   if (usesCommandKey(target)) {
     // Apple's fixed modifier order: Control, Option, Shift, Command.
     return [
@@ -379,6 +434,17 @@ List<(String, List<ShortcutReferenceEntry>)> shortcutReference({
         ?row(AppCommand.closeTab),
         ?row(AppCommand.nextTab),
         ?row(AppCommand.previousTab),
+      ],
+    ),
+    (
+      'Panes',
+      [
+        ?row(AppCommand.splitSideBySide),
+        ?row(AppCommand.splitTopBottom),
+        ?row(AppCommand.focusPaneLeft),
+        ?row(AppCommand.focusPaneRight),
+        ?row(AppCommand.focusPaneUp),
+        ?row(AppCommand.focusPaneDown),
       ],
     ),
     (
