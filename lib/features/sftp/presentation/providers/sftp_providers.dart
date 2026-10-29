@@ -349,9 +349,14 @@ class SftpNotifier extends _$SftpNotifier {
     final client = state.remoteClient;
     if (client == null) return;
     try {
+      // A symlink is unlinked, never rmdir'd: its target is left alone.
       await ref
           .read(sftpServiceProvider)
-          .deleteItem(client, item.path, isDirectory: item.isDirectory);
+          .deleteItem(
+            client,
+            item.path,
+            isDirectory: item.isDirectory && !item.isSymlink,
+          );
       await loadRemoteDirectory();
     } catch (e) {
       if (!ref.mounted) return;
