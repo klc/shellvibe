@@ -60,6 +60,7 @@ class ListHostsTool with McpArgReaders implements McpToolHandler {
   McpToolDefinition get definition => McpToolDefinition(
     name: name,
     description:
+        'Start here to run anything on a remote server over SSH. '
         'Lists every host registered in this client\'s workspace that is '
         'visible to MCP agents (a host owner can hide any host from agents '
         'entirely; hidden hosts never appear here). Returns '

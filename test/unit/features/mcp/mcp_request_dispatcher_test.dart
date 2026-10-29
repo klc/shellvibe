@@ -81,6 +81,21 @@ void main() {
     expect(tool.lastArgs, {'sessionId': 's-1', 'command': 'ls'});
   });
 
+  test(
+    'initialize tells the agent to use these tools instead of ssh',
+    () async {
+      final result =
+          await dispatcher.handle(
+                'client-1',
+                JsonRpcRequest(id: ++ids, method: McpMethod.initialize),
+              )
+              as Map<String, Object?>;
+
+      expect(result['instructions'], contains('ssh'));
+      expect((result['instructions'] as String).length, lessThan(2048));
+    },
+  );
+
   test('calls between two handshakes share one scope', () async {
     await initialize('client-1');
 

@@ -36,6 +36,7 @@ class OpenSessionTool with McpArgReaders implements McpToolHandler {
   McpToolDefinition get definition => McpToolDefinition(
     name: name,
     description:
+        'SSH into a remote server. '
         'Opens a new persistent, PTY-less shell session on a host you '
         'already have access to (see request_host_access). Fails with '
         'HOST_ACCESS_REQUIRED if you do not — this tool never prompts the '

@@ -55,9 +55,10 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
   McpToolDefinition get definition => McpToolDefinition(
     name: name,
     description:
-        'Runs one shell command over an already-open session (see '
-        'open_session). The command is checked against this host\'s access '
-        'policy before it runs: it may execute immediately, be denied '
+        'Runs one shell command on a remote server over SSH, through an '
+        'already-open session (see open_session). The command is checked '
+        'against this host\'s access policy before it runs: it may execute '
+        'immediately, be denied '
         'outright (POLICY_DENIED), be rejected because it needs a terminal '
         '(INTERACTIVE_COMMAND — the error message gives you a batch-mode '
         'command to retry with instead), or pause while the user is asked '

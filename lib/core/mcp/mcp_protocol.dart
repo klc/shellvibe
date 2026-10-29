@@ -238,10 +238,16 @@ class McpInitializeResult {
   final McpServerInfo serverInfo;
   final Map<String, Object?> capabilities;
 
+  /// Free-text guidance on when and how to use this server's tools. Clients
+  /// that defer tool schemas (Claude Code's tool search) load this up front,
+  /// so it is what tells an agent to reach for these tools at all.
+  final String? instructions;
+
   McpInitializeResult({
     required this.serverInfo,
     this.protocolVersion = kMcpProtocolVersion,
     Map<String, Object?>? capabilities,
+    this.instructions,
   }) : capabilities =
            capabilities ??
            const {
@@ -252,6 +258,7 @@ class McpInitializeResult {
     'protocolVersion': protocolVersion,
     'serverInfo': serverInfo.toJson(),
     'capabilities': capabilities,
+    if (instructions != null) 'instructions': instructions,
   };
 }
 
