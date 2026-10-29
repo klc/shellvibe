@@ -29,8 +29,8 @@ HostAccessRequest _hostAccessRequest() => const HostAccessRequest(
     HostAccessCandidate(
       hostId: 'host-1',
       label: 'prod-web-01',
-      environment: HostEnvironment.prod,
       suggestedMode: McpAccessMode.readonly,
+      maxMode: McpAccessMode.guarded,
     ),
   ],
 );
@@ -210,53 +210,54 @@ void main() {
     expect(find.text('user page'), findsOneWidget);
   });
 
-  testWidgets('deny and suspend also closes the client\'s sessions and grants', (
-    tester,
-  ) async {
-    _ignoreOverflow(tester);
-    final clients = _FakeClientRepo()..release.complete();
-    final pool = _FakePool();
-    final grants = _FakeGrants();
-    await tester.pumpWidget(
-      _harness(
-        coordinator,
-        overrides: [
-          mcpClientRepositoryProvider.overrideWithValue(clients),
-          mcpSessionPoolProvider.overrideWithValue(pool),
-          mcpGrantRepositoryProvider.overrideWithValue(grants),
-        ],
-      ),
-    );
-    await tester.pump();
+  testWidgets(
+    'deny and suspend also closes the client\'s sessions and grants',
+    (tester) async {
+      _ignoreOverflow(tester);
+      final clients = _FakeClientRepo()..release.complete();
+      final pool = _FakePool();
+      final grants = _FakeGrants();
+      await tester.pumpWidget(
+        _harness(
+          coordinator,
+          overrides: [
+            mcpClientRepositoryProvider.overrideWithValue(clients),
+            mcpSessionPoolProvider.overrideWithValue(pool),
+            mcpGrantRepositoryProvider.overrideWithValue(grants),
+          ],
+        ),
+      );
+      await tester.pump();
 
-    unawaited(coordinator.requestHostAccess(_hostAccessRequest()));
-    // A second prompt from the same client, queued behind the first.
-    HostAccessResult? queued;
-    unawaited(
-      coordinator
-          .requestHostAccess(_hostAccessRequest())
-          .then((r) => queued = r),
-    );
-    await _pumpFrames(tester);
-    await tester.pump(mcpApprovalArmDelay);
-    tester
-        .widget<ShellVibeButton>(
-          find.byKey(const Key('mcp_host_access_deny_suspend_button')),
-        )
-        .onPressed!();
-    await _pumpFrames(tester);
+      unawaited(coordinator.requestHostAccess(_hostAccessRequest()));
+      // A second prompt from the same client, queued behind the first.
+      HostAccessResult? queued;
+      unawaited(
+        coordinator
+            .requestHostAccess(_hostAccessRequest())
+            .then((r) => queued = r),
+      );
+      await _pumpFrames(tester);
+      await tester.pump(mcpApprovalArmDelay);
+      tester
+          .widget<ShellVibeButton>(
+            find.byKey(const Key('mcp_host_access_deny_suspend_button')),
+          )
+          .onPressed!();
+      await _pumpFrames(tester);
 
-    expect(clients.revoked, ['client-1']);
-    expect(pool.closed, ['client-1']);
-    expect(grants.revoked, ['client-1']);
-    // Refused with it, and never put on screen for a suspended client.
-    expect(queued?.granted, isEmpty);
-    expect(coordinator.currentHostAccess, isEmpty);
-    expect(
-      find.byKey(const Key('mcp_host_access_deny_suspend_button')),
-      findsNothing,
-    );
-  });
+      expect(clients.revoked, ['client-1']);
+      expect(pool.closed, ['client-1']);
+      expect(grants.revoked, ['client-1']);
+      // Refused with it, and never put on screen for a suspended client.
+      expect(queued?.granted, isEmpty);
+      expect(coordinator.currentHostAccess, isEmpty);
+      expect(
+        find.byKey(const Key('mcp_host_access_deny_suspend_button')),
+        findsNothing,
+      );
+    },
+  );
 }
 
 /// The test binding renders every glyph as a full-em block, so the dialog's

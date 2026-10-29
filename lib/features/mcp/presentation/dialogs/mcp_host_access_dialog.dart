@@ -9,7 +9,7 @@ import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../domain/models/mcp_enums.dart';
 import '../../domain/models/mcp_models.dart';
 import 'mcp_command_approval_dialog.dart'
-    show McpEnvironmentBadge, mcpApprovalArmDelay, visibleControlChars;
+    show mcpApprovalArmDelay, visibleControlChars;
 
 /// How long a batch of host grants should last before the agent has to ask
 /// again.
@@ -358,21 +358,10 @@ class _HostRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = ShellVibeTokens.resolve(context);
-    final isProd = candidate.environment == HostEnvironment.prod;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      decoration: BoxDecoration(
-        // Production rows get a visible tint rather than relying on the
-        // small badge alone — this is the row the user is most likely to
-        // regret checking without looking twice.
-        color: isProd ? tokens.dangerMutedSurface : Colors.transparent,
-        borderRadius: BorderRadius.circular(tokens.radiusSmall),
-        border: isProd
-            ? Border.all(color: tokens.danger.withValues(alpha: 0.35))
-            : null,
-      ),
       child: Row(
         children: [
           ShadCheckbox(value: checked, onChanged: onCheckedChanged),
@@ -384,12 +373,10 @@ class _HostRow extends StatelessWidget {
                 context,
                 size: 13,
                 weight: FontWeight.w500,
-                color: isProd ? tokens.dangerMutedText : tokens.textPrimary,
+                color: tokens.textPrimary,
               ),
             ),
           ),
-          const SizedBox(width: 8),
-          McpEnvironmentBadge(environment: candidate.environment),
           const SizedBox(width: 12),
           Text(
             'mode:',
@@ -401,16 +388,12 @@ class _HostRow extends StatelessWidget {
           ShadSelect<McpAccessMode>(
             key: Key('mcp_host_access_mode_dropdown_${candidate.hostId}'),
             initialValue: mode,
-            selectedOptionBuilder: (context, value) => Text(value.name),
-            // `autonomous` is not offered anywhere in v0 (see
-            // McpAccessMode.autonomous's own doc comment) — only the two
-            // modes v0 actually ships are selectable here.
-            options: const [
-              ShadOption(
-                value: McpAccessMode.readonly,
-                child: Text('readonly'),
-              ),
-              ShadOption(value: McpAccessMode.guarded, child: Text('guarded')),
+            selectedOptionBuilder: (context, value) => Text(value.label),
+            // Nothing above the host's max access is offered.
+            options: [
+              for (final option in McpAccessMode.values)
+                if (option.index <= candidate.maxMode.index)
+                  ShadOption(value: option, child: Text(option.label)),
             ],
             onChanged: (value) {
               if (value != null) onModeChanged(value);

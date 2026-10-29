@@ -112,14 +112,16 @@ void main() {
     expect((await db.select(db.hosts).get()).single.startupSnippetId, isNull);
   });
 
-  testWidgets('the environment select saves Production', (tester) async {
+  testWidgets('a new host lets agents in, up to the max access picked', (
+    tester,
+  ) async {
     await pumpForm(tester);
     await tester.enterText(find.byKey(const Key('host_label_input')), 'db');
     await tester.enterText(
       find.byKey(const Key('host_hostname_input')),
       'db.example.com',
     );
-    final dropdown = find.byKey(const Key('host_environment_dropdown'));
+    final dropdown = find.byKey(const Key('host_mcp_max_mode_dropdown'));
     await tester.scrollUntilVisible(
       dropdown,
       120,
@@ -131,14 +133,16 @@ void main() {
           .first,
     );
     await tester.tap(
-      find.descendant(of: dropdown, matching: find.text('Development')),
+      find.descendant(of: dropdown, matching: find.text('Ask before changes')),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Production').last);
+    await tester.tap(find.text('Read only').last);
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('host_save_button')));
     await tester.pumpAndSettle();
 
-    expect((await db.select(db.hosts).get()).single.environment, 'prod');
+    final row = (await db.select(db.hosts).get()).single;
+    expect(row.mcpVisible, isTrue);
+    expect(row.mcpDefaultMode, 'readonly');
   });
 }

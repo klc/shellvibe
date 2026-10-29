@@ -29,12 +29,12 @@ class HostModel {
   /// Snippet sent into this host's terminal when its session first comes up.
   final String? startupSnippetId;
 
-  /// `dev`, `staging` or `prod`. The MCP policy engine reads it, and so does
-  /// anything that runs a command in the background: nothing starts on `prod`
-  /// without the user confirming it.
-  final String environment;
+  /// False hides this host from AI agents (MCP) entirely.
+  final bool mcpVisible;
 
-  bool get isProd => environment == 'prod';
+  /// The most an AI agent may be granted here: `readonly`, `guarded` or
+  /// `autonomous`. Stored in the `mcpDefaultMode` column.
+  final String mcpMaxMode;
 
   /// `user@hostname:port`, the user part omitted when there is none.
   String get address =>
@@ -57,7 +57,8 @@ class HostModel {
     this.jumpHostId,
     required this.createdAt,
     this.startupSnippetId,
-    this.environment = 'dev',
+    this.mcpVisible = true,
+    this.mcpMaxMode = 'guarded',
   });
 
   HostModel copyWith({
@@ -76,7 +77,8 @@ class HostModel {
     String? jumpHostId,
     DateTime? createdAt,
     String? startupSnippetId,
-    String? environment,
+    bool? mcpVisible,
+    String? mcpMaxMode,
   }) {
     return HostModel(
       id: id ?? this.id,
@@ -94,7 +96,8 @@ class HostModel {
       jumpHostId: jumpHostId ?? this.jumpHostId,
       createdAt: createdAt ?? this.createdAt,
       startupSnippetId: startupSnippetId ?? this.startupSnippetId,
-      environment: environment ?? this.environment,
+      mcpVisible: mcpVisible ?? this.mcpVisible,
+      mcpMaxMode: mcpMaxMode ?? this.mcpMaxMode,
     );
   }
 
@@ -117,7 +120,8 @@ class HostModel {
           colorTag == other.colorTag &&
           jumpHostId == other.jumpHostId &&
           startupSnippetId == other.startupSnippetId &&
-          environment == other.environment &&
+          mcpVisible == other.mcpVisible &&
+          mcpMaxMode == other.mcpMaxMode &&
           createdAt == other.createdAt;
 
   @override
@@ -136,7 +140,8 @@ class HostModel {
       colorTag.hashCode ^
       jumpHostId.hashCode ^
       startupSnippetId.hashCode ^
-      environment.hashCode ^
+      mcpVisible.hashCode ^
+      mcpMaxMode.hashCode ^
       createdAt.hashCode;
 }
 

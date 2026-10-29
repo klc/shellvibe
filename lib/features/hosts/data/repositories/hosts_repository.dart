@@ -28,7 +28,8 @@ class HostsRepository {
     String? colorTag,
     String? jumpHostId,
     String? startupSnippetId,
-    String environment = 'dev',
+    bool mcpVisible = true,
+    String mcpMaxMode = 'guarded',
   }) async {
     final hostId = id ?? const Uuid().v4();
     final now = DateTime.now();
@@ -51,7 +52,8 @@ class HostsRepository {
       colorTag: Value<String?>(colorTag),
       jumpHostId: Value<String?>(jumpHostId),
       startupSnippetId: Value<String?>(startupSnippetId),
-      environment: Value(environment),
+      mcpVisible: Value(mcpVisible),
+      mcpDefaultMode: Value(mcpMaxMode),
       // Keep the original creation date on edits.
       createdAt: id == null ? Value(now) : const Value.absent(),
     );
@@ -85,7 +87,8 @@ class HostsRepository {
       jumpHostId: jumpHostId,
       createdAt: now,
       startupSnippetId: startupSnippetId,
-      environment: environment,
+      mcpVisible: mcpVisible,
+      mcpMaxMode: mcpMaxMode,
     );
   }
 
@@ -205,7 +208,8 @@ class HostsRepository {
       jumpHostId: row.jumpHostId,
       createdAt: row.createdAt,
       startupSnippetId: row.startupSnippetId,
-      environment: row.environment,
+      mcpVisible: row.mcpVisible,
+      mcpMaxMode: row.mcpDefaultMode,
     );
   }
 

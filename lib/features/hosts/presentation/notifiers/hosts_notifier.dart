@@ -56,7 +56,8 @@ class HostsNotifier extends _$HostsNotifier {
     String? colorTag,
     String? jumpHostId,
     String? startupSnippetId,
-    String environment = 'dev',
+    bool mcpVisible = true,
+    String mcpMaxMode = 'guarded',
   }) {
     return _mutate(
       (repo) => repo.saveHost(
@@ -73,7 +74,8 @@ class HostsNotifier extends _$HostsNotifier {
         colorTag: colorTag,
         jumpHostId: jumpHostId,
         startupSnippetId: startupSnippetId,
-        environment: environment,
+        mcpVisible: mcpVisible,
+        mcpMaxMode: mcpMaxMode,
       ),
     );
   }
@@ -93,7 +95,8 @@ class HostsNotifier extends _$HostsNotifier {
     String? colorTag,
     String? jumpHostId,
     String? startupSnippetId,
-    String environment = 'dev',
+    bool mcpVisible = true,
+    String mcpMaxMode = 'guarded',
   }) {
     return _mutate(
       (repo) => repo.saveHost(
@@ -111,7 +114,8 @@ class HostsNotifier extends _$HostsNotifier {
         colorTag: colorTag,
         jumpHostId: jumpHostId,
         startupSnippetId: startupSnippetId,
-        environment: environment,
+        mcpVisible: mcpVisible,
+        mcpMaxMode: mcpMaxMode,
       ),
     );
   }

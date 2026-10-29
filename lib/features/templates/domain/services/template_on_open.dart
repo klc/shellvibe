@@ -95,10 +95,7 @@ class TemplateOnOpen {
       return OnOpenOutcome.busy;
     }
 
-    // Production always asks, whatever "ask before running" says: a layout
-    // being opened must not start a runbook on a prod host unattended.
-    final mustAsk = template.onOpenConfirm || hosts.any((h) => h.isProd);
-    if (mustAsk && !await confirm(runbook, hosts)) {
+    if (template.onOpenConfirm && !await confirm(runbook, hosts)) {
       return OnOpenOutcome.declined;
     }
 

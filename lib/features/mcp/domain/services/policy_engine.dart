@@ -48,13 +48,6 @@ class PolicyEngine {
   ///    the regex classifier a single time per call.)
   /// 6. Look up (category × mode) in the decision matrix — see
   ///    [_matrixAction] — to get [PolicyAction.allow], `.confirm` or `.deny`.
-  ///
-  /// The production override in [_applyProductionOverride] is layered on top
-  /// of step 6's result only — never on top of a user rule or a remembered
-  /// approval, matching the plan's "matrisin üstüne biner" (sits on top of
-  /// the matrix) wording precisely. It is the one rule that survives every
-  /// mode: a `deny` is never upgraded, and no destructive category or
-  /// `opaqueExec` may come out of the matrix as `allow` on a production host.
   Future<PolicyDecision> evaluate(
     CommandContext ctx, {
     required String workspaceId,
@@ -82,17 +75,8 @@ class PolicyEngine {
     final rules = await dao.getPolicyRulesForWorkspace(workspaceId);
     final ruleAction = _matchUserRule(rules, ctx);
     if (ruleAction != null) {
-      // The production override sits above user rules, not beside them. The
-      // plan's rule is unconditional — "no destructive category passes
-      // without approval on prod, whatever the mode" — and a rule that
-      // auto-allows is exactly a destructive category passing without
-      // approval. The rule still decides *what* happens; production only
-      // insists a human sees it first.
       return _finish(
-        _applyProductionOverride(
-          PolicyDecision(action: ruleAction, category: classification.category),
-          ctx.environment,
-        ),
+        PolicyDecision(action: ruleAction, category: classification.category),
         ctx,
       );
     }
@@ -111,43 +95,31 @@ class PolicyEngine {
           now: now,
         );
     if (remembered) {
-      // The override applies here too. An approval is only refused storage
-      // while the host is *currently* production (see [canRemember]) — but a
-      // host gets re-tagged, and an approval recorded while it was `dev`
-      // would otherwise keep auto-running a destructive command on it after
-      // the tag changed. The environment is read at decision time, so a host
-      // becoming production immediately re-arms the prompt.
       return _finish(
-        _applyProductionOverride(
-          PolicyDecision(
-            action: PolicyAction.allow,
-            category: classification.category,
-            fromRememberedApproval: true,
-          ),
-          ctx.environment,
+        PolicyDecision(
+          action: PolicyAction.allow,
+          category: classification.category,
+          fromRememberedApproval: true,
         ),
         ctx,
       );
     }
 
-    // 5 & 6. (category × mode) matrix, then the production override on top.
-    final matrixAction = _matrixAction(classification.category, mode);
-    final withOverride = _applyProductionOverride(
-      PolicyDecision(action: matrixAction, category: classification.category),
-      ctx.environment,
+    // 5 & 6. (category × mode) matrix.
+    return _finish(
+      PolicyDecision(
+        action: _matrixAction(classification.category, mode),
+        category: classification.category,
+      ),
+      ctx,
     );
-    return _finish(withOverride, ctx);
   }
 
-  /// Whether an approval for this (category, environment) pair may be
-  /// remembered at all — independent of which [ApprovalScope] the user
-  /// picks in the dialog.
+  /// Whether an approval for this category may be remembered at all —
+  /// independent of which [ApprovalScope] the user picks in the dialog.
   ///
-  /// These exceptions are the only thing standing between an "approve
-  /// everything" reflex and production, and they are non-negotiable:
+  /// These exceptions are non-negotiable:
   ///
-  /// - A destructive category ([RiskCategory.isDestructive]) on a
-  ///   [HostEnvironment.prod] host must be looked at every single time.
   /// - [RiskCategory.opaqueExec] must be looked at every single time,
   ///   everywhere, because the classifier could not read what it actually
   ///   runs — remembering it would mean trusting a blank check forever.
@@ -155,14 +127,9 @@ class PolicyEngine {
   ///   everywhere. The matrix never auto-allows it, and a remembered
   ///   approval would turn one "yes" into an agent that reads the same
   ///   credentials unasked from then on.
-  bool canRemember(RiskCategory category, HostEnvironment environment) {
-    if (environment == HostEnvironment.prod && category.isDestructive) {
-      return false;
-    }
-    return !_alwaysAsks(category);
-  }
+  bool canRemember(RiskCategory category) => !_alwaysAsks(category);
 
-  /// Categories a human is asked about on every call, in every environment.
+  /// Categories a human is asked about on every call.
   static bool _alwaysAsks(RiskCategory category) =>
       category == RiskCategory.opaqueExec ||
       category == RiskCategory.secretRead;
@@ -282,35 +249,6 @@ class PolicyEngine {
     }
   }
 
-  /// The production override: the one rule that survives every mode.
-  ///
-  /// On a [HostEnvironment.prod] host, nothing the matrix classified as a
-  /// destructive category ([RiskCategory.isDestructive]) or as
-  /// [RiskCategory.opaqueExec] may come out as [PolicyAction.allow] — it is
-  /// downgraded to [PolicyAction.confirm] and [PolicyDecision.productionOverride]
-  /// is set so the UI can say *why* a mode that would normally auto-approve
-  /// still stopped to ask. A [PolicyAction.deny] is never upgraded by this
-  /// step; the override only ever makes a decision stricter, never looser.
-  PolicyDecision _applyProductionOverride(
-    PolicyDecision decision,
-    HostEnvironment environment,
-  ) {
-    if (environment != HostEnvironment.prod) return decision;
-    if (decision.action != PolicyAction.allow) return decision;
-    final overridable =
-        decision.category.isDestructive ||
-        decision.category == RiskCategory.opaqueExec;
-    if (!overridable) return decision;
-    return PolicyDecision(
-      action: PolicyAction.confirm,
-      category: decision.category,
-      message: decision.message,
-      hint: decision.hint,
-      fromRememberedApproval: decision.fromRememberedApproval,
-      productionOverride: true,
-    );
-  }
-
   // -------------------------------------------------------------------
   // Messages — populated on every refusal so the agent has something it
   // can read and act on, not just a bare rejection.
@@ -324,13 +262,11 @@ class PolicyEngine {
       message: _messageFor(decision, ctx),
       hint: decision.hint,
       fromRememberedApproval: decision.fromRememberedApproval,
-      productionOverride: decision.productionOverride,
     );
   }
 
   String? _messageFor(PolicyDecision decision, CommandContext ctx) {
     final categoryLabel = decision.category.wireName;
-    final envLabel = _envLabel(ctx.environment);
     switch (decision.action) {
       case PolicyAction.allow:
         return null;
@@ -340,17 +276,11 @@ class PolicyEngine {
         // category name.
         return null;
       case PolicyAction.deny:
-        return 'This command was refused on a $envLabel host in '
-            '${ctx.mode.name} mode (category: $categoryLabel).';
+        return 'This command was refused in ${ctx.mode.name} mode '
+            '(category: $categoryLabel).';
       case PolicyAction.confirm:
-        if (decision.productionOverride) {
-          return 'This command would normally run without asking in '
-              '${ctx.mode.name} mode, but category $categoryLabel is never '
-              'auto-approved on a $envLabel host — it needs explicit '
-              'confirmation instead.';
-        }
-        return 'This command needs user confirmation on a $envLabel host in '
-            '${ctx.mode.name} mode (category: $categoryLabel).';
+        return 'This command needs user confirmation in ${ctx.mode.name} '
+            'mode (category: $categoryLabel).';
     }
   }
 
@@ -366,10 +296,4 @@ class PolicyEngine {
     }
     return '`$command` $reason and cannot run over this channel.';
   }
-
-  String _envLabel(HostEnvironment environment) => switch (environment) {
-    HostEnvironment.dev => 'development',
-    HostEnvironment.staging => 'staging',
-    HostEnvironment.prod => 'production',
-  };
 }

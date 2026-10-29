@@ -89,15 +89,17 @@ class Hosts extends Table {
     onDelete: KeyAction.setNull,
   )();
 
-  /// 'dev' | 'staging' | 'prod' — the policy engine's criticality signal.
+  /// 'dev' | 'staging' | 'prod'. No longer read: kept so sync payloads stay
+  /// readable by older app versions.
   TextColumn get environment => text().withDefault(const Constant('dev'))();
 
   /// False hides this host entirely from MCP `list_hosts` output.
   BoolColumn get mcpVisible => boolean().withDefault(const Constant(true))();
 
-  /// Mode preselected in the MCP access-approval window.
+  /// The most an AI agent may be granted on this host (`readonly`, `guarded`
+  /// or `autonomous`). The name predates its use as a ceiling.
   TextColumn get mcpDefaultMode =>
-      text().withDefault(const Constant('readonly'))();
+      text().withDefault(const Constant('guarded'))();
 
   @override
   Set<Column> get primaryKey => {id};

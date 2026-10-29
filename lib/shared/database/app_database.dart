@@ -116,7 +116,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 20;
+  int get schemaVersion => 21;
 
   @override
   MigrationStrategy get migration {
@@ -334,6 +334,21 @@ class AppDatabase extends _$AppDatabase {
           )) {
             await _ensureTable(runbooks);
             await m.addColumn(templatePanes, templatePanes.startupRunbookId);
+          }
+        }
+        if (from < 21) {
+          // `mcp_default_mode` became each host's max AI access. It had no
+          // editor until now, so every row still holds the old 'readonly'
+          // preselect; 'guarded' is the most any host could reach before.
+          final columns = await customSelect(
+            'PRAGMA table_info("${hosts.actualTableName}")',
+          ).get();
+          if (columns.any(
+            (c) => c.read<String>('name') == 'mcp_default_mode',
+          )) {
+            await customStatement(
+              "UPDATE ${hosts.actualTableName} SET mcp_default_mode = 'guarded'",
+            );
           }
         }
       },

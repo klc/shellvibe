@@ -20,10 +20,7 @@ enum McpAccessMode {
   /// Risky commands are surfaced to the user for approval before they run.
   guarded,
 
-  /// Risky commands run without asking, except on production hosts.
-  ///
-  /// Not offered in v0; the value exists so stored rows and the policy matrix
-  /// do not need a migration when it ships.
+  /// Risky commands run without asking.
   autonomous;
 
   static McpAccessMode fromName(String value) => switch (value) {
@@ -33,20 +30,16 @@ enum McpAccessMode {
     // An unknown persisted value must never widen access.
     _ => McpAccessMode.readonly,
   };
-}
 
-/// Deployment criticality of a host, used as an override on top of the policy
-/// matrix: nothing destructive runs unattended on `prod`.
-enum HostEnvironment {
-  dev,
-  staging,
-  prod;
-
-  static HostEnvironment fromName(String value) => switch (value) {
-    'staging' => HostEnvironment.staging,
-    'prod' => HostEnvironment.prod,
-    _ => HostEnvironment.dev,
+  String get label => switch (this) {
+    McpAccessMode.readonly => 'Read only',
+    McpAccessMode.guarded => 'Ask before changes',
+    McpAccessMode.autonomous => 'Full access',
   };
+
+  /// This mode, lowered to [cap] when it reaches further: a host's max access
+  /// bounds every grant on it, whatever was asked for or approved.
+  McpAccessMode atMost(McpAccessMode cap) => index <= cap.index ? this : cap;
 }
 
 /// What a command is judged to do, as produced by `CommandClassifier`.
@@ -113,15 +106,6 @@ enum RiskCategory {
     RiskCategory.interactive => 'interactive',
     RiskCategory.secretRead => 'secret_read',
     RiskCategory.unclassified => 'unclassified',
-  };
-
-  /// Categories that may never be silently repeated on a production host.
-  bool get isDestructive => switch (this) {
-    RiskCategory.destructiveFs ||
-    RiskCategory.serviceControl ||
-    RiskCategory.identityPerm ||
-    RiskCategory.database => true,
-    _ => false,
   };
 }
 

@@ -6,6 +6,7 @@ import 'package:shellvibe/app/widgets/shellvibe_ui.dart';
 import 'package:shellvibe/core/utils/platform_capabilities.dart';
 import 'package:shellvibe/features/vault/presentation/notifiers/identities_notifier.dart';
 
+import '../../../mcp/domain/models/mcp_enums.dart';
 import '../../../workspaces/presentation/providers/workspace_provider.dart';
 import '../../../snippets/presentation/notifiers/snippets_notifier.dart';
 import '../../domain/models/host_model.dart';
@@ -51,7 +52,8 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
   String? _selectedIdentityId;
   String? _selectedJumpHostId;
   String? _selectedStartupSnippetId;
-  late String _environment;
+  late bool _mcpVisible;
+  late McpAccessMode _mcpMaxMode;
   bool _isLoading = false;
 
   @override
@@ -91,7 +93,8 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
     _selectedIdentityId = init?.identityId;
     _selectedJumpHostId = init?.jumpHostId;
     _selectedStartupSnippetId = init?.startupSnippetId;
-    _environment = init?.environment ?? 'dev';
+    _mcpVisible = init?.mcpVisible ?? true;
+    _mcpMaxMode = McpAccessMode.fromName(init?.mcpMaxMode ?? 'guarded');
   }
 
   @override
@@ -179,7 +182,8 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
               : _colorTagController.text.trim(),
           jumpHostId: _selectedJumpHostId,
           startupSnippetId: _selectedStartupSnippetId,
-          environment: _environment,
+          mcpVisible: _mcpVisible,
+          mcpMaxMode: _mcpMaxMode.name,
         );
       } else {
         saved = await notifier.addHost(
@@ -199,7 +203,8 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
               : _colorTagController.text.trim(),
           jumpHostId: _selectedJumpHostId,
           startupSnippetId: _selectedStartupSnippetId,
-          environment: _environment,
+          mcpVisible: _mcpVisible,
+          mcpMaxMode: _mcpMaxMode.name,
         );
       }
 
@@ -401,33 +406,39 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                   children: [
                     Expanded(
                       flex: 2,
-                      child: ShadSelectFormField<String>(
-                        key: const Key('host_protocol_dropdown'),
-                        initialValue: _protocol,
-                        label: const Text('Protocol'),
-                        selectedOptionBuilder: (context, value) =>
-                            Text(value.toUpperCase()),
-                        options: [
-                          const ShadOption(value: 'ssh', child: Text('SSH')),
-                          const ShadOption(value: 'mosh', child: Text('Mosh')),
-                          if (supportsLocalShell)
+                      child: _FullWidth(
+                        builder: (width) => ShadSelectFormField<String>(
+                          minWidth: width,
+                          key: const Key('host_protocol_dropdown'),
+                          initialValue: _protocol,
+                          label: const Text('Protocol'),
+                          selectedOptionBuilder: (context, value) =>
+                              Text(value.toUpperCase()),
+                          options: [
+                            const ShadOption(value: 'ssh', child: Text('SSH')),
                             const ShadOption(
-                              value: 'local',
-                              child: Text('Local Shell'),
+                              value: 'mosh',
+                              child: Text('Mosh'),
                             ),
-                        ],
-                        onChanged: (val) {
-                          if (val == null) return;
-                          setState(() {
-                            _protocol = val;
-                            // Mosh carries its session over UDP, which cannot
-                            // be tunneled through an SSH channel. The jump host
-                            // is dropped here rather than at connect time so
-                            // the form never holds a combination that cannot
-                            // work; the note below the field says why.
-                            if (val == 'mosh') _selectedJumpHostId = null;
-                          });
-                        },
+                            if (supportsLocalShell)
+                              const ShadOption(
+                                value: 'local',
+                                child: Text('Local Shell'),
+                              ),
+                          ],
+                          onChanged: (val) {
+                            if (val == null) return;
+                            setState(() {
+                              _protocol = val;
+                              // Mosh carries its session over UDP, which cannot
+                              // be tunneled through an SSH channel. The jump host
+                              // is dropped here rather than at connect time so
+                              // the form never holds a combination that cannot
+                              // work; the note below the field says why.
+                              if (val == 'mosh') _selectedJumpHostId = null;
+                            });
+                          },
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -498,39 +509,42 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                 const SizedBox(height: 12),
                 // Identity Selection
                 identitiesAsync.when(
-                  data: (identities) => ShadSelectFormField<String?>(
-                    key: const Key('host_identity_dropdown'),
-                    initialValue: _selectedIdentityId,
-                    label: const Text('Identity / Credentials'),
-                    selectedOptionBuilder: (context, value) {
-                      if (value == null) {
-                        return const Text('(None - Prompt on Connect)');
-                      }
-                      final i = identities
-                          .where((item) => item.id == value)
-                          .firstOrNull;
-                      return Text(
-                        i != null
-                            ? '${i.title}${i.username.isNotEmpty ? ' (${i.username})' : ''}'
-                            : value,
-                      );
-                    },
-                    options: [
-                      const ShadOption<String?>(
-                        value: null,
-                        child: Text('(None - Prompt on Connect)'),
-                      ),
-                      ...identities.map(
-                        (i) => ShadOption<String?>(
-                          value: i.id,
-                          child: Text(
-                            '${i.title}${i.username.isNotEmpty ? ' (${i.username})' : ''}',
+                  data: (identities) => _FullWidth(
+                    builder: (width) => ShadSelectFormField<String?>(
+                      minWidth: width,
+                      key: const Key('host_identity_dropdown'),
+                      initialValue: _selectedIdentityId,
+                      label: const Text('Identity / Credentials'),
+                      selectedOptionBuilder: (context, value) {
+                        if (value == null) {
+                          return const Text('(None - Prompt on Connect)');
+                        }
+                        final i = identities
+                            .where((item) => item.id == value)
+                            .firstOrNull;
+                        return Text(
+                          i != null
+                              ? '${i.title}${i.username.isNotEmpty ? ' (${i.username})' : ''}'
+                              : value,
+                        );
+                      },
+                      options: [
+                        const ShadOption<String?>(
+                          value: null,
+                          child: Text('(None - Prompt on Connect)'),
+                        ),
+                        ...identities.map(
+                          (i) => ShadOption<String?>(
+                            value: i.id,
+                            child: Text(
+                              '${i.title}${i.username.isNotEmpty ? ' (${i.username})' : ''}',
+                            ),
                           ),
                         ),
-                      ),
-                    ],
-                    onChanged: (val) =>
-                        setState(() => _selectedIdentityId = val),
+                      ],
+                      onChanged: (val) =>
+                          setState(() => _selectedIdentityId = val),
+                    ),
                   ),
                   loading: () => const _SelectStatus(
                     icon: LucideIcons.loaderCircle,
@@ -549,40 +563,43 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                 const SizedBox(height: 12),
                 // Tag selection: a host can carry any number of tags.
                 groupsAsync.when(
-                  data: (groups) => ShadSelectMultipleFormField<String>(
-                    key: const Key('host_group_dropdown'),
-                    initialValue: _selectedGroupIds,
-                    label: const Text('Tags'),
-                    placeholder: const Text('(None - Untagged)'),
-                    // Stay open so several tags can be ticked in one go.
-                    closeOnSelect: false,
-                    selectedOptionsBuilder: (context, values) {
-                      if (values.isEmpty) {
-                        return const Text('(None - Untagged)');
-                      }
-                      final names = values.map(
-                        (id) =>
-                            groups
-                                .where((item) => item.id == id)
-                                .firstOrNull
-                                ?.name ??
-                            id,
-                      );
-                      return Text(
-                        names.join(', '),
-                        overflow: TextOverflow.ellipsis,
-                      );
-                    },
-                    options: [
-                      for (final g in groups)
-                        ShadOption<String>(
-                          key: Key('host_tag_option_${g.id}'),
-                          value: g.id,
-                          child: Text(g.name),
-                        ),
-                    ],
-                    onChanged: (val) =>
-                        setState(() => _selectedGroupIds = {...?val}),
+                  data: (groups) => _FullWidth(
+                    builder: (width) => ShadSelectMultipleFormField<String>(
+                      minWidth: width,
+                      key: const Key('host_group_dropdown'),
+                      initialValue: _selectedGroupIds,
+                      label: const Text('Tags'),
+                      placeholder: const Text('(None - Untagged)'),
+                      // Stay open so several tags can be ticked in one go.
+                      closeOnSelect: false,
+                      selectedOptionsBuilder: (context, values) {
+                        if (values.isEmpty) {
+                          return const Text('(None - Untagged)');
+                        }
+                        final names = values.map(
+                          (id) =>
+                              groups
+                                  .where((item) => item.id == id)
+                                  .firstOrNull
+                                  ?.name ??
+                              id,
+                        );
+                        return Text(
+                          names.join(', '),
+                          overflow: TextOverflow.ellipsis,
+                        );
+                      },
+                      options: [
+                        for (final g in groups)
+                          ShadOption<String>(
+                            key: Key('host_tag_option_${g.id}'),
+                            value: g.id,
+                            child: Text(g.name),
+                          ),
+                      ],
+                      onChanged: (val) =>
+                          setState(() => _selectedGroupIds = {...?val}),
+                    ),
                   ),
                   loading: () => const _SelectStatus(
                     icon: LucideIcons.loaderCircle,
@@ -615,35 +632,38 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                           .where((h) => !excludedJumpHostIds.contains(h.id))
                           .toList();
 
-                      return ShadSelectFormField<String?>(
-                        key: const Key('host_jumphost_dropdown'),
-                        initialValue: _selectedJumpHostId,
-                        label: const Text('Jump Host (Bastion)'),
-                        selectedOptionBuilder: (context, value) {
-                          if (value == null) {
-                            return const Text('(Direct Connection)');
-                          }
-                          final h = candidateJumpHosts
-                              .where((item) => item.id == value)
-                              .firstOrNull;
-                          return Text(
-                            h != null ? '${h.label} (${h.hostname})' : value,
-                          );
-                        },
-                        options: [
-                          const ShadOption<String?>(
-                            value: null,
-                            child: Text('(Direct Connection)'),
-                          ),
-                          ...candidateJumpHosts.map(
-                            (h) => ShadOption<String?>(
-                              value: h.id,
-                              child: Text('${h.label} (${h.hostname})'),
+                      return _FullWidth(
+                        builder: (width) => ShadSelectFormField<String?>(
+                          minWidth: width,
+                          key: const Key('host_jumphost_dropdown'),
+                          initialValue: _selectedJumpHostId,
+                          label: const Text('Jump Host (Bastion)'),
+                          selectedOptionBuilder: (context, value) {
+                            if (value == null) {
+                              return const Text('(Direct Connection)');
+                            }
+                            final h = candidateJumpHosts
+                                .where((item) => item.id == value)
+                                .firstOrNull;
+                            return Text(
+                              h != null ? '${h.label} (${h.hostname})' : value,
+                            );
+                          },
+                          options: [
+                            const ShadOption<String?>(
+                              value: null,
+                              child: Text('(Direct Connection)'),
                             ),
-                          ),
-                        ],
-                        onChanged: (val) =>
-                            setState(() => _selectedJumpHostId = val),
+                            ...candidateJumpHosts.map(
+                              (h) => ShadOption<String?>(
+                                value: h.id,
+                                child: Text('${h.label} (${h.hostname})'),
+                              ),
+                            ),
+                          ],
+                          onChanged: (val) =>
+                              setState(() => _selectedJumpHostId = val),
+                        ),
                       );
                     },
                     loading: () => const _SelectStatus(
@@ -661,34 +681,37 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                 ref
                     .watch(snippetsProvider)
                     .when(
-                      data: (snippets) => ShadSelectFormField<String?>(
-                        key: const Key('host_startup_snippet_dropdown'),
-                        initialValue:
-                            snippets.any(
-                              (s) => s.id == _selectedStartupSnippetId,
-                            )
-                            ? _selectedStartupSnippetId
-                            : null,
-                        label: const Text('Startup snippet'),
-                        selectedOptionBuilder: (context, value) {
-                          final snippet = snippets
-                              .where((item) => item.id == value)
-                              .firstOrNull;
-                          return Text(snippet?.title ?? '(None)');
-                        },
-                        options: [
-                          const ShadOption<String?>(
-                            value: null,
-                            child: Text('(None)'),
-                          ),
-                          for (final snippet in snippets)
-                            ShadOption<String?>(
-                              value: snippet.id,
-                              child: Text(snippet.title),
+                      data: (snippets) => _FullWidth(
+                        builder: (width) => ShadSelectFormField<String?>(
+                          minWidth: width,
+                          key: const Key('host_startup_snippet_dropdown'),
+                          initialValue:
+                              snippets.any(
+                                (s) => s.id == _selectedStartupSnippetId,
+                              )
+                              ? _selectedStartupSnippetId
+                              : null,
+                          label: const Text('Startup snippet'),
+                          selectedOptionBuilder: (context, value) {
+                            final snippet = snippets
+                                .where((item) => item.id == value)
+                                .firstOrNull;
+                            return Text(snippet?.title ?? '(None)');
+                          },
+                          options: [
+                            const ShadOption<String?>(
+                              value: null,
+                              child: Text('(None)'),
                             ),
-                        ],
-                        onChanged: (val) =>
-                            setState(() => _selectedStartupSnippetId = val),
+                            for (final snippet in snippets)
+                              ShadOption<String?>(
+                                value: snippet.id,
+                                child: Text(snippet.title),
+                              ),
+                          ],
+                          onChanged: (val) =>
+                              setState(() => _selectedStartupSnippetId = val),
+                        ),
                       ),
                       loading: () => const _SelectStatus(
                         icon: LucideIcons.loaderCircle,
@@ -699,28 +722,6 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                         text: 'Failed to load snippets',
                       ),
                     ),
-                const SizedBox(height: 12),
-                // What this machine is. Anything that runs a command on it in
-                // the background asks first when it is production.
-                ShadSelectFormField<String>(
-                  key: const Key('host_environment_dropdown'),
-                  initialValue: _environment,
-                  label: const Text('Environment'),
-                  selectedOptionBuilder: (context, value) =>
-                      Text(switch (value) {
-                        'prod' => 'Production',
-                        'staging' => 'Staging',
-                        _ => 'Development',
-                      }),
-                  options: const [
-                    ShadOption(value: 'dev', child: Text('Development')),
-                    ShadOption(value: 'staging', child: Text('Staging')),
-                    ShadOption(value: 'prod', child: Text('Production')),
-                  ],
-                  onChanged: (val) {
-                    if (val != null) setState(() => _environment = val);
-                  },
-                ),
                 const SizedBox(height: 16),
                 // The address the form actually resolves to, spelled out. Two
                 // fields and a jump-host select do not add up to a route in
@@ -774,6 +775,51 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                     color: tokens.textSubtle,
                   ),
                 ),
+                // AI agents reach hosts only through the desktop app.
+                if (!isMobilePlatform) ...[
+                  const SizedBox(height: 20),
+                  const ShellVibeFormSectionHeader(
+                    icon: LucideIcons.bot,
+                    title: 'AI access',
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      const Expanded(child: Text('Allow AI agents')),
+                      ShadSwitch(
+                        key: const Key('host_mcp_visible_switch'),
+                        value: _mcpVisible,
+                        onChanged: (val) => setState(() => _mcpVisible = val),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  _FullWidth(
+                    builder: (width) => ShadSelectFormField<McpAccessMode>(
+                      key: const Key('host_mcp_max_mode_dropdown'),
+                      minWidth: width,
+                      enabled: _mcpVisible,
+                      initialValue: _mcpMaxMode,
+                      label: const Text('Max access'),
+                      selectedOptionBuilder: (context, value) =>
+                          Text(value.label),
+                      options: [
+                        for (final mode in McpAccessMode.values)
+                          ShadOption(value: mode, child: Text(mode.label)),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) setState(() => _mcpMaxMode = val);
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const _FieldNote(
+                    'Read only runs only commands that change nothing. Ask '
+                    'before changes asks you first. Full access runs changes '
+                    'without asking; reading secrets and unreadable scripts '
+                    'still ask.',
+                  ),
+                ],
               ],
             ),
           ),
@@ -781,6 +827,21 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
       ),
     );
   }
+}
+
+/// Gives a select the width of the slot it sits in.
+///
+/// A ShadSelect sizes itself to its content (at least 128px), not to its
+/// slot, so next to full-width inputs every select came out a different width.
+class _FullWidth extends StatelessWidget {
+  final Widget Function(double width) builder;
+
+  const _FullWidth({required this.builder});
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) => builder(constraints.maxWidth),
+  );
 }
 
 /// Slight placeholder shown while an async select is loading or failed.

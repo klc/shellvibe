@@ -6,16 +6,13 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/widgets/adaptive_modal.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
-import '../../domain/models/mcp_enums.dart';
 import '../../domain/models/mcp_models.dart';
 import 'mcp_command_approval_dialog.dart';
 
 /// Approval prompt for an agent's `run_runbook`, asked every time.
 ///
 /// It shows everything the run will do before it does it: each step, each
-/// target host with its environment (production stands out, and this dialog is
-/// the one production confirmation an MCP run gets), the strategy, and the
-/// variable values the agent supplied. A secret variable is never in the
+/// target host, the strategy, and the variable values the agent supplied. A secret variable is never in the
 /// request: the agent may not pass one, so it appears here as an obscured
 /// field the user fills in, and what they type goes to the run and nowhere
 /// else.
@@ -134,10 +131,6 @@ class _McpRunbookApprovalDialogState extends State<McpRunbookApprovalDialog> {
     final tokens = ShellVibeTokens.resolve(context);
     final request = widget.request;
     final bodyStyle = Theme.of(context).textTheme.bodySmall;
-    final prod = [
-      for (final h in request.hosts)
-        if (h.environment == HostEnvironment.prod) h,
-    ];
 
     return PopScope(
       canPop: false,
@@ -162,18 +155,11 @@ class _McpRunbookApprovalDialogState extends State<McpRunbookApprovalDialog> {
             label: 'Deny',
             onPressed: () => _resolve(RunbookApprovalDecision.denied),
           ),
-          if (prod.isNotEmpty)
-            ShellVibeButton.danger(
-              key: const Key('mcp_runbook_approve_button'),
-              label: 'Run on production',
-              onPressed: _armed ? _approve : null,
-            )
-          else
-            ShellVibeButton(
-              key: const Key('mcp_runbook_approve_button'),
-              label: 'Approve',
-              onPressed: _armed ? _approve : null,
-            ),
+          ShellVibeButton(
+            key: const Key('mcp_runbook_approve_button'),
+            label: 'Approve',
+            onPressed: _armed ? _approve : null,
+          ),
         ]),
         actionsAxis: adaptiveDialogActionsAxis(context),
         child: Material(
@@ -188,30 +174,6 @@ class _McpRunbookApprovalDialogState extends State<McpRunbookApprovalDialog> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: 8),
-                  if (prod.isNotEmpty)
-                    Container(
-                      key: const Key('mcp_runbook_prod_banner'),
-                      width: double.infinity,
-                      margin: const EdgeInsets.only(bottom: 10),
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: tokens.danger.withValues(alpha: 0.10),
-                        borderRadius: BorderRadius.circular(
-                          tokens.radiusMedium,
-                        ),
-                        border: Border.all(
-                          color: tokens.danger.withValues(alpha: 0.5),
-                        ),
-                      ),
-                      child: Text(
-                        'This run includes production: '
-                        '${prod.map((h) => h.label).join(', ')}.',
-                        style: bodyStyle?.copyWith(
-                          color: tokens.danger,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
                   Text(
                     'Hosts · ${request.strategyLabel}',
                     style: bodyStyle?.copyWith(
@@ -224,20 +186,13 @@ class _McpRunbookApprovalDialogState extends State<McpRunbookApprovalDialog> {
                     Padding(
                       key: Key('mcp_runbook_host_${host.id}'),
                       padding: const EdgeInsets.symmetric(vertical: 3),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              host.label,
-                              style: shellvibeMono(
-                                context,
-                                size: 13,
-                                color: tokens.textPrimary,
-                              ),
-                            ),
-                          ),
-                          McpEnvironmentBadge(environment: host.environment),
-                        ],
+                      child: Text(
+                        host.label,
+                        style: shellvibeMono(
+                          context,
+                          size: 13,
+                          color: tokens.textPrimary,
+                        ),
                       ),
                     ),
                   const SizedBox(height: 12),

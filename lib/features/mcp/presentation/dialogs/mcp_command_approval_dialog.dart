@@ -70,14 +70,9 @@ String riskCategoryLabel(RiskCategory category) => switch (category) {
 /// remember options are off, not *why*. The paths that turn it off are
 /// pinned down in docs/mcp_plan.md "Onay hatırlama semantiği" and echoed in
 /// [CommandApprovalRequest]'s own doc comment, so they are reconstructed here
-/// from [CommandApprovalRequest.environment] and [CommandApprovalRequest.category]
-/// well enough to show the user which rule fired, rather than just that one did.
+/// from [CommandApprovalRequest.category] well enough to show the user which
+/// rule fired, rather than just that one did.
 String _cannotRememberReason(CommandApprovalRequest request) {
-  if (request.environment == HostEnvironment.prod &&
-      request.category.isDestructive) {
-    return 'This command cannot be remembered: destructive action on a '
-        'production host.';
-  }
   if (request.category == RiskCategory.opaqueExec) {
     return "This command cannot be remembered: its effect can't be read "
         'from the command text.';
@@ -227,21 +222,14 @@ class _McpCommandApprovalDialogState extends State<McpCommandApprovalDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      request.hostLabel,
-                      style: shellvibeMono(
-                        context,
-                        size: 13,
-                        weight: FontWeight.w500,
-                        color: tokens.textPrimary,
-                      ),
-                    ),
-                  ),
-                  McpEnvironmentBadge(environment: request.environment),
-                ],
+              Text(
+                request.hostLabel,
+                style: shellvibeMono(
+                  context,
+                  size: 13,
+                  weight: FontWeight.w500,
+                  color: tokens.textPrimary,
+                ),
               ),
               const SizedBox(height: 4),
               Text(
@@ -402,28 +390,4 @@ class _McpCommandApprovalDialogState extends State<McpCommandApprovalDialog> {
     ApprovalScope.session => 'This session',
     ApprovalScope.always => 'Always',
   };
-}
-
-class McpEnvironmentBadge extends StatelessWidget {
-  final HostEnvironment environment;
-
-  const McpEnvironmentBadge({super.key, required this.environment});
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = ShellVibeTokens.resolve(context);
-    final label = switch (environment) {
-      HostEnvironment.prod => 'prod',
-      HostEnvironment.staging => 'staging',
-      HostEnvironment.dev => 'dev',
-    };
-    return switch (environment) {
-      HostEnvironment.prod => ShadBadge.destructive(child: Text(label)),
-      HostEnvironment.staging => ShadBadge.outline(
-        foregroundColor: tokens.warning,
-        child: Text(label),
-      ),
-      HostEnvironment.dev => ShadBadge.secondary(child: Text(label)),
-    };
-  }
 }

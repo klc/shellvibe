@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
-import 'package:shellvibe/features/mcp/domain/models/mcp_enums.dart';
 import 'package:shellvibe/features/mcp/domain/models/mcp_models.dart';
 import 'package:shellvibe/features/mcp/presentation/dialogs/mcp_runbook_approval_dialog.dart';
 
 RunbookApprovalRequest _request({
-  bool prod = true,
   List<RunbookSecretField> secrets = const [
     RunbookSecretField(name: 'token', label: 'API token'),
   ],
@@ -31,16 +29,8 @@ RunbookApprovalRequest _request({
     RunbookApprovalStep(order: 3, kind: 'snippet', text: 'echo done'),
   ],
   hosts: [
-    RunbookApprovalHost(
-      id: 'h1',
-      label: 'web-1',
-      environment: prod ? HostEnvironment.prod : HostEnvironment.dev,
-    ),
-    const RunbookApprovalHost(
-      id: 'h2',
-      label: 'web-2',
-      environment: HostEnvironment.staging,
-    ),
+    RunbookApprovalHost(id: 'h1', label: 'web-1'),
+    RunbookApprovalHost(id: 'h2', label: 'web-2'),
   ],
 );
 
@@ -87,8 +77,8 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('shows who asked, every step, every host with its environment, '
-      'the strategy and the values', (tester) async {
+  testWidgets('shows who asked, every step, every host, the strategy and '
+      'the values', (tester) async {
     await open(tester, _request());
 
     expect(
@@ -98,8 +88,6 @@ void main() {
     expect(find.text('Hosts · rolling'), findsOneWidget);
     expect(find.byKey(const Key('mcp_runbook_host_h1')), findsOneWidget);
     expect(find.byKey(const Key('mcp_runbook_host_h2')), findsOneWidget);
-    expect(find.text('prod'), findsOneWidget);
-    expect(find.text('staging'), findsOneWidget);
     for (final n in [1, 2, 3]) {
       expect(find.byKey(Key('mcp_runbook_step_$n')), findsOneWidget);
     }
@@ -107,27 +95,6 @@ void main() {
     expect(find.text('2. Waits for you to continue'), findsOneWidget);
     expect(find.text('Check the dashboards'), findsOneWidget);
     expect(find.text('env = production'), findsOneWidget);
-  });
-
-  testWidgets('production is called out and the approve button says so', (
-    tester,
-  ) async {
-    await open(tester, _request());
-    final banner = find.byKey(const Key('mcp_runbook_prod_banner'));
-    expect(banner, findsOneWidget);
-    expect(
-      find.descendant(of: banner, matching: find.textContaining('web-1')),
-      findsOneWidget,
-    );
-    expect(find.text('Run on production'), findsOneWidget);
-  });
-
-  testWidgets('without production there is no banner and a plain Approve', (
-    tester,
-  ) async {
-    await open(tester, _request(prod: false));
-    expect(find.byKey(const Key('mcp_runbook_prod_banner')), findsNothing);
-    expect(find.text('Approve'), findsOneWidget);
   });
 
   testWidgets('a secret is typed here, obscured, and returned only with an '

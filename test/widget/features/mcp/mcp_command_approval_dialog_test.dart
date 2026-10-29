@@ -11,7 +11,6 @@ CommandApprovalRequest _request(String command) => CommandApprovalRequest(
   clientName: 'Claude Code',
   hostId: 'h1',
   hostLabel: 'web-1',
-  environment: HostEnvironment.dev,
   command: command,
   cwd: '/srv/app',
   category: RiskCategory.unclassified,
