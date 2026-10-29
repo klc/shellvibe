@@ -54,6 +54,10 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
   SSHSessionManager? _subscribedSession;
   String? _subscribedTabId;
   int _attachmentGeneration = 0;
+  // The SSH client the current SftpClient was opened from. Every terminal-tabs
+  // emission re-runs the sync; without this, each one opened a fresh SFTP
+  // channel and closed the old one under in-flight transfers.
+  SSHClient? _attachedSshClient;
 
   @override
   void initState() {
@@ -85,6 +89,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
         session == null) {
       await _stopWatchingSession();
       if (!mounted || generation != _attachmentGeneration) return;
+      _attachedSshClient = null;
       await ref.read(sftpProvider.notifier).setRemoteClient(null);
       return;
     }
@@ -94,9 +99,18 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     final sshClient = session.client;
     if (!session.isConnected || sshClient == null || sshClient.isClosed) {
       if (!mounted || generation != _attachmentGeneration) return;
+      _attachedSshClient = null;
       await ref
           .read(sftpProvider.notifier)
           .setRemoteClient(null, sessionId: activeTab.id);
+      return;
+    }
+
+    // Already attached to this very client: nothing to reopen.
+    final sftpState = ref.read(sftpProvider);
+    if (sftpState.remoteClient != null &&
+        sftpState.remoteSessionId == activeTab.id &&
+        identical(sshClient, _attachedSshClient)) {
       return;
     }
 
@@ -107,6 +121,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
         await client.close();
         return;
       }
+      _attachedSshClient = sshClient;
       await ref
           .read(sftpProvider.notifier)
           .setRemoteClient(client, sessionId: activeTab.id);
@@ -114,6 +129,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
       if (!_isCurrentSession(generation, activeTab.id, session, sshClient)) {
         return;
       }
+      _attachedSshClient = null;
       await ref
           .read(sftpProvider.notifier)
           .setRemoteClient(null, sessionId: activeTab.id);

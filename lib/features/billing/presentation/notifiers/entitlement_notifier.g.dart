@@ -67,7 +67,7 @@ final class EntitlementNotifierProvider
 }
 
 String _$entitlementNotifierHash() =>
-    r'2ed5524e52bdfe07afcd02d91bbe962bacb65ed9';
+    r'deacc5cd4a0825ef007889524d4079b41da4985c';
 
 /// Single source of truth for the account's plan limits.
 ///

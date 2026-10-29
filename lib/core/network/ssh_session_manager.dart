@@ -194,8 +194,9 @@ class SSHSessionManager {
       // GHASH bit by bit: about 1.2 MB/s against ChaCha20's 30 MB/s, so an
       // SFTP upload pinned a core at that rate. OpenSSH prefers ChaCha20
       // too; GCM and CTR stay as fallbacks for servers that disable it.
-      algorithms: const SSHAlgorithms(
-        cipher: [
+      algorithms: SSHAlgorithms(
+        hostkey: await _preferredHostkeyOrder(config.hostname, config.port),
+        cipher: const [
           SSHCipherType.chacha20poly1305,
           SSHCipherType.aes256gcm,
           SSHCipherType.aes128gcm,
@@ -313,6 +314,27 @@ class SSHSessionManager {
         );
       }
     }
+  }
+
+  /// dartssh2's default host key algorithm order, with the key type already
+  /// in known_hosts for this server moved to the front. Trust is keyed on
+  /// (hostname, port) only, so a server trusted via RSA that later adds an
+  /// ed25519 key would otherwise negotiate ed25519 and look like a changed
+  /// key (a MITM) in [verifyHostKey]. Same as OpenSSH's HostKeyAlgorithms
+  /// ordering. RSA is one key under three algorithm names, so all of them
+  /// move together.
+  Future<List<SSHHostkeyType>> _preferredHostkeyOrder(
+    String hostname,
+    int port,
+  ) async {
+    final known = await knownHostsDao?.findKnownHost(hostname, port);
+    final defaults = const SSHAlgorithms().hostkey;
+    if (known == null) return defaults;
+    const rsa = {'rsa-sha2-512', 'rsa-sha2-256', 'ssh-rsa'};
+    bool matches(SSHHostkeyType t) => rsa.contains(known.keyType)
+        ? rsa.contains(t.name)
+        : t.name == known.keyType;
+    return [...defaults.where(matches), ...defaults.where((t) => !matches(t))];
   }
 
   /// Host key verification logic using [KnownHostsDao] and optional [promptCallback].

@@ -150,7 +150,8 @@ class VaultNotifier extends _$VaultNotifier {
     final generation = _lifecycleGeneration;
     final keyService = ref.read(vaultKeyServiceProvider);
 
-    state = const AsyncLoading();
+    // No `AsyncLoading` here: the vault stays usable while the DEK is wrapped,
+    // and a loading state would trip the fail-closed Device Link gates.
     try {
       await keyService.configureMasterPassword(masterPassword);
       if (!_isCurrentLifecycle(generation)) {
@@ -229,7 +230,12 @@ class VaultNotifier extends _$VaultNotifier {
       return false;
     }
 
-    state = const AsyncLoading();
+    // The unlock dialog is the only consumer of the loading flag. Publishing
+    // it while already unlocked (e.g. [removeMasterPassword] verifying the
+    // password) would trip the fail-closed Device Link gates.
+    if (currentState == null || currentState.status == VaultStatus.locked) {
+      state = const AsyncLoading();
+    }
 
     final keyService = ref.read(vaultKeyServiceProvider);
 

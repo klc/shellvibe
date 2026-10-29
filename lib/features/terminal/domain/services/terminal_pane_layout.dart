@@ -1,3 +1,5 @@
+import 'package:flutter/widgets.dart';
+
 import '../models/terminal_tab_session.dart';
 
 /// Root pane of the tab [pane] belongs to — the tab it is displayed in. The
@@ -280,5 +282,79 @@ class TerminalPaneLayout {
     result.add(pane);
 
     return result;
+  }
+
+  /// The pane of [paneId]'s tab that sits against it on the [direction] side,
+  /// or null when [paneId] is at that edge of the tab or missing.
+  ///
+  /// Of several panes along that edge, the one most in line with the centre
+  /// of [paneId] is picked.
+  String? neighborPane(
+    List<TerminalTabSession> tabs,
+    String paneId,
+    AxisDirection direction,
+  ) {
+    final pane = findInList(tabs, paneId);
+    if (pane == null) return null;
+    final root = rootOfPane(tabs, pane);
+    // A broken parent chain has no root to lay out from, and could loop.
+    if (root.splitParentId != null) return null;
+
+    // The tab as a unit square, cut the way `buildTerminalSessionTree` folds
+    // it: each child, oldest first, takes its share off the trailing side of
+    // what its parent has left.
+    final rects = <String, Rect>{};
+    void place(TerminalTabSession node, Rect rect) {
+      var rest = rect;
+      for (final child in tabs.where((t) => t.splitParentId == node.id)) {
+        if ((child.splitDirection ?? Axis.horizontal) == Axis.horizontal) {
+          final x = rest.right - rest.width * child.splitRatio;
+          place(child, Rect.fromLTRB(x, rest.top, rest.right, rest.bottom));
+          rest = Rect.fromLTRB(rest.left, rest.top, x, rest.bottom);
+        } else {
+          final y = rest.bottom - rest.height * child.splitRatio;
+          place(child, Rect.fromLTRB(rest.left, y, rest.right, rest.bottom));
+          rest = Rect.fromLTRB(rest.left, rest.top, rest.right, y);
+        }
+      }
+      rects[node.id] = rest;
+    }
+
+    place(root, const Rect.fromLTWH(0, 0, 1, 1));
+
+    final from = rects[paneId]!;
+    const epsilon = 1e-9;
+    bool same(double a, double b) => (a - b).abs() < epsilon;
+    bool overlap(
+      double start,
+      double end,
+      double otherStart,
+      double otherEnd,
+    ) => start < otherEnd - epsilon && otherStart < end - epsilon;
+    // Panes tile the square, so a neighbour on that side shares the edge.
+    bool against(Rect r) => switch (direction) {
+      AxisDirection.left =>
+        same(r.right, from.left) &&
+            overlap(r.top, r.bottom, from.top, from.bottom),
+      AxisDirection.right =>
+        same(r.left, from.right) &&
+            overlap(r.top, r.bottom, from.top, from.bottom),
+      AxisDirection.up =>
+        same(r.bottom, from.top) &&
+            overlap(r.left, r.right, from.left, from.right),
+      AxisDirection.down =>
+        same(r.top, from.bottom) &&
+            overlap(r.left, r.right, from.left, from.right),
+    };
+    double offCentre(Rect r) =>
+        axisDirectionToAxis(direction) == Axis.horizontal
+        ? (r.center.dy - from.center.dy).abs()
+        : (r.center.dx - from.center.dx).abs();
+
+    final neighbours = [
+      for (final MapEntry(:key, :value) in rects.entries)
+        if (against(value)) (id: key, offset: offCentre(value)),
+    ]..sort((a, b) => a.offset.compareTo(b.offset));
+    return neighbours.firstOrNull?.id;
   }
 }

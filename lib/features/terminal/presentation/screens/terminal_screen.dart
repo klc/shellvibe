@@ -469,9 +469,13 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
   /// hyperlink's URI is attacker-controlled program output, so anything
   /// else (e.g. `file://`) is dropped rather than handed to the OS. A bare
   /// `www.` match from the plain-text detector has no scheme, so it is
-  /// treated as https.
+  /// treated as https — checked before the scheme regex, which would read
+  /// `www.host:8080/…` as scheme `www.host`.
   Future<void> _handleHyperlinkTap(String uri) async {
-    final normalized = _uriSchemePattern.hasMatch(uri) ? uri : 'https://$uri';
+    final normalized =
+        uri.toLowerCase().startsWith('www.') || !_uriSchemePattern.hasMatch(uri)
+        ? 'https://$uri'
+        : uri;
     final parsed = Uri.tryParse(normalized);
     if (parsed == null) return;
     const allowedSchemes = {'http', 'https', 'mailto'};

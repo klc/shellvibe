@@ -208,6 +208,22 @@ void main() {
       );
     });
 
+    test('panes split and move the way iTerm and Windows Terminal do', () {
+      String? mac(AppCommand c) =>
+          shortcutLabel(c, platform: TargetPlatform.macOS);
+      String? windows(AppCommand c) =>
+          shortcutLabel(c, platform: TargetPlatform.windows);
+
+      expect(mac(AppCommand.splitSideBySide), '⌘D');
+      expect(mac(AppCommand.splitTopBottom), '⇧⌘D');
+      expect(mac(AppCommand.focusPaneLeft), '⌥⌘←');
+      expect(mac(AppCommand.focusPaneDown), '⌥⌘↓');
+      expect(windows(AppCommand.splitSideBySide), 'Ctrl+Shift+D');
+      expect(windows(AppCommand.splitTopBottom), 'Ctrl+Shift+O');
+      expect(windows(AppCommand.focusPaneRight), 'Alt+→');
+      expect(windows(AppCommand.focusPaneUp), 'Alt+↑');
+    });
+
     test('zoom has a keypad way in off Apple', () {
       bool binds(AppCommand command, SingleActivator wanted) => shortcutsFor(
         command,

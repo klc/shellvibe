@@ -16,6 +16,7 @@ import '../../../settings/presentation/notifiers/settings_notifier.dart';
 import '../../../snippets/domain/models/snippet_model.dart';
 import '../../../snippets/domain/services/snippet_variable_parser.dart';
 import '../../../snippets/presentation/widgets/snippet_picker_sheet.dart';
+import '../../../snippets/presentation/widgets/terminal_send.dart';
 import '../../../snippets/presentation/widgets/variable_input_dialog.dart';
 import '../../../templates/domain/models/template_model.dart';
 import '../../../templates/presentation/dialogs/save_template_dialog.dart';
@@ -114,6 +115,27 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
           CycleTabIntent: CallbackAction<CycleTabIntent>(
             onInvoke: (intent) =>
                 ref.read(terminalTabsProvider.notifier).cycleTab(intent.step),
+          ),
+          SplitPaneIntent: CallbackAction<SplitPaneIntent>(
+            onInvoke: (intent) {
+              if (activeTab != null) {
+                unawaited(
+                  ref
+                      .read(terminalTabsProvider.notifier)
+                      .splitTab(
+                        activeTab.id,
+                        direction: intent.direction,
+                        onHostKeyPrompt: _launcher.promptHostKey,
+                      ),
+                );
+              }
+              return null;
+            },
+          ),
+          FocusPaneIntent: CallbackAction<FocusPaneIntent>(
+            onInvoke: (intent) => ref
+                .read(terminalTabsProvider.notifier)
+                .focusPane(intent.direction),
           ),
           // Here rather than app-wide: the size is the terminal's, and a zoom
           // pressed on the Hosts screen would change something not in view.
@@ -234,6 +256,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
         itemKey: const Key('terminal_menu_split_vertical'),
         icon: LucideIcons.columns2,
         label: 'Split Side by Side',
+        shortcut: shortcutLabel(AppCommand.splitSideBySide),
         value: () => unawaited(
           notifier.splitTab(
             pane.id,
@@ -246,6 +269,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
         itemKey: const Key('terminal_menu_split_horizontal'),
         icon: LucideIcons.rows2,
         label: 'Split Top / Bottom',
+        shortcut: shortcutLabel(AppCommand.splitTopBottom),
         value: () => unawaited(
           notifier.splitTab(
             pane.id,
@@ -376,10 +400,22 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
       values = entered;
     }
     if (!mounted) return;
-    _sendToPanes(
-      ref.read(terminalTabsProvider),
+    final tabsState = ref.read(terminalTabsProvider);
+    final filled = fillPaneBuiltins(
+      tabsState,
       SnippetVariableParser.substituteVariables(snippet.code, values),
     );
+    _sendToPanes(tabsState, filled.code);
+    if (filled.unresolved) {
+      ShadToaster.of(context).show(
+        ShadToast(
+          description: Text(
+            '"${snippet.title}" uses \${SV:...} and the pane has no host, so '
+            'those were left as written.',
+          ),
+        ),
+      );
+    }
   }
 
   /// A tab's right-click menu: close it, or the tabs around it.
@@ -651,9 +687,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
   /// A new tab can also be a whole saved layout, so unless [onSelect] narrows
   /// the choice to one host (a split can only take one), templates are listed
   /// beside the hosts.
-  void _showSelectHostModal({
-    Future<void> Function(HostModel host)? onSelect,
-  }) {
+  void _showSelectHostModal({Future<void> Function(HostModel host)? onSelect}) {
     showAdaptivePanel<void>(
       context: context,
       title: 'Connect to Host',

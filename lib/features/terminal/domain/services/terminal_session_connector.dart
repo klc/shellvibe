@@ -476,6 +476,10 @@ class TerminalSessionConnector {
     tab.moshLinkState = null;
     if (cause == TerminalDisconnectCause.connectionLost) {
       tab.terminal.write('\r\n\x1b[1;31m[Connection lost]\x1b[0m\r\n');
+      // The keep-alive only flagged the drop; the dead client, its socket and
+      // the jump hops (with their own keep-alive timers) are still open, and
+      // tunnels would keep picking the dead client up as "live".
+      unawaited(tab.closeSessions());
     }
     notifyChanged();
   }

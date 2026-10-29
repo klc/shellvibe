@@ -267,6 +267,54 @@ void main() {
     });
   });
 
+  group('another account', () {
+    test('a device with no record takes the account signed in now', () async {
+      // Builds before the record existed. Asking every one of them which
+      // account they synced with would be a question with one answer.
+      final notifier = await started();
+      await joined(notifier);
+
+      expect(current().blocker, isNull);
+      expect(await store().readSyncAccount(), 'user-1');
+    });
+
+    test('a device that synced under another one waits to be asked', () async {
+      await store().writeSyncAccount('user-0');
+
+      await started();
+
+      expect(current().blocker, SyncBlocker.accountChanged);
+      expect(server.requests, isEmpty, reason: 'nothing went to the server');
+      expect(await store().readSyncAccount(), 'user-0');
+    });
+
+    test('adding this device starts sync over under the new account', () async {
+      // What the previous account left: a finished join, its key and a
+      // position in its log. Kept, they would skip the join, seal for the
+      // wrong account and page past the new account's log.
+      final journal = SyncJournal(db: db, deviceId: 'device-a');
+      await journal.writeJoinState(SyncJoinState.done);
+      await journal.acknowledgePullSeq(500, maxClock: 3);
+      await store().writeSyncKey(base64.encode(key(1)));
+      await store().writeSyncAccount('user-0');
+      await seedGround(key(2));
+
+      final notifier = await started();
+      expect(current().blocker, SyncBlocker.accountChanged);
+
+      await notifier.joinSignedInAccount();
+      await joined(await started());
+
+      expect(await store().readSyncAccount(), 'user-1');
+      expect(await store().readSyncKey(), base64.encode(key(2)));
+      expect(
+        (await db.select(db.hosts).get()).map((h) => h.id),
+        contains('remote-host'),
+      );
+      expect((await journal.readState()).pulledThroughSeq, isNot(500));
+    });
+  });
+
   group('the sync key', () {
     test('a device holding a key of its own adopts the account\'s', () async {
       // Two devices that switched sync on before either had written a ground

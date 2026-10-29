@@ -84,7 +84,9 @@ final class EntitlementState {
 /// answers `413` whatever this object says.
 @Riverpod(keepAlive: true)
 class EntitlementNotifier extends _$EntitlementNotifier {
-  late final EntitlementCache _cache;
+  // Not `final`: the notifier instance survives rebuilds, and [build] re-runs
+  // on every account emission, so it must be able to reassign this.
+  late EntitlementCache _cache;
   EntitlementApi? _api;
 
   @override

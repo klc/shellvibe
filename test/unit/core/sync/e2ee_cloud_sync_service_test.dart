@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:cryptography/cryptography.dart' show SecretKey;
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -241,6 +242,74 @@ void main() {
       );
       expect(decrypted, equals('ghp_supersecrettoken'));
     });
+
+    test(
+      'a secret the backup key cannot open does not stop the restore',
+      () async {
+        const password = 'SuperSecretMasterPassword123!';
+
+        // Under a key this device does not hold: what keychain loss or another
+        // device's sync operation leaves behind. Export carries it as it is.
+        final foreignKey = SecretKey(engine.generateKey());
+        final foreignPassword = await engine.encrypt(
+          plaintext: 'hunter2',
+          secretKey: foreignKey,
+        );
+        final foreignValue = await engine.encrypt(
+          plaintext: 'ghp_unreadable',
+          secretKey: foreignKey,
+        );
+        await db1
+            .into(db1.identities)
+            .insert(
+              IdentitiesCompanion.insert(
+                id: 'ident_foreign',
+                workspaceId: 'ws_test',
+                title: 'Legacy root',
+                username: 'root',
+                authType: 'password',
+                passwordEncrypted: Value(foreignPassword),
+                createdAt: DateTime.now(),
+              ),
+            );
+        await db1
+            .into(db1.vaultEnvVars)
+            .insert(
+              VaultEnvVarsCompanion.insert(
+                id: 'env_foreign',
+                workspaceId: 'ws_test',
+                name: 'LEGACY_TOKEN',
+                valueEncrypted: foreignValue,
+                createdAt: DateTime.now(),
+              ),
+            );
+
+        final backupJson = await syncService.exportEncryptedBackup(
+          db: db1,
+          masterPassword: password,
+        );
+
+        // Before the fix this threw CryptoException and restored nothing.
+        await syncService.importEncryptedBackup(
+          backupPackageJson: backupJson,
+          db: db2,
+          masterPassword: password,
+        );
+
+        final hosts = await db2.select(db2.hosts).get();
+        expect(hosts.map((h) => h.id), contains('host_sync'));
+
+        final identity = await (db2.select(
+          db2.identities,
+        )..where((t) => t.id.equals('ident_foreign'))).getSingle();
+        expect(identity.passwordEncrypted, equals(foreignPassword));
+
+        final envVar = await (db2.select(
+          db2.vaultEnvVars,
+        )..where((t) => t.id.equals('env_foreign'))).getSingle();
+        expect(envVar.valueEncrypted, equals(foreignValue));
+      },
+    );
 
     test('a vault environment variable is dropped from a backup that excludes '
         'identities', () async {
