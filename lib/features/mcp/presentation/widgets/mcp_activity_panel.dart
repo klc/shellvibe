@@ -7,13 +7,11 @@ import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../domain/models/mcp_enums.dart';
 import '../mcp_date_format.dart';
 import '../notifiers/mcp_activity_notifier.dart';
-import '../notifiers/mcp_settings_notifier.dart';
 import '../screens/mcp_audit_screen.dart';
 
 /// The product's answer to "the agent is a black box": a live feed of every
 /// connected AI client, every command it just ran (and how the policy engine
-/// decided it), what it currently holds, and one destructive-styled button
-/// that cuts all of it off.
+/// decided it) and what it currently holds.
 ///
 /// Every color and shape here is pulled from [ShellVibeTokens] and the shared
 /// [ShellVibeStatusChip]/[ShellVibeQuietButton] widgets — nothing invented for
@@ -99,8 +97,6 @@ class McpActivityPanel extends ConsumerWidget {
               );
             },
           ),
-          Divider(height: 24, color: tokens.border),
-          const _PanicAction(),
         ],
       ),
     );
@@ -482,25 +478,6 @@ class _TimelineRowTile extends StatelessWidget {
           McpDecisionChip(decision: status),
         ],
       ),
-    );
-  }
-}
-
-/// The kill switch. No confirmation dialog — a panic button that hesitates
-/// isn't one. It calls straight through to [McpSettingsNotifier.panic],
-/// which is the single implementation of "cut everything" in this codebase;
-/// this panel does not re-close sessions or re-revoke grants itself.
-class _PanicAction extends ConsumerWidget {
-  const _PanicAction();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return ShellVibeButton.danger(
-      key: const Key('mcp_activity_panic_button'),
-      label: 'CUT ALL AGENT ACCESS',
-      icon: LucideIcons.power,
-      onPressed: () => ref.read(mcpSettingsProvider.notifier).panic(),
-      expand: true,
     );
   }
 }
