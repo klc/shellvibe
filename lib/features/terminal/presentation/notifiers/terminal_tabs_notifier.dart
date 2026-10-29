@@ -7,7 +7,6 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:uuid/uuid.dart';
 import 'package:xterm3/xterm.dart';
 
-import '../../../../app/router/app_router.dart';
 import '../../../../core/network/device_link/device_link_local_session_transport.dart';
 import '../../../../core/network/device_link/device_link_server.dart';
 import '../../../../core/network/device_link/device_link_session_transport.dart';
@@ -23,7 +22,6 @@ import '../../../settings/domain/models/app_settings_model.dart';
 import '../../../settings/presentation/notifiers/settings_notifier.dart';
 import '../../../snippets/presentation/notifiers/runbooks_notifier.dart';
 import '../../../snippets/presentation/notifiers/snippets_notifier.dart';
-import '../../../snippets/presentation/widgets/prod_confirmation.dart';
 import '../../../device_link/data/repositories/device_link_pairing_repository.dart';
 import '../../../vault/data/repositories/vault_env_repository.dart';
 import '../../../vault/domain/models/identity_model.dart';
@@ -205,15 +203,6 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       // is open when the shell appears.
       final all = await ref.read(runbooksRepositoryProvider).getAllRunbooks();
       return all.where((r) => r.id == id).firstOrNull;
-    },
-    confirmProd: (runbook, host) async {
-      final context = rootNavigatorKey.currentContext;
-      if (context == null) return false;
-      return confirmProdRun(
-        context,
-        what: 'startup runbook "${runbook.title}"',
-        hosts: [host],
-      );
     },
     send: (tab, code) {
       // Pasted, then Enter typed: inside a bracketed paste a newline is text.

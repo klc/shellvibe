@@ -1919,7 +1919,7 @@ class $HostsTable extends Hosts with TableInfo<$HostsTable, Host> {
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: false,
-    defaultValue: const Constant('readonly'),
+    defaultValue: const Constant('guarded'),
   );
   @override
   List<GeneratedColumn> get $columns => [
@@ -2209,13 +2209,15 @@ class Host extends DataClass implements Insertable<Host> {
   /// Cleared (not cascaded) when the snippet is deleted.
   final String? startupSnippetId;
 
-  /// 'dev' | 'staging' | 'prod' — the policy engine's criticality signal.
+  /// 'dev' | 'staging' | 'prod'. No longer read: kept so sync payloads stay
+  /// readable by older app versions.
   final String environment;
 
   /// False hides this host entirely from MCP `list_hosts` output.
   final bool mcpVisible;
 
-  /// Mode preselected in the MCP access-approval window.
+  /// The most an AI agent may be granted on this host (`readonly`, `guarded`
+  /// or `autonomous`). The name predates its use as a ceiling.
   final String mcpDefaultMode;
   const Host({
     required this.id,

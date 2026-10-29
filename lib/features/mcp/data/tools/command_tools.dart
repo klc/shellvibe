@@ -115,11 +115,11 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
     // for the idle-timeout window (default 30 minutes), and `McpSession`
     // itself carries no mode of its own (see mcp_session_pool.dart) — the
     // grant is the single source of truth for "what may run here right now."
-    final mode = await grantRepository.effectiveMode(
+    final granted = await grantRepository.effectiveMode(
       ctx.clientId,
       session.hostId,
     );
-    if (mode == null) {
+    if (granted == null) {
       throw McpToolException(
         McpErrorCode.hostAccessRequired,
         'Access to host "${session.hostId}" is no longer granted. Call '
@@ -134,13 +134,15 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
         'Host "${session.hostId}" has been hidden from agents.',
       );
     }
-    // A host row that vanished mid-session (deleted, or a workspace swapped
-    // underneath) is treated as production, not as dev. `dev` is the loosest
-    // environment there is, so guessing it here would quietly drop the one
-    // override that keeps destructive commands in front of a human.
-    final environment = hostRow == null
-        ? HostEnvironment.prod
-        : HostEnvironment.fromName(hostRow.environment);
+    // The host's max access is read now, not at grant time, so lowering it
+    // holds every open session to the new limit at once. A host row that
+    // vanished mid-session (deleted, or a workspace swapped underneath) is
+    // held to read only rather than guessed at.
+    final mode = granted.atMost(
+      hostRow == null
+          ? McpAccessMode.readonly
+          : McpAccessMode.fromName(hostRow.mcpDefaultMode),
+    );
 
     final memberships = await hostsDao.getMembershipsForHost(session.hostId);
 
@@ -148,7 +150,6 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
       command: command,
       cwd: session.shell.cwd,
       mode: mode,
-      environment: environment,
       hostId: session.hostId,
       clientId: ctx.clientId,
       hostGroupIds: memberships.map((m) => m.groupId).toSet(),
@@ -209,11 +210,10 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
           clientName: ctx.clientName,
           hostId: session.hostId,
           hostLabel: session.hostLabel,
-          environment: environment,
           command: command,
           cwd: session.shell.cwd,
           category: decision.category,
-          canRemember: policyEngine.canRemember(decision.category, environment),
+          canRemember: policyEngine.canRemember(decision.category),
         );
         final approval = await approvalCoordinator.requestCommandApproval(
           approvalRequest,

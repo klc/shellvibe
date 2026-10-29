@@ -9,26 +9,18 @@ import '../../domain/services/approval_coordinator.dart';
 import '../repositories/mcp_grant_repository.dart';
 import 'mcp_tool_handler.dart';
 
-/// Reads the three MCP-specific `Hosts` columns (`environment`, `mcpVisible`,
-/// `mcpDefaultMode`) directly off [HostsDao].
-///
-/// [HostsRepository]'s `HostModel` does not carry these fields — it predates
-/// the `schemaVersion` 7 → 8 migration that added them (see
-/// `docs/mcp_plan.md` Faz 3) and is out of scope for this change (it is not
-/// one of this file's owned files). Every discovery tool below still goes
-/// through [HostsRepository] first for the fields it already has (label,
-/// hostname, port, groups, jump host); this helper only fills the gap, by id,
-/// straight from the DAO both `HostsRepository` and `HostsDao` share.
+/// Reads the MCP-specific `Hosts` columns (`mcpVisible`, and `mcpDefaultMode`,
+/// which holds the host's max access) directly off [HostsDao]. Every discovery
+/// tool below still goes through [HostsRepository] first for the fields it
+/// needs (label, hostname, port, groups, jump host); this helper only fills
+/// the gap, by id, straight from the DAO both share.
 Future<Host?> _hostRow(HostsDao hostsDao, String hostId) =>
     hostsDao.getHostById(hostId);
 
-HostEnvironment _environmentOf(Host? row) => row == null
-    ? HostEnvironment.dev
-    : HostEnvironment.fromName(row.environment);
-
 bool _isMcpVisible(Host? row) => row == null || row.mcpVisible;
 
-McpAccessMode _defaultModeOf(Host? row) => row == null
+/// The most any grant on this host may allow.
+McpAccessMode _maxModeOf(Host? row) => row == null
     ? McpAccessMode.readonly
     : McpAccessMode.fromName(row.mcpDefaultMode);
 
@@ -70,9 +62,10 @@ class ListHostsTool with McpArgReaders implements McpToolHandler {
         'change what this tool returns, and hosts saved in another workspace '
         'are never listed here. If the user asks for a host that is missing, '
         'tell them which workspace you can see and that the host may live in '
-        'a different one, which needs its own token from Settings -> AI '
-        'Access. For each host this reports whether the caller currently has '
-        'access ("granted"/"none") and, if granted, the access mode. The '
+        'a different one, which this connection cannot see. For each host '
+        'this reports its maxMode (the most any grant there can allow), '
+        'whether the caller currently has access ("granted"/"none") and, if '
+        'granted, the access mode. The '
         'hostId returned here is the ONLY handle any MCP tool ever gives you '
         'on a host: hostname, port, username, and credentials are never '
         'returned by this or any other tool. To act on a host, request access '
@@ -93,13 +86,17 @@ class ListHostsTool with McpArgReaders implements McpToolHandler {
       final row = await _hostRow(hostsDao, host.id);
       if (!_isMcpVisible(row)) continue;
 
-      final mode = await grantRepository.effectiveMode(ctx.clientId, host.id);
+      final maxMode = _maxModeOf(row);
+      final mode = (await grantRepository.effectiveMode(
+        ctx.clientId,
+        host.id,
+      ))?.atMost(maxMode);
       final groupNames = await _groupNames(hostsRepository, host.groupIds);
 
       result.add({
         'id': host.id,
         'label': host.label,
-        'environment': _environmentOf(row).name,
+        'maxMode': maxMode.name,
         'groups': groupNames,
         'access': mode == null ? 'none' : 'granted',
         'mode': mode?.name,
@@ -198,12 +195,16 @@ class DescribeHostTool with McpArgReaders implements McpToolHandler {
     final jumpLabel = host.jumpHostId == null
         ? null
         : (await hostsRepository.getHostById(host.jumpHostId!))?.label;
-    final mode = await grantRepository.effectiveMode(ctx.clientId, hostId);
+    final maxMode = _maxModeOf(row);
+    final mode = (await grantRepository.effectiveMode(
+      ctx.clientId,
+      hostId,
+    ))?.atMost(maxMode);
 
     return {
       'id': host.id,
       'label': host.label,
-      'environment': _environmentOf(row).name,
+      'maxMode': maxMode.name,
       'protocol': host.protocol,
       'groups': groupNames,
       'jumpHost': jumpLabel,
@@ -268,13 +269,12 @@ class RequestHostAccessTool with McpArgReaders implements McpToolHandler {
         },
         'requestedMode': {
           'type': 'string',
-          'enum': ['readonly', 'guarded'],
+          'enum': ['readonly', 'guarded', 'autonomous'],
           'description':
-              'Access mode to request for every host in this call, instead '
-              'of each host\'s own configured default. The user can still '
-              'override it per host in the approval window. Omit to use '
-              'each host\'s default mode. ("autonomous" is not offered in '
-              'this version.)',
+              'Access mode to request for every host in this call. Never '
+              'granted above a host\'s own maxMode (see list_hosts), and the '
+              'user can still lower it per host in the approval window. '
+              'Omit to ask for each host\'s maxMode.',
         },
       },
       'required': ['hostIds', 'reason'],
@@ -324,7 +324,7 @@ class RequestHostAccessTool with McpArgReaders implements McpToolHandler {
         granted.add(
           HostAccessGrant(
             hostId: hostId,
-            mode: McpAccessMode.fromName(held.mode),
+            mode: McpAccessMode.fromName(held.mode).atMost(_maxModeOf(row)),
             expiresAt: held.expiresAt,
             sessionScoped: held.connectionScopeId != null,
           ),
@@ -344,8 +344,10 @@ class RequestHostAccessTool with McpArgReaders implements McpToolHandler {
         HostAccessCandidate(
           hostId: hostId,
           label: host.label,
-          environment: _environmentOf(row),
-          suggestedMode: requestedMode ?? _defaultModeOf(row),
+          suggestedMode: (requestedMode ?? _maxModeOf(row)).atMost(
+            _maxModeOf(row),
+          ),
+          maxMode: _maxModeOf(row),
         ),
       );
     }
@@ -360,7 +362,18 @@ class RequestHostAccessTool with McpArgReaders implements McpToolHandler {
         ),
       );
 
-      for (final grant in result.granted) {
+      final maxModes = {for (final c in candidates) c.hostId: c.maxMode};
+      for (final answer in result.granted) {
+        // Capped again here, not only in the window: what is stored must hold
+        // whatever the UI let through.
+        final grant = HostAccessGrant(
+          hostId: answer.hostId,
+          mode: answer.mode.atMost(
+            maxModes[answer.hostId] ?? McpAccessMode.readonly,
+          ),
+          expiresAt: answer.expiresAt,
+          sessionScoped: answer.sessionScoped,
+        );
         await grantRepository.grant(
           clientId: ctx.clientId,
           hostId: grant.hostId,
@@ -382,19 +395,16 @@ class RequestHostAccessTool with McpArgReaders implements McpToolHandler {
     return HostAccessResult(granted: granted, denied: denied).toJson();
   }
 
-  /// `McpAccessMode.fromName` maps any unrecognized string to `readonly` as
-  /// a fail-safe default, but `"autonomous"` IS a recognized name — so that
-  /// fallback would never fire for it. v0 does not offer `autonomous` (see
-  /// `docs/mcp_plan.md`, "v0 kapsamı"), so it is rejected explicitly here
-  /// instead of being silently downgraded, which would hide the agent's
-  /// mistake instead of reporting it.
+  /// An unknown name is reported rather than read as `readonly` (what
+  /// [McpAccessMode.fromName] falls back to), which would hide the agent's
+  /// mistake instead of telling it.
   McpAccessMode? _parseRequestedMode(String? raw) {
     if (raw == null) return null;
-    if (raw != 'readonly' && raw != 'guarded') {
+    if (!McpAccessMode.values.any((m) => m.name == raw)) {
       throw McpToolException(
         McpErrorCode.internal,
-        'Argument "requestedMode" must be "readonly" or "guarded" '
-        '("autonomous" is not offered in this version), got "$raw".',
+        'Argument "requestedMode" must be "readonly", "guarded" or '
+        '"autonomous", got "$raw".',
       );
     }
     return McpAccessMode.fromName(raw);

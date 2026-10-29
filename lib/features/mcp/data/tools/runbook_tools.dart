@@ -512,12 +512,8 @@ class RunRunbookTool with McpArgReaders implements McpToolHandler {
             ),
         ],
         hosts: [
-          for (final row in hosts)
-            RunbookApprovalHost(
-              id: row.host.id,
-              label: row.host.label,
-              environment: row.environment,
-            ),
+          for (final host in hosts)
+            RunbookApprovalHost(id: host.id, label: host.label),
         ],
       ),
     );
@@ -530,7 +526,7 @@ class RunRunbookTool with McpArgReaders implements McpToolHandler {
       // Names only: a value may be a credential, and the log is not the place.
       'variables': [...plain.keys, ...secretFields.map((f) => f.name)],
     };
-    final hostLabels = hosts.map((h) => h.host.label).join(', ');
+    final hostLabels = hosts.map((h) => h.label).join(', ');
 
     if (!decision.approved) {
       await auditRepository.record(
@@ -569,7 +565,7 @@ class RunRunbookTool with McpArgReaders implements McpToolHandler {
     final started = DateTime.now();
     final done = gateway.start(
       runbook,
-      [for (final row in hosts) row.host],
+      hosts,
       variableValues: {...plain, ...decision.secretValues},
       strategy: strategy,
       triggeredBy: RunTrigger(
@@ -656,11 +652,11 @@ class RunRunbookTool with McpArgReaders implements McpToolHandler {
   /// Every host must exist in this workspace, be visible to MCP and be
   /// granted to this client. Anything else is the same answer a hidden host
   /// gets everywhere: the agent cannot tell "missing" from "not yours".
-  Future<List<({HostModel host, HostEnvironment environment})>> _resolveHosts(
+  Future<List<HostModel>> _resolveHosts(
     McpToolContext ctx,
     List<String> hostIds,
   ) async {
-    final resolved = <({HostModel host, HostEnvironment environment})>[];
+    final resolved = <HostModel>[];
     final seen = <String>{};
     for (final id in hostIds) {
       if (!seen.add(id)) continue;
@@ -689,10 +685,7 @@ class RunRunbookTool with McpArgReaders implements McpToolHandler {
           'background.',
         );
       }
-      resolved.add((
-        host: host,
-        environment: HostEnvironment.fromName(row.environment),
-      ));
+      resolved.add(host);
     }
     return resolved;
   }

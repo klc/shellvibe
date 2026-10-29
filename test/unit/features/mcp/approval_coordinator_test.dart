@@ -12,7 +12,6 @@ CommandApprovalRequest _commandRequest({
     clientName: 'Claude Desktop',
     hostId: 'host-1',
     hostLabel: 'prod-web-01',
-    environment: HostEnvironment.prod,
     command: 'rm -rf ./logs/*.gz',
     cwd: '/var/log',
     category: RiskCategory.destructiveFs,
@@ -29,14 +28,14 @@ HostAccessRequest _hostAccessRequest() {
       HostAccessCandidate(
         hostId: 'host-1',
         label: 'prod-web-01',
-        environment: HostEnvironment.prod,
         suggestedMode: McpAccessMode.readonly,
+        maxMode: McpAccessMode.guarded,
       ),
       HostAccessCandidate(
         hostId: 'host-2',
         label: 'staging-api',
-        environment: HostEnvironment.staging,
         suggestedMode: McpAccessMode.guarded,
+        maxMode: McpAccessMode.guarded,
       ),
     ],
   );
@@ -272,10 +271,9 @@ void main() {
     expect((await mine).approved, isFalse);
     expect((await access).granted, isEmpty);
     expect(coordinator.currentHostAccess, isEmpty);
-    expect(
-      coordinator.currentCommands.map((c) => c.request.clientId),
-      ['client-2'],
-    );
+    expect(coordinator.currentCommands.map((c) => c.request.clientId), [
+      'client-2',
+    ]);
   });
 
   test('dispose resolves anything still pending rather than hanging', () async {

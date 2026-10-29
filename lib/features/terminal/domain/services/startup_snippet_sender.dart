@@ -1,4 +1,3 @@
-import '../../../hosts/domain/models/host_model.dart';
 import '../../../snippets/domain/models/runbook_model.dart';
 import '../../../snippets/domain/models/runbook_step_model.dart';
 import '../../../snippets/domain/models/snippet_model.dart';
@@ -21,8 +20,6 @@ enum StartupSnippetOutcome {
   /// a snippet that was deleted. Nothing was sent.
   blocked,
 
-  /// The user declined typing the startup runbook into a production host.
-  declined,
   sent,
 }
 
@@ -35,9 +32,6 @@ class StartupSnippetSender {
   final Future<SnippetModel?> Function(String id) loadSnippet;
   final Future<RunbookModel?> Function(String id) loadRunbook;
 
-  /// Asks before [runbook] is typed into a pane on production [host].
-  final Future<bool> Function(RunbookModel runbook, HostModel host) confirmProd;
-
   /// Types [code] into [tab] and presses Enter.
   final void Function(TerminalTabSession tab, String code) send;
 
@@ -47,7 +41,6 @@ class StartupSnippetSender {
   const StartupSnippetSender({
     required this.loadSnippet,
     required this.loadRunbook,
-    required this.confirmProd,
     required this.send,
     required this.notify,
   });
@@ -151,9 +144,6 @@ class StartupSnippetSender {
         code,
         builtinValuesFor(host),
       );
-      if (host.isProd && !await confirmProd(runbook, host)) {
-        return StartupSnippetOutcome.declined;
-      }
     }
     send(tab, code);
     return StartupSnippetOutcome.sent;

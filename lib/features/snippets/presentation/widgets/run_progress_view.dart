@@ -16,7 +16,6 @@ import '../../domain/services/runbook_executor.dart';
 import '../../domain/services/runbook_run_service.dart';
 import '../../domain/services/run_variables.dart';
 import '../notifiers/snippets_notifier.dart';
-import 'prod_confirmation.dart';
 import '../notifiers/run_history_providers.dart';
 import '../notifiers/runbook_run_notifier.dart';
 import '../notifiers/runbooks_notifier.dart';
@@ -196,15 +195,6 @@ Future<bool> rerunOnHosts(
       ),
     );
     if (hosts.isEmpty) return false;
-  }
-  if (!await confirmProdRun(
-    context,
-    what:
-        '${RunbookRunService.isSnippetRunbook(runbook) ? 'snippet' : 'runbook'}'
-        ' "${runbook.title}"',
-    hosts: hosts,
-  )) {
-    return false;
   }
   if (!context.mounted) return false;
   // The prompts above were awaited, so the answer to "is something running"

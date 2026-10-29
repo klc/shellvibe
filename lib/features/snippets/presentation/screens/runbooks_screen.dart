@@ -18,7 +18,6 @@ import '../notifiers/runbook_run_notifier.dart';
 import '../notifiers/runbooks_notifier.dart';
 import '../widgets/automation_list_parts.dart';
 import '../widgets/automation_section_layout.dart';
-import '../widgets/prod_confirmation.dart';
 import '../widgets/run_progress_view.dart';
 import '../widgets/run_history_section.dart';
 import '../widgets/run_target_sheet.dart';
@@ -327,13 +326,6 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
       variableValues = inputs;
     }
 
-    if (!await confirmProdRun(
-      context,
-      what: 'runbook "${runbook.title}"',
-      hosts: hosts,
-    )) {
-      return;
-    }
     if (!mounted) return;
 
     // The prompts above were awaited, so the answer to "is something running"

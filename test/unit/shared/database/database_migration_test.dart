@@ -89,7 +89,7 @@ void main() {
         final appDb = AppDatabase(NativeDatabase(tempDbFile));
         db = appDb;
 
-        expect(appDb.schemaVersion, equals(20));
+        expect(appDb.schemaVersion, equals(21));
 
         // The v10 tables have to exist after a migration, not only after a
         // fresh create: a device that upgrades and then makes a change would
@@ -546,7 +546,7 @@ void main() {
       final appDb = AppDatabase(NativeDatabase(tempDbFile));
       db = appDb;
 
-      expect(appDb.schemaVersion, equals(20));
+      expect(appDb.schemaVersion, equals(21));
       expect(await appDb.vaultEnvVarsDao.getByWorkspace('default'), isEmpty);
 
       await appDb.vaultEnvVarsDao.insert(
@@ -609,7 +609,7 @@ void main() {
         final appDb = AppDatabase(NativeDatabase(tempDbFile));
         db = appDb;
 
-        expect(appDb.schemaVersion, equals(20));
+        expect(appDb.schemaVersion, equals(21));
 
         // The id is the deterministic one sync uses, so another device that
         // migrates the same data produces the same row.
@@ -633,5 +633,26 @@ void main() {
         expect(legacy, isEmpty);
       },
     );
+
+    test('upgrading to v21 raises every host to guarded AI access', () async {
+      // Built at the current schema, then wound back to v20 with the old
+      // 'readonly' preselect every host carried, so reopening runs the step.
+      final fresh = AppDatabase(NativeDatabase(tempDbFile));
+      await fresh.customStatement(
+        "INSERT INTO workspaces (id, name, created_at) VALUES ('ws-1', 'W', 0)",
+      );
+      await fresh.customStatement(
+        'INSERT INTO hosts (id, workspace_id, label, hostname, created_at, '
+        "mcp_default_mode) VALUES ('h-1', 'ws-1', 'H', 'h', 0, 'readonly')",
+      );
+      await fresh.customStatement('PRAGMA user_version = 20;');
+      await fresh.close();
+
+      final appDb = AppDatabase(NativeDatabase(tempDbFile));
+      db = appDb;
+
+      final host = await appDb.hostsDao.getHostById('h-1');
+      expect(host!.mcpDefaultMode, 'guarded');
+    });
   });
 }

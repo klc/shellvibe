@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shellvibe/features/mcp/domain/models/mcp_enums.dart';
 import 'package:shellvibe/features/mcp/domain/models/mcp_models.dart';
 import 'package:shellvibe/features/mcp/domain/services/approval_coordinator.dart';
 
@@ -8,13 +7,7 @@ const _request = RunbookApprovalRequest(
   clientName: 'Claude Desktop',
   runbookTitle: 'Deploy',
   steps: [RunbookApprovalStep(order: 1, kind: 'command', text: 'uptime')],
-  hosts: [
-    RunbookApprovalHost(
-      id: 'h1',
-      label: 'prod-web-01',
-      environment: HostEnvironment.prod,
-    ),
-  ],
+  hosts: [RunbookApprovalHost(id: 'h1', label: 'prod-web-01')],
   strategyLabel: 'parallel ×4',
 );
 

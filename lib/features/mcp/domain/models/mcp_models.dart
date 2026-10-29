@@ -52,17 +52,12 @@ class PolicyDecision {
   /// this exact command, host and cwd.
   final bool fromRememberedApproval;
 
-  /// True when the production override forced a confirmation that the mode
-  /// alone would have allowed.
-  final bool productionOverride;
-
   const PolicyDecision({
     required this.action,
     required this.category,
     this.message,
     this.hint,
     this.fromRememberedApproval = false,
-    this.productionOverride = false,
   });
 }
 
@@ -75,7 +70,6 @@ class CommandContext {
   final String command;
   final String cwd;
   final McpAccessMode mode;
-  final HostEnvironment environment;
   final String hostId;
   final String clientId;
 
@@ -96,7 +90,6 @@ class CommandContext {
     required this.command,
     required this.cwd,
     required this.mode,
-    required this.environment,
     required this.hostId,
     required this.clientId,
     this.hostGroupIds = const {},
@@ -177,13 +170,12 @@ class CommandApprovalRequest {
   final String clientName;
   final String hostId;
   final String hostLabel;
-  final HostEnvironment environment;
   final String command;
   final String cwd;
   final RiskCategory category;
 
-  /// False when this command may not be remembered: a destructive category on
-  /// a production host, or anything the classifier cannot read. The dialog
+  /// False when this command may not be remembered: anything the classifier
+  /// cannot read, or a credential read. The dialog
   /// greys out the remember options rather than hiding them, so the user can
   /// see the rule exists.
   final bool canRemember;
@@ -193,7 +185,6 @@ class CommandApprovalRequest {
     required this.clientName,
     required this.hostId,
     required this.hostLabel,
-    required this.environment,
     required this.command,
     required this.cwd,
     required this.category,
@@ -222,13 +213,8 @@ class RunbookApprovalStep {
 class RunbookApprovalHost {
   final String id;
   final String label;
-  final HostEnvironment environment;
 
-  const RunbookApprovalHost({
-    required this.id,
-    required this.label,
-    required this.environment,
-  });
+  const RunbookApprovalHost({required this.id, required this.label});
 }
 
 /// A secret variable the user has to type into the approval dialog, because an
@@ -307,18 +293,20 @@ class HostAccessRequest {
   });
 }
 
-/// One row in the host-access approval window, pre-filled with the host's own
-/// default mode so the safe answer is the default answer.
+/// One row in the host-access approval window, pre-filled with the mode the
+/// agent asked for, never above the host's own max access.
 class HostAccessCandidate {
   final String hostId;
   final String label;
-  final HostEnvironment environment;
   final McpAccessMode suggestedMode;
+
+  /// The host's max access: the window offers no mode above it.
+  final McpAccessMode maxMode;
 
   const HostAccessCandidate({
     required this.hostId,
     required this.label,
-    required this.environment,
     required this.suggestedMode,
+    required this.maxMode,
   });
 }

@@ -91,7 +91,8 @@ void main() {
       hostname: '10.0.0.5',
       username: 'deploy',
       port: 2222,
-      environment: 'prod',
+      mcpVisible: false,
+      mcpMaxMode: 'readonly',
     );
     await pumpDialog(
       tester,
@@ -121,6 +122,7 @@ void main() {
     expect(copy.label, 'web (copy)');
     expect(copy.username, 'deploy');
     expect(copy.port, 2222);
-    expect(copy.environment, 'prod');
+    expect(copy.mcpVisible, isFalse);
+    expect(copy.mcpDefaultMode, 'readonly');
   });
 }

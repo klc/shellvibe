@@ -7,13 +7,12 @@ import 'package:shellvibe/features/terminal/domain/models/terminal_tab_session.d
 import 'package:shellvibe/features/terminal/domain/services/startup_snippet_sender.dart';
 import 'package:xterm3/xterm.dart';
 
-HostModel host({String? startup, String environment = 'dev'}) => HostModel(
+HostModel host({String? startup}) => HostModel(
   id: 'h',
   workspaceId: 'w',
   label: 'web',
   hostname: 'web.example.com',
   startupSnippetId: startup,
-  environment: environment,
   createdAt: DateTime(2026),
 );
 
@@ -80,8 +79,6 @@ class Harness {
   };
   final sent = <String>[];
   final notices = <String>[];
-  final prodAsks = <String>[];
-  bool prodAnswer = false;
   int loads = 0;
 
   late final sender = StartupSnippetSender(
@@ -90,10 +87,6 @@ class Harness {
       return snippets[id];
     },
     loadRunbook: (id) async => runbooks[id],
-    confirmProd: (runbook, host) async {
-      prodAsks.add('${runbook.id}@${host.label}');
-      return prodAnswer;
-    },
     send: (tab, code) => sent.add(code),
     notify: notices.add,
   );
@@ -275,27 +268,6 @@ void main() {
       );
       expect(h.sent, isEmpty);
       expect(h.notices.single, contains('needs input'));
-    });
-
-    test('production asks first, and a no types nothing', () async {
-      final h = Harness();
-      final prod = host(environment: 'prod');
-      expect(
-        await h.sender.onSessionLive(tab(host: prod, runbook: 'logs')),
-        StartupSnippetOutcome.declined,
-      );
-      expect(h.prodAsks, ['logs@web']);
-      expect(h.sent, isEmpty);
-
-      h.prodAnswer = true;
-      await h.sender.onSessionLive(tab(host: prod, runbook: 'logs'));
-      expect(h.sent, hasLength(1));
-    });
-
-    test('a non-production host is not asked', () async {
-      final h = Harness();
-      await h.sender.onSessionLive(tab(host: host(), runbook: 'logs'));
-      expect(h.prodAsks, isEmpty);
     });
   });
 }

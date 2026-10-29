@@ -115,7 +115,6 @@ void main() {
     String id, {
     String workspace = 'ws',
     bool visible = true,
-    String environment = 'dev',
     bool granted = true,
   }) async {
     await db.hostsDao.insertHost(
@@ -126,7 +125,6 @@ void main() {
         hostname: '$id.example.test',
         createdAt: DateTime(2026),
         mcpVisible: Value(visible),
-        environment: Value(environment),
       ),
     );
     if (granted) {
@@ -627,7 +625,7 @@ void main() {
 
   group('run_runbook approval', () {
     Future<void> seed() async {
-      await host('h1', environment: 'prod');
+      await host('h1');
       await host('h2');
       await db.snippetsDao.insertSnippet(
         SnippetsCompanion.insert(
@@ -682,10 +680,7 @@ void main() {
       expect(request.clientName, 'Claude Code');
       expect(request.runbookTitle, 'Release');
       expect(request.strategyLabel, 'rolling');
-      expect(request.hosts.map((h) => (h.label, h.environment)), [
-        ('label-h1', HostEnvironment.prod),
-        ('label-h2', HostEnvironment.dev),
-      ]);
+      expect(request.hosts.map((h) => h.label), ['label-h1', 'label-h2']);
       expect(request.steps.map((s) => s.kind), [
         'command',
         'snippet',

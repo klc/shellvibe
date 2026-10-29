@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart' hide isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/features/hosts/data/repositories/hosts_repository.dart';
@@ -22,6 +23,29 @@ class _DenyAll extends ApprovalCoordinator {
         HostAccessDenial(hostId: c.hostId, reason: 'timeout'),
     ],
   );
+}
+
+/// Approves every candidate at [mode], whatever the window offered.
+class _ApproveAs extends ApprovalCoordinator {
+  _ApproveAs(this.mode);
+
+  final McpAccessMode mode;
+  final requests = <HostAccessRequest>[];
+
+  @override
+  Future<HostAccessResult> requestHostAccess(
+    HostAccessRequest request, {
+    Duration timeout = const Duration(seconds: 120),
+  }) async {
+    requests.add(request);
+    return HostAccessResult(
+      granted: [
+        for (final c in request.candidates)
+          HostAccessGrant(hostId: c.hostId, mode: mode),
+      ],
+      denied: const [],
+    );
+  }
 }
 
 void main() {
@@ -92,5 +116,37 @@ void main() {
       {'hostId': 'host-a', 'mode': 'guarded'},
     ]);
     expect(result['denied'], isEmpty);
+  });
+
+  test('nothing is granted above a host\'s max access', () async {
+    await (db.update(db.hosts)..where((h) => h.id.equals('host-a'))).write(
+      const HostsCompanion(mcpDefaultMode: Value('readonly')),
+    );
+    final coordinator = _ApproveAs(McpAccessMode.autonomous);
+    final tool = RequestHostAccessTool(
+      hostsRepository: HostsRepository(hostsDao: db.hostsDao),
+      hostsDao: db.hostsDao,
+      grantRepository: grants,
+      approvalCoordinator: coordinator,
+    );
+
+    final result =
+        await tool.execute(ctx, {
+              'hostIds': ['host-a'],
+              'reason': 'deploy',
+              'requestedMode': 'autonomous',
+            })
+            as Map<String, Object?>;
+
+    final candidate = coordinator.requests.single.candidates.single;
+    expect(candidate.suggestedMode, McpAccessMode.readonly);
+    expect(candidate.maxMode, McpAccessMode.readonly);
+    expect(result['granted'], [
+      {'hostId': 'host-a', 'mode': 'readonly'},
+    ]);
+    expect(
+      await grants.effectiveMode('client-1', 'host-a'),
+      McpAccessMode.readonly,
+    );
   });
 }

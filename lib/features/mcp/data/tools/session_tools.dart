@@ -89,7 +89,7 @@ class OpenSessionTool with McpArgReaders implements McpToolHandler {
     final session = await sessionPool.open(
       clientId: ctx.clientId,
       clientName: ctx.clientName,
-      mode: mode.name,
+      mode: mode.atMost(McpAccessMode.fromName(row.mcpDefaultMode)).name,
       host: host,
     );
 
