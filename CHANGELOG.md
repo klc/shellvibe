@@ -7,6 +7,48 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-10-29
+
+### Added
+
+- AI Access: Connect an AI tool adds ShellVibe to Claude Code, Claude
+  Desktop, Cursor, Antigravity or Codex in one click. Each tool shows whether
+  it is set up, points at another install, or has a config ShellVibe will not
+  edit. A Manual section shows the config to paste into any other MCP client.
+- Hosts: each host has its own AI access switch and a max access level: Read
+  only, Ask before changes or Full access. An agent never gets more than that
+  on the host, whatever it asks for or is approved. New hosts start with AI
+  access on and Ask before changes.
+
+### Changed
+
+- AI Access: existing hosts are set to Ask before changes. Set Read only on
+  the hosts that should stay read-only.
+- AI Access: the MCP server tells agents to use ShellVibe rather than `ssh`
+  for remote servers, and the tool descriptions mention SSH, so an agent that
+  loads its tools on demand finds them.
+
+### Removed
+
+- AI Access: Add client, the client list and per-client tokens. Agents
+  connect only through the `shellvibe-mcp` bridge, and a client added by hand
+  before no longer gets in. Reconnect it with Connect an AI tool or the
+  Manual config.
+- Hosts: the environment setting (dev, staging, production) and the extra
+  confirmation before a snippet, runbook or startup snippet runs on a
+  production host. For agents, the max access level takes its place.
+
+### Fixed
+
+- SFTP: a symlink to a directory can be deleted. It is unlinked and its
+  target is left alone.
+- Vault: a wrong password in Remove Master Password no longer sends an
+  unlocked vault to the unlock screen while the key stays in memory.
+- Device Link: abandoning a rescan of a desktop the phone is already paired
+  with no longer breaks the saved pairing or leaves the phone connected.
+- Runbooks: Markdown export keeps the variable declarations of inlined
+  snippet steps, so a secret input stays secret after import.
+
 ## [1.10.0] - 2026-10-26
 
 ### Added
@@ -839,7 +881,8 @@ entry describes what ShellVibe is rather than what changed.
 - iOS and Android are not released. The code builds for them and they are not
   part of this release.
 
-[Unreleased]: https://github.com/klc/shellvibe/compare/v1.10.0...HEAD
+[Unreleased]: https://github.com/klc/shellvibe/compare/v1.11.0...HEAD
+[1.11.0]: https://github.com/klc/shellvibe/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/klc/shellvibe/compare/v1.9.2...v1.10.0
 [1.9.2]: https://github.com/klc/shellvibe/compare/v1.9.1...v1.9.2
 [1.9.1]: https://github.com/klc/shellvibe/compare/v1.9.0...v1.9.1
