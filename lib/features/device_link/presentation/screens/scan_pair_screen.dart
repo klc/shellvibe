@@ -72,6 +72,8 @@ class _DeviceLinkPairingFlowScreenState
         .releaseActiveController(payload.spki);
     final connection = await DeviceLinkClient().connectToQrPayload(payload);
     _connection = connection;
+    // A rescan after an earlier hand-off: this connection is not handed off.
+    _handedOff = false;
     // Set once the desktop has replaced this phone's secret, cleared once the
     // new profile is saved.
     String? unsavedSecret;
