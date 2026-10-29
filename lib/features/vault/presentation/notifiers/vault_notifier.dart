@@ -277,7 +277,12 @@ class VaultNotifier extends _$VaultNotifier {
 
       state = AsyncData(
         VaultState(
-          status: VaultStatus.locked,
+          // A wrong password does not drop a DEK that is already in memory
+          // (Settings verifies through here before removing the password), so
+          // the status follows [VaultKeyService], as in [build].
+          status: keyService.isUnlockedInMemory
+              ? VaultStatus.unlocked
+              : VaultStatus.locked,
           failedAttempts: attempts,
           lockoutUntil: lockoutUntil,
         ),
