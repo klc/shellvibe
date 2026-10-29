@@ -848,7 +848,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
       context: context,
       builder: (ctx) => ShadDialog.alert(
         title: Text('Delete ${item.name}?'),
-        description: item.isDirectory
+        description: item.isDirectory && !item.isSymlink
             ? const Text('This folder and everything in it will be deleted.')
             : null,
         actions: adaptiveDialogActions(context, [

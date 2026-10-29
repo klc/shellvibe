@@ -140,13 +140,18 @@ final class DeviceLinkPairingProfile {
     );
   }
 
-  DeviceLinkPairingProfile copyWith({String? sessionId, String? name}) {
+  DeviceLinkPairingProfile copyWith({
+    String? sessionId,
+    String? name,
+    String? deviceId,
+    String? secret,
+  }) {
     return DeviceLinkPairingProfile(
       id: id,
-      deviceId: deviceId,
+      deviceId: deviceId ?? this.deviceId,
       name: name ?? this.name,
       platform: platform,
-      secret: secret,
+      secret: secret ?? this.secret,
       host: host,
       addresses: addresses,
       mdns: mdns,

@@ -72,6 +72,11 @@ class _DeviceLinkPairingFlowScreenState
         .releaseActiveController(payload.spki);
     final connection = await DeviceLinkClient().connectToQrPayload(payload);
     _connection = connection;
+    // A rescan after an earlier hand-off: this connection is not handed off.
+    _handedOff = false;
+    // Set once the desktop has replaced this phone's secret, cleared once the
+    // new profile is saved.
+    String? unsavedSecret;
     try {
       await connection.sendHello(
         DeviceLinkHello(
@@ -109,6 +114,7 @@ class _DeviceLinkPairingFlowScreenState
       if (pairedMessage is! DeviceLinkPaired) {
         throw StateError('Desktop rejected the pairing request');
       }
+      unsavedSecret = pairedMessage.secret;
 
       final authenticatedHello = await connection.nextControl();
       if (authenticatedHello is DeviceLinkError) {
@@ -169,6 +175,7 @@ class _DeviceLinkPairingFlowScreenState
         // otherwise open a second connection to the session this one is about
         // to attach to — and one of them would be told the session is in use.
         await pairingStorage.save(profile);
+        unsavedSecret = null;
         await pairingStorage.pruneSupersededProfiles(
           keepId: profile.id,
           spki: profile.spki,
@@ -199,6 +206,18 @@ class _DeviceLinkPairingFlowScreenState
       if (!_handedOff) {
         await connection.close();
         _connection = null;
+      }
+      // The desktop stored the new secret the moment it paired. A rescan left
+      // before a session was picked must still hand it to the pairing this
+      // phone already holds, or that pairing is rejected from now on.
+      final secret = unsavedSecret;
+      final existing = secret == null
+          ? null
+          : await pairingStorage.getById(payload.spki);
+      if (existing != null) {
+        await pairingStorage.save(
+          existing.copyWith(deviceId: deviceId, secret: secret),
+        );
       }
     }
   }

@@ -36,7 +36,7 @@ final class VaultNotifierProvider
   VaultNotifier create() => VaultNotifier();
 }
 
-String _$vaultNotifierHash() => r'c1eab98473d748af449e9fee14165ae8413261fd';
+String _$vaultNotifierHash() => r'39f93dfc44f0b8df8a9b51ca1ac4b63f213f9447';
 
 /// Manages the vault lifecycle: setup, lock, unlock, brute-force protection.
 

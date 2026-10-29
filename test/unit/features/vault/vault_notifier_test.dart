@@ -310,7 +310,14 @@ void main() {
             .isMasterPasswordConfigured(),
         isTrue,
       );
-      expect(container.read(vaultProvider).value!.failedAttempts, equals(1));
+      final state = container.read(vaultProvider).value!;
+      expect(state.failedAttempts, equals(1));
+      // The DEK is still in memory, so the vault must not read as locked.
+      expect(state.status, equals(VaultStatus.unlocked));
+      expect(
+        container.read(vaultKeyServiceProvider).isUnlockedInMemory,
+        isTrue,
+      );
     });
 
     test('removeMasterPassword works from a locked vault', () async {
