@@ -13,6 +13,7 @@ import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../../../core/utils/platform_capabilities.dart';
 import '../../../../shared/database/app_database.dart';
 import '../../../workspaces/presentation/providers/workspace_provider.dart';
+import '../../data/mcp_agent_config.dart';
 import '../../data/mcp_server_controller.dart';
 import '../mcp_date_format.dart';
 import '../notifiers/mcp_settings_notifier.dart';
@@ -76,6 +77,11 @@ final class McpAccessSettingsSection extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _buildMasterSwitchCard(context, ref, tokens, settings),
+        const SizedBox(height: 16),
+        _AgentAppsCard(
+          bridge: _detectBridgeCommand(),
+          serverEnabled: settings.masterEnabled,
+        ),
         const SizedBox(height: 16),
         _buildClientsCard(context, ref, tokens, settings),
         const SizedBox(height: 16),
@@ -418,7 +424,7 @@ final class McpAccessSettingsSection extends ConsumerWidget {
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               'Cut all agent access',
@@ -692,6 +698,136 @@ class _ExperimentalBanner extends StatelessWidget {
               style: const TextStyle(fontSize: 13),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One-click setup for the AI tools whose config file ShellVibe knows: each
+/// row says whether that tool already points at this install's bridge and, if
+/// not, writes it in.
+class _AgentAppsCard extends StatefulWidget {
+  const _AgentAppsCard({required this.bridge, required this.serverEnabled});
+
+  final _BridgeCommand bridge;
+  final bool serverEnabled;
+
+  @override
+  State<_AgentAppsCard> createState() => _AgentAppsCardState();
+}
+
+class _AgentAppsCardState extends State<_AgentAppsCard> {
+  final Map<McpAgentApp, String> _paths = {
+    for (final app in McpAgentApp.values)
+      app: ?mcpAgentConfigPath(
+        app,
+        environment: Platform.environment,
+        isWindows: Platform.isWindows,
+        isMacOS: Platform.isMacOS,
+      ),
+  };
+  final Map<McpAgentApp, McpAgentConfigStatus> _statuses = {};
+
+  @override
+  void initState() {
+    super.initState();
+    if (!widget.bridge.isPlaceholder) _refresh();
+  }
+
+  Future<void> _refresh() async {
+    for (final MapEntry(key: app, value: path) in _paths.entries) {
+      final status = await readMcpAgentConfigStatus(
+        app,
+        path,
+        widget.bridge.command,
+      );
+      if (!mounted) return;
+      setState(() => _statuses[app] = status);
+    }
+  }
+
+  Future<void> _install(McpAgentApp app) async {
+    try {
+      await installMcpAgentServer(app, _paths[app]!, widget.bridge.command);
+    } on Exception catch (e) {
+      if (mounted) {
+        ShadToaster.of(context).show(
+          ShadToast.destructive(
+            description: Text('Could not update ${app.label}\'s config: $e'),
+          ),
+        );
+      }
+      return;
+    }
+    await _refresh();
+    if (!mounted) return;
+    ShadToaster.of(context).show(
+      ShadToast(
+        description: Text(
+          'Added ShellVibe to ${app.label}. Restart ${app.label} to load it.'
+          '${widget.serverEnabled ? '' : ' Turn on "Allow AI agent access" too.'}',
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = ShellVibeTokens.resolve(context);
+    return ShadCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 14, 16, 8),
+            child: Text('Connect an AI tool'),
+          ),
+          const Divider(),
+          if (widget.bridge.isPlaceholder)
+            ListTile(
+              leading: Icon(LucideIcons.circleAlert, color: tokens.warning),
+              title: const Text(
+                'The shellvibe-mcp bridge could not be located next to this '
+                'install, so there is nothing to point an AI tool at.',
+              ),
+            )
+          else
+            for (final MapEntry(key: app, value: path) in _paths.entries) ...[
+              if (app != _paths.keys.first) const Divider(height: 1),
+              ListTile(
+                key: Key('mcp_agent_app_${app.name}'),
+                title: Text(app.label),
+                subtitle: Text(
+                  path,
+                  style: shellvibeMono(
+                    context,
+                    size: 11.5,
+                    color: tokens.textMuted,
+                  ),
+                ),
+                trailing: switch (_statuses[app]) {
+                  null => null,
+                  McpAgentConfigStatus.installed => const ShadBadge.secondary(
+                    child: Text('Connected'),
+                  ),
+                  McpAgentConfigStatus.unreadable => Text(
+                    'Edit by hand',
+                    style: TextStyle(color: tokens.warning),
+                  ),
+                  McpAgentConfigStatus.outdated => ShellVibeButton.secondary(
+                    key: Key('mcp_agent_app_update_${app.name}'),
+                    label: 'Update',
+                    onPressed: () => _install(app),
+                  ),
+                  McpAgentConfigStatus.missing => ShellVibeButton.secondary(
+                    key: Key('mcp_agent_app_add_${app.name}'),
+                    label: 'Add',
+                    onPressed: () => _install(app),
+                  ),
+                },
+              ),
+            ],
         ],
       ),
     );
