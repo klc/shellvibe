@@ -3,6 +3,7 @@ import 'package:shellvibe/features/snippets/domain/models/runbook_model.dart';
 import 'package:shellvibe/features/snippets/domain/models/runbook_step_model.dart';
 import 'package:shellvibe/features/snippets/domain/models/snippet_model.dart';
 import 'package:shellvibe/features/snippets/domain/models/variable_declaration.dart';
+import 'package:shellvibe/features/snippets/domain/services/run_variables.dart';
 import 'package:shellvibe/features/snippets/domain/services/runbook_markdown.dart';
 
 RunbookModel import(String md) => RunbookMarkdown.import(md, workspaceId: 'ws');
@@ -119,6 +120,42 @@ void main() {
       // It comes back as an ordinary command.
       expect(import(md).steps.single.command, 'echo hello');
       expect(import(md).steps.single.kind, StepKind.command);
+    });
+
+    test('a snippet step\'s declarations travel in the frontmatter', () {
+      final book = RunbookModel(
+        id: 'rb',
+        workspaceId: 'w',
+        title: 'Login',
+        createdAt: DateTime(2026),
+        variables: [original.variables.first], // env, an enumeration
+        steps: [
+          step(1, '# snippet: Login', kind: StepKind.snippet, snippetId: 'sn'),
+        ],
+      );
+      final md = RunbookMarkdown.export(
+        book,
+        snippets: {
+          'sn': const SnippetModel(
+            id: 'sn',
+            workspaceId: 'w',
+            title: 'Login',
+            code: r'login ${INPUT:env} ${INPUT:host} ${INPUT:token}',
+            variables: [
+              VariableDeclaration(name: 'env'),
+              VariableDeclaration(name: 'token', type: VariableType.secret),
+            ],
+          ),
+        },
+      );
+      final back = import(md);
+      final needed = collectRunVariables(back);
+      final types = {for (final d in needed.declarations) d.name: d.type};
+      expect(types['token'], VariableType.secret);
+      // The runbook's own declaration wins over the snippet's.
+      expect(types['env'], VariableType.enumeration);
+      // One entry per name, and nothing made up for the undeclared `host`.
+      expect([for (final v in back.variables) v.name], ['env', 'token']);
     });
 
     test('a deleted snippet falls back to the step\'s own text', () {

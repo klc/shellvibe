@@ -40,7 +40,8 @@ class RunbookMarkdownException implements Exception {
 ///
 /// A snippet step is exported as the snippet's current code, since a file
 /// cannot refer to a snippet that only exists in one person's library; it
-/// comes back as an ordinary command step.
+/// comes back as an ordinary command step, the snippet's variable
+/// declarations joining the runbook's.
 class RunbookMarkdown {
   static const _shellLanguages = {'sh', 'bash', 'shell', 'zsh', 'console'};
 
@@ -66,9 +67,21 @@ class RunbookMarkdown {
     if (runbook.tags.isNotEmpty) {
       out.writeln('tags: ${jsonEncode(runbook.tags)}');
     }
-    if (runbook.variables.isNotEmpty) {
+    // An inlined snippet's declarations come along with its code, or a secret
+    // it declares imports as plain text; the runbook's own win, as in a run.
+    final own = {for (final v in runbook.variables) v.name};
+    final variables = [
+      ...runbook.variables,
+      ...{
+        for (final step in runbook.orderedSteps)
+          if (step.kind == StepKind.snippet)
+            for (final v in snippets[step.snippetId]?.variables ?? const [])
+              if (!own.contains(v.name)) v.name: v,
+      }.values,
+    ];
+    if (variables.isNotEmpty) {
       out.writeln(
-        'variables: ${jsonEncode([for (final v in runbook.variables) v.toJson()])}',
+        'variables: ${jsonEncode([for (final v in variables) v.toJson()])}',
       );
     }
     out.writeln('defaults: ${jsonEncode(_builtIn)}');
