@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart' show debugPrint;
 
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../../../../shared/database/app_database.dart';
 import '../../../../shared/providers/database_providers.dart';
 import '../../../workspaces/presentation/providers/workspace_provider.dart';
 import '../../../../shared/storage/secure_storage_service.dart';
@@ -12,13 +11,12 @@ import '../../../workspaces/domain/models/workspace_model.dart';
 import '../../data/mcp_providers.dart';
 import '../../data/mcp_server_controller.dart';
 import '../../data/repositories/mcp_repository_providers.dart';
-import '../../domain/services/mcp_service_providers.dart';
 
 part 'mcp_settings_notifier.g.dart';
 
 /// Everything the AI Access settings screen needs to render: the master
-/// switch, the running server's own view of itself, the registered client
-/// list, and the numeric knobs the user can tune.
+/// switch, the running server's own view of itself, and the numeric knobs the
+/// user can tune.
 class McpSettingsState {
   final bool masterEnabled;
 
@@ -34,7 +32,6 @@ class McpSettingsState {
   /// promise of real-time accuracy while the screen sits unfocused.
   final bool serverRunning;
   final int? serverPort;
-  final List<McpClient> clients;
   final int defaultCommandTimeoutSeconds;
   final int outputCapBytes;
   final int sessionIdleTimeoutMinutes;
@@ -44,7 +41,6 @@ class McpSettingsState {
     required this.masterEnabled,
     required this.serverRunning,
     required this.serverPort,
-    required this.clients,
     required this.defaultCommandTimeoutSeconds,
     required this.outputCapBytes,
     required this.sessionIdleTimeoutMinutes,
@@ -56,7 +52,6 @@ class McpSettingsState {
     bool? serverRunning,
     int? serverPort,
     bool clearServerPort = false,
-    List<McpClient>? clients,
     int? defaultCommandTimeoutSeconds,
     int? outputCapBytes,
     int? sessionIdleTimeoutMinutes,
@@ -66,7 +61,6 @@ class McpSettingsState {
       masterEnabled: masterEnabled ?? this.masterEnabled,
       serverRunning: serverRunning ?? this.serverRunning,
       serverPort: clearServerPort ? null : (serverPort ?? this.serverPort),
-      clients: clients ?? this.clients,
       defaultCommandTimeoutSeconds:
           defaultCommandTimeoutSeconds ?? this.defaultCommandTimeoutSeconds,
       outputCapBytes: outputCapBytes ?? this.outputCapBytes,
@@ -207,7 +201,7 @@ abstract final class McpSettingsBounds {
 }
 
 /// Owns the current workspace's AI-access settings: the master switch, the
-/// live server/client view, and the tunable numeric knobs.
+/// live server view, and the tunable numeric knobs.
 ///
 /// Flipping the master switch is the one place this notifier reaches outside
 /// its own storage: on -> [McpServerController.start], off ->
@@ -226,9 +220,6 @@ class McpSettingsNotifier extends _$McpSettingsNotifier {
     final persisted = await store.load(workspaceId);
 
     final controller = ref.watch(mcpServerControllerProvider);
-    final clients = await ref
-        .watch(mcpClientRepositoryProvider)
-        .listClients(workspaceId);
     _applyLimits(persisted);
 
     // The persisted switch is the user's standing instruction, not a record
@@ -247,7 +238,6 @@ class McpSettingsNotifier extends _$McpSettingsNotifier {
       masterEnabled: persisted.masterEnabled,
       serverRunning: controller.isRunning,
       serverPort: controller.port,
-      clients: clients,
       defaultCommandTimeoutSeconds: persisted.defaultCommandTimeoutSeconds,
       outputCapBytes: persisted.outputCapBytes,
       sessionIdleTimeoutMinutes: persisted.sessionIdleTimeoutMinutes,
@@ -411,32 +401,6 @@ class McpSettingsNotifier extends _$McpSettingsNotifier {
     await _purge(clamped);
   }
 
-  /// Registers a new client for the current workspace and returns its raw
-  /// bearer token. The caller (the settings screen) is responsible for
-  /// showing it exactly once — this notifier never stores or re-exposes it,
-  /// mirroring [McpClientRepository.createClient]'s own contract.
-  Future<String> addClient(String name) async {
-    final repo = ref.read(mcpClientRepositoryProvider);
-    final (_, rawToken) = await repo.createClient(
-      workspaceId: _workspaceId,
-      name: name,
-    );
-    await _refreshClients();
-    return rawToken;
-  }
-
-  /// Revokes a client's token and, with it, everything it still holds: a
-  /// revoked token must not keep running commands over sessions it opened
-  /// before, nor keep grants a re-issued client could inherit, nor an
-  /// approval prompt that could still be answered yes.
-  Future<void> revokeClient(String clientId) async {
-    await ref.read(mcpClientRepositoryProvider).revokeClient(clientId);
-    ref.read(approvalCoordinatorProvider).cancelForClient(clientId);
-    await ref.read(mcpSessionPoolProvider).closeForClient(clientId);
-    await ref.read(mcpGrantRepositoryProvider).revokeAllForClient(clientId);
-    await _refreshClients();
-  }
-
   /// Cuts every form of agent access in one call: closes every open MCP
   /// session, revokes every host grant, drops every remembered approval,
   /// revokes every client token across every workspace, and stops the
@@ -447,10 +411,8 @@ class McpSettingsNotifier extends _$McpSettingsNotifier {
   /// button) is where any "are you sure" UX belongs, if the product ever
   /// wants one; this method itself always executes immediately and
   /// unconditionally. It is also the single implementation of panic in this
-  /// codebase: the AI Activity panel's own panic button calls this rather
-  /// than re-closing sessions or re-revoking grants itself, so there is
-  /// exactly one place that has to get "cut everything, nothing left
-  /// half-revoked" right.
+  /// codebase, so there is exactly one place that has to get "cut
+  /// everything, nothing left half-revoked" right.
   ///
   /// Client revocation is deliberately not scoped to [_workspaceId]: a user
   /// hitting this button wants every agent shut out, not just the one
@@ -481,15 +443,6 @@ class McpSettingsNotifier extends _$McpSettingsNotifier {
       await _persist(current, masterEnabled: false);
     }
     ref.invalidateSelf();
-  }
-
-  Future<void> _refreshClients() async {
-    final current = state.value;
-    if (current == null) return;
-    final clients = await ref
-        .read(mcpClientRepositoryProvider)
-        .listClients(_workspaceId);
-    state = AsyncValue.data(current.copyWith(clients: clients));
   }
 
   Future<void> _updateAndPersist(

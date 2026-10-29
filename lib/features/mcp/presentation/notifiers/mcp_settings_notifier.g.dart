@@ -9,7 +9,7 @@ part of 'mcp_settings_notifier.dart';
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // ignore_for_file: type=lint, type=warning
 /// Owns the current workspace's AI-access settings: the master switch, the
-/// live server/client view, and the tunable numeric knobs.
+/// live server view, and the tunable numeric knobs.
 ///
 /// Flipping the master switch is the one place this notifier reaches outside
 /// its own storage: on -> [McpServerController.start], off ->
@@ -20,7 +20,7 @@ part of 'mcp_settings_notifier.dart';
 final mcpSettingsProvider = McpSettingsNotifierProvider._();
 
 /// Owns the current workspace's AI-access settings: the master switch, the
-/// live server/client view, and the tunable numeric knobs.
+/// live server view, and the tunable numeric knobs.
 ///
 /// Flipping the master switch is the one place this notifier reaches outside
 /// its own storage: on -> [McpServerController.start], off ->
@@ -29,7 +29,7 @@ final mcpSettingsProvider = McpSettingsNotifierProvider._();
 final class McpSettingsNotifierProvider
     extends $AsyncNotifierProvider<McpSettingsNotifier, McpSettingsState> {
   /// Owns the current workspace's AI-access settings: the master switch, the
-  /// live server/client view, and the tunable numeric knobs.
+  /// live server view, and the tunable numeric knobs.
   ///
   /// Flipping the master switch is the one place this notifier reaches outside
   /// its own storage: on -> [McpServerController.start], off ->
@@ -55,10 +55,10 @@ final class McpSettingsNotifierProvider
 }
 
 String _$mcpSettingsNotifierHash() =>
-    r'b1033c82a368d0dba07af53d533107b9b2f65866';
+    r'b7cca2432e122cf650c0b9ade31084ee35498cb0';
 
 /// Owns the current workspace's AI-access settings: the master switch, the
-/// live server/client view, and the tunable numeric knobs.
+/// live server view, and the tunable numeric knobs.
 ///
 /// Flipping the master switch is the one place this notifier reaches outside
 /// its own storage: on -> [McpServerController.start], off ->

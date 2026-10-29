@@ -221,8 +221,12 @@ class McpServerController {
   }
 
   Future<String?> _authenticate(String bearerToken) async {
+    // Only the token this server minted for the stdio bridge is accepted. Any
+    // other client row (one left over from the removed "Add client" screen)
+    // means an agent speaking HTTP straight to this port, which is no longer
+    // a supported way in.
     final client = await clients.authenticate(bearerToken);
-    if (client != null) return client.id;
+    if (client != null && client.name == systemClientName) return client.id;
 
     // The presented token is dead. If it is the one this server itself handed
     // to the bridge, the row behind it was deleted or revoked out from under
