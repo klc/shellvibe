@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io' show File, Platform;
 
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,14 +9,9 @@ import 'package:path/path.dart' as p;
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../../../../app/theme/shellvibe_tokens.dart';
-import '../../../../app/widgets/adaptive_modal.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../../../core/utils/platform_capabilities.dart';
-import '../../../../shared/database/app_database.dart';
-import '../../../workspaces/presentation/providers/workspace_provider.dart';
 import '../../data/mcp_agent_config.dart';
-import '../../data/mcp_server_controller.dart';
-import '../mcp_date_format.dart';
 import '../notifiers/mcp_settings_notifier.dart';
 import 'mcp_activity_panel.dart';
 
@@ -83,8 +79,6 @@ final class McpAccessSettingsSection extends ConsumerWidget {
           serverEnabled: settings.masterEnabled,
         ),
         const SizedBox(height: 16),
-        _buildClientsCard(context, ref, tokens, settings),
-        const SizedBox(height: 16),
         // The live panel sits with the switch that enables it: seeing what an
         // agent is doing right now is the same decision as deciding whether it
         // may act at all, and a panel reachable only from elsewhere is a panel
@@ -116,8 +110,9 @@ final class McpAccessSettingsSection extends ConsumerWidget {
               key: const Key('mcp_master_switch'),
               title: const Text('Allow AI agent access'),
               subtitle: const Text(
-                'Starts a localhost-only MCP server this workspace\'s '
-                'registered clients can connect to.',
+                'Starts a localhost-only MCP server that AI tools reach '
+                'through the shellvibe-mcp bridge. Agents see this '
+                'workspace\'s hosts.',
               ),
               value: settings.masterEnabled,
               onChanged: (value) => _setMasterEnabled(context, ref, value),
@@ -166,132 +161,6 @@ final class McpAccessSettingsSection extends ConsumerWidget {
         );
       }
     }
-  }
-
-  Widget _buildClientsCard(
-    BuildContext context,
-    WidgetRef ref,
-    ShellVibeTokens tokens,
-    McpSettingsState settings,
-  ) {
-    return ShadCard(
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 8, 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text('Clients'),
-                      const SizedBox(height: 2),
-                      // A token is minted for one workspace and stays bound to
-                      // it: switching workspaces in the window does not change
-                      // what an already-issued token can see, which is
-                      // otherwise invisible from both sides — the app shows one
-                      // workspace while the agent answers about another.
-                      Text(
-                        'Tokens issued here only ever see '
-                        '${_activeWorkspaceName(ref)}. A host in another '
-                        'workspace needs a client registered there.',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: tokens.textMuted,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                ShellVibeButton.secondary(
-                  key: const Key('mcp_add_client_button'),
-                  label: 'Add client',
-                  icon: LucideIcons.plus,
-                  onPressed: () => _showAddClientFlow(context, ref),
-                ),
-              ],
-            ),
-          ),
-          const Divider(),
-          // The server mints its own client row on every start for the stdio
-          // bridge to authenticate with. It is infrastructure, not something
-          // the user registered, and it is replaced on every restart — so it
-          // is kept out of this list entirely. Showing it would invite
-          // revoking it, which kills the bridge while `mcp-endpoint.json`
-          // still points at its now-dead token, and every agent request
-          // fails with an unexplained "token is invalid".
-          if (_userClients(settings).isEmpty)
-            const ListTile(
-              key: Key('mcp_clients_empty'),
-              leading: Icon(LucideIcons.bot),
-              title: Text('No clients registered for this workspace yet.'),
-            )
-          else
-            for (final client in _userClients(settings)) ...[
-              if (client != _userClients(settings).first)
-                const Divider(height: 1),
-              _buildClientRow(context, ref, tokens, client),
-            ],
-        ],
-      ),
-    );
-  }
-
-  /// The clients the user actually registered.
-  ///
-  /// Excludes [McpServerController.systemClientName] — see the comment at the
-  /// call site for why that row must never be presented as revocable.
-  List<McpClient> _userClients(McpSettingsState settings) => settings.clients
-      .where((c) => c.name != McpServerController.systemClientName)
-      .toList(growable: false);
-
-  /// The workspace new tokens will be bound to, by name.
-  String _activeWorkspaceName(WidgetRef ref) {
-    final id = ref.watch(activeWorkspaceIdProvider);
-    final workspaces = ref.watch(workspacesProvider).value ?? const [];
-    for (final workspace in workspaces) {
-      if (workspace.id == id) return 'the "${workspace.name}" workspace';
-    }
-    return 'this workspace';
-  }
-
-  Widget _buildClientRow(
-    BuildContext context,
-    WidgetRef ref,
-    ShellVibeTokens tokens,
-    McpClient client,
-  ) {
-    final revoked = client.revokedAt != null;
-    return ListTile(
-      key: Key('mcp_client_${client.id}'),
-      leading: Icon(
-        LucideIcons.bot,
-        color: revoked ? tokens.textSubtle : tokens.brand,
-      ),
-      title: Text(
-        client.name,
-        style: revoked ? TextStyle(color: tokens.textSubtle) : null,
-      ),
-      subtitle: Text(
-        'created ${formatMcpDate(client.createdAt)} · '
-        'last seen ${_formatDateOrNever(client.lastSeenAt)} · '
-        'expires ${_formatDateOrNever(client.expiresAt)}',
-        style: Theme.of(
-          context,
-        ).textTheme.bodySmall?.copyWith(color: tokens.textMuted),
-      ),
-      trailing: revoked
-          ? const ShadBadge.secondary(child: Text('Revoked'))
-          : ShellVibeButton.danger(
-              key: Key('mcp_revoke_client_${client.id}'),
-              label: 'Revoke',
-              onPressed: () => ref
-                  .read(mcpSettingsProvider.notifier)
-                  .revokeClient(client.id),
-            ),
-    );
   }
 
   Widget _buildLimitsCard(
@@ -456,137 +325,6 @@ final class McpAccessSettingsSection extends ConsumerWidget {
     );
   }
 
-  Future<void> _showAddClientFlow(BuildContext context, WidgetRef ref) async {
-    final nameController = TextEditingController();
-    final name = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => ShadDialog.alert(
-        title: const Text('Add Client'),
-        description: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Name this client the way you\'ll recognize it later, e.g. '
-              '"Claude Desktop" or "Claude Code — laptop".',
-            ),
-            const SizedBox(height: 12),
-            ShadInput(
-              key: const Key('mcp_add_client_name_field'),
-              controller: nameController,
-              placeholder: const Text('Client name'),
-              autofocus: true,
-            ),
-          ],
-        ),
-        actions: adaptiveDialogActions(context, [
-          ShellVibeButton.secondary(
-            key: const Key('mcp_add_client_cancel_button'),
-            label: 'Cancel',
-            onPressed: () => Navigator.of(dialogContext).pop(),
-          ),
-          ShellVibeButton(
-            key: const Key('mcp_add_client_create_button'),
-            label: 'Create',
-            onPressed: () =>
-                Navigator.of(dialogContext).pop(nameController.text.trim()),
-          ),
-        ]),
-        actionsAxis: adaptiveDialogActionsAxis(context),
-      ),
-    );
-    nameController.dispose();
-
-    if (name == null || name.isEmpty || !context.mounted) return;
-
-    final String rawToken;
-    try {
-      rawToken = await ref.read(mcpSettingsProvider.notifier).addClient(name);
-    } catch (e) {
-      if (context.mounted) {
-        ShadToaster.of(context).show(
-          ShadToast.destructive(
-            description: Text('Could not create client: $e'),
-          ),
-        );
-      }
-      return;
-    }
-
-    if (!context.mounted) return;
-    await _showTokenRevealDialog(context, rawToken);
-  }
-
-  Future<void> _showTokenRevealDialog(
-    BuildContext context,
-    String rawToken,
-  ) async {
-    final bridge = _detectBridgeCommand();
-    final configJson = _buildClientConfigJson(bridge.command);
-
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) {
-        final tokens = ShellVibeTokens.resolve(dialogContext);
-        return ShadDialog.alert(
-          title: const Text('Client Created'),
-          description: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'This token is shown once and cannot be retrieved again. '
-                'Copy it now — if it\'s lost, revoke this client and add a '
-                'new one.',
-                style: Theme.of(
-                  dialogContext,
-                ).textTheme.bodySmall?.copyWith(color: tokens.danger),
-              ),
-              const SizedBox(height: 10),
-              _CopyableBlock(
-                key: const Key('mcp_new_client_token'),
-                text: rawToken,
-                tokens: tokens,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Paste this into the MCP client\'s config:',
-                style: Theme.of(dialogContext).textTheme.bodySmall,
-              ),
-              if (bridge.isPlaceholder) ...[
-                const SizedBox(height: 6),
-                Text(
-                  'The shellvibe-mcp bridge binary could not be located '
-                  'next to this install. Replace the placeholder below with '
-                  'its actual path.',
-                  style: Theme.of(
-                    dialogContext,
-                  ).textTheme.bodySmall?.copyWith(color: tokens.warning),
-                ),
-              ],
-              const SizedBox(height: 8),
-              _CopyableBlock(
-                key: const Key('mcp_new_client_config_json'),
-                text: configJson,
-                tokens: tokens,
-                maxLines: 6,
-              ),
-            ],
-          ),
-          actions: adaptiveDialogActions(context, [
-            ShellVibeButton(
-              key: const Key('mcp_token_reveal_done_button'),
-              label: 'Done',
-              onPressed: () => Navigator.of(dialogContext).pop(),
-            ),
-          ]),
-          actionsAxis: adaptiveDialogActionsAxis(context),
-        );
-      },
-    );
-  }
-
   /// Locates the `shellvibe-mcp` stdio bridge binary next to this running
   /// install, at runtime — never hard-coded. `docs/mcp_plan.md`'s "Köprü
   /// binary'sinin dağıtımı" section is explicit that the path differs by
@@ -628,15 +366,6 @@ final class McpAccessSettingsSection extends ConsumerWidget {
     );
   }
 
-  String _buildClientConfigJson(String command) {
-    const encoder = JsonEncoder.withIndent('  ');
-    return encoder.convert({
-      'mcpServers': {
-        'shellvibe': {'command': command},
-      },
-    });
-  }
-
   String _formatSeconds(int seconds) =>
       seconds < 60 ? '$seconds seconds' : '${seconds ~/ 60} minute(s)';
 
@@ -651,9 +380,6 @@ final class McpAccessSettingsSection extends ConsumerWidget {
     }
     return '${bytes ~/ 1024} KB';
   }
-
-  String _formatDateOrNever(DateTime? date) =>
-      date == null ? 'never' : formatMcpDate(date);
 }
 
 /// Marks AI Access as experimental, so a rough edge reads as known rather than
@@ -787,12 +513,13 @@ class _AgentAppsCardState extends State<_AgentAppsCard> {
           if (widget.bridge.isPlaceholder)
             ListTile(
               leading: Icon(LucideIcons.circleAlert, color: tokens.warning),
-              title: const Text(
+              title: Text(
                 'The shellvibe-mcp bridge could not be located next to this '
-                'install, so there is nothing to point an AI tool at.',
+                'install, so there is nothing to point an AI tool at.'
+                '${kDebugMode ? ' Run tool/build_bridge.sh after flutter run.' : ''}',
               ),
             )
-          else
+          else ...[
             for (final MapEntry(key: app, value: path) in _paths.entries) ...[
               if (app != _paths.keys.first) const Divider(height: 1),
               ListTile(
@@ -828,6 +555,35 @@ class _AgentAppsCardState extends State<_AgentAppsCard> {
                 },
               ),
             ],
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Manual'),
+                  const SizedBox(height: 2),
+                  Text(
+                    'For any other MCP client, or a file marked "Edit by '
+                    'hand", add this to its MCP config:',
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: tokens.textMuted),
+                  ),
+                  const SizedBox(height: 8),
+                  _CopyableBlock(
+                    key: const Key('mcp_manual_config_json'),
+                    text: const JsonEncoder.withIndent('  ').convert({
+                      'mcpServers': {
+                        'shellvibe': {'command': widget.bridge.command},
+                      },
+                    }),
+                    tokens: tokens,
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -844,20 +600,13 @@ class _BridgeCommand {
   const _BridgeCommand({required this.command, required this.isPlaceholder});
 }
 
-/// A monospace, selectable block of text with a one-tap copy button — used
-/// for both the one-time token and the client config JSON in the "Add
-/// client" reveal dialog.
+/// A monospace, selectable block of text with a one-tap copy button — the
+/// manual config under "Connect an AI tool".
 class _CopyableBlock extends StatelessWidget {
-  const _CopyableBlock({
-    super.key,
-    required this.text,
-    required this.tokens,
-    this.maxLines,
-  });
+  const _CopyableBlock({super.key, required this.text, required this.tokens});
 
   final String text;
   final ShellVibeTokens tokens;
-  final int? maxLines;
 
   @override
   Widget build(BuildContext context) {
@@ -875,7 +624,6 @@ class _CopyableBlock extends StatelessWidget {
           Expanded(
             child: SelectableText(
               text,
-              maxLines: maxLines,
               style: shellvibeMono(
                 context,
                 size: 11.5,

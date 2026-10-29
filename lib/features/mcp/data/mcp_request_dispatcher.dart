@@ -155,8 +155,9 @@ class McpRequestDispatcher {
       // revoked mid-conversation. Say so plainly instead of failing as a
       // generic internal error, so the agent stops retrying.
       return McpToolResult.error(
-        'This client has been revoked. Ask the user to issue a new token in '
-        'ShellVibe under Settings → AI Access.',
+        'This client has been revoked. It stays shut out until the user '
+        'turns AI access off and on again in ShellVibe under Settings → AI '
+        'Access.',
       );
     }
 
