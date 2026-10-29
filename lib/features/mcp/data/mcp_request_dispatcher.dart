@@ -15,6 +15,20 @@ part 'mcp_request_dispatcher.g.dart';
 /// Name and version this server reports to a client during `initialize`.
 const _kServerInfo = McpServerInfo(name: 'ShellVibe', version: '1');
 
+/// Sent in `initialize`. An agent otherwise defaults to `ssh` in its own
+/// shell, which skips the user's access policy, approvals and audit log.
+const _kInstructions =
+    'Use ShellVibe whenever the user asks for anything on a remote server '
+    '(run a command, check a service, read logs, deploy) that you would '
+    'otherwise do with ssh, scp or a terminal. The servers the user saved in '
+    'ShellVibe are reached through these tools, not through ssh in a local '
+    'shell. Flow: list_hosts -> request_host_access (once, with every host '
+    'the task needs) -> open_session -> run_command -> close_session. If '
+    'list_runbooks already has the operation, prefer run_runbook. You only '
+    'ever get hostIds, never hostnames or credentials. A command may pause '
+    'for the user\'s approval or be denied by the host\'s policy: read the '
+    'error code and adapt rather than falling back to ssh.';
+
 /// Turns a JSON-RPC request into an MCP response by routing it to the tool
 /// registry.
 ///
@@ -86,7 +100,10 @@ class McpRequestDispatcher {
         final ended = _connectionScopes[clientId];
         _connectionScopes[clientId] = const Uuid().v4();
         if (ended != null) onScopeEnded?.call(ended);
-        return McpInitializeResult(serverInfo: _kServerInfo).toJson();
+        return McpInitializeResult(
+          serverInfo: _kServerInfo,
+          instructions: _kInstructions,
+        ).toJson();
 
       case McpMethod.toolsList:
         return {
