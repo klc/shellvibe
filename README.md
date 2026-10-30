@@ -40,7 +40,7 @@ ShellVibe brings modern, hardware-accelerated terminal rendering, a Zero-Knowled
 
 ![Vault identity list showing one stored password identity](docs/screenshots/vault.png)
 
-**AI access** — an MCP server, off by default, that lets an agent reach registered hosts under per-host approval, never with the credential itself.
+**AI access** — an MCP server, off by default, that lets an agent reach your hosts through ShellVibe instead of `ssh`, under per-host approval and a per-host max access level, never with the credential itself. Claude Code, Claude Desktop, Cursor, Antigravity and Codex connect in one click.
 
 ![AI Access settings with the agent toggle, registered clients, live activity and a kill switch](docs/screenshots/ai-access.png)
 
@@ -65,7 +65,7 @@ ShellVibe brings modern, hardware-accelerated terminal rendering, a Zero-Knowled
 - **Identity Vault** — Argon2id + AES-256-GCM Zero-Knowledge encryption. Master password protected DEK/KEK architecture, brute-force lockout and auto-lock on background.
 - **Snippets & Runbooks** — `${INPUT:variable}` parameterised commands and multi-step runbook execution with exit-code / regex output verification.
 - **Workspaces** — Isolated workspace scoping for hosts, identities, tunnels and automation; switched by clicking the workspace card.
-- **AI access (MCP)** — A localhost-only MCP server, off by default per workspace, that gives an agent (Claude Code, Claude Desktop, any MCP client) `list_hosts`, `describe_host`, `request_host_access`, `open_session`, `run_command`, `interrupt`, `close_session` and `list_sessions` — under per-host approval and policy, with an audit log and a kill switch, and never a stored credential.
+- **AI access (MCP)** — A localhost-only MCP server, off by default per workspace, that gives an agent (Claude Code, Claude Desktop, Cursor, Antigravity and Codex in one click, or any MCP client by hand) `list_hosts`, `describe_host`, `request_host_access`, `open_session`, `run_command`, `interrupt`, `close_session`, `list_sessions` and the runbook tools `list_runbooks`, `run_runbook`, `get_runbook_run` and `cancel_runbook_run` — under per-host approval and policy, with an audit log and a kill switch, and never a stored credential.
 - **Device Link** — Pair a phone over your own LAN with a QR code and take a session over from the other device.
 - **E2EE Cloud Sync** — Self-contained encrypted backup export/import (DEK wrapped with backup password, re-wrapping of secrets across devices).
 - **Design System** — "Quiet Ops" theme with 7+ dark palettes (OLED, Catppuccin, Nord, Dracula, Solarized, TokyoNight, Gruvbox) via Shadcn UI.
@@ -151,7 +151,7 @@ flutter test
 - Identity secrets (passwords, private keys, passphrases) are encrypted with a random Data Encryption Key (DEK). With a master password configured, the DEK is stored only in its AES-256-GCM wrapped form and the plaintext copy is purged from the keychain.
 - Failed unlock attempts trigger exponential back-off lockout (30s → … → 1h).
 - SFTP operations mitigate path-traversal (slip) attacks and uploads use atomic temp-file + rename commits.
-- AI access is off by default in every workspace. When it is on, the MCP server listens on `127.0.0.1` only, an agent sees a host as an opaque id rather than a hostname or credential, each host is granted read-only or read-write by hand, every tool call is written to an audit log, and one button cuts all agent access.
+- AI access is off by default in every workspace. When it is on, the MCP server listens on `127.0.0.1` only, an agent sees a host as an opaque id rather than a hostname or credential, each host has its own AI access switch and a max access level (Read only, Ask before changes or Full access) that no grant or approval can exceed, every tool call is written to an audit log, and one button cuts all agent access.
 
 ### macOS App Sandbox is disabled
 
