@@ -33,10 +33,15 @@ runbook_tools_test.dart checks that the MCP runbook tools mask secrets in
 commands and step output; its only credential is AKIAABCDEFGHIJKLMNOP, an
 alphabet run shaped like an AWS key, once inside a curl Authorization header.
 
+output_redactor_partial_key_test.dart checks that a PEM key cut in half by the
+output cap is still masked. Its "key" is an OpenSSH envelope around two made-up
+body lines that end in `dummybodyline1` and `dummybodyline2`.
+
 Podfile.lock records a checksum per pod, which reads as an API key.
 """
 paths = [
   '''^test/unit/features/mcp/output_redactor_test\.dart$''',
+  '''^test/unit/features/mcp/output_redactor_partial_key_test\.dart$''',
   '''^test/unit/features/mcp/runbook_tools_test\.dart$''',
   '''^test/unit/features/vault/identities_notifier_test\.dart$''',
   '''^test/unit/features/hosts/ssh_config_import_service_test\.dart$''',

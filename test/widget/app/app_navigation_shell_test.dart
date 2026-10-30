@@ -11,6 +11,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:shellvibe/app/router/app_router.dart';
 import 'package:shellvibe/app/widgets/app_navigation_shell.dart';
 import 'package:shellvibe/app/widgets/window_chrome_frame.dart';
+import 'package:shellvibe/app/window/launch_at_login.dart';
 import 'package:shellvibe/app/window/window_chrome.dart';
 import 'package:shellvibe/core/utils/platform_capabilities.dart';
 import 'package:shellvibe/features/hosts/presentation/screens/hosts_screen.dart';
@@ -54,6 +55,11 @@ void main() {
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
         vaultProvider.overrideWith(() => _UnlockedVaultNotifier()),
+        // The real one shells out to `reg query` on Windows, and the process
+        // outlives the test's fake clock as a pending timer.
+        launchAtLoginProvider.overrideWithValue(
+          const UnsupportedLaunchAtLogin(),
+        ),
       ],
       child: Consumer(
         builder: (context, ref, _) {
