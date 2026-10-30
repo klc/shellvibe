@@ -27,6 +27,11 @@ final class DeviceLinkPairingProfile {
   final String? sessionId;
   final DateTime pairedAt;
 
+  /// False once a session with this desktop was ended on purpose, from either
+  /// end: the pairing then waits for the user instead of reconnecting by
+  /// itself. Pairing again starts a fresh profile with it back on.
+  final bool autoReconnect;
+
   DeviceLinkPairingProfile({
     required this.id,
     required this.deviceId,
@@ -40,6 +45,7 @@ final class DeviceLinkPairingProfile {
     required this.spki,
     required this.sessionId,
     required this.pairedAt,
+    this.autoReconnect = true,
   }) : addresses = List.unmodifiable(addresses);
 
   factory DeviceLinkPairingProfile.fromQr({
@@ -84,6 +90,7 @@ final class DeviceLinkPairingProfile {
     'spki': spki,
     'sessionId': sessionId,
     'pairedAt': pairedAt.toUtc().toIso8601String(),
+    'autoReconnect': autoReconnect,
   };
 
   factory DeviceLinkPairingProfile.fromJson(Object? value) {
@@ -137,6 +144,8 @@ final class DeviceLinkPairingProfile {
       spki: value['spki'] as String,
       sessionId: sessionId as String?,
       pairedAt: pairedAt.toUtc(),
+      // Profiles saved before the field existed kept reconnecting.
+      autoReconnect: value['autoReconnect'] != false,
     );
   }
 
@@ -145,6 +154,7 @@ final class DeviceLinkPairingProfile {
     String? name,
     String? deviceId,
     String? secret,
+    bool? autoReconnect,
   }) {
     return DeviceLinkPairingProfile(
       id: id,
@@ -159,6 +169,7 @@ final class DeviceLinkPairingProfile {
       spki: spki,
       sessionId: sessionId ?? this.sessionId,
       pairedAt: pairedAt,
+      autoReconnect: autoReconnect ?? this.autoReconnect,
     );
   }
 }
