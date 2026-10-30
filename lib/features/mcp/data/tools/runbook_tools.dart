@@ -368,11 +368,13 @@ class RunRunbookTool with McpArgReaders implements McpToolHandler {
         'Starts a runbook (see list_runbooks) on one or more hosts and '
         'returns at once with a runId; the run goes on in ShellVibe. Every '
         'call pauses for the user to approve it in a window that shows the '
-        'steps, the hosts (production is highlighted) and the values: there '
+        'steps, the hosts and the values: there '
         'is no policy mode or earlier approval that skips this, because a '
         'runbook is several commands on several hosts. Every host must be '
         'visible to you and already granted (request_host_access first, or '
-        'you get HOST_ACCESS_REQUIRED). Pass only non-secret variables; a '
+        'you get HOST_ACCESS_REQUIRED), and not read only: a host whose '
+        'maxMode or grant is readonly refuses with POLICY_DENIED. Pass only '
+        'non-secret variables; a '
         'secret variable is typed by the user in the approval window, and '
         'passing one is rejected. Required variables that are missing are '
         'reported before the user is asked anything. One run at a time: '
@@ -671,11 +673,21 @@ class RunRunbookTool with McpArgReaders implements McpToolHandler {
           'No host with id "$id" is visible to this client.',
         );
       }
-      if (await grantRepository.effectiveMode(ctx.clientId, id) == null) {
+      final granted = await grantRepository.effectiveMode(ctx.clientId, id);
+      if (granted == null) {
         throw McpToolException(
           McpErrorCode.hostAccessRequired,
           'Access to host "$id" has not been granted. Call '
           'request_host_access for it first.',
+        );
+      }
+      // A runbook changes the host by design, which read only never allows,
+      // whether the limit is the host's max access or the grant itself.
+      if (granted.atMost(McpAccessMode.fromName(row.mcpDefaultMode)) ==
+          McpAccessMode.readonly) {
+        throw McpToolException(
+          McpErrorCode.policyDenied,
+          'Host "$id" is read only for agents, so a runbook cannot run on it.',
         );
       }
       if (host.protocol == 'local') {

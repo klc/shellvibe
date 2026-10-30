@@ -9,6 +9,9 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- AI Access: an agent can no longer run a runbook on a host whose max access,
+  or its own grant there, is Read only. It used to run once the approval
+  window was accepted.
 - Device Link: a session ended on purpose, from the phone or the desktop,
   stays ended. The phone no longer reconnects by itself when it comes back to
   the foreground; scan the QR code again to reconnect. Dropped connections
