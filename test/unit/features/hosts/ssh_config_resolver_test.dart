@@ -12,7 +12,9 @@ class Harness {
   late final SshConfigResolver resolver = SshConfigResolver(
     loader: (path) async {
       touchedPaths.add(path);
-      return files[path];
+      // The resolver joins glob matches with the platform separator, which is
+      // `\` on Windows; these fake files are keyed with `/`.
+      return files[path.replaceAll(r'\', '/')];
     },
     lister: (dir) async {
       final prefix = dir == '.' ? '' : '$dir/';
