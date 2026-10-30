@@ -45,7 +45,7 @@ final class DeviceLinkNotifierProvider
 }
 
 String _$deviceLinkNotifierHash() =>
-    r'6b9f34e1674dccb5ef33eaf67efa22c89463e68c';
+    r'4359bb52a96a9943fb137737000e8ee3462f2353';
 
 /// Owns saved-pairing reconnects and their mobile terminal controllers.
 

@@ -4,6 +4,8 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../../../core/network/device_link/device_link_protocol.dart';
+import '../../../../core/network/device_link/device_link_server.dart';
 import '../../../../shared/providers/database_providers.dart';
 import '../../data/repositories/device_link_pairing_storage.dart';
 import '../../data/services/device_link_auto_reconnect_service.dart';
@@ -130,9 +132,16 @@ class DeviceLinkNotifier extends _$DeviceLinkNotifier {
         if (_disposed) break;
         if (!_vaultAllowsDeviceLink) break;
         if (_controllers.containsKey(profile.id)) continue;
+        if (!profile.autoReconnect) continue;
         try {
           await _connectProfile(profile, storage);
         } catch (error) {
+          if (error is DeviceLinkTransportException &&
+              error.code == deviceLinkSessionEndedCode) {
+            // Ended on the desktop while this phone was away to hear it.
+            await _stopAutoReconnect(profile.id);
+            continue;
+          }
           debugPrint(
             '[Device Link] Reconnect failed for ${profile.id}: $error',
           );
@@ -211,10 +220,30 @@ class DeviceLinkNotifier extends _$DeviceLinkNotifier {
     String profileId,
     DeviceLinkLinkedSessionController controller,
   ) async {
+    // Still the live one: the user closed the tab, not the notifier after a
+    // drop. Turned off before the entry goes, or a resume landing in between
+    // reconnects it.
     if (identical(_controllers[profileId], controller)) {
+      await _stopAutoReconnect(profileId);
       _controllers.remove(profileId);
     }
     await _closeControllerQuietly(controller);
+  }
+
+  /// A session ended on purpose, from either end, stays ended: the pairing is
+  /// skipped by [reconnectStoredProfiles] until the user pairs it again.
+  Future<void> _stopAutoReconnect(String profileId) async {
+    if (_disposed) return;
+    try {
+      final storage = DeviceLinkPairingStorage(
+        ref.read(secureStorageServiceProvider),
+      );
+      final profile = await storage.getById(profileId);
+      if (profile == null || !profile.autoReconnect) return;
+      await storage.save(profile.copyWith(autoReconnect: false));
+    } catch (error) {
+      debugPrint('[Device Link] Could not turn off reconnect: $error');
+    }
   }
 
   /// Ends the live session for [profileId], if there is one.
@@ -254,6 +283,10 @@ class DeviceLinkNotifier extends _$DeviceLinkNotifier {
     }
     if (_disposed) return;
     _controllers.remove(profileId);
+    if (controller.status == DeviceLinkLinkedSessionStatus.detached ||
+        controller.endedByPeer) {
+      unawaited(_stopAutoReconnect(profileId));
+    }
     if (controller.status == DeviceLinkLinkedSessionStatus.detached) return;
     unawaited(controller.close());
     unawaited(

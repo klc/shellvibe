@@ -316,6 +316,71 @@ void main() {
     );
   }, timeout: const Timeout(_timeout));
 
+  test(
+    'a session ended on the desktop refuses reconnects until paired again',
+    () async {
+      Future<String> pair(DeviceLinkClientConnection connection) async {
+        final payload = await server.createPairingPayload(
+          addresses: const ['127.0.0.1'],
+        );
+        await connection.sendHello(
+          const DeviceLinkHello(deviceId: 'phone', deviceName: 'Phone'),
+        );
+        await connection.nextControl(timeout: _timeout);
+        await connection.sendPair(
+          DeviceLinkPair(
+            token: payload.token,
+            deviceName: 'Phone',
+            devicePublicKey: 'phone-public-key',
+          ),
+        );
+        final paired = await connection.nextControl(timeout: _timeout);
+        await connection.nextControl(timeout: _timeout);
+        return (paired as DeviceLinkPaired).secret;
+      }
+
+      Future<DeviceLinkControlMessage> reconnect(String secret) async {
+        final connection = await _connect(identity, server.port);
+        addTearDown(connection.close);
+        await connection.sendHello(
+          DeviceLinkHello(
+            deviceId: 'phone',
+            deviceName: 'Phone',
+            secret: secret,
+          ),
+        );
+        return connection.nextControl(timeout: _timeout);
+      }
+
+      final first = await _connect(identity, server.port);
+      addTearDown(first.close);
+      final secret = await pair(first);
+      await _attach(first);
+
+      await echo._owner!.end();
+      final ended = await first.nextControl(timeout: _timeout);
+      expect(
+        ended is DeviceLinkError && ended.code == deviceLinkSessionEndedCode,
+        isTrue,
+      );
+      await _waitForClosed(first);
+
+      final refused = await reconnect(secret);
+      expect(
+        refused is DeviceLinkError &&
+            refused.code == deviceLinkSessionEndedCode,
+        isTrue,
+      );
+
+      final rescan = await _connect(identity, server.port);
+      addTearDown(rescan.close);
+      final newSecret = await pair(rescan);
+      await rescan.close();
+      expect(await reconnect(newSecret), isA<DeviceLinkHelloAck>());
+    },
+    timeout: const Timeout(_timeout),
+  );
+
   test('disconnectDevice closes only that device\'s connections', () async {
     Future<DeviceLinkClientConnection> pairAs(String deviceId) async {
       final payload = await server.createPairingPayload(

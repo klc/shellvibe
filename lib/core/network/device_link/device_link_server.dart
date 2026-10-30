@@ -183,6 +183,12 @@ final class DeviceLinkServer {
   HttpServer? _httpServer;
   final Set<DeviceLinkServerConnection> _connections = {};
 
+  /// Devices whose session was ended here. Their stored-secret reconnects are
+  /// refused until they pair again: a phone that was asleep never got the
+  /// [deviceLinkSessionEndedCode] frame and would otherwise dial straight back.
+  // ponytail: in memory only, a desktop restart lets them reconnect again.
+  final Set<String> _endedDevices = {};
+
   DeviceLinkServer({
     required this.identity,
     required this.hostName,
@@ -411,6 +417,13 @@ final class DeviceLinkServer {
         await connection.close();
         return;
       }
+      if (_endedDevices.contains(hello.deviceId)) {
+        await connection._protocolErrorAndClose(
+          deviceLinkSessionEndedCode,
+          'The desktop ended this session; pair again to reconnect',
+        );
+        return;
+      }
       connection._markAuthenticated();
     }
     // An unauthenticated hello exposes no session metadata.
@@ -454,6 +467,7 @@ final class DeviceLinkServer {
       return;
     }
     await _dropSupersededDevices(deviceId, pair.supersedes);
+    _endedDevices.remove(deviceId);
     connection._markAuthenticated();
     await connection.sendControl(
       DeviceLinkPaired(secret: secret, hostName: hostName),
@@ -814,6 +828,21 @@ final class DeviceLinkServerConnection {
   Future<void> _protocolErrorAndClose(String code, String message) async {
     await _error(code, message);
     await close();
+  }
+
+  /// Closes this connection as ended on purpose: the phone is told so, and the
+  /// same device reconnecting by itself is refused until it pairs again.
+  Future<void> end() async {
+    final deviceId = _deviceId;
+    if (deviceId != null) _server._endedDevices.add(deviceId);
+    try {
+      await _error(
+        deviceLinkSessionEndedCode,
+        'The desktop ended this session',
+      );
+    } finally {
+      await close();
+    }
   }
 
   Future<void> close() async {

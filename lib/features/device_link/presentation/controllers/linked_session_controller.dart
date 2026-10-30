@@ -63,6 +63,7 @@ final class DeviceLinkLinkedSessionController extends ChangeNotifier {
       DeviceLinkLinkedSessionStatus.connecting;
   String? _errorMessage;
   bool _readOnly = false;
+  bool _endedByPeer = false;
   Future<void> _outboundTail = Future<void>.value();
   int _queuedInputBytes = 0;
   int _rejectedInputBytes = 0;
@@ -142,6 +143,10 @@ final class DeviceLinkLinkedSessionController extends ChangeNotifier {
 
   DeviceLinkLinkedSessionStatus get status => _status;
   String? get errorMessage => _errorMessage;
+
+  /// Whether the desktop ended this session on purpose, as opposed to the
+  /// connection dropping.
+  bool get endedByPeer => _endedByPeer;
   bool get isReadOnly => _readOnly || connection.isReadOnly;
   bool get supportsBracketedPaste => _bracketedPaste;
   bool get canSendInput =>
@@ -298,6 +303,7 @@ final class DeviceLinkLinkedSessionController extends ChangeNotifier {
         terminalSession.isConnected = true;
         _notify();
       case DeviceLinkError(:final code, :final message):
+        if (code == deviceLinkSessionEndedCode) _endedByPeer = true;
         if (_isFatalErrorCode(code)) {
           _setError('$code: $message');
           return;
@@ -324,6 +330,7 @@ final class DeviceLinkLinkedSessionController extends ChangeNotifier {
     'session_not_attached',
     'already_attached',
     'snapshot_too_large',
+    deviceLinkSessionEndedCode,
   };
 
   bool _isFatalErrorCode(String code) => _fatalErrorCodes.contains(code);

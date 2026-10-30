@@ -39,6 +39,11 @@ class DeviceLinkUnsupportedVersionException
 /// have to verify one Argon2id hash at a time.
 const int deviceLinkMaxSupersededDevices = 8;
 
+/// Error code the desktop sends right before closing a session it ended on
+/// purpose. Without it the phone cannot tell the close from a dropped network
+/// and dials straight back in.
+const String deviceLinkSessionEndedCode = 'session_ended';
+
 /// A pairing record the phone is replacing, proven by the secret it holds.
 ///
 /// The desktop keys authorization rows by the phone's device id. When a phone

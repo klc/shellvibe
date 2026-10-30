@@ -185,7 +185,7 @@ final class DeviceLinkLocalSessionTransport
   /// Closes the owning connection so the server releases the attachment and
   /// restores the desktop terminal dimensions through the normal close path.
   Future<void> disconnect() async {
-    await _connection?.close();
+    await _connection?.end();
   }
 
   @override
@@ -207,7 +207,7 @@ final class DeviceLinkLocalSessionTransport
       // that a desktop tab disappeared. The server-side close path is
       // idempotent, so this remains safe if a normal socket/PTY close races
       // with tab disposal.
-      await connection.close();
+      await connection.end();
     }
   }
 
@@ -221,7 +221,7 @@ final class DeviceLinkLocalSessionTransport
     if (connection == null) return;
     _detachInternal();
     onStateChanged?.call();
-    unawaited(connection.close());
+    unawaited(connection.end());
   }
 
   DeviceLinkAttachment? _detachInternal() {

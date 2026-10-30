@@ -7,6 +7,13 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Device Link: a session ended on purpose, from the phone or the desktop,
+  stays ended. The phone no longer reconnects by itself when it comes back to
+  the foreground; scan the QR code again to reconnect. Dropped connections
+  still reconnect on their own.
+
 ## [1.11.0] - 2026-10-29
 
 ### Added
