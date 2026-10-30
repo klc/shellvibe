@@ -116,6 +116,8 @@ void main() {
     String workspace = 'ws',
     bool visible = true,
     bool granted = true,
+    String maxMode = 'guarded',
+    McpAccessMode grantMode = McpAccessMode.guarded,
   }) async {
     await db.hostsDao.insertHost(
       HostsCompanion.insert(
@@ -125,14 +127,11 @@ void main() {
         hostname: '$id.example.test',
         createdAt: DateTime(2026),
         mcpVisible: Value(visible),
+        mcpDefaultMode: Value(maxMode),
       ),
     );
     if (granted) {
-      await grants.grant(
-        clientId: 'client-1',
-        hostId: id,
-        mode: McpAccessMode.guarded,
-      );
+      await grants.grant(clientId: 'client-1', hostId: id, mode: grantMode);
     }
   }
 
@@ -466,6 +465,23 @@ void main() {
         ),
       );
       expect(coordinator.currentRunbooks, isEmpty);
+    });
+
+    test('a read only host or grant refuses, before any dialog', () async {
+      await runbook();
+      await host('capped', maxMode: 'readonly');
+      await host('granted-ro', grantMode: McpAccessMode.readonly);
+      for (final id in ['capped', 'granted-ro']) {
+        await expectLater(
+          run.execute(_ctx, {
+            'runbookId': 'rb',
+            'hostIds': [id],
+          }),
+          toolError(McpErrorCode.policyDenied, contains('read only')),
+        );
+      }
+      expect(coordinator.currentRunbooks, isEmpty);
+      expect(gateway.started, isEmpty);
     });
 
     test('one inaccessible host among several refuses the whole run', () async {
