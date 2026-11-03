@@ -230,7 +230,11 @@ class McpSettingsNotifier extends _$McpSettingsNotifier {
     // app that is plainly open. Reconciling is scheduled rather than awaited
     // so `build` stays synchronous-ish and cannot deadlock on a provider it
     // is itself constructing.
-    if (persisted.masterEnabled && !controller.isRunning) {
+    // A workspace switch lands here too: a server still bound to the old
+    // workspace is restarted so the bridge's next call (it re-reads
+    // `mcp-endpoint.json` on every request) sees this workspace's hosts.
+    if (persisted.masterEnabled != controller.isRunning ||
+        _boundElsewhere(controller)) {
       Future<void>.microtask(ensureServerMatchesSetting);
     }
 
@@ -257,9 +261,11 @@ class McpSettingsNotifier extends _$McpSettingsNotifier {
     if (current == null) return;
 
     final controller = ref.read(mcpServerControllerProvider);
-    if (current.masterEnabled == controller.isRunning) return;
+    final stale = _boundElsewhere(controller);
+    if (!stale && current.masterEnabled == controller.isRunning) return;
 
     try {
+      if (stale) await controller.stop();
       if (current.masterEnabled) {
         await _start(controller, current);
       } else {
@@ -281,6 +287,9 @@ class McpSettingsNotifier extends _$McpSettingsNotifier {
       ),
     );
   }
+
+  bool _boundElsewhere(McpServerController controller) =>
+      controller.isRunning && controller.workspaceId != _workspaceId;
 
   /// Flips the master switch: on starts the MCP HTTP server for this
   /// workspace, off stops it. Default is OFF for every workspace that has

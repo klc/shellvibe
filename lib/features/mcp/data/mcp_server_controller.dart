@@ -93,8 +93,9 @@ class McpServerController {
   /// The workspace whose MCP client this controller writes into
   /// `mcp-endpoint.json`. See `docs/mcp_plan.md`'s "Workspace bağlama": the
   /// client a bridge authenticates as is fixed to whichever workspace this
-  /// returns *at start time* — switching the active workspace in the UI
-  /// later does not move an already-running bridge's visibility.
+  /// returns *at start time*. The controller itself never follows a later
+  /// switch; `McpSettingsNotifier` restarts the server when the active
+  /// workspace changes, see [workspaceId].
   final String Function() activeWorkspaceId;
 
   /// Reserved name for the client row this controller mints for its own
@@ -123,6 +124,7 @@ class McpServerController {
 
   McpHttpTransport? _transport;
   Future<void>? _startFuture;
+  String? _workspaceId;
 
   McpServerController({
     required this.transportFactory,
@@ -138,6 +140,11 @@ class McpServerController {
 
   /// The bound port, or `null` while stopped.
   int? get port => _transport?.port;
+
+  /// The workspace the bridge's client row was minted for, or `null` while
+  /// stopped. Differs from [activeWorkspaceId] once the user switches
+  /// workspaces under a running server.
+  String? get workspaceId => isRunning ? _workspaceId : null;
 
   /// Starts the transport and writes `mcp-endpoint.json`.
   ///
@@ -314,6 +321,7 @@ class McpServerController {
       workspaceId: workspaceId,
       name: systemClientName,
     );
+    _workspaceId = workspaceId;
     return rawToken;
   }
 }
