@@ -16,6 +16,10 @@ and release versions follow [Semantic Versioning](https://semver.org/).
   stays ended. The phone no longer reconnects by itself when it comes back to
   the foreground; scan the QR code again to reconnect. Dropped connections
   still reconnect on their own.
+- Terminal: broadcast input belongs to one tab. Panes selected in one tab no
+  longer receive what is typed in another, and a tab's selection is still
+  there after switching away and back. ⌘/Ctrl+clicking a second pane now
+  selects the pane you were in as well, instead of that one alone.
 
 ## [1.11.0] - 2026-10-29
 

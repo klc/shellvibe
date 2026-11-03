@@ -301,13 +301,21 @@ void main() {
       },
     );
 
+    /// Opens a tab and splits it so it holds [count] panes; returns their ids
+    /// in creation order. The last one is left active.
+    List<String> openPanes(TerminalTabsNotifier notifier, int count) {
+      notifier.openLocalTab(title: 'Tab');
+      final ids = [container.read(terminalTabsProvider).activeTabId!];
+      while (ids.length < count) {
+        notifier.splitTab(ids.first);
+        ids.add(container.read(terminalTabsProvider).activeTabId!);
+      }
+      return ids;
+    }
+
     test('togglePaneSelection toggles membership and isBroadcasting', () {
       final notifier = container.read(terminalTabsProvider.notifier);
-
-      notifier.openLocalTab(title: 'A');
-      final a = container.read(terminalTabsProvider).activeTabId!;
-      notifier.openLocalTab(title: 'B');
-      final b = container.read(terminalTabsProvider).activeTabId!;
+      final [a, b] = openPanes(notifier, 2);
 
       expect(container.read(terminalTabsProvider).isBroadcasting, isFalse);
 
@@ -328,13 +336,8 @@ void main() {
     test('tapPane modifier click selects and activates; plain click on an '
         'unselected pane clears the selection', () {
       final notifier = container.read(terminalTabsProvider.notifier);
-
-      notifier.openLocalTab(title: 'A');
-      final a = container.read(terminalTabsProvider).activeTabId!;
-      notifier.openLocalTab(title: 'B');
-      final b = container.read(terminalTabsProvider).activeTabId!;
-      notifier.openLocalTab(title: 'C');
-      final c = container.read(terminalTabsProvider).activeTabId!;
+      final [a, b, c] = openPanes(notifier, 3);
+      notifier.tapPane(a, broadcastModifier: false);
 
       notifier.tapPane(a, broadcastModifier: true);
       notifier.tapPane(b, broadcastModifier: true);
@@ -349,6 +352,61 @@ void main() {
       state = container.read(terminalTabsProvider);
       expect(state.selectedPaneIds, isEmpty);
       expect(state.activeTabId, c);
+    });
+
+    test('a modifier click from pane 1 onto pane 2 selects both', () {
+      final notifier = container.read(terminalTabsProvider.notifier);
+      final [a, b, c] = openPanes(notifier, 3);
+      notifier.tapPane(a, broadcastModifier: false);
+
+      notifier.tapPane(b, broadcastModifier: true);
+
+      var state = container.read(terminalTabsProvider);
+      expect(state.selectedPaneIds, {a, b});
+      expect(state.isBroadcasting, isTrue);
+
+      // Only the first one pulls the active pane in; later ones just add.
+      notifier.tapPane(c, broadcastModifier: true);
+      notifier.tapPane(a, broadcastModifier: true);
+
+      state = container.read(terminalTabsProvider);
+      expect(state.selectedPaneIds, {b, c});
+    });
+
+    test('each tab keeps its own broadcast selection', () {
+      final notifier = container.read(terminalTabsProvider.notifier);
+      final [a1, a2] = openPanes(notifier, 2);
+      final [b1, b2, b3] = openPanes(notifier, 3);
+
+      // Typed into pane 1 of tab A: it must reach A's pane 2 only.
+      final received = <String, List<String>>{};
+      for (final id in [a1, a2, b1, b2]) {
+        notifier.tabById(id)!.terminal.onOutput = (data) =>
+            (received[id] ??= []).add(data);
+      }
+
+      notifier.tapPane(a1, broadcastModifier: false);
+      notifier.tapPane(a2, broadcastModifier: true);
+      notifier.tapPane(b1, broadcastModifier: false);
+      notifier.tapPane(b2, broadcastModifier: true);
+
+      var state = container.read(terminalTabsProvider);
+      expect(state.activeSelection, {b1, b2});
+
+      notifier.tabById(a1)!.terminal.onOutput!('ls');
+      expect(received[a2], ['ls']);
+      expect(received[b1], isNull);
+      expect(received[b2], isNull);
+
+      // Leaving broadcast in tab B leaves tab A's selection alone, so it is
+      // still there when the user comes back.
+      notifier.tapPane(b3, broadcastModifier: false);
+      expect(container.read(terminalTabsProvider).activeSelection, isEmpty);
+      notifier.setActiveTab(a1);
+
+      state = container.read(terminalTabsProvider);
+      expect(state.activeSelection, {a1, a2});
+      expect(state.isBroadcasting, isTrue);
     });
 
     test('closeTab clears the closed pane from the selection', () async {

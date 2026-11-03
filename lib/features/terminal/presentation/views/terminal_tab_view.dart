@@ -220,7 +220,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
       tokens,
       paneOrder: _paneOrder(tabsState, activeRootTab),
       activePaneId: tabsState.activeTabId,
-      selectedPaneIds: tabsState.selectedPaneIds,
+      selectedPaneIds: tabsState.activeSelection,
       buildPaneMenuEntries: _paneMenuEntries,
       squareTopLeft: activeIsFirstTab,
     );
@@ -369,7 +369,7 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
   void _openSnippetPicker() {
     final tabsState = ref.read(terminalTabsProvider);
     if (tabsState.tabs.isEmpty) return;
-    final selectedCount = tabsState.selectedPaneIds.length;
+    final selectedCount = tabsState.activeSelection.length;
     SnippetPickerSheet.show(
       context,
       targetLabel: tabsState.isBroadcasting
