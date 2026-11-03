@@ -350,10 +350,10 @@ void main() {
 
       expect(find.byType(TerminalView), findsNWidgets(3));
 
-      // ⌘+click pane 0 and pane 1 -> two panes selected, broadcast live.
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+      // In pane 0, ⌘+click pane 1 -> both selected, broadcast live.
       await tester.tap(find.byType(TerminalView).at(0));
       await tester.pump();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
       await tester.tap(find.byType(TerminalView).at(1));
       await tester.pump();
       await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);

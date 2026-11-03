@@ -309,7 +309,7 @@ class _RunTargetSheetState extends ConsumerState<RunTargetSheet> {
                   dense: true,
                   leading: const Icon(LucideIcons.radio, size: 18),
                   title: Text(
-                    'Selected panes (${tabs.selectedPaneIds.length})',
+                    'Selected panes (${tabs.activeSelection.length})',
                   ),
                   subtitle: const Text('Broadcasts to every selected pane.'),
                   onTap: () => Navigator.of(

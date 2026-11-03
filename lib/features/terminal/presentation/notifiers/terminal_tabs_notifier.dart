@@ -747,7 +747,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
   void _broadcastFrom(String originId, String data) {
     _broadcastRouter.forwardToOthers(
       originId: originId,
-      selectedIds: state.selectedPaneIds,
+      selectedIds: state.selectionInTabOf(originId),
       tabs: state.tabs,
       data: data,
     );
@@ -767,30 +767,48 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     _syncBroadcast();
   }
 
-  /// Drops every selected pane, ending broadcast.
-  void clearPaneSelection() {
-    if (state.selectedPaneIds.isEmpty) return;
-    state = state.copyWith(selectedPaneIds: const {});
+  /// Drops the selection of the tab [paneId] is in, ending its broadcast.
+  /// Other tabs keep theirs.
+  void clearPaneSelection(String paneId) {
+    final inTab = state.selectionInTabOf(paneId);
+    if (inTab.isEmpty) return;
+    state = state.copyWith(
+      selectedPaneIds: state.selectedPaneIds.difference(inTab),
+    );
     _syncBroadcast();
   }
 
   /// Single entry point for pane taps. A modifier click toggles selection and
   /// makes the pane active (it becomes the broadcast origin); a plain click on
-  /// a pane outside the selection clears the selection and focuses that pane.
+  /// a pane outside the selection clears its tab's selection and focuses it.
+  ///
+  /// The first modifier click in a tab also selects the pane the user was in:
+  /// ⌘-clicking pane 2 from pane 1 means "1 and 2", not "2 alone".
   void tapPane(String tabId, {required bool broadcastModifier}) {
     if (broadcastModifier) {
+      final active = state.activeTab;
+      final pane = state.tabs.where((t) => t.id == tabId).firstOrNull;
+      if (active != null &&
+          pane != null &&
+          !pane.isMcp &&
+          active.id != tabId &&
+          rootOfPane(state.tabs, active).id ==
+              rootOfPane(state.tabs, pane).id &&
+          state.selectionInTabOf(tabId).isEmpty) {
+        togglePaneSelection(active.id);
+      }
       togglePaneSelection(tabId);
     } else if (!state.selectedPaneIds.contains(tabId)) {
-      clearPaneSelection();
+      clearPaneSelection(tabId);
     }
     setActiveTab(tabId);
   }
 
-  /// Sends [code] to every selected pane (origin included) — the snippet
-  /// path while broadcasting. With [submit] the command is also run (Enter).
+  /// Sends [code] to every selected pane of the active tab (origin included)
+  /// — the snippet path while broadcasting. With [submit] the command is also run (Enter).
   void sendTextToSelectedPanes(String code, {bool submit = false}) {
     _broadcastRouter.sendTextToPanes(
-      selectedIds: state.selectedPaneIds,
+      selectedIds: state.activeSelection,
       tabs: state.tabs,
       text: code,
       submit: submit,
