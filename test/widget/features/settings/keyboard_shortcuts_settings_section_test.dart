@@ -37,7 +37,7 @@ void main() {
     await pumpSection(tester, TargetPlatform.windows);
 
     expect(find.text('Ctrl+Shift+K'), findsOneWidget);
-    expect(find.text('Ctrl+Shift+1…7'), findsOneWidget);
+    expect(find.text('Ctrl+Shift+1…8'), findsOneWidget);
     expect(find.text('Ctrl+Tab'), findsOneWidget);
     expect(find.text('Alt+F4'), findsOneWidget);
     expect(find.text('Ctrl+Shift+C'), findsOneWidget);

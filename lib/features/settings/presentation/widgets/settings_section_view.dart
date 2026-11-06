@@ -15,7 +15,6 @@ import '../../../account/presentation/widgets/account_settings_section.dart';
 import '../../../cloud_backup/presentation/widgets/cloud_backup_section.dart';
 import '../../../cloud_backup/presentation/widgets/sync_section.dart';
 import '../../../device_link/presentation/widgets/paired_devices_settings_section.dart';
-import '../../../mcp/presentation/widgets/mcp_access_settings_section.dart';
 import '../../../terminal/domain/models/terminal_font.dart';
 import '../../../terminal/domain/models/terminal_palette.dart';
 import '../../../terminal/domain/models/terminal_palette_data.dart';
@@ -576,11 +575,6 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
         return [
           _buildSectionHeader('Paired Devices', LucideIcons.smartphone),
           const PairedDevicesSettingsSection(),
-        ];
-      case SettingsSection.aiAccess:
-        return [
-          _buildSectionHeader('AI Access', LucideIcons.bot),
-          const McpAccessSettingsSection(),
         ];
       case SettingsSection.account:
         return [

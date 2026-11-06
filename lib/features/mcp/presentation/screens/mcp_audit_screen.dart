@@ -351,10 +351,10 @@ class _McpAuditScreenState extends ConsumerState<McpAuditScreen> {
               message: retentionDays != null
                   ? 'Retention: $retentionDays days. Records are never '
                         'edited or deleted from here — change the window in '
-                        'Settings → AI Access → Audit log retention.'
+                        'AI Access → Audit log retention.'
                   : 'Records are never edited or deleted from here — the '
-                        'retention window is set in Settings → AI Access → '
-                        'Audit log retention.',
+                        'retention window is set in AI Access → Audit log '
+                        'retention.',
             ),
           ),
           Padding(

@@ -15,6 +15,7 @@ import 'package:shellvibe/app/window/launch_at_login.dart';
 import 'package:shellvibe/app/window/window_chrome.dart';
 import 'package:shellvibe/core/utils/platform_capabilities.dart';
 import 'package:shellvibe/features/hosts/presentation/screens/hosts_screen.dart';
+import 'package:shellvibe/features/mcp/presentation/screens/mcp_access_screen.dart';
 import 'package:shellvibe/features/settings/presentation/screens/settings_screen.dart';
 import 'package:shellvibe/features/settings/presentation/widgets/keyboard_shortcuts_settings_section.dart';
 import 'package:shellvibe/features/templates/data/repositories/templates_repository.dart';
@@ -274,12 +275,42 @@ void main() {
         await pumpTabTransition(tester);
         expect(find.byType(SettingsScreen), findsOneWidget);
 
-        // 7. Switch back to Hosts (/hosts - Index 0)
+        // 7. Switch to AI Access (/ai-access - Index 7)
+        await tester.tap(find.byKey(const Key('nav_item_7')));
+        await pumpTabTransition(tester);
+        expect(find.byType(McpAccessScreen), findsOneWidget);
+
+        // 8. Switch back to Hosts (/hosts - Index 0)
         await tester.tap(find.byKey(const Key('nav_item_0')));
         await pumpTabTransition(tester);
         expect(find.byType(HostsScreen), findsOneWidget);
       },
     );
+
+    testWidgets('A tablet rail has no AI Access, and a link to it lands on '
+        'Settings', (tester) async {
+      // The MCP bridge does not run on iOS or Android.
+      debugPlatformCapabilitiesOverride = TargetPlatform.iOS;
+      addTearDown(() => debugPlatformCapabilitiesOverride = null);
+      tester.view.physicalSize = const Size(1180, 820);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(createTestWidget());
+      await pumpTabTransition(tester);
+      expect(find.byKey(const Key('nav_item_0')), findsOneWidget);
+      expect(
+        find.byKey(Key('nav_item_${navigationIndexForPath('/ai-access')}')),
+        findsNothing,
+      );
+
+      ProviderScope.containerOf(
+        tester.element(find.byType(MaterialApp)),
+      ).read(appRouterProvider).go('/ai-access');
+      await pumpTabTransition(tester);
+      expect(find.byType(McpAccessScreen), findsNothing);
+      expect(find.byType(SettingsScreen), findsOneWidget);
+    });
 
     testWidgets('Rail is icon-only and has no collapse toggle', (tester) async {
       tester.view.physicalSize = const Size(1440, 900);
