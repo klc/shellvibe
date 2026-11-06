@@ -89,7 +89,7 @@ void main() {
         final appDb = AppDatabase(NativeDatabase(tempDbFile));
         db = appDb;
 
-        expect(appDb.schemaVersion, equals(21));
+        expect(appDb.schemaVersion, equals(22));
 
         // The v10 tables have to exist after a migration, not only after a
         // fresh create: a device that upgrades and then makes a change would
@@ -546,7 +546,7 @@ void main() {
       final appDb = AppDatabase(NativeDatabase(tempDbFile));
       db = appDb;
 
-      expect(appDb.schemaVersion, equals(21));
+      expect(appDb.schemaVersion, equals(22));
       expect(await appDb.vaultEnvVarsDao.getByWorkspace('default'), isEmpty);
 
       await appDb.vaultEnvVarsDao.insert(
@@ -609,7 +609,7 @@ void main() {
         final appDb = AppDatabase(NativeDatabase(tempDbFile));
         db = appDb;
 
-        expect(appDb.schemaVersion, equals(21));
+        expect(appDb.schemaVersion, equals(22));
 
         // The id is the deterministic one sync uses, so another device that
         // migrates the same data produces the same row.
@@ -653,6 +653,38 @@ void main() {
 
       final host = await appDb.hostsDao.getHostById('h-1');
       expect(host!.mcpDefaultMode, 'guarded');
+    });
+
+    test('upgrading to v22 places old audit rows by their host', () async {
+      // Built at the current schema, then wound back to v21 by dropping the
+      // column, so reopening adds it and runs the backfill.
+      final fresh = AppDatabase(NativeDatabase(tempDbFile));
+      await fresh.customStatement(
+        "INSERT INTO workspaces (id, name, created_at) VALUES ('ws-1', 'W', 0)",
+      );
+      await fresh.customStatement(
+        'INSERT INTO hosts (id, workspace_id, label, hostname, created_at) '
+        "VALUES ('h-1', 'ws-1', 'H', 'h', 0)",
+      );
+      await fresh.customStatement(
+        'INSERT INTO mcp_audit_log (id, at, client_id, client_name, host_id, '
+        "tool, args_json, decision) VALUES ('a-1', 0, 'c', 'C', 'h-1', "
+        "'run_command', '{}', 'allowed'), ('a-2', 0, 'c', 'C', 'h-gone', "
+        "'run_command', '{}', 'allowed'), ('a-3', 0, 'c', 'C', NULL, "
+        "'run_runbook', '{}', 'allowed')",
+      );
+      await fresh.customStatement(
+        'ALTER TABLE mcp_audit_log DROP COLUMN workspace_id',
+      );
+      await fresh.customStatement('PRAGMA user_version = 21;');
+      await fresh.close();
+
+      final appDb = AppDatabase(NativeDatabase(tempDbFile));
+      db = appDb;
+
+      final rows = await appDb.mcpDao.queryEntries();
+      final byId = {for (final r in rows) r.id: r.workspaceId};
+      expect(byId, {'a-1': 'ws-1', 'a-2': null, 'a-3': null});
     });
   });
 }

@@ -197,6 +197,8 @@ void main() {
       expect(find.byKey(const Key('settings_tool_tunnels')), findsOneWidget);
       expect(find.byKey(const Key('settings_tool_snippets')), findsOneWidget);
       expect(find.byKey(const Key('settings_tool_workspaces')), findsOneWidget);
+      // A narrow desktop window has no rail, so this is AI Access's way in.
+      expect(find.byKey(const Key('settings_tool_ai-access')), findsOneWidget);
     });
 
     testWidgets('Tapping a section opens its page, and back returns', (
@@ -229,7 +231,7 @@ void main() {
       );
     });
 
-    testWidgets('A phone has no AI Access section, even by deep link', (
+    testWidgets('A phone has no AI Access entry, even by deep link', (
       tester,
     ) async {
       debugPlatformCapabilitiesOverride = TargetPlatform.android;
@@ -243,13 +245,13 @@ void main() {
       // The MCP bridge does not run on a phone, so its switches would do
       // nothing there.
       await tester.scrollUntilVisible(
-        find.byKey(const Key('settings_section_deviceLink')),
+        find.byKey(const Key('settings_tool_workspaces')),
         300,
         scrollable: find.byType(Scrollable).first,
       );
-      expect(find.byKey(const Key('settings_section_aiAccess')), findsNothing);
+      expect(find.byKey(const Key('settings_tool_ai-access')), findsNothing);
 
-      // A stale link to it lands on the index rather than on the section.
+      // A stale link to the old Settings section lands on the index.
       await tester.pumpWidget(buildApp(initialLocation: '/settings/aiAccess'));
       await tester.pumpAndSettle();
       expect(find.text('AI Access'), findsNothing);

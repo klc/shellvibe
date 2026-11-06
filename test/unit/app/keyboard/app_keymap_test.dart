@@ -32,7 +32,7 @@ void main() {
         expect(label(AppCommand.find), '⌘F', reason: '$platform');
         expect(
           moduleRangeShortcutLabel(platform: platform),
-          '⌘1…7',
+          '⌘1…8',
           reason: '$platform',
         );
       }
@@ -51,7 +51,7 @@ void main() {
         expect(label(AppCommand.openSnippets), 'Ctrl+Shift+S');
         expect(label(AppCommand.find), 'Ctrl+Shift+F');
         expect(moduleShortcutLabel(1, platform: platform), 'Ctrl+Shift+2');
-        expect(moduleRangeShortcutLabel(platform: platform), 'Ctrl+Shift+1…7');
+        expect(moduleRangeShortcutLabel(platform: platform), 'Ctrl+Shift+1…8');
       }
     });
 

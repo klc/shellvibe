@@ -7,6 +7,19 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- AI Access has moved out of Settings into the sidebar, above Vault. Its
+  shortcut is ⌘8 (Ctrl+Shift+8 on Windows and Linux). When the window is too
+  narrow for the sidebar, it is under Settings → Tools.
+
+### Fixed
+
+- AI Access: the audit log and its exports show the open workspace's records
+  only. They used to list agent activity from every workspace together.
+  Older records whose host has since been deleted stay visible in every
+  workspace.
+
 ## [1.11.1] - 2026-11-03
 
 ### Fixed

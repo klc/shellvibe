@@ -5,6 +5,7 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../../../core/constants/app_constants.dart';
+import '../../../../core/utils/platform_capabilities.dart';
 import '../../../tunnels/presentation/tunnel_availability.dart';
 import '../../domain/models/settings_section.dart';
 import '../dialogs/problem_report_dialog.dart';
@@ -68,23 +69,22 @@ class SettingsScreen extends StatelessWidget {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
               children: [
-                for (final group in SettingsSectionGroup.values)
-                  if (group.availableSections.isNotEmpty) ...[
-                    ShellVibeSectionLabel(label: group.label),
-                    _buildIndexCard(context, [
-                      for (final entry in group.availableSections)
-                        _IndexTile(
-                          itemKey: Key('settings_section_${entry.name}'),
-                          icon: entry.icon,
-                          label: entry.label,
-                          meta: entry.meta,
-                          onTap: () => GoRouter.maybeOf(
-                            context,
-                          )?.go('/settings/${entry.name}'),
-                        ),
-                    ]),
-                    const SizedBox(height: 4),
-                  ],
+                for (final group in SettingsSectionGroup.values) ...[
+                  ShellVibeSectionLabel(label: group.label),
+                  _buildIndexCard(context, [
+                    for (final entry in group.sections)
+                      _IndexTile(
+                        itemKey: Key('settings_section_${entry.name}'),
+                        icon: entry.icon,
+                        label: entry.label,
+                        meta: entry.meta,
+                        onTap: () => GoRouter.maybeOf(
+                          context,
+                        )?.go('/settings/${entry.name}'),
+                      ),
+                  ]),
+                  const SizedBox(height: 4),
+                ],
                 // Tunnels, snippets and workspaces are not among the five
                 // mobile tabs, so this is their entry point.
                 ..._buildToolsGroup(context),
@@ -176,23 +176,22 @@ class SettingsScreen extends StatelessWidget {
               children: [
                 // The wide nav keeps the same grouping as the phone index, so
                 // the two layouts agree about what belongs with what.
-                for (final group in SettingsSectionGroup.values)
-                  if (group.availableSections.isNotEmpty) ...[
-                    ShellVibeSectionLabel(label: group.label),
-                    for (final entry in group.availableSections)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 2),
-                        child: ShellVibeNavItem(
-                          itemKey: Key('settings_section_${entry.name}'),
-                          icon: entry.icon,
-                          label: entry.label,
-                          selected: entry == active,
-                          onTap: () => GoRouter.maybeOf(
-                            context,
-                          )?.go('/settings/${entry.name}'),
-                        ),
+                for (final group in SettingsSectionGroup.values) ...[
+                  ShellVibeSectionLabel(label: group.label),
+                  for (final entry in group.sections)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 2),
+                      child: ShellVibeNavItem(
+                        itemKey: Key('settings_section_${entry.name}'),
+                        icon: entry.icon,
+                        label: entry.label,
+                        selected: entry == active,
+                        onTap: () => GoRouter.maybeOf(
+                          context,
+                        )?.go('/settings/${entry.name}'),
                       ),
-                  ],
+                    ),
+                ],
               ],
             ),
           ),
@@ -251,6 +250,15 @@ class SettingsScreen extends StatelessWidget {
             LucideIcons.panelTop,
             'Saved session layouts.',
           ),
+          // A narrow desktop window has no rail, so this is its way in. The
+          // MCP bridge does not run on a phone.
+          if (!isMobilePlatform)
+            (
+              '/ai-access',
+              'AI Access',
+              LucideIcons.bot,
+              'AI agent access, registered clients, and the kill switch.',
+            ),
         ])
           _IndexTile(
             itemKey: Key('settings_tool_${entry.$1.substring(1)}'),

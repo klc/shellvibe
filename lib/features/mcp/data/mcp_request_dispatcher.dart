@@ -156,8 +156,7 @@ class McpRequestDispatcher {
       // generic internal error, so the agent stops retrying.
       return McpToolResult.error(
         'This client has been revoked. It stays shut out until the user '
-        'turns AI access off and on again in ShellVibe under Settings → AI '
-        'Access.',
+        'turns AI access off and on again in ShellVibe under AI Access.',
       );
     }
 
