@@ -374,6 +374,7 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
     return auditRepository.record(
       clientId: ctx.clientId,
       clientName: ctx.clientName,
+      workspaceId: ctx.workspaceId,
       hostId: session.hostId,
       hostLabel: session.hostLabel,
       tool: name,

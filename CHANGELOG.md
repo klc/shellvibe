@@ -7,6 +7,13 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- AI Access: the audit log and its exports show the open workspace's records
+  only. They used to list agent activity from every workspace together.
+  Older records whose host has since been deleted stay visible in every
+  workspace.
+
 ## [1.11.1] - 2026-11-03
 
 ### Fixed

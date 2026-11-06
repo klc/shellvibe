@@ -439,6 +439,7 @@ class RunRunbookTool with McpArgReaders implements McpToolHandler {
       await auditRepository.record(
         clientId: ctx.clientId,
         clientName: ctx.clientName,
+        workspaceId: ctx.workspaceId,
         tool: name,
         args: {
           'runbookId': runbookId,
@@ -534,6 +535,7 @@ class RunRunbookTool with McpArgReaders implements McpToolHandler {
       await auditRepository.record(
         clientId: ctx.clientId,
         clientName: ctx.clientName,
+        workspaceId: ctx.workspaceId,
         hostLabel: hostLabels,
         tool: name,
         args: audited,
@@ -553,6 +555,7 @@ class RunRunbookTool with McpArgReaders implements McpToolHandler {
       await auditRepository.record(
         clientId: ctx.clientId,
         clientName: ctx.clientName,
+        workspaceId: ctx.workspaceId,
         hostLabel: hostLabels,
         tool: name,
         args: audited,
@@ -581,6 +584,7 @@ class RunRunbookTool with McpArgReaders implements McpToolHandler {
     await auditRepository.record(
       clientId: ctx.clientId,
       clientName: ctx.clientName,
+      workspaceId: ctx.workspaceId,
       hostLabel: hostLabels,
       tool: name,
       args: {...audited, 'runId': runId},
@@ -597,6 +601,7 @@ class RunRunbookTool with McpArgReaders implements McpToolHandler {
             await auditRepository.record(
               clientId: ctx.clientId,
               clientName: ctx.clientName,
+              workspaceId: ctx.workspaceId,
               hostLabel: hostLabels,
               tool: name,
               args: {'runId': runId, 'outcome': outcome},
@@ -926,6 +931,7 @@ class CancelRunbookRunTool with McpArgReaders implements McpToolHandler {
     await auditRepository.record(
       clientId: ctx.clientId,
       clientName: ctx.clientName,
+      workspaceId: ctx.workspaceId,
       tool: name,
       args: {'runId': runId, 'wasRunning': active},
       decision: AuditDecision.allowed,

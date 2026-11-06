@@ -219,6 +219,7 @@ class McpDao extends DatabaseAccessor<AppDatabase> with _$McpDaoMixin {
 
   /// Filters are ANDed together; any left null is not applied. Newest first.
   Future<List<McpAuditLogData>> queryEntries({
+    String? workspaceId,
     String? clientId,
     String? hostId,
     String? decision,
@@ -230,6 +231,13 @@ class McpDao extends DatabaseAccessor<AppDatabase> with _$McpDaoMixin {
   }) {
     final query = select(mcpAuditLog)
       ..orderBy([(t) => OrderingTerm.desc(t.at)]);
+    if (workspaceId != null) {
+      // A pre-v22 row no host could place shows in every workspace: an audit
+      // trail must not lose a row just because its workspace is unknown.
+      query.where(
+        (t) => t.workspaceId.equals(workspaceId) | t.workspaceId.isNull(),
+      );
+    }
     if (clientId != null) {
       query.where((t) => t.clientId.equals(clientId));
     }

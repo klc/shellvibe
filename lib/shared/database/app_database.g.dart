@@ -9224,6 +9224,17 @@ class $McpAuditLogTable extends McpAuditLog
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _workspaceIdMeta = const VerificationMeta(
+    'workspaceId',
+  );
+  @override
+  late final GeneratedColumn<String> workspaceId = GeneratedColumn<String>(
+    'workspace_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _hostIdMeta = const VerificationMeta('hostId');
   @override
   late final GeneratedColumn<String> hostId = GeneratedColumn<String>(
@@ -9336,6 +9347,7 @@ class $McpAuditLogTable extends McpAuditLog
     at,
     clientId,
     clientName,
+    workspaceId,
     hostId,
     hostLabel,
     tool,
@@ -9384,6 +9396,15 @@ class $McpAuditLogTable extends McpAuditLog
       );
     } else if (isInserting) {
       context.missing(_clientNameMeta);
+    }
+    if (data.containsKey('workspace_id')) {
+      context.handle(
+        _workspaceIdMeta,
+        workspaceId.isAcceptableOrUnknown(
+          data['workspace_id']!,
+          _workspaceIdMeta,
+        ),
+      );
     }
     if (data.containsKey('host_id')) {
       context.handle(
@@ -9482,6 +9503,10 @@ class $McpAuditLogTable extends McpAuditLog
         DriftSqlType.string,
         data['${effectivePrefix}client_name'],
       )!,
+      workspaceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}workspace_id'],
+      ),
       hostId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}host_id'],
@@ -9536,6 +9561,11 @@ class McpAuditLogData extends DataClass implements Insertable<McpAuditLogData> {
   final DateTime at;
   final String clientId;
   final String clientName;
+
+  /// The workspace the client was bound to at the time of the call. Not a
+  /// foreign key, for the same reason as [clientId]. Null only on rows
+  /// written before v22 whose host was gone by then.
+  final String? workspaceId;
   final String? hostId;
   final String? hostLabel;
   final String tool;
@@ -9551,6 +9581,7 @@ class McpAuditLogData extends DataClass implements Insertable<McpAuditLogData> {
     required this.at,
     required this.clientId,
     required this.clientName,
+    this.workspaceId,
     this.hostId,
     this.hostLabel,
     required this.tool,
@@ -9569,6 +9600,9 @@ class McpAuditLogData extends DataClass implements Insertable<McpAuditLogData> {
     map['at'] = Variable<DateTime>(at);
     map['client_id'] = Variable<String>(clientId);
     map['client_name'] = Variable<String>(clientName);
+    if (!nullToAbsent || workspaceId != null) {
+      map['workspace_id'] = Variable<String>(workspaceId);
+    }
     if (!nullToAbsent || hostId != null) {
       map['host_id'] = Variable<String>(hostId);
     }
@@ -9602,6 +9636,9 @@ class McpAuditLogData extends DataClass implements Insertable<McpAuditLogData> {
       at: Value(at),
       clientId: Value(clientId),
       clientName: Value(clientName),
+      workspaceId: workspaceId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(workspaceId),
       hostId: hostId == null && nullToAbsent
           ? const Value.absent()
           : Value(hostId),
@@ -9639,6 +9676,7 @@ class McpAuditLogData extends DataClass implements Insertable<McpAuditLogData> {
       at: serializer.fromJson<DateTime>(json['at']),
       clientId: serializer.fromJson<String>(json['clientId']),
       clientName: serializer.fromJson<String>(json['clientName']),
+      workspaceId: serializer.fromJson<String?>(json['workspaceId']),
       hostId: serializer.fromJson<String?>(json['hostId']),
       hostLabel: serializer.fromJson<String?>(json['hostLabel']),
       tool: serializer.fromJson<String>(json['tool']),
@@ -9659,6 +9697,7 @@ class McpAuditLogData extends DataClass implements Insertable<McpAuditLogData> {
       'at': serializer.toJson<DateTime>(at),
       'clientId': serializer.toJson<String>(clientId),
       'clientName': serializer.toJson<String>(clientName),
+      'workspaceId': serializer.toJson<String?>(workspaceId),
       'hostId': serializer.toJson<String?>(hostId),
       'hostLabel': serializer.toJson<String?>(hostLabel),
       'tool': serializer.toJson<String>(tool),
@@ -9677,6 +9716,7 @@ class McpAuditLogData extends DataClass implements Insertable<McpAuditLogData> {
     DateTime? at,
     String? clientId,
     String? clientName,
+    Value<String?> workspaceId = const Value.absent(),
     Value<String?> hostId = const Value.absent(),
     Value<String?> hostLabel = const Value.absent(),
     String? tool,
@@ -9692,6 +9732,7 @@ class McpAuditLogData extends DataClass implements Insertable<McpAuditLogData> {
     at: at ?? this.at,
     clientId: clientId ?? this.clientId,
     clientName: clientName ?? this.clientName,
+    workspaceId: workspaceId.present ? workspaceId.value : this.workspaceId,
     hostId: hostId.present ? hostId.value : this.hostId,
     hostLabel: hostLabel.present ? hostLabel.value : this.hostLabel,
     tool: tool ?? this.tool,
@@ -9711,6 +9752,9 @@ class McpAuditLogData extends DataClass implements Insertable<McpAuditLogData> {
       clientName: data.clientName.present
           ? data.clientName.value
           : this.clientName,
+      workspaceId: data.workspaceId.present
+          ? data.workspaceId.value
+          : this.workspaceId,
       hostId: data.hostId.present ? data.hostId.value : this.hostId,
       hostLabel: data.hostLabel.present ? data.hostLabel.value : this.hostLabel,
       tool: data.tool.present ? data.tool.value : this.tool,
@@ -9737,6 +9781,7 @@ class McpAuditLogData extends DataClass implements Insertable<McpAuditLogData> {
           ..write('at: $at, ')
           ..write('clientId: $clientId, ')
           ..write('clientName: $clientName, ')
+          ..write('workspaceId: $workspaceId, ')
           ..write('hostId: $hostId, ')
           ..write('hostLabel: $hostLabel, ')
           ..write('tool: $tool, ')
@@ -9757,6 +9802,7 @@ class McpAuditLogData extends DataClass implements Insertable<McpAuditLogData> {
     at,
     clientId,
     clientName,
+    workspaceId,
     hostId,
     hostLabel,
     tool,
@@ -9776,6 +9822,7 @@ class McpAuditLogData extends DataClass implements Insertable<McpAuditLogData> {
           other.at == this.at &&
           other.clientId == this.clientId &&
           other.clientName == this.clientName &&
+          other.workspaceId == this.workspaceId &&
           other.hostId == this.hostId &&
           other.hostLabel == this.hostLabel &&
           other.tool == this.tool &&
@@ -9793,6 +9840,7 @@ class McpAuditLogCompanion extends UpdateCompanion<McpAuditLogData> {
   final Value<DateTime> at;
   final Value<String> clientId;
   final Value<String> clientName;
+  final Value<String?> workspaceId;
   final Value<String?> hostId;
   final Value<String?> hostLabel;
   final Value<String> tool;
@@ -9809,6 +9857,7 @@ class McpAuditLogCompanion extends UpdateCompanion<McpAuditLogData> {
     this.at = const Value.absent(),
     this.clientId = const Value.absent(),
     this.clientName = const Value.absent(),
+    this.workspaceId = const Value.absent(),
     this.hostId = const Value.absent(),
     this.hostLabel = const Value.absent(),
     this.tool = const Value.absent(),
@@ -9826,6 +9875,7 @@ class McpAuditLogCompanion extends UpdateCompanion<McpAuditLogData> {
     required DateTime at,
     required String clientId,
     required String clientName,
+    this.workspaceId = const Value.absent(),
     this.hostId = const Value.absent(),
     this.hostLabel = const Value.absent(),
     required String tool,
@@ -9849,6 +9899,7 @@ class McpAuditLogCompanion extends UpdateCompanion<McpAuditLogData> {
     Expression<DateTime>? at,
     Expression<String>? clientId,
     Expression<String>? clientName,
+    Expression<String>? workspaceId,
     Expression<String>? hostId,
     Expression<String>? hostLabel,
     Expression<String>? tool,
@@ -9866,6 +9917,7 @@ class McpAuditLogCompanion extends UpdateCompanion<McpAuditLogData> {
       if (at != null) 'at': at,
       if (clientId != null) 'client_id': clientId,
       if (clientName != null) 'client_name': clientName,
+      if (workspaceId != null) 'workspace_id': workspaceId,
       if (hostId != null) 'host_id': hostId,
       if (hostLabel != null) 'host_label': hostLabel,
       if (tool != null) 'tool': tool,
@@ -9885,6 +9937,7 @@ class McpAuditLogCompanion extends UpdateCompanion<McpAuditLogData> {
     Value<DateTime>? at,
     Value<String>? clientId,
     Value<String>? clientName,
+    Value<String?>? workspaceId,
     Value<String?>? hostId,
     Value<String?>? hostLabel,
     Value<String>? tool,
@@ -9902,6 +9955,7 @@ class McpAuditLogCompanion extends UpdateCompanion<McpAuditLogData> {
       at: at ?? this.at,
       clientId: clientId ?? this.clientId,
       clientName: clientName ?? this.clientName,
+      workspaceId: workspaceId ?? this.workspaceId,
       hostId: hostId ?? this.hostId,
       hostLabel: hostLabel ?? this.hostLabel,
       tool: tool ?? this.tool,
@@ -9930,6 +9984,9 @@ class McpAuditLogCompanion extends UpdateCompanion<McpAuditLogData> {
     }
     if (clientName.present) {
       map['client_name'] = Variable<String>(clientName.value);
+    }
+    if (workspaceId.present) {
+      map['workspace_id'] = Variable<String>(workspaceId.value);
     }
     if (hostId.present) {
       map['host_id'] = Variable<String>(hostId.value);
@@ -9974,6 +10031,7 @@ class McpAuditLogCompanion extends UpdateCompanion<McpAuditLogData> {
           ..write('at: $at, ')
           ..write('clientId: $clientId, ')
           ..write('clientName: $clientName, ')
+          ..write('workspaceId: $workspaceId, ')
           ..write('hostId: $hostId, ')
           ..write('hostLabel: $hostLabel, ')
           ..write('tool: $tool, ')
@@ -24791,6 +24849,7 @@ typedef $$McpAuditLogTableCreateCompanionBuilder =
       required DateTime at,
       required String clientId,
       required String clientName,
+      Value<String?> workspaceId,
       Value<String?> hostId,
       Value<String?> hostLabel,
       required String tool,
@@ -24809,6 +24868,7 @@ typedef $$McpAuditLogTableUpdateCompanionBuilder =
       Value<DateTime> at,
       Value<String> clientId,
       Value<String> clientName,
+      Value<String?> workspaceId,
       Value<String?> hostId,
       Value<String?> hostLabel,
       Value<String> tool,
@@ -24848,6 +24908,11 @@ class $$McpAuditLogTableFilterComposer
 
   ColumnFilters<String> get clientName => $composableBuilder(
     column: $table.clientName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get workspaceId => $composableBuilder(
+    column: $table.workspaceId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -24931,6 +24996,11 @@ class $$McpAuditLogTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get workspaceId => $composableBuilder(
+    column: $table.workspaceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get hostId => $composableBuilder(
     column: $table.hostId,
     builder: (column) => ColumnOrderings(column),
@@ -25002,6 +25072,11 @@ class $$McpAuditLogTableAnnotationComposer
 
   GeneratedColumn<String> get clientName => $composableBuilder(
     column: $table.clientName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get workspaceId => $composableBuilder(
+    column: $table.workspaceId,
     builder: (column) => column,
   );
 
@@ -25077,6 +25152,7 @@ class $$McpAuditLogTableTableManager
                 Value<DateTime> at = const Value.absent(),
                 Value<String> clientId = const Value.absent(),
                 Value<String> clientName = const Value.absent(),
+                Value<String?> workspaceId = const Value.absent(),
                 Value<String?> hostId = const Value.absent(),
                 Value<String?> hostLabel = const Value.absent(),
                 Value<String> tool = const Value.absent(),
@@ -25093,6 +25169,7 @@ class $$McpAuditLogTableTableManager
                 at: at,
                 clientId: clientId,
                 clientName: clientName,
+                workspaceId: workspaceId,
                 hostId: hostId,
                 hostLabel: hostLabel,
                 tool: tool,
@@ -25111,6 +25188,7 @@ class $$McpAuditLogTableTableManager
                 required DateTime at,
                 required String clientId,
                 required String clientName,
+                Value<String?> workspaceId = const Value.absent(),
                 Value<String?> hostId = const Value.absent(),
                 Value<String?> hostLabel = const Value.absent(),
                 required String tool,
@@ -25127,6 +25205,7 @@ class $$McpAuditLogTableTableManager
                 at: at,
                 clientId: clientId,
                 clientName: clientName,
+                workspaceId: workspaceId,
                 hostId: hostId,
                 hostLabel: hostLabel,
                 tool: tool,
