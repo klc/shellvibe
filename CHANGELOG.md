@@ -7,6 +7,8 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-11-07
+
 ### Changed
 
 - AI Access has moved out of Settings into the sidebar, above Vault. Its
@@ -914,7 +916,8 @@ entry describes what ShellVibe is rather than what changed.
 - iOS and Android are not released. The code builds for them and they are not
   part of this release.
 
-[Unreleased]: https://github.com/klc/shellvibe/compare/v1.11.1...HEAD
+[Unreleased]: https://github.com/klc/shellvibe/compare/v1.12.0...HEAD
+[1.12.0]: https://github.com/klc/shellvibe/compare/v1.11.1...v1.12.0
 [1.11.1]: https://github.com/klc/shellvibe/compare/v1.11.0...v1.11.1
 [1.11.0]: https://github.com/klc/shellvibe/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/klc/shellvibe/compare/v1.9.2...v1.10.0
