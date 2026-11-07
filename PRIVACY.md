@@ -1,6 +1,6 @@
 # Privacy
 
-**Last updated:** 2026-11-03 · Applies to ShellVibe 1.11.1 for macOS,
+**Last updated:** 2026-11-07 · Applies to ShellVibe 1.12.0 for macOS,
 Windows, Linux, iOS and Android.
 
 ShellVibe is a terminal, SSH and SFTP client. It runs on your machine and talks
