@@ -134,7 +134,7 @@ enum AppCommand {
 }
 
 /// How many modules have a digit shortcut. Matches `appNavigationItems`.
-const int kModuleShortcutCount = 7;
+const int kModuleShortcutCount = 8;
 
 const List<LogicalKeyboardKey> _digitKeys = [
   LogicalKeyboardKey.digit1,
@@ -367,7 +367,7 @@ String moduleShortcutLabel(int index, {TargetPlatform? platform}) =>
       platform: platform,
     );
 
-/// The module chords as one range: `⌘1…7` or `Ctrl+Shift+1…7`.
+/// The module chords as one range: `⌘1…8` or `Ctrl+Shift+1…8`.
 String moduleRangeShortcutLabel({TargetPlatform? platform}) =>
     '${moduleShortcutLabel(0, platform: platform)}…$kModuleShortcutCount';
 

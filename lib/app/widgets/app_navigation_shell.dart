@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
+import '../../core/utils/platform_capabilities.dart';
 import '../../features/hosts/domain/services/host_launcher.dart';
 import '../../features/settings/presentation/notifiers/settings_notifier.dart';
 import '../../features/templates/domain/models/template_model.dart';
@@ -91,6 +92,13 @@ const List<NavigationItemData> appNavigationItems = [
     path: '/settings',
     description: 'Application Settings',
   ),
+  // Last so the older modules keep their digit shortcuts. Desktop only.
+  NavigationItemData(
+    label: 'AI Access',
+    icon: LucideIcons.bot,
+    path: '/ai-access',
+    description: 'AI Agent Access',
+  ),
 ];
 
 /// Rail order from the wireframe. `null` renders the separator that divides
@@ -101,6 +109,7 @@ const List<String?> kRailLayout = [
   '/tunnels',
   '/snippets',
   null,
+  '/ai-access',
   '/vault',
   '/workspaces',
   '/settings',
@@ -165,6 +174,7 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
             // a hardware keyboard must not reach what the UI does not offer.
             final path = appNavigationItems[intent.index].path;
             if (path == '/tunnels' && !tunnelsSupported) return null;
+            if (path == '/ai-access' && isMobilePlatform) return null;
             _onTabSelected(intent.index);
             return null;
           },
@@ -280,7 +290,8 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
               child: Column(
                 children: [
                   for (final path in kRailLayout)
-                    if (path == '/tunnels' && !tunnelsSupported)
+                    if ((path == '/tunnels' && !tunnelsSupported) ||
+                        (path == '/ai-access' && isMobilePlatform))
                       const SizedBox.shrink()
                     else if (path == null)
                       _RailSeparator(color: tokens.border)

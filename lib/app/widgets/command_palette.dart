@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
+import '../../core/utils/platform_capabilities.dart';
 import '../../features/bookmarks/presentation/notifiers/bookmarks_notifier.dart';
 import '../../features/hosts/domain/models/host_model.dart';
 import '../../features/hosts/presentation/notifiers/hosts_notifier.dart';
@@ -97,6 +98,7 @@ class _CommandPaletteState extends ConsumerState<CommandPalette> {
     final filtered = appNavigationItems.indexed.where((entry) {
       final item = entry.$2;
       if (item.path == '/tunnels' && !tunnelsSupported) return false;
+      if (item.path == '/ai-access' && isMobilePlatform) return false;
       return item.label.toLowerCase().contains(value) ||
           item.description.toLowerCase().contains(value);
     }).toList();

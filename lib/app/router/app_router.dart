@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/network/device_link/device_link_server.dart';
+import '../../core/utils/platform_capabilities.dart';
 import '../../features/device_link/presentation/screens/pairing_qr_screen.dart';
 import '../../features/device_link/presentation/screens/scan_pair_screen.dart';
 import '../../features/hosts/presentation/screens/hosts_screen.dart';
+import '../../features/mcp/presentation/screens/mcp_access_screen.dart';
 import '../../features/settings/presentation/screens/settings_screen.dart';
 import '../../features/sftp/presentation/screens/sftp_dual_pane_screen.dart';
 import '../../features/snippets/presentation/screens/snippets_screen.dart';
@@ -221,6 +223,18 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                     },
                   ),
                 ],
+              ),
+            ],
+          ),
+          // Index 7: AI Access. The MCP bridge does not run on a phone, so a
+          // restored route or a link lands on Settings there.
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/ai-access',
+                redirect: (context, state) =>
+                    isMobilePlatform ? '/settings' : null,
+                builder: (context, state) => const McpAccessScreen(),
               ),
             ],
           ),

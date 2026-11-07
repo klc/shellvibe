@@ -142,6 +142,7 @@ class _McpAuditScreenState extends ConsumerState<McpAuditScreen> {
       final rows = await ref
           .read(mcpAuditRepositoryProvider)
           .query(
+            workspaceId: ref.read(activeWorkspaceIdProvider),
             clientId: _filters.clientId,
             hostId: _filters.hostId,
             decision: _filters.decision,
@@ -217,8 +218,10 @@ class _McpAuditScreenState extends ConsumerState<McpAuditScreen> {
     setState(() => _exporting = true);
     try {
       final repo = ref.read(mcpAuditRepositoryProvider);
+      final workspaceId = ref.read(activeWorkspaceIdProvider);
       final content = asCsv
           ? await repo.exportCsv(
+              workspaceId: workspaceId,
               clientId: _filters.clientId,
               hostId: _filters.hostId,
               decision: _filters.decision,
@@ -227,6 +230,7 @@ class _McpAuditScreenState extends ConsumerState<McpAuditScreen> {
               to: _filters.to,
             )
           : await repo.exportJson(
+              workspaceId: workspaceId,
               clientId: _filters.clientId,
               hostId: _filters.hostId,
               decision: _filters.decision,
@@ -347,10 +351,10 @@ class _McpAuditScreenState extends ConsumerState<McpAuditScreen> {
               message: retentionDays != null
                   ? 'Retention: $retentionDays days. Records are never '
                         'edited or deleted from here — change the window in '
-                        'Settings → AI Access → Audit log retention.'
+                        'AI Access → Audit log retention.'
                   : 'Records are never edited or deleted from here — the '
-                        'retention window is set in Settings → AI Access → '
-                        'Audit log retention.',
+                        'retention window is set in AI Access → Audit log '
+                        'retention.',
             ),
           ),
           Padding(

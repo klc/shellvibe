@@ -116,7 +116,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 21;
+  int get schemaVersion => 22;
 
   @override
   MigrationStrategy get migration {
@@ -348,6 +348,22 @@ class AppDatabase extends _$AppDatabase {
           )) {
             await customStatement(
               "UPDATE ${hosts.actualTableName} SET mcp_default_mode = 'guarded'",
+            );
+          }
+        }
+        if (from < 22) {
+          // Audit rows remember their workspace. The client row cannot place
+          // older ones (the bridge's row is re-minted on every start), so
+          // their host does where it still exists. The rest stay null.
+          if (await _needsColumn(
+            mcpAuditLog.actualTableName,
+            'workspace_id',
+          )) {
+            await m.addColumn(mcpAuditLog, mcpAuditLog.workspaceId);
+            await customStatement(
+              'UPDATE ${mcpAuditLog.actualTableName} SET workspace_id = '
+              '(SELECT workspace_id FROM ${hosts.actualTableName} '
+              'WHERE id = ${mcpAuditLog.actualTableName}.host_id)',
             );
           }
         }

@@ -39,6 +39,7 @@ class McpAuditRepository {
   Future<void> record({
     required String clientId,
     required String clientName,
+    required String workspaceId,
     String? hostId,
     String? hostLabel,
     required String tool,
@@ -56,6 +57,7 @@ class McpAuditRepository {
         at: DateTime.now().toUtc(),
         clientId: clientId,
         clientName: clientName,
+        workspaceId: Value(workspaceId),
         hostId: Value(hostId),
         hostLabel: Value(hostLabel),
         tool: tool,
@@ -73,6 +75,7 @@ class McpAuditRepository {
   /// Queries audit rows, newest first. Every filter left null is not
   /// applied; filters are ANDed together.
   Future<List<McpAuditLogData>> query({
+    String? workspaceId,
     String? clientId,
     String? hostId,
     AuditDecision? decision,
@@ -83,6 +86,7 @@ class McpAuditRepository {
     int offset = 0,
   }) {
     return dao.queryEntries(
+      workspaceId: workspaceId,
       clientId: clientId,
       hostId: hostId,
       decision: decision?.wireName,
@@ -108,6 +112,7 @@ class McpAuditRepository {
   /// capped at [_exportRowCap] rows so an unbounded date range can't hang
   /// the UI thread building a multi-million-row string.
   Future<String> exportJson({
+    String? workspaceId,
     String? clientId,
     String? hostId,
     AuditDecision? decision,
@@ -116,6 +121,7 @@ class McpAuditRepository {
     DateTime? to,
   }) async {
     final rows = await query(
+      workspaceId: workspaceId,
       clientId: clientId,
       hostId: hostId,
       decision: decision,
@@ -131,6 +137,7 @@ class McpAuditRepository {
   /// Exports matching rows as CSV text, for the audit screen's "export"
   /// action. Same filters and row cap as [exportJson].
   Future<String> exportCsv({
+    String? workspaceId,
     String? clientId,
     String? hostId,
     AuditDecision? decision,
@@ -139,6 +146,7 @@ class McpAuditRepository {
     DateTime? to,
   }) async {
     final rows = await query(
+      workspaceId: workspaceId,
       clientId: clientId,
       hostId: hostId,
       decision: decision,

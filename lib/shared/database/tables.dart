@@ -535,6 +535,11 @@ class McpAuditLog extends Table {
   DateTimeColumn get at => dateTime()();
   TextColumn get clientId => text()();
   TextColumn get clientName => text()();
+
+  /// The workspace the client was bound to at the time of the call. Not a
+  /// foreign key, for the same reason as [clientId]. Null only on rows
+  /// written before v22 whose host was gone by then.
+  TextColumn get workspaceId => text().nullable()();
   TextColumn get hostId => text().nullable()();
   TextColumn get hostLabel => text().nullable()();
   TextColumn get tool => text()();
