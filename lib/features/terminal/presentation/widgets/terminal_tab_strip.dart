@@ -219,214 +219,276 @@ class TerminalTabStrip extends ConsumerWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final compact = constraints.maxWidth < _kTabBarCompactWidth;
+          final notifier = ref.read(terminalTabsProvider.notifier);
+          bool isRootTab(String id) => rootTabs.any((t) => t.id == id);
+          // A phone's strip only reorders: its tabs are too narrow to aim a
+          // merge at, and too narrow to split once merged.
+          bool canMerge(String draggedId, TerminalTabSession target) =>
+              !compact &&
+              !target.isMcp &&
+              !(rootTabs.where((t) => t.id == draggedId).firstOrNull?.isMcp ??
+                  true);
+          void drop(String draggedId, int targetIndex, _TabDropZone zone) {
+            if (zone == _TabDropZone.merge) {
+              notifier.mergeTab(draggedId, rootTabs[targetIndex].id);
+              return;
+            }
+            final from = rootTabs.indexWhere((t) => t.id == draggedId);
+            var to = zone == _TabDropZone.before
+                ? targetIndex
+                : targetIndex + 1;
+            if (from < to) to--;
+            notifier.moveTab(draggedId, to);
+          }
+
           return Row(
             children: [
               Expanded(
-                // Tabs are dragged into a new order. The handles are the tabs
-                // themselves rather than the grip Flutter adds on desktop: a
-                // tab is already a pill you would reach for, and a grip icon
-                // in each one would cost the title its room.
-                child: ReorderableListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  padding: EdgeInsets.zero,
-                  buildDefaultDragHandles: false,
-                  proxyDecorator: (child, _, _) => Material(
-                    color: Colors.transparent,
-                    child: Opacity(opacity: 0.85, child: child),
-                  ),
-                  onReorderItem: (from, to) => ref
-                      .read(terminalTabsProvider.notifier)
-                      .moveTab(rootTabs[from].id, to),
-                  itemCount: rootTabs.length,
-                  itemBuilder: (context, index) {
-                    final tab = rootTabs[index];
-                    final isActive = tab.id == activeRootTab?.id;
-                    // Tab identity is the host name plus a state dot. The old
-                    // colour-coded tab edge is gone: the wireframe wants text to
-                    // do the distinguishing so eight tabs stay readable.
-                    final dotState = tab.errorMessage != null
-                        ? ShellVibeDotState.error
-                        : tab.isConnecting
-                        ? ShellVibeDotState.idle
-                        : tab.isConnected
-                        ? ShellVibeDotState.online
-                        : ShellVibeDotState.offline;
+                // A tab is dragged by the tab itself. Dropped on either side
+                // of another tab it moves there; dropped on its middle, it
+                // joins that tab as a split. Past the last tab, it goes last.
+                child: DragTarget<String>(
+                  onWillAcceptWithDetails: (details) => isRootTab(details.data),
+                  onAcceptWithDetails: (details) =>
+                      notifier.moveTab(details.data, rootTabs.length - 1),
+                  builder: (context, _, _) => ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    padding: EdgeInsets.zero,
+                    itemCount: rootTabs.length,
+                    itemBuilder: (context, index) {
+                      final tab = rootTabs[index];
+                      final isActive = tab.id == activeRootTab?.id;
+                      // Tab identity is the host name plus a state dot. The old
+                      // colour-coded tab edge is gone: the wireframe wants text to
+                      // do the distinguishing so eight tabs stay readable.
+                      final dotState = tab.errorMessage != null
+                          ? ShellVibeDotState.error
+                          : tab.isConnecting
+                          ? ShellVibeDotState.idle
+                          : tab.isConnected
+                          ? ShellVibeDotState.online
+                          : ShellVibeDotState.offline;
 
-                    final endpoint = terminalEndpointLabel(tab);
-                    final tabChip = Semantics(
-                      label: 'Tab ${tab.title}',
-                      selected: isActive,
-                      button: true,
-                      child: Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: InkWell(
-                          onTap: () => ref
-                              .read(terminalTabsProvider.notifier)
-                              .setActiveTab(tab.id),
-                          onSecondaryTapDown: (details) => unawaited(
-                            onShowTabMenu(
-                              tab,
-                              index: index,
-                              tabCount: rootTabs.length,
-                              position: details.globalPosition,
+                      final endpoint = terminalEndpointLabel(tab);
+                      final tabChip = Semantics(
+                        label: 'Tab ${tab.title}',
+                        selected: isActive,
+                        button: true,
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: InkWell(
+                            onTap: () => ref
+                                .read(terminalTabsProvider.notifier)
+                                .setActiveTab(tab.id),
+                            onSecondaryTapDown: (details) => unawaited(
+                              onShowTabMenu(
+                                tab,
+                                index: index,
+                                tabCount: rootTabs.length,
+                                position: details.globalPosition,
+                              ),
                             ),
-                          ),
-                          borderRadius: tabRadius,
-                          child: AnimatedContainer(
-                            duration: tokens.motionFast,
-                            key: Key('tab_header_${tab.id}'),
-                            height: kTerminalTabStripHeight,
-                            constraints: BoxConstraints(
-                              minWidth: compact ? 110 : 150,
-                              maxWidth: 230,
-                            ),
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            decoration: BoxDecoration(
-                              // Only the active tab is a slab. The rest are text
-                              // on the canvas, which is what keeps eight open
-                              // sessions from reading as a toolbar.
-                              //
-                              // It lifts at the top and settles into the
-                              // terminal's own colour at the bottom, where it
-                              // has no border at all — so the tab does not end,
-                              // it becomes the pane.
-                              gradient: isActive
-                                  ? LinearGradient(
-                                      begin: Alignment.topCenter,
-                                      end: Alignment.bottomCenter,
-                                      colors: [
-                                        tokens.surfaceRaised,
-                                        terminalBg,
-                                      ],
-                                    )
-                                  : null,
-                              borderRadius: tabRadius,
-                              border: isActive
-                                  ? Border(
-                                      top: BorderSide(color: activeTabRing),
-                                      left: BorderSide(color: activeTabRing),
-                                      right: BorderSide(color: activeTabRing),
-                                    )
-                                  : null,
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                ShellVibeStatusDot(state: dotState, size: 7),
-                                const SizedBox(width: 9),
-                                // The badge is what tells the user, at a
-                                // glance across eight tabs, which shell is
-                                // being driven by something other than them.
-                                if (tab.isMcp) ...[
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 5,
-                                      vertical: 1,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: tokens.brand.withValues(
-                                        alpha: 0.16,
-                                      ),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(
-                                      'AI',
-                                      style: TextStyle(
-                                        color: tokens.brand,
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.w700,
-                                        letterSpacing: 0.5,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 7),
-                                ],
-                                Flexible(
-                                  child: Text(
-                                    tab.title,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      color: isActive
-                                          ? tokens.textPrimary
-                                          : tokens.textMuted,
-                                      fontWeight: isActive
-                                          ? FontWeight.w600
-                                          : FontWeight.w500,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                ),
-                                // With the status bar gone these are the
-                                // only trace of a quiet link or an attached
-                                // device on a tab that is not on screen.
-                                for (final pane in panesOfTab(
-                                  tabsState.tabs,
-                                  tab,
-                                )) ...[
-                                  if (moshQuietBadge(
-                                        context,
-                                        tokens,
-                                        pane,
-                                        showText: false,
+                            borderRadius: tabRadius,
+                            child: AnimatedContainer(
+                              duration: tokens.motionFast,
+                              key: Key('tab_header_${tab.id}'),
+                              height: kTerminalTabStripHeight,
+                              constraints: BoxConstraints(
+                                minWidth: compact ? 110 : 150,
+                                maxWidth: 230,
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                              ),
+                              decoration: BoxDecoration(
+                                // Only the active tab is a slab. The rest are text
+                                // on the canvas, which is what keeps eight open
+                                // sessions from reading as a toolbar.
+                                //
+                                // It lifts at the top and settles into the
+                                // terminal's own colour at the bottom, where it
+                                // has no border at all — so the tab does not end,
+                                // it becomes the pane.
+                                gradient: isActive
+                                    ? LinearGradient(
+                                        begin: Alignment.topCenter,
+                                        end: Alignment.bottomCenter,
+                                        colors: [
+                                          tokens.surfaceRaised,
+                                          terminalBg,
+                                        ],
                                       )
-                                      case final badge?) ...[
-                                    const SizedBox(width: 6),
-                                    badge,
+                                    : null,
+                                borderRadius: tabRadius,
+                                border: isActive
+                                    ? Border(
+                                        top: BorderSide(color: activeTabRing),
+                                        left: BorderSide(color: activeTabRing),
+                                        right: BorderSide(color: activeTabRing),
+                                      )
+                                    : null,
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  ShellVibeStatusDot(state: dotState, size: 7),
+                                  const SizedBox(width: 9),
+                                  // The badge is what tells the user, at a
+                                  // glance across eight tabs, which shell is
+                                  // being driven by something other than them.
+                                  if (tab.isMcp) ...[
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 5,
+                                        vertical: 1,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: tokens.brand.withValues(
+                                          alpha: 0.16,
+                                        ),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        'AI',
+                                        style: TextStyle(
+                                          color: tokens.brand,
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w700,
+                                          letterSpacing: 0.5,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 7),
                                   ],
-                                  if (pane.attachment != null) ...[
-                                    const SizedBox(width: 6),
-                                    deviceLinkBadge(ref, tokens, pane),
-                                  ],
-                                ],
-                                const SizedBox(width: 9),
-                                Semantics(
-                                  label: 'Close tab ${tab.title}',
-                                  button: true,
-                                  child: InkWell(
-                                    key: Key('close_tab_${tab.id}'),
-                                    onTap: () => ref
-                                        .read(terminalTabsProvider.notifier)
-                                        .closeTab(tab.id),
-                                    child: Icon(
-                                      LucideIcons.x,
-                                      size: 14,
-                                      color: tokens.textSubtle,
+                                  Flexible(
+                                    child: Text(
+                                      tab.title,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: isActive
+                                            ? tokens.textPrimary
+                                            : tokens.textMuted,
+                                        fontWeight: isActive
+                                            ? FontWeight.w600
+                                            : FontWeight.w500,
+                                        fontSize: 13,
+                                      ),
                                     ),
                                   ),
-                                ),
-                              ],
+                                  // With the status bar gone these are the
+                                  // only trace of a quiet link or an attached
+                                  // device on a tab that is not on screen.
+                                  for (final pane in panesOfTab(
+                                    tabsState.tabs,
+                                    tab,
+                                  )) ...[
+                                    if (moshQuietBadge(
+                                          context,
+                                          tokens,
+                                          pane,
+                                          showText: false,
+                                        )
+                                        case final badge?) ...[
+                                      const SizedBox(width: 6),
+                                      badge,
+                                    ],
+                                    if (pane.attachment != null) ...[
+                                      const SizedBox(width: 6),
+                                      deviceLinkBadge(ref, tokens, pane),
+                                    ],
+                                  ],
+                                  const SizedBox(width: 9),
+                                  Semantics(
+                                    label: 'Close tab ${tab.title}',
+                                    button: true,
+                                    child: InkWell(
+                                      key: Key('close_tab_${tab.id}'),
+                                      onTap: () => ref
+                                          .read(terminalTabsProvider.notifier)
+                                          .closeTab(tab.id),
+                                      child: Icon(
+                                        LucideIcons.x,
+                                        size: 14,
+                                        color: tokens.textSubtle,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    );
-                    // The tab names the host by its label; hovering it says
-                    // where that label points, which the status bar used to.
-                    final labelledChip = endpoint == null
-                        ? tabChip
-                        : Tooltip(
-                            key: Key('tab_endpoint_${tab.id}'),
-                            message: endpoint,
-                            waitDuration: const Duration(milliseconds: 500),
-                            child: tabChip,
-                          );
-                    // A pointer drags at once, past the tap slop, so a click
-                    // still selects. A finger has to hold first: on a phone a
-                    // swipe along the strip is how the tabs are scrolled.
-                    return KeyedSubtree(
-                      key: ValueKey('tab_item_${tab.id}'),
-                      child: isMobilePlatform
-                          ? ReorderableDelayedDragStartListener(
-                              index: index,
+                      );
+                      // The tab names the host by its label; hovering it says
+                      // where that label points, which the status bar used to.
+                      final labelledChip = endpoint == null
+                          ? tabChip
+                          : Tooltip(
+                              key: Key('tab_endpoint_${tab.id}'),
+                              message: endpoint,
+                              waitDuration: const Duration(milliseconds: 500),
+                              child: tabChip,
+                            );
+                      final feedback = Material(
+                        color: Colors.transparent,
+                        child: Opacity(
+                          opacity: 0.85,
+                          child: Container(
+                            height: kTerminalTabStripHeight,
+                            constraints: const BoxConstraints(maxWidth: 230),
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: tokens.surfaceRaised,
+                              borderRadius: tabRadius,
+                              border: Border.all(color: activeTabRing),
+                            ),
+                            child: Text(
+                              tab.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: tokens.textPrimary,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                      final dimmed = Opacity(opacity: 0.4, child: labelledChip);
+                      // A pointer drags at once, past the tap slop, so a click
+                      // still selects. A finger has to hold first: on a phone a
+                      // swipe along the strip is how the tabs are scrolled.
+                      final draggable = isMobilePlatform
+                          ? LongPressDraggable<String>(
+                              data: tab.id,
+                              dragAnchorStrategy: pointerDragAnchorStrategy,
+                              feedback: feedback,
+                              childWhenDragging: dimmed,
                               child: labelledChip,
                             )
-                          : ReorderableDragStartListener(
-                              index: index,
+                          : Draggable<String>(
+                              data: tab.id,
+                              dragAnchorStrategy: pointerDragAnchorStrategy,
+                              feedback: feedback,
+                              childWhenDragging: dimmed,
                               child: labelledChip,
-                            ),
-                    );
-                  },
+                            );
+                      return _TabDropTarget(
+                        key: ValueKey('tab_item_${tab.id}'),
+                        tabId: tab.id,
+                        isTab: isRootTab,
+                        canMerge: (draggedId) => canMerge(draggedId, tab),
+                        onDrop: (draggedId, zone) =>
+                            drop(draggedId, index, zone),
+                        tokens: tokens,
+                        borderRadius: tabRadius,
+                        child: draggable,
+                      );
+                    },
+                  ),
                 ),
               ),
               if (compact)
@@ -511,6 +573,124 @@ class TerminalTabStrip extends ConsumerWidget {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+enum _TabDropZone { before, merge, after }
+
+/// One tab as a drop target: its outer quarters reorder, its middle merges.
+///
+/// Accepts the tab it wraps as well, so dropping a tab back on itself does
+/// nothing instead of falling through to the strip's move-to-end target.
+class _TabDropTarget extends StatefulWidget {
+  final String tabId;
+  final bool Function(String id) isTab;
+  final bool Function(String draggedId) canMerge;
+  final void Function(String draggedId, _TabDropZone zone) onDrop;
+  final ShellVibeTokens tokens;
+  final BorderRadius borderRadius;
+  final Widget child;
+
+  const _TabDropTarget({
+    super.key,
+    required this.tabId,
+    required this.isTab,
+    required this.canMerge,
+    required this.onDrop,
+    required this.tokens,
+    required this.borderRadius,
+    required this.child,
+  });
+
+  @override
+  State<_TabDropTarget> createState() => _TabDropTargetState();
+}
+
+class _TabDropTargetState extends State<_TabDropTarget> {
+  _TabDropZone? _zone;
+
+  /// Where [globalPointer] falls on this tab, or null for the tab itself.
+  /// The drag uses the pointer anchor, so a drop's offset is the pointer.
+  _TabDropZone? _zoneAt(Offset globalPointer, String draggedId) {
+    if (draggedId == widget.tabId) return null;
+    final box = context.findRenderObject()! as RenderBox;
+    final x = box.globalToLocal(globalPointer).dx / box.size.width;
+    if (widget.canMerge(draggedId) && x >= 0.25 && x <= 0.75) {
+      return _TabDropZone.merge;
+    }
+    return x < 0.5 ? _TabDropZone.before : _TabDropZone.after;
+  }
+
+  /// Nudges the strip along while the pointer sits near either end of it, so
+  /// a tab can reach a slot that is scrolled out of view.
+  // ponytail: moves only on pointer motion, a timer if holding still matters.
+  void _autoScroll(Offset globalPointer) {
+    final scrollable = Scrollable.maybeOf(context);
+    final box = scrollable?.context.findRenderObject() as RenderBox?;
+    if (scrollable == null || box == null) return;
+    final x = box.globalToLocal(globalPointer).dx;
+    final position = scrollable.position;
+    const edge = 40.0;
+    final delta = x < edge ? -12.0 : (x > box.size.width - edge ? 12.0 : 0.0);
+    if (delta == 0) return;
+    position.jumpTo(
+      (position.pixels + delta).clamp(
+        position.minScrollExtent,
+        position.maxScrollExtent,
+      ),
+    );
+  }
+
+  void _show(_TabDropZone? zone) {
+    if (zone != _zone) setState(() => _zone = zone);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final brand = widget.tokens.brand;
+    return DragTarget<String>(
+      onWillAcceptWithDetails: (details) => widget.isTab(details.data),
+      onMove: (details) {
+        _show(_zoneAt(details.offset, details.data));
+        _autoScroll(details.offset);
+      },
+      onLeave: (_) => _show(null),
+      onAcceptWithDetails: (details) {
+        final zone = _zoneAt(details.offset, details.data);
+        _show(null);
+        if (zone != null) widget.onDrop(details.data, zone);
+      },
+      builder: (context, _, _) => Stack(
+        children: [
+          widget.child,
+          if (_zone == _TabDropZone.merge)
+            Positioned.fill(
+              right: 8,
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  key: const Key('tab_merge_highlight'),
+                  decoration: BoxDecoration(
+                    color: brand.withValues(alpha: 0.14),
+                    borderRadius: widget.borderRadius,
+                    border: Border.all(color: brand.withValues(alpha: 0.6)),
+                  ),
+                ),
+              ),
+            ),
+          if (_zone == _TabDropZone.before || _zone == _TabDropZone.after)
+            Positioned(
+              top: 6,
+              bottom: 6,
+              // In the 8px gap the tab leaves on its right, or on its left
+              // edge for a drop in front of it.
+              left: _zone == _TabDropZone.before ? 0 : null,
+              right: _zone == _TabDropZone.after ? 3 : null,
+              width: 2,
+              child: IgnorePointer(child: ColoredBox(color: brand)),
+            ),
+        ],
       ),
     );
   }

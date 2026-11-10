@@ -316,6 +316,13 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
       // would do the same thing; the pane row appears once there is a split.
       if (paneCount > 1)
         AdaptiveMenuAction(
+          itemKey: const Key('terminal_menu_move_to_new_tab'),
+          icon: LucideIcons.squareArrowOutUpRight,
+          label: 'Move to New Tab',
+          value: () => notifier.moveToNewTab(pane.id),
+        ),
+      if (paneCount > 1)
+        AdaptiveMenuAction(
           itemKey: const Key('terminal_menu_close_pane'),
           icon: LucideIcons.x,
           label: 'Close Pane',

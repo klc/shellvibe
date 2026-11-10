@@ -1304,6 +1304,138 @@ void main() {
       await tester.pumpAndSettle();
     });
 
+    testWidgets('dropping a tab on the middle of another merges it; its '
+        'edge only reorders', (tester) async {
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+      final container = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          localPtyManagerProvider.overrideWithValue(_NoShellPtyManager()),
+        ],
+      );
+      final notifier = container.read(terminalTabsProvider.notifier);
+      notifier.openLocalTab(title: 'one');
+      notifier.openLocalTab(title: 'two');
+      notifier.openLocalTab(title: 'three');
+      final ids = [
+        for (final tab in container.read(terminalTabsProvider).tabs) tab.id,
+      ];
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: ShadTheme(
+            data: ShadThemeData(
+              colorScheme: const ShadSlateColorScheme.dark(),
+              brightness: Brightness.dark,
+            ),
+            child: const MaterialApp(home: TerminalTabView()),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      Future<void> dragTab(String id, Offset to) async {
+        final start = tester.getCenter(find.byKey(Key('tab_header_$id')));
+        final gesture = await tester.startGesture(
+          start,
+          kind: PointerDeviceKind.mouse,
+        );
+        await tester.pump(const Duration(milliseconds: 50));
+        for (var step = 1; step <= 10; step++) {
+          await gesture.moveTo(Offset.lerp(start, to, step / 10)!);
+          await tester.pump(const Duration(milliseconds: 20));
+        }
+        await gesture.up();
+        await tester.pumpAndSettle();
+      }
+
+      // Onto the left edge of "one": a move, not a merge.
+      final one = tester.getRect(find.byKey(Key('tab_header_${ids[0]}')));
+      await dragTab(ids[2], one.centerLeft + const Offset(4, 0));
+      var state = container.read(terminalTabsProvider);
+      expect(
+        state.tabs.where((t) => t.splitParentId == null).map((t) => t.id),
+        [ids[2], ids[0], ids[1]],
+      );
+
+      // Onto the middle of "one": it joins that tab.
+      await dragTab(
+        ids[1],
+        tester.getCenter(find.byKey(Key('tab_header_${ids[0]}'))),
+      );
+      state = container.read(terminalTabsProvider);
+      expect(
+        state.tabs.firstWhere((t) => t.id == ids[1]).splitParentId,
+        ids[0],
+      );
+      expect(find.byKey(Key('tab_header_${ids[1]}')), findsNothing);
+      expect(state.activeTabId, ids[1]);
+      expect(find.byKey(const Key('tab_merge_highlight')), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('Move to New Tab takes a pane out of its split', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(2400, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final container = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          localPtyManagerProvider.overrideWithValue(_NoShellPtyManager()),
+        ],
+      );
+      final notifier = container.read(terminalTabsProvider.notifier);
+      notifier.openLocalTab(title: 'A');
+      final first = container.read(terminalTabsProvider).activeTabId!;
+      notifier.splitTab(first, direction: Axis.horizontal);
+      final second = container.read(terminalTabsProvider).tabs.last.id;
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: ShadTheme(
+            data: ShadThemeData(
+              colorScheme: const ShadSlateColorScheme.dark(),
+              brightness: Brightness.dark,
+            ),
+            child: const MaterialApp(home: TerminalTabView()),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byKey(ValueKey(second))),
+        kind: PointerDeviceKind.mouse,
+        buttons: kSecondaryMouseButton,
+      );
+      await gesture.up();
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('terminal_menu_move_to_new_tab')));
+      await tester.pumpAndSettle();
+
+      final state = container.read(terminalTabsProvider);
+      expect(
+        state.tabs.where((t) => t.splitParentId == null).map((t) => t.id),
+        [first, second],
+      );
+      expect(state.activeTabId, second);
+      expect(find.byKey(Key('tab_header_$second')), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('right-clicking a tab offers to close the tabs around it', (
       tester,
     ) async {
