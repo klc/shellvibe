@@ -581,54 +581,62 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
                     color: theme.background,
                     child: StreamBuilder<void>(
                       stream: session.moshPredictionChanges,
-                      builder: (context, _) => TerminalView(
-                        session.terminal,
-                        key: _terminalViewKey,
-                        theme: theme,
-                        controller: _terminalController,
-                        scrollController: _terminalScroll,
-                        shortcuts: _terminalShortcuts,
-                        // Keeps the grid off the pane's ring on every side. The view
-                        // insets inside its own background fill, so the gap reads as
-                        // terminal rather than as a seam of the pane behind it, and
-                        // the columns and rows are measured against the inset box.
-                        padding: const EdgeInsets.all(3),
-                        focusNode: _terminalFocus,
-                        autofocus: true,
-                        deleteDetection:
-                            shouldShowExtraKeys && !widget.readOnly,
-                        readOnly: widget.readOnly,
-                        onTapUp: _handleTapUp,
-                        // Desktop only: a long press on a phone is how xterm
-                        // starts a text selection, and the pane header and tab
-                        // bar already carry these actions there.
-                        onSecondaryTapDown: _showContextMenu,
-                        onHyperlinkTap: _handleHyperlinkTap,
-                        predictionText: session.isMosh
-                            ? session.moshPredictionEngine.visibleText
-                            : null,
-                        cursorType: switch (settings.cursorStyle) {
-                          AppCursorStyle.block => TerminalCursorType.block,
-                          AppCursorStyle.underline =>
-                            TerminalCursorType.underline,
-                          AppCursorStyle.bar => TerminalCursorType.verticalBar,
-                        },
-                        textStyle: TerminalStyle(
-                          fontSize: settings.fontSize,
-                          fontFamily: resolveTerminalFontFamily(
-                            settings.fontFamily,
+                      // xterm takes focus only on tap-down, and a drag that
+                      // starts before the press timeout never becomes a tap:
+                      // the selection lands here while focus, and with it
+                      // Cmd/Ctrl+C and OSC 52, stays on another pane.
+                      builder: (context, _) => Listener(
+                        onPointerDown: (_) => _terminalFocus.requestFocus(),
+                        child: TerminalView(
+                          session.terminal,
+                          key: _terminalViewKey,
+                          theme: theme,
+                          controller: _terminalController,
+                          scrollController: _terminalScroll,
+                          shortcuts: _terminalShortcuts,
+                          // Keeps the grid off the pane's ring on every side. The view
+                          // insets inside its own background fill, so the gap reads as
+                          // terminal rather than as a seam of the pane behind it, and
+                          // the columns and rows are measured against the inset box.
+                          padding: const EdgeInsets.all(3),
+                          focusNode: _terminalFocus,
+                          autofocus: true,
+                          deleteDetection:
+                              shouldShowExtraKeys && !widget.readOnly,
+                          readOnly: widget.readOnly,
+                          onTapUp: _handleTapUp,
+                          // Desktop only: a long press on a phone is how xterm
+                          // starts a text selection, and the pane header and tab
+                          // bar already carry these actions there.
+                          onSecondaryTapDown: _showContextMenu,
+                          onHyperlinkTap: _handleHyperlinkTap,
+                          predictionText: session.isMosh
+                              ? session.moshPredictionEngine.visibleText
+                              : null,
+                          cursorType: switch (settings.cursorStyle) {
+                            AppCursorStyle.block => TerminalCursorType.block,
+                            AppCursorStyle.underline =>
+                              TerminalCursorType.underline,
+                            AppCursorStyle.bar =>
+                              TerminalCursorType.verticalBar,
+                          },
+                          textStyle: TerminalStyle(
+                            fontSize: settings.fontSize,
+                            fontFamily: resolveTerminalFontFamily(
+                              settings.fontFamily,
+                            ),
+                            fontFamilyFallback: kTerminalFontFamilyFallback,
+                            enableLigatures: settings.enableLigatures,
+                            // Configurable in Settings; 1.4 lands on the same 18px pitch
+                            // reference terminals use at the default 14px font.
+                            height: settings.lineHeightFactor,
+                            // Configurable in Settings. Most palettes ship distinct bright
+                            // variants, so remapping bold runs from 0-7 onto 8-15 is what
+                            // the schemes were authored for; palettes whose brights mirror
+                            // the base colors (Rosé Pine, Snazzy, One Light) are unaffected.
+                            drawBoldTextWithBrightColors:
+                                settings.drawBoldTextWithBrightColors,
                           ),
-                          fontFamilyFallback: kTerminalFontFamilyFallback,
-                          enableLigatures: settings.enableLigatures,
-                          // Configurable in Settings; 1.4 lands on the same 18px pitch
-                          // reference terminals use at the default 14px font.
-                          height: settings.lineHeightFactor,
-                          // Configurable in Settings. Most palettes ship distinct bright
-                          // variants, so remapping bold runs from 0-7 onto 8-15 is what
-                          // the schemes were authored for; palettes whose brights mirror
-                          // the base colors (Rosé Pine, Snazzy, One Light) are unaffected.
-                          drawBoldTextWithBrightColors:
-                              settings.drawBoldTextWithBrightColors,
                         ),
                       ),
                     ),

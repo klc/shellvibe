@@ -710,6 +710,64 @@ void main() {
       await tester.pumpAndSettle();
     });
 
+    testWidgets('a quick drag-select focuses the pane it selects in', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(2400, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final container = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          localPtyManagerProvider.overrideWithValue(_NoShellPtyManager()),
+        ],
+      );
+      final notifier = container.read(terminalTabsProvider.notifier);
+      notifier.openLocalTab(title: 'A');
+      final first = container.read(terminalTabsProvider).activeTabId!;
+      notifier.splitTab(first, direction: Axis.horizontal);
+      final second = container.read(terminalTabsProvider).tabs.last.id;
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: ShadTheme(
+            data: ShadThemeData(
+              colorScheme: const ShadSlateColorScheme.dark(),
+              brightness: Brightness.dark,
+            ),
+            child: const MaterialApp(home: TerminalTabView()),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      await tester.tap(find.byKey(ValueKey(first)));
+      await tester.pumpAndSettle();
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'terminal_$first');
+
+      // Moving before the press timeout makes it a drag, so the tap that used
+      // to hand the pane focus never fires and Cmd+C copied from the other
+      // pane's empty selection.
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byKey(ValueKey(second))),
+        kind: PointerDeviceKind.mouse,
+      );
+      await gesture.moveBy(const Offset(40, 0));
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'terminal_$second',
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('a split tab offers Close Pane in the menu', (tester) async {
       tester.view.physicalSize = const Size(2400, 1600);
       tester.view.devicePixelRatio = 1.0;
