@@ -301,7 +301,11 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
     final data = await Clipboard.getData(Clipboard.kTextPlain);
     final text = data?.text;
     if (text == null || text.isEmpty) return;
-    if (!Terminal.isPasteSafe(text) && !await _confirmUnsafePaste(text)) {
+    final confirm =
+        ref.read(settingsProvider).value?.confirmMultiLinePaste ?? true;
+    if (confirm &&
+        !Terminal.isPasteSafe(text) &&
+        !await _confirmUnsafePaste(text)) {
       return;
     }
     if (!mounted) return;
@@ -313,25 +317,40 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
     final lines = '\n'.allMatches(text).length + 1;
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => ShadDialog(
-        title: const Text('Paste and run?'),
-        description: Text(
-          'The clipboard holds $lines lines. Pasting it into the shell runs '
-          'every line but the last one immediately.',
+      // Enter pastes, Esc cancels. Only while nothing inside has focus, so
+      // Enter on a tabbed-to Cancel still cancels.
+      builder: (dialogContext) => Focus(
+        autofocus: true,
+        onKeyEvent: (node, event) {
+          if (event is KeyDownEvent &&
+              node.hasPrimaryFocus &&
+              (event.logicalKey == LogicalKeyboardKey.enter ||
+                  event.logicalKey == LogicalKeyboardKey.numpadEnter)) {
+            Navigator.of(dialogContext).pop(true);
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        },
+        child: ShadDialog(
+          title: const Text('Paste and run?'),
+          description: Text(
+            'The clipboard holds $lines lines. Pasting it into the shell runs '
+            'every line but the last one immediately.',
+          ),
+          actions: adaptiveDialogActions(dialogContext, [
+            ShellVibeButton.secondary(
+              buttonKey: const Key('unsafe_paste_cancel_button'),
+              label: 'Cancel',
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+            ),
+            ShellVibeButton(
+              buttonKey: const Key('unsafe_paste_confirm_button'),
+              label: 'Paste',
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+            ),
+          ]),
+          actionsAxis: adaptiveDialogActionsAxis(dialogContext),
         ),
-        actions: adaptiveDialogActions(dialogContext, [
-          ShellVibeButton.secondary(
-            buttonKey: const Key('unsafe_paste_cancel_button'),
-            label: 'Cancel',
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-          ),
-          ShellVibeButton(
-            buttonKey: const Key('unsafe_paste_confirm_button'),
-            label: 'Paste',
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-          ),
-        ]),
-        actionsAxis: adaptiveDialogActionsAxis(dialogContext),
       ),
     );
     return confirmed ?? false;

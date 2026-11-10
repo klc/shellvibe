@@ -177,6 +177,9 @@ class SettingsNotifier extends _$SettingsNotifier {
   Future<void> setDesktopNotifications(bool enabled) =>
       _edit((s) => s.copyWith(desktopNotifications: enabled));
 
+  Future<void> setConfirmMultiLinePaste(bool enabled) =>
+      _edit((s) => s.copyWith(confirmMultiLinePaste: enabled));
+
   Future<void> setDrawBoldTextWithBrightColors(bool enabled) =>
       _edit((s) => s.copyWith(drawBoldTextWithBrightColors: enabled));
 
