@@ -54,7 +54,10 @@ dependencies:
   # ask for kitty's disambiguate flag only. 6.3.5 keeps a drag selection's
   # start in place while the view scrolls, and sends Shift+keypad Enter as
   # Shift+Enter so Cursor's agent CLI starts a new line instead of U+E046.
-  xterm3: ^6.3.5
+  # 6.4.0 stops remote output from resizing the terminal, reading the
+  # clipboard over OSC 52 or echoing the title into the input, and makes
+  # readOnly views block hardware keys and paste too.
+  xterm3: ^6.4.0
   # Back on the pub.dev release: every fix we carried on our fork landed
   # upstream by 4.0.1 (the transport, KEX, SFTP, web and HTTP work in #229,
   # #230 and #231), so there is nothing left for a pin to hold.
