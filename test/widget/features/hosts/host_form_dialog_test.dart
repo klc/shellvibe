@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -69,6 +71,51 @@ void main() {
     await tester.enterText(find.byKey(const Key('host_port_input')), '2222');
     await tester.pump();
     expect(find.text('root@10.0.0.5:2222'), findsOneWidget);
+  });
+
+  testWidgets('Try connection reports a failed connect in the dialog', (
+    tester,
+  ) async {
+    // A port nothing listens on, so the connect is refused at once.
+    final port = (await tester.runAsync(() async {
+      final socket = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+      final port = socket.port;
+      await socket.close();
+      return port;
+    }))!;
+
+    await pumpDialog(tester);
+    await tester.enterText(find.byKey(const Key('host_label_input')), 'box');
+    await tester.enterText(
+      find.byKey(const Key('host_hostname_input')),
+      '127.0.0.1',
+    );
+    await tester.enterText(find.byKey(const Key('host_port_input')), '$port');
+    await tester.tap(find.byKey(const Key('host_try_connection_button')));
+    await tester.pumpAndSettle();
+
+    // No identity picked: the form asks for credentials, as a connect would.
+    await tester.enterText(
+      find.byKey(const Key('connect_username_input')),
+      'root',
+    );
+    await tester.enterText(
+      find.byKey(const Key('connect_password_input')),
+      'secret',
+    );
+    await tester.tap(
+      find.byKey(const Key('connect_credentials_submit_button')),
+    );
+    await tester.pump();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 500)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('host_try_connection_result')), findsOneWidget);
+    expect(find.textContaining('Connected as'), findsNothing);
+    // Nothing was saved.
+    expect(await db.hostsDao.getHostsByWorkspace('default'), isEmpty);
   });
 
   testWidgets('address and user name fields are not autocorrected', (
