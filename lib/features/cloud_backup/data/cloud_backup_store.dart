@@ -252,6 +252,20 @@ final class CloudBackupStore {
   Future<void> writeGroundMark({required int revision, required int clock}) =>
       storage.write(key: _groundMarkKey, value: '$revision:$clock');
 
+  /// The tables automatic sync carried when it last started here, or null
+  /// before a build recorded them.
+  ///
+  /// A build that carries one more has to pull the log again: the build
+  /// before stepped over that table's operations and moved its cursor past.
+  Future<Set<String>?> readSyncedTypes() async {
+    final value = await storage.read(key: _syncedTypesKey);
+
+    return value?.split(',').toSet();
+  }
+
+  Future<void> writeSyncedTypes(Iterable<String> types) =>
+      storage.write(key: _syncedTypesKey, value: types.join(','));
+
   /// How often a backup runs on its own.
   Future<BackupFrequency> readBackupFrequency() async =>
       BackupFrequency.fromWireName(await storage.read(key: _frequencyKey));
@@ -398,5 +412,6 @@ final class CloudBackupStore {
   /// Not removed by [clear]. Forgetting the passphrase leaves the journal's
   /// state where it was, and that state still belongs to this account.
   static const String _syncAccountKey = 'shellvibe_sync_account';
+  static const String _syncedTypesKey = 'shellvibe_sync_known_types';
   static const String _backupAccountKey = 'shellvibe_backup_account';
 }

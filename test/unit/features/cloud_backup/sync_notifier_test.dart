@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/core/sync/backup_scope_store.dart';
 import 'package:shellvibe/core/sync/e2ee_cloud_sync_service.dart';
 import 'package:shellvibe/core/sync/sync_journal.dart';
+import 'package:shellvibe/core/sync/sync_row_codec.dart';
 import 'package:shellvibe/features/cloud_backup/data/cloud_backup_store.dart';
 import 'package:shellvibe/features/cloud_backup/presentation/notifiers/sync_notifier.dart';
 import 'package:shellvibe/features/settings/presentation/notifiers/backup_scope_notifier.dart';
@@ -366,6 +367,56 @@ void main() {
         );
       },
     );
+  });
+
+  group('a build that syncs a new table', () {
+    /// The first pull a rebuild sends, after this device stood at position
+    /// 500 under a build that synced [before].
+    Future<Map<String, String>> firstPullAfterUpgrade(
+      Set<String> before,
+    ) async {
+      await joined(await started());
+      await SyncJournal(
+        db: db,
+        deviceId: 'device-a',
+      ).acknowledgePullSeq(500, maxClock: 3);
+      await store().writeSyncedTypes(before);
+      final seen = server.requests.length;
+
+      container.invalidate(syncProvider);
+      await joined(await started());
+
+      return server.requests
+          .skip(seen)
+          .firstWhere(
+            (r) => r.method == 'GET' && r.url.path.endsWith('/sync/operations'),
+          )
+          .url
+          .queryParameters;
+    }
+
+    test('pulls the log again from the start', () async {
+      // The build before stepped over the table's operations and moved its
+      // cursor past them. Left there, they never arrive.
+      final query = await firstPullAfterUpgrade(
+        SyncRowCodec.syncableTypes.where((t) => t != 'bookmarks').toSet(),
+      );
+
+      expect(query['since_seq'], isNull);
+      expect(query['since_clock'], '0');
+      expect(
+        await store().readSyncedTypes(),
+        SyncRowCodec.syncableTypes.toSet(),
+      );
+    });
+
+    test('a build with the same tables keeps its place', () async {
+      final query = await firstPullAfterUpgrade(
+        SyncRowCodec.syncableTypes.toSet(),
+      );
+
+      expect(query['since_seq'], '500');
+    });
   });
 
   group('a device that syncs less', () {

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'dart:io';
 
+import 'package:dartssh2/dartssh2.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/core/network/ssh_session_manager.dart';
@@ -317,6 +318,47 @@ void main() {
             ),
           ),
         );
+      },
+    );
+
+    test(
+      'host key order puts the key type on record for this server first',
+      () async {
+        Future<void> trust(String host, String keyType) =>
+            db.knownHostsDao.insertOrUpdateKnownHost(
+              KnownHostsCompanion.insert(
+                id: host,
+                hostname: host,
+                port: 22,
+                keyType: keyType,
+                fingerprintSha256: 'SHA256:x',
+                firstSeenAt: DateTime(2026),
+              ),
+            );
+        await trust('rsa.example', 'ssh-rsa');
+        await trust('ecdsa.example', 'ecdsa-sha2-nistp256');
+
+        expect(
+          await sessionManager.preferredHostkeyOrder('new.example', 22),
+          const SSHAlgorithms().hostkey,
+        );
+        expect(
+          (await sessionManager.preferredHostkeyOrder(
+            'rsa.example',
+            22,
+          )).take(3),
+          [
+            SSHHostkeyType.rsaSha512,
+            SSHHostkeyType.rsaSha256,
+            SSHHostkeyType.ed25519,
+          ],
+        );
+        final ecdsa = await sessionManager.preferredHostkeyOrder(
+          'ecdsa.example',
+          22,
+        );
+        expect(ecdsa.first, SSHHostkeyType.ecdsa256);
+        expect(ecdsa.toSet(), const SSHAlgorithms().hostkey.toSet());
       },
     );
   });

@@ -282,12 +282,17 @@ class RunbookApprovalDecision {
 class HostAccessRequest {
   final String clientId;
   final String clientName;
+
+  /// The client's own workspace, so a "Deny and suspend" can be audited
+  /// where the request came from.
+  final String workspaceId;
   final String reason;
   final List<HostAccessCandidate> candidates;
 
   const HostAccessRequest({
     required this.clientId,
     required this.clientName,
+    required this.workspaceId,
     required this.reason,
     required this.candidates,
   });

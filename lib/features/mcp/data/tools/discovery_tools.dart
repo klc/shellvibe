@@ -366,6 +366,7 @@ class RequestHostAccessTool with McpArgReaders implements McpToolHandler {
         HostAccessRequest(
           clientId: ctx.clientId,
           clientName: ctx.clientName,
+          workspaceId: ctx.workspaceId,
           reason: reason,
           candidates: candidates,
         ),

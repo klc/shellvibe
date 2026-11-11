@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/app/router/app_router.dart';
 import 'package:shellvibe/features/mcp/data/mcp_providers.dart';
 import 'package:shellvibe/features/mcp/data/mcp_session_pool.dart';
+import 'package:shellvibe/features/mcp/data/repositories/mcp_audit_repository.dart';
 import 'package:shellvibe/features/mcp/data/repositories/mcp_client_repository.dart';
 import 'package:shellvibe/features/mcp/data/repositories/mcp_grant_repository.dart';
 import 'package:shellvibe/features/mcp/data/repositories/mcp_repository_providers.dart';
@@ -24,6 +25,7 @@ import 'package:shellvibe/app/widgets/shellvibe_ui.dart';
 HostAccessRequest _hostAccessRequest() => const HostAccessRequest(
   clientId: 'client-1',
   clientName: 'Claude Desktop',
+  workspaceId: 'default',
   reason: 'Investigating a disk-full alert',
   candidates: [
     HostAccessCandidate(
@@ -83,6 +85,27 @@ class _FakeGrants extends Fake implements McpGrantRepository {
   @override
   Future<void> revokeAllForClient(String clientId) async =>
       revoked.add(clientId);
+}
+
+class _FakeAudit extends Fake implements McpAuditRepository {
+  final rows = <(String, String, String, AuditDecision)>[];
+
+  @override
+  Future<void> record({
+    required String clientId,
+    required String clientName,
+    required String workspaceId,
+    String? hostId,
+    String? hostLabel,
+    required String tool,
+    required Map<String, Object?> args,
+    required AuditDecision decision,
+    RiskCategory? category,
+    int? exitCode,
+    int? durationMs,
+    int? outputBytes,
+    String? outputSha256,
+  }) async => rows.add((tool, clientId, workspaceId, decision));
 }
 
 void main() {
@@ -182,6 +205,7 @@ void main() {
           mcpClientRepositoryProvider.overrideWithValue(clients),
           mcpSessionPoolProvider.overrideWithValue(_FakePool()),
           mcpGrantRepositoryProvider.overrideWithValue(_FakeGrants()),
+          mcpAuditRepositoryProvider.overrideWithValue(_FakeAudit()),
         ],
       ),
     );
@@ -217,6 +241,7 @@ void main() {
       final clients = _FakeClientRepo()..release.complete();
       final pool = _FakePool();
       final grants = _FakeGrants();
+      final audit = _FakeAudit();
       await tester.pumpWidget(
         _harness(
           coordinator,
@@ -224,6 +249,7 @@ void main() {
             mcpClientRepositoryProvider.overrideWithValue(clients),
             mcpSessionPoolProvider.overrideWithValue(pool),
             mcpGrantRepositoryProvider.overrideWithValue(grants),
+            mcpAuditRepositoryProvider.overrideWithValue(audit),
           ],
         ),
       );
@@ -249,6 +275,9 @@ void main() {
       expect(clients.revoked, ['client-1']);
       expect(pool.closed, ['client-1']);
       expect(grants.revoked, ['client-1']);
+      expect(audit.rows, [
+        ('suspend_client', 'client-1', 'default', AuditDecision.denied),
+      ]);
       // Refused with it, and never put on screen for a suspended client.
       expect(queued?.granted, isEmpty);
       expect(coordinator.currentHostAccess, isEmpty);

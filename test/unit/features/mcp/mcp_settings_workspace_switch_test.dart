@@ -6,6 +6,7 @@ import 'package:shellvibe/features/mcp/data/mcp_host_connector.dart';
 import 'package:shellvibe/features/mcp/data/mcp_providers.dart';
 import 'package:shellvibe/features/mcp/data/mcp_server_controller.dart';
 import 'package:shellvibe/features/mcp/data/mcp_session_pool.dart';
+import 'package:shellvibe/features/mcp/data/repositories/mcp_audit_repository.dart';
 import 'package:shellvibe/features/mcp/data/repositories/mcp_client_repository.dart';
 import 'package:shellvibe/features/mcp/presentation/notifiers/mcp_settings_notifier.dart';
 import 'package:shellvibe/features/workspaces/domain/models/workspace_model.dart';
@@ -21,6 +22,7 @@ import 'package:shellvibe/shared/storage/secure_storage_service.dart';
 void main() {
   late ProviderContainer container;
   late _FakeController controller;
+  late AppDatabase db;
 
   Future<void> boot(Map<String, String> stored) async {
     controller = _FakeController(
@@ -28,7 +30,7 @@ void main() {
     );
     final pool = McpSessionPool(connector: _NoConnector());
     addTearDown(pool.dispose);
-    final db = AppDatabase(NativeDatabase.memory());
+    db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
     container = ProviderContainer(
       overrides: [
@@ -81,6 +83,29 @@ void main() {
 
     expect(controller.isRunning, isFalse);
     expect(stored['mcp_settings_b'], contains('"masterEnabled":false'));
+  });
+
+  test('panic leaves an audit row for every client it revokes', () async {
+    await boot({'mcp_settings_a': '{"masterEnabled":true}'});
+    await db.workspacesDao.insertWorkspace(
+      WorkspacesCompanion.insert(id: 'b', name: 'b', createdAt: DateTime(2026)),
+    );
+    await db.mcpDao.insertClient(
+      McpClientsCompanion.insert(
+        id: 'client-b',
+        workspaceId: 'b',
+        name: 'Agent',
+        tokenHash: 'hash-b',
+        createdAt: DateTime(2026),
+      ),
+    );
+
+    await container.read(mcpSettingsProvider.notifier).panic();
+
+    final rows = await McpAuditRepository(db.mcpDao).query();
+    expect(rows.map((r) => (r.tool, r.clientId, r.workspaceId, r.decision)), [
+      ('panic', 'client-b', 'b', 'denied'),
+    ]);
   });
 
   test('stops the server when the new workspace has AI access off', () async {
