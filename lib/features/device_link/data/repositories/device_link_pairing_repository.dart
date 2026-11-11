@@ -10,7 +10,7 @@ typedef VaultUnlockedWrite =
 
 /// Database boundary for desktop-side Device Link authorization records.
 ///
-/// SQLite receives only the Argon2id record. The raw pairing secret is passed
+/// SQLite receives only the hashed record. The raw pairing secret is passed
 /// through this class once, hashed, and discarded by the caller afterwards.
 final class DeviceLinkPairingRepository {
   final PairedDevicesDao dao;
@@ -75,7 +75,7 @@ final class DeviceLinkPairingRepository {
       secret: secret,
       encodedHash: device.secretHash,
     );
-    // Argon2id verification is asynchronous. A lock requested while it runs
+    // Verification is asynchronous. A lock requested while it runs
     // must not turn a previously valid secret into a newly admitted session.
     if (!valid || isVaultLocked()) return false;
     try {

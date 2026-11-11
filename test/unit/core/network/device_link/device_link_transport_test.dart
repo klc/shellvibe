@@ -766,6 +766,107 @@ void main() {
     timeout: const Timeout(_timeout),
   );
 
+  test(
+    'drops a peer whose frame exceeds the cap before it is buffered',
+    () async {
+      // The bug this pins: dart:io had no payload cap, so any LAN peer could
+      // send one giant frame before hello and have it buffered whole. Without
+      // the cap it was answered with `handshake_required` and kept open.
+      final connection = await _connect(identity, server.port);
+      addTearDown(connection.close);
+
+      await connection.sendRawBinary(
+        Uint8List(deviceLinkMaxBinaryFrameLength + 1),
+      );
+
+      await _waitForClosed(connection);
+    },
+    timeout: const Timeout(_timeout),
+  );
+
+  test('closes a connection that never says hello', () async {
+    final strict = DeviceLinkServer(
+      identity: identity,
+      hostName: 'test-host',
+      appVersion: 'test',
+      pairedDeviceAuthenticator: devices.authenticate,
+      pairedDevicePersister: devices.save,
+      helloTimeout: const Duration(milliseconds: 200),
+    );
+    await strict.start();
+    addTearDown(strict.close);
+
+    final silent = await _connect(identity, strict.port);
+    addTearDown(silent.close);
+    final greeted = await _connect(identity, strict.port);
+    addTearDown(greeted.close);
+    await greeted.sendHello(
+      const DeviceLinkHello(deviceId: 'phone-greeted', deviceName: 'Phone'),
+    );
+    await greeted.nextControl(timeout: _timeout);
+
+    await _waitForClosed(silent);
+    expect(greeted.isClosed, isFalse);
+  }, timeout: const Timeout(_timeout));
+
+  test('caps the connections one address may hold open', () async {
+    final capped = DeviceLinkServer(
+      identity: identity,
+      hostName: 'test-host',
+      appVersion: 'test',
+      pairedDeviceAuthenticator: devices.authenticate,
+      pairedDevicePersister: devices.save,
+      maxConnectionsPerAddress: 2,
+    );
+    await capped.start();
+    addTearDown(capped.close);
+
+    final first = await _connect(identity, capped.port);
+    addTearDown(first.close);
+    final second = await _connect(identity, capped.port);
+    addTearDown(second.close);
+    await expectLater(_connect(identity, capped.port), throwsA(anything));
+
+    // A closed connection gives its slot back.
+    await first.close();
+    await _waitForServerToNotice();
+    final third = await _connect(identity, capped.port);
+    addTearDown(third.close);
+    expect(third.isClosed, isFalse);
+  }, timeout: const Timeout(_timeout));
+
+  test('bounds the terminal size a phone asks for', () async {
+    // The bug this pins: attach and resize passed any positive size through,
+    // and a terminal allocates a buffer for whatever it is given.
+    final payload = await server.createPairingPayload(
+      addresses: const ['127.0.0.1'],
+    );
+    final connection = await _connect(identity, server.port);
+    addTearDown(connection.close);
+    await _pair(connection, payload.token, 'phone-huge');
+
+    await connection.sendAttach(
+      const DeviceLinkAttach(sessionId: 'local-1', cols: 1000000000, rows: 40),
+    );
+    final attached = await connection.nextControl(timeout: _timeout);
+    expect(attached, isA<DeviceLinkAttached>());
+    expect(
+      (attached as DeviceLinkAttached).cols,
+      deviceLinkMaxTerminalDimension,
+    );
+    expect(attached.rows, 40);
+    await connection.nextBinary(timeout: _timeout);
+
+    await connection.sendResize(
+      const DeviceLinkResize(cols: 80, rows: 1 << 40),
+    );
+    final deadline = DateTime.now().add(_timeout);
+    while (echo.resizes.isEmpty && DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    expect(echo.resizes, [(80, deviceLinkMaxTerminalDimension)]);
+  }, timeout: const Timeout(_timeout));
+
   test('round-trips raw binary frames without UTF-8 conversion', () async {
     final payload = await server.createPairingPayload(
       addresses: const ['127.0.0.1'],
@@ -925,6 +1026,7 @@ Future<HttpServer> _startRawServer(
 /// A session that echoes every input frame back as PTY output.
 final class _EchoTransport implements DeviceLinkSessionTransport {
   final List<DeviceLinkBinaryFrame> received = [];
+  final List<(int, int)> resizes = [];
   DeviceLinkServerConnection? _owner;
 
   @override
@@ -977,7 +1079,7 @@ final class _EchoTransport implements DeviceLinkSessionTransport {
     required DeviceLinkServerConnection connection,
     required int columns,
     required int rows,
-  }) async {}
+  }) async => resizes.add((columns, rows));
 
   @override
   Future<DeviceLinkAttachment?> detach({
@@ -990,3 +1092,7 @@ final class _EchoTransport implements DeviceLinkSessionTransport {
   @override
   Future<void> dispose() async {}
 }
+
+/// Gives the server a moment to process a close the client just sent.
+Future<void> _waitForServerToNotice() =>
+    Future<void>.delayed(const Duration(milliseconds: 200));

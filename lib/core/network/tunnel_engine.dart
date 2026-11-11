@@ -179,7 +179,9 @@ class TunnelEngine {
         _activeSockets[ruleId]?.add(clientSocket);
         SSHForwardChannel? sshChannel;
         try {
-          sshChannel = await sshClient.forwardLocal(remoteHost, remotePort);
+          sshChannel = await openForwardChannel(
+            sshClient.forwardLocal(remoteHost, remotePort),
+          );
           if (!isTunnelActive(ruleId)) {
             clientSocket.destroy();
             sshChannel.close();
@@ -230,7 +232,11 @@ class TunnelEngine {
       remotePort: remotePort,
     );
     try {
+      // Bound to the server's loopback, as `ssh -R port:…` does. Left empty,
+      // dartssh2 asks for every interface, and a server with
+      // `GatewayPorts clientspecified` would expose the port to the network.
       final listener = await sshClient.forwardRemote(
+        host: 'localhost',
         port: remotePort,
       );
       if (listener == null) {

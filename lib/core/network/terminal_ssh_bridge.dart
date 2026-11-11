@@ -39,7 +39,9 @@ class TerminalSSHBridge {
   /// jump ahead of output still queued here.
   late final CoalescingTerminalWriter _writer =
       writerOverride ??
-      CoalescingTerminalWriter(PacedTerminalWriter(terminal));
+      CoalescingTerminalWriter(
+        PacedTerminalWriter(terminal, waitForFrame: nextFrameOrTimeout),
+      );
 
   /// Replaces the writer so a test can drive the write path without a frame
   /// pipeline.

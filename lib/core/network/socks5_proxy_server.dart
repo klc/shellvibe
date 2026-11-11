@@ -6,6 +6,9 @@ import 'package:dartssh2/dartssh2.dart';
 
 import 'socket_channel_pipe.dart';
 
+/// How long a client may take to finish the SOCKS5 handshake and request.
+const _kHandshakeTimeout = Duration(seconds: 10);
+
 typedef BytesTransferredCallback = void Function(int bytes);
 
 /// Pure Dart SOCKS5 Proxy Server for Dynamic Port Forwarding (-D).
@@ -14,6 +17,9 @@ class Socks5ProxyServer {
   final SSHClient sshClient;
   final String bindAddress;
   final BytesTransferredCallback? onBytesTransferred;
+
+  /// How long a client may take to finish the handshake and its request.
+  final Duration handshakeTimeout;
 
   ServerSocket? _serverSocket;
   final Set<SocketChannelPipe> _activePipes = {};
@@ -26,6 +32,7 @@ class Socks5ProxyServer {
     required this.sshClient,
     this.bindAddress = '127.0.0.1',
     this.onBytesTransferred,
+    this.handshakeTimeout = _kHandshakeTimeout,
   });
 
   bool get isListening => _isListening;
@@ -47,6 +54,10 @@ class Socks5ProxyServer {
   Future<void> _handleClient(Socket clientSocket) async {
     _activeSockets.add(clientSocket);
     final reader = _BufferedSocketReader(clientSocket);
+    // A client that connects and goes quiet would otherwise hold its socket
+    // forever. Failing the reader ends every pending read short, and each
+    // short read already cleans up.
+    final handshakeTimer = Timer(handshakeTimeout, reader.fail);
     SSHForwardChannel? sshChannel;
     try {
       // Step 1: Handshake
@@ -155,9 +166,15 @@ class Socks5ProxyServer {
       }
       final targetPort = (portBytes[0] << 8) | portBytes[1];
 
+      // The request is in. Opening the channel has its own, longer bound: a
+      // slow target is not a client stalling the handshake.
+      handshakeTimer.cancel();
+
       // Step 3: Open SSH channel to destination target
       try {
-        sshChannel = await sshClient.forwardLocal(targetHost, targetPort);
+        sshChannel = await openForwardChannel(
+          sshClient.forwardLocal(targetHost, targetPort),
+        );
       } catch (_) {
         try {
           clientSocket.add([0x05, 0x04, 0x00, 0x01, 0, 0, 0, 0, 0, 0]);
@@ -211,6 +228,8 @@ class Socks5ProxyServer {
           clientSocket.destroy();
         } catch (_) {}
       }
+    } finally {
+      handshakeTimer.cancel();
     }
   }
 
@@ -290,6 +309,14 @@ class _BufferedSocketReader {
   }
 
   bool get hasFailed => _hasError;
+
+  /// Gives up on the client: pending and later reads return short.
+  void fail() {
+    _hasError = true;
+    if (_dataCompleter != null && !_dataCompleter!.isCompleted) {
+      _dataCompleter!.complete();
+    }
+  }
 
   Future<Uint8List> detach() async {
     _detached = true;

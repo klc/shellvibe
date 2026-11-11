@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shellvibe/core/network/socket_channel_pipe.dart';
 import 'package:shellvibe/core/network/socks5_proxy_server.dart';
 
 class FakeSSHForwardChannel implements SSHForwardChannel {
@@ -21,6 +22,9 @@ class FakeSSHForwardChannel implements SSHForwardChannel {
   /// Delivers [data] as if the remote end of the forward had sent it.
   void remoteSend(List<int> data) => _channelStreamController.add(Uint8List.fromList(data));
 
+  /// Whether the pipe has stopped taking what the remote end sends.
+  bool get remotePaused => _channelStreamController.isPaused;
+
   /// Ends the remote side's stream (EOF) without touching the local side.
   Future<void> remoteEof() => _channelStreamController.close();
 
@@ -30,8 +34,10 @@ class FakeSSHForwardChannel implements SSHForwardChannel {
     await _channelSinkController.close();
   }
 
+  bool destroyed = false;
+
   @override
-  void destroy() {}
+  void destroy() => destroyed = true;
 
   @override
   Future<void> get done => _channelStreamController.done;
@@ -284,5 +290,111 @@ void main() {
     await clientDone.future.timeout(const Duration(seconds: 5));
 
     expect(String.fromCharCodes(received.sublist(12)), equals('RESPONSE'));
+  });
+
+  test('Socks5ProxyServer stops reading the client while the channel takes nothing', () async {
+    // The bug this pins: every chunk read from the client went into the
+    // channel sink at once, so a channel with no window left buffered an
+    // upload's worth of bytes on the Dart heap. Now the pause reaches the
+    // socket, the kernel buffers fill, and the client's flush stalls.
+    final forwarded = <int>[];
+    final sinkSub = fakeChannel.sinkStream.listen(forwarded.addAll);
+    final clientSocket = await connectThroughProxy(<int>[], Completer<void>());
+    sinkSub.pause();
+
+    const total = 32 * 1024 * 1024;
+    clientSocket.add(Uint8List(total));
+    final flushed = clientSocket.flush();
+    await expectLater(
+      flushed.timeout(const Duration(seconds: 2)),
+      throwsA(isA<TimeoutException>()),
+    );
+
+    sinkSub.resume();
+    await flushed.timeout(const Duration(seconds: 10));
+    await Future.doWhile(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      return forwarded.length < total;
+    }).timeout(const Duration(seconds: 10));
+    expect(forwarded.length, equals(total));
+
+    await sinkSub.cancel();
+    clientSocket.destroy();
+  });
+
+  test('Socks5ProxyServer stops taking from the channel while the client reads nothing', () async {
+    // The reverse direction: socket.add() queued whatever the channel sent
+    // however slowly the client read, and the channel kept granting window.
+    final received = <int>[];
+    final replied = Completer<void>();
+    final clientSocket = await Socket.connect('127.0.0.1', serverPort);
+    final clientSub = clientSocket.listen((data) {
+      received.addAll(data);
+      if (received.length >= 12 && !replied.isCompleted) replied.complete();
+    });
+    clientSocket.add([
+      0x05, 0x01, 0x00,
+      0x05, 0x01, 0x00, 0x01, 127, 0, 0, 1, 0x1F, 0x90,
+    ]);
+    await replied.future.timeout(const Duration(seconds: 5));
+    clientSub.pause();
+
+    const chunk = 64 * 1024;
+    const chunks = 512; // 32 MiB
+    for (var i = 0; i < chunks; i++) {
+      fakeChannel.remoteSend(Uint8List(chunk));
+    }
+    await Future<void>.delayed(const Duration(seconds: 1));
+    expect(fakeChannel.remotePaused, isTrue);
+
+    clientSub.resume();
+    await Future.doWhile(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      return received.length < 12 + chunk * chunks;
+    }).timeout(const Duration(seconds: 10));
+
+    await clientSub.cancel();
+    clientSocket.destroy();
+  });
+
+  test('Socks5ProxyServer drops a client that never finishes the handshake', () async {
+    final probe = await ServerSocket.bind('127.0.0.1', 0);
+    final port = probe.port;
+    await probe.close();
+    final bound = Socks5ProxyServer(
+      localPort: port,
+      sshClient: fakeSshClient,
+      handshakeTimeout: const Duration(milliseconds: 200),
+    );
+    await bound.start();
+    addTearDown(bound.stop);
+
+    final clientSocket = await Socket.connect('127.0.0.1', port);
+    final closed = Completer<void>();
+    clientSocket.listen((_) {}, onDone: closed.complete, onError: (_) {
+      if (!closed.isCompleted) closed.complete();
+    });
+    // Half a greeting, then silence.
+    clientSocket.add([0x05]);
+    await clientSocket.flush();
+
+    await closed.future.timeout(const Duration(seconds: 5));
+    clientSocket.destroy();
+  });
+
+  test('a forward channel that opens after the timeout is closed', () async {
+    final pending = Completer<SSHForwardChannel>();
+    await expectLater(
+      openForwardChannel(
+        pending.future,
+        timeout: const Duration(milliseconds: 10),
+      ),
+      throwsA(isA<TimeoutException>()),
+    );
+
+    final lateChannel = FakeSSHForwardChannel();
+    pending.complete(lateChannel);
+    await pumpEventQueue();
+    expect(lateChannel.destroyed, isTrue);
   });
 }

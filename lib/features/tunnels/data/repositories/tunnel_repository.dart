@@ -20,6 +20,11 @@ class TunnelRepository {
     return rules.map(_mapToDomain).toList();
   }
 
+  Future<List<TunnelRuleModel>> getAutoStartRules() async {
+    final rules = await _dao.getAutoStartRules();
+    return rules.map(_mapToDomain).toList();
+  }
+
   Future<void> addRule(TunnelRuleModel rule) async {
     await _dao.insertRule(_mapToCompanion(rule));
   }

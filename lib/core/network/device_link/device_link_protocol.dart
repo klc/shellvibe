@@ -12,6 +12,9 @@ const int deviceLinkMaxSnapshotPayloadLength = 4 * 1024 * 1024;
 const int deviceLinkMaxBinaryFrameLength =
     deviceLinkMaxSnapshotPayloadLength + 1;
 
+/// Largest column or row count the desktop applies for a phone.
+const int deviceLinkMaxTerminalDimension = 1000;
+
 /// Raised when a Device Link control or binary frame is malformed.
 class DeviceLinkProtocolException implements Exception {
   final String code;

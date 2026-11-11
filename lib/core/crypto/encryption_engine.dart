@@ -20,6 +20,7 @@ class CryptoException implements Exception {
 /// and AES-256-GCM for payload encryption and decryption.
 class EncryptionEngine {
   static const String argon2idHashPrefix = 'argon2id-v1';
+  static const String sha256HashPrefix = 'sha256-v1';
 
   final Argon2id _kdf;
   final AesGcm _cipher;
@@ -63,31 +64,35 @@ class EncryptionEngine {
   /// Use this — never [generateSalt] — when the bytes are used as key material.
   Uint8List generateKey([int length = 32]) => secureRandomBytes(length);
 
-  /// Creates a self-contained Argon2id password record.
+  /// Creates a verifier record for a high-entropy random secret, such as the
+  /// 256-bit Device Link pairing secret. The format is
+  /// `sha256-v1:<base64url digest>`.
   ///
-  /// The salt and derived bytes are stored together, but the original secret
-  /// never leaves this method. The format is
-  /// `argon2id-v1:<base64url salt>:<base64url digest>`.
+  /// A plain SHA-256 is enough because such a secret cannot be guessed: a slow
+  /// KDF only slows brute force of low-entropy input, and Argon2id cost 64 MiB
+  /// per check here, which any peer presenting a known device id could make
+  /// this process allocate. Never use this for a password.
   Future<String> hashSecret(String secret) async {
-    final salt = generateSalt();
-    final key = await deriveMasterKeyInBackground(
-      masterPassword: secret,
-      salt: salt,
-    );
-    final digest = await key.extractBytes();
-    return [
-      argon2idHashPrefix,
-      base64UrlNoPad(salt),
-      base64UrlNoPad(digest),
-    ].join(':');
+    final digest = await Sha256().hash(utf8.encode(secret));
+    return '$sha256HashPrefix:${base64UrlNoPad(digest.bytes)}';
   }
 
-  /// Verifies a secret against a record produced by [hashSecret].
+  /// Verifies a secret against a record produced by [hashSecret], or by its
+  /// earlier Argon2id form (`argon2id-v1:<base64url salt>:<base64url digest>`)
+  /// that pairings stored before the switch still carry.
   Future<bool> verifySecret({
     required String secret,
     required String encodedHash,
   }) async {
     final parts = encodedHash.split(':');
+    if (parts.length == 2 && parts[0] == sha256HashPrefix) {
+      try {
+        final digest = await Sha256().hash(utf8.encode(secret));
+        return constantTimeEquals(digest.bytes, _decodeBase64Url(parts[1]));
+      } catch (_) {
+        return false;
+      }
+    }
     if (parts.length != 3 || parts[0] != argon2idHashPrefix) return false;
     try {
       final salt = _decodeBase64Url(parts[1]);

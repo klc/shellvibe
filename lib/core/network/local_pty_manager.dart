@@ -57,7 +57,7 @@ class TerminalLocalPtyBridge {
   late final CoalescingTerminalWriter _writer =
       writerOverride ??
       CoalescingTerminalWriter(
-        PacedTerminalWriter(terminal),
+        PacedTerminalWriter(terminal, waitForFrame: nextFrameOrTimeout),
         onHandOff: _acknowledgeBatch,
       );
 

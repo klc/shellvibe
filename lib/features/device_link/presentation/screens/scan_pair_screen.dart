@@ -77,6 +77,7 @@ class _DeviceLinkPairingFlowScreenState
     // Set once the desktop has replaced this phone's secret, cleared once the
     // new profile is saved.
     String? unsavedSecret;
+    String? pairedHostName;
     try {
       await connection.sendHello(
         DeviceLinkHello(
@@ -115,6 +116,7 @@ class _DeviceLinkPairingFlowScreenState
         throw StateError('Desktop rejected the pairing request');
       }
       unsavedSecret = pairedMessage.secret;
+      pairedHostName = pairedMessage.hostName;
 
       final authenticatedHello = await connection.nextControl();
       if (authenticatedHello is DeviceLinkError) {
@@ -209,14 +211,24 @@ class _DeviceLinkPairingFlowScreenState
       }
       // The desktop stored the new secret the moment it paired. A rescan left
       // before a session was picked must still hand it to the pairing this
-      // phone already holds, or that pairing is rejected from now on.
+      // phone already holds, or that pairing is rejected from now on. A first
+      // pairing left that way is kept too, without a session and without
+      // reconnecting by itself: otherwise the desktop lists a paired device
+      // that can never connect.
       final secret = unsavedSecret;
-      final existing = secret == null
-          ? null
-          : await pairingStorage.getById(payload.spki);
-      if (existing != null) {
+      if (secret != null) {
+        final existing = await pairingStorage.getById(payload.spki);
         await pairingStorage.save(
-          existing.copyWith(deviceId: deviceId, secret: secret),
+          existing?.copyWith(deviceId: deviceId, secret: secret) ??
+              DeviceLinkPairingProfile.fromQr(
+                deviceId: deviceId,
+                name: pairedHostName?.isNotEmpty == true
+                    ? pairedHostName!
+                    : payload.host,
+                platform: 'desktop',
+                secret: secret,
+                payload: payload,
+              ).copyWith(autoReconnect: false),
         );
       }
     }

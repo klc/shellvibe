@@ -166,6 +166,11 @@ class TunnelsNotifier extends _$TunnelsNotifier {
     HostKeyPromptCallback? onHostKeyPrompt,
   }) async {
     if (!ref.mounted) return;
+    // A port made up here would forward somewhere the user never chose.
+    final remotePort = rule.remotePort;
+    if (rule.type != 'dynamic' && remotePort == null) {
+      throw StateError('This forward has no remote port set.');
+    }
     final engine = ref.read(tunnelEngineProvider);
     final pool = ref.read(tunnelSshPoolProvider);
 
@@ -210,14 +215,14 @@ class TunnelsNotifier extends _$TunnelsNotifier {
           sshClient: sshClient,
           localPort: rule.localPort,
           remoteHost: rule.remoteHost ?? '127.0.0.1',
-          remotePort: rule.remotePort ?? 80,
+          remotePort: remotePort!,
         );
       } else if (rule.type == 'remote') {
         await engine.startRemoteForward(
           ruleId: rule.id,
           hostId: rule.hostId,
           sshClient: sshClient,
-          remotePort: rule.remotePort ?? 8080,
+          remotePort: remotePort!,
           // The rule's "remote host" column is the bind address on this side
           // for a remote forward.
           localHost: rule.remoteHost ?? '127.0.0.1',
@@ -237,6 +242,23 @@ class TunnelsNotifier extends _$TunnelsNotifier {
       // for a rule that failed.
       await pool.release(rule.id);
       rethrow;
+    }
+  }
+
+  /// Starts [hostId]'s forwards marked "Auto-start with SSH Connection" that
+  /// are not already up. Called when a terminal session to that host comes
+  /// up, so each one rides on that session's client.
+  ///
+  /// Best effort: a rule that cannot start (its port already taken) must not
+  /// keep the others from starting, and the engine reports it as failed.
+  Future<void> autoStartRulesForHost(String hostId) async {
+    final rules = await ref.read(tunnelRepositoryProvider).getAutoStartRules();
+    for (final rule in rules.where((rule) => rule.hostId == hostId)) {
+      if (!ref.mounted) return;
+      if (ref.read(tunnelEngineProvider).isTunnelActive(rule.id)) continue;
+      try {
+        await startRule(rule);
+      } catch (_) {}
     }
   }
 
