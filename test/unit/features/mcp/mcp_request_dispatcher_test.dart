@@ -114,6 +114,55 @@ void main() {
     expect(ended, [first]);
   });
 
+  group('two agent windows sharing one client token', () {
+    Future<McpToolContext> call(String connection) async {
+      await dispatcher.handle(
+        'client-1',
+        JsonRpcRequest(
+          id: ++ids,
+          method: McpMethod.toolsCall,
+          params: const {'name': 'record'},
+        ),
+        connection,
+      );
+      return tool.calls.last;
+    }
+
+    Future<void> hello(String connection, Object? clientInfo) =>
+        dispatcher.handle(
+          'client-1',
+          JsonRpcRequest(
+            id: ++ids,
+            method: McpMethod.initialize,
+            params: {'clientInfo': ?clientInfo},
+          ),
+          connection,
+        );
+
+    test(
+      'get separate scopes, and one handshake does not end the other\'s',
+      () async {
+        await hello('window-a', null);
+        final a = (await call('window-a')).connectionScopeId;
+        await hello('window-b', null);
+        final b = (await call('window-b')).connectionScopeId;
+
+        expect(b, isNot(a));
+        expect(ended, isEmpty);
+        expect((await call('window-a')).connectionScopeId, a);
+      },
+    );
+
+    test('are named by what they report in clientInfo', () async {
+      await hello('window-a', {'name': 'claude-code\u001b[2J', 'version': '1'});
+      await hello('window-b', {'name': 'cursor'});
+
+      expect((await call('window-a')).clientName, 'claude-code[2J');
+      expect((await call('window-b')).clientName, 'cursor');
+      expect((await call('window-c')).clientName, 'Agent client-1');
+    });
+  });
+
   test('one client reconnecting does not end another\'s session', () async {
     await initialize('client-1');
     await initialize('client-2');

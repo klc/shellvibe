@@ -47,6 +47,11 @@ abstract class ShellChannel {
   /// True once the channel is closed, whether via [close] or because the
   /// remote end hung up by itself (e.g. the shell process exited).
   bool get isClosed;
+
+  /// Completes once the remote end has closed the channel, with the shell's
+  /// exit status when the remote reported one (null when it did not, e.g.
+  /// the connection dropped). [isClosed] is already true by then.
+  Future<int?> get done;
 }
 
 /// [ShellChannel] backed by a `dartssh2` [SSHSession] — a PTY-less shell
@@ -61,14 +66,23 @@ class SshShellChannel implements ShellChannel {
     // the network dropping — without anyone calling [close] first. Without
     // this listener, [isClosed] would keep reporting false forever and the
     // hang-recovery chain would never realize the channel is already dead.
-    _session.done.then(
-      (_) => _closed = true,
-      onError: (Object _) => _closed = true,
+    done = _session.done.then(
+      (_) {
+        _closed = true;
+        return _session.exitCode;
+      },
+      onError: (Object _) {
+        _closed = true;
+        return null;
+      },
     );
   }
 
   final SSHSession _session;
   bool _closed = false;
+
+  @override
+  late final Future<int?> done;
 
   @override
   Stream<List<int>> get stdout => _session.stdout;

@@ -75,14 +75,16 @@ class _PendingCommand {
 }
 
 class _PendingHostAccess {
-  final PendingHostAccessApproval pending;
+  PendingHostAccessApproval pending;
   final Completer<HostAccessResult> completer;
-  final Timer timer;
+  Timer timer;
+  final Duration timeout;
 
   _PendingHostAccess({
     required this.pending,
     required this.completer,
     required this.timer,
+    required this.timeout,
   });
 }
 
@@ -237,9 +239,31 @@ class ApprovalCoordinator {
       pending: pending,
       completer: completer,
       timer: timer,
+      timeout: timeout,
     );
     _emitHostAccess();
     return completer.future;
+  }
+
+  /// Restarts [id]'s timeout from now and returns its new deadline, or null
+  /// when it is no longer pending. Called as its window goes on screen: a
+  /// request that waited in line behind other prompts must not run out
+  /// before the user has even seen it.
+  DateTime? restartHostAccessClock(String id) {
+    final entry = _hostAccess[id];
+    if (entry == null) return null;
+    entry.timer.cancel();
+    final old = entry.pending;
+    entry.pending = PendingHostAccessApproval(
+      id: id,
+      request: old.request,
+      requestedAt: old.requestedAt,
+      expiresAt: DateTime.now().toUtc().add(entry.timeout),
+    );
+    entry.timer = Timer(entry.timeout, () {
+      _completeHostAccess(id, _allDenied(old.request, 'timeout'));
+    });
+    return entry.pending.expiresAt;
   }
 
   HostAccessResult _allDenied(HostAccessRequest request, String reason) {

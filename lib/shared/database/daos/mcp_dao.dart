@@ -45,6 +45,24 @@ class McpDao extends DatabaseAccessor<AppDatabase> with _$McpDaoMixin {
     );
   }
 
+  /// Replaces [id]'s token hash; everything hanging off the row (grants,
+  /// approvals) stays. [expiresAt] and, with [reinstate], a revocation are
+  /// overwritten too.
+  Future<int> replaceClientToken(
+    String id,
+    String tokenHash, {
+    DateTime? expiresAt,
+    bool reinstate = false,
+  }) {
+    return (update(mcpClients)..where((t) => t.id.equals(id))).write(
+      McpClientsCompanion(
+        tokenHash: Value(tokenHash),
+        expiresAt: Value(expiresAt),
+        revokedAt: reinstate ? const Value(null) : const Value.absent(),
+      ),
+    );
+  }
+
   Future<int> deleteClient(String id) {
     return (delete(mcpClients)..where((t) => t.id.equals(id))).go();
   }

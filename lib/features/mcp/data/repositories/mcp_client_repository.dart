@@ -78,6 +78,50 @@ class McpClientRepository {
     return null;
   }
 
+  /// Returns a fresh raw token for the system client row named [name] in
+  /// [workspaceId], creating the row if it does not exist yet.
+  ///
+  /// The row itself is kept, so the grants and "Always" approvals hanging
+  /// off it survive a server restart; only its token changes. A revocation
+  /// ("Deny and suspend client") survives too unless [reinstate] is set,
+  /// which the user turning AI access on does. The token does not expire:
+  /// it is rotated on every start anyway, and an expiry would only swap the
+  /// identity under a long-running app.
+  ///
+  /// Rows of that name in other workspaces get a token nobody holds, so a
+  /// bridge still holding an old one cannot reach a workspace the server no
+  /// longer serves.
+  Future<String> issueSystemToken({
+    required String workspaceId,
+    required String name,
+    bool reinstate = false,
+  }) async {
+    String? issued;
+    for (final client in await dao.getClientsNamed(name)) {
+      final token = McpToken.generate();
+      final mine = issued == null && client.workspaceId == workspaceId;
+      await dao.replaceClientToken(
+        client.id,
+        McpToken.hash(token),
+        reinstate: mine && reinstate,
+      );
+      if (mine) issued = token;
+    }
+    if (issued != null) return issued;
+
+    final token = McpToken.generate();
+    await dao.insertClient(
+      McpClientsCompanion.insert(
+        id: const Uuid().v4(),
+        workspaceId: workspaceId,
+        name: name,
+        tokenHash: McpToken.hash(token),
+        createdAt: DateTime.now().toUtc(),
+      ),
+    );
+    return token;
+  }
+
   /// Revokes a client immediately. The row stays — so a subsequent
   /// authentication attempt with its old token fails cleanly and any audit
   /// history referencing it (by copied label, not foreign key) remains

@@ -23,6 +23,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 const int _parseErrorCode = -32700;
 const int _internalErrorCode = -32603;
@@ -35,6 +36,17 @@ const String _notRunningMessage =
 // a browser, so it sends a fixed, non-URL value that the server allowlists
 // specifically for this binary rather than a real origin it doesn't have.
 const String _bridgeOrigin = 'shellvibe-bridge';
+
+/// Identifies this bridge process to the app. Every agent window launches its
+/// own bridge but they all present the same token, so this is what keeps one
+/// agent's "this session" approvals and open sessions apart from another's.
+final String _connectionId = () {
+  final random = Random.secure();
+  return List.generate(
+    16,
+    (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0'),
+  ).join();
+}();
 
 Future<void> main(List<String> arguments) async {
   final endpointPath = _resolveEndpointPath(arguments);
@@ -187,6 +199,14 @@ Map<String, dynamic> _frameFromHttpResult({
   final isJsonRpcShaped =
       body is Map<String, dynamic> && body.containsKey('jsonrpc');
 
+  // The app answers some failures (401, 429, a body it could not parse)
+  // before it has read the request id, so they carry `id: null`. Relayed
+  // as is, the client cannot match the error to its request and waits on it
+  // until its own timeout.
+  if (isJsonRpcShaped && body['id'] == null) {
+    body['id'] = id;
+  }
+
   if (result.statusCode >= 200 && result.statusCode < 300) {
     if (isJsonRpcShaped) {
       return body;
@@ -275,12 +295,14 @@ String _resolveEndpointPath(List<String> arguments) {
   }
 
   // USERPROFILE is the Windows equivalent of HOME; dart:io's Platform
-  // doesn't normalize this for us. If neither is set we fall through to an
+  // doesn't normalize this for us. Same choice as the app's
+  // `McpEndpointFile`: a Windows HOME (set by Git Bash, MSYS, Cygwin) points
+  // somewhere the app never writes. If it is unset we fall through to an
   // empty path — reading it will fail like a missing file, which correctly
   // surfaces as "ShellVibe is not running" on every request rather than
   // crashing the process.
   final home =
-      Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'] ?? '';
+      Platform.environment[Platform.isWindows ? 'USERPROFILE' : 'HOME'] ?? '';
   if (home.isEmpty) {
     return '';
   }
@@ -330,6 +352,7 @@ Future<_HttpResult> _postToBridge(_Endpoint endpoint, String rawLine) async {
     );
     request.headers.contentType = ContentType.json;
     request.headers.set('Origin', _bridgeOrigin);
+    request.headers.set('X-ShellVibe-Connection', _connectionId);
     // Set an explicit length rather than letting HttpClient fall back to
     // chunked transfer encoding: the request bodies here are always small
     // and already fully in memory, and a known Content-Length is the more
