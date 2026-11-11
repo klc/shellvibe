@@ -212,7 +212,9 @@ class SshConfigResolver {
     String? hostname;
     String? username;
     int? port;
-    final identityFiles = <String>[];
+    // Expanded only once the loop is done: `%h`, `%p` and `%r` stand for the
+    // final hostname, port and user, which a later directive may still set.
+    final rawIdentityFiles = <(String, SshConfigDirective)>[];
     final forwards = <SshForwardDraft>[];
     final warnings = <SshConfigWarning>[];
     SshJumpHostDraft? jumpHost;
@@ -311,19 +313,10 @@ class SshConfigResolver {
             case 'identityfile':
               for (final raw in d.args) {
                 if (raw == 'none') {
-                  identityFiles.clear();
+                  rawIdentityFiles.clear();
                   continue;
                 }
-                final expanded = _expandPathTokens(
-                  raw,
-                  d,
-                  alias: alias,
-                  port: effectivePort(),
-                  username: username,
-                  onWarning: (msg) => warn(d, msg),
-                );
-                if (expanded == null) continue;
-                identityFiles.add(expanded);
+                rawIdentityFiles.add((raw, d));
               }
               break;
 
@@ -418,6 +411,20 @@ class SshConfigResolver {
       }
     }
 
+    final identityFiles = <String>[];
+    for (final (raw, d) in rawIdentityFiles) {
+      final expanded = _expandPathTokens(
+        raw,
+        d,
+        alias: alias,
+        hostname: effectiveHostname(),
+        port: effectivePort(),
+        username: username,
+        onWarning: (msg) => warn(d, msg),
+      );
+      if (expanded != null) identityFiles.add(expanded);
+    }
+
     return ResolvedSshConfig(
       alias: alias,
       hostname: hostname ?? alias,
@@ -433,19 +440,19 @@ class SshConfigResolver {
   // ── Host pattern matching ───────────────────────────────────────────────
 
   /// `Host` patterns match the alias given on the command line; a negated
-  /// match vetoes the stanza no matter what the positive patterns say.
+  /// match vetoes the stanza no matter what the positive patterns say, and
+  /// never matches on its own (ssh_config(5) PATTERNS): `Host !bastion`
+  /// applies to nothing.
   bool _hostPatternsMatch(List<String> patterns, String host) {
-    var anyPositive = false;
     var positiveMatch = false;
     for (final raw in patterns) {
       final negated = raw.startsWith('!');
       final body = negated ? raw.substring(1) : raw;
-      if (!negated) anyPositive = true;
       final matched = _patternListMatches(body, host);
       if (matched && negated) return false;
       if (matched && !negated) positiveMatch = true;
     }
-    return !anyPositive || positiveMatch;
+    return positiveMatch;
   }
 
   /// `|` alternation + case-sensitive `*`/`?` glob against [host].
@@ -485,7 +492,8 @@ class SshConfigResolver {
     var i = 0;
 
     while (i < args.length) {
-      var token = args[i];
+      // Criteria are keywords, and keywords are case-insensitive.
+      var token = args[i].toLowerCase();
       final negated = token.startsWith('!');
       if (negated) token = token.substring(1);
 
@@ -502,7 +510,9 @@ class SshConfigResolver {
         final list = <String>[];
         i++;
         while (i < args.length &&
-            !_criterionKeywords.contains(_stripNegation(args[i]))) {
+            !_criterionKeywords.contains(
+              _stripNegation(args[i]).toLowerCase(),
+            )) {
           list.add(args[i]);
           i++;
         }
@@ -555,19 +565,18 @@ class SshConfigResolver {
   String _stripNegation(String token) =>
       token.startsWith('!') ? token.substring(1) : token;
 
-  /// Pattern list where negated entries veto the whole match.
+  /// Pattern list where negated entries veto the whole match; as with
+  /// `Host`, a list of only negated entries never matches.
   bool _patternListWithNegation(List<String> patterns, String target) {
-    var anyPositive = false;
     var positiveMatch = false;
     for (final raw in patterns) {
       final negated = raw.startsWith('!');
       final body = negated ? raw.substring(1) : raw;
-      if (!negated) anyPositive = true;
       final matched = _patternListMatches(body, target);
       if (matched && negated) return false;
       if (matched && !negated) positiveMatch = true;
     }
-    return !anyPositive || positiveMatch;
+    return positiveMatch;
   }
 
   // ── Token expansion ─────────────────────────────────────────────────────
@@ -617,6 +626,7 @@ class SshConfigResolver {
     String raw,
     SshConfigDirective d, {
     String? alias,
+    String? hostname,
     int? port,
     String? username,
     void Function(String message)? onWarning,
@@ -650,7 +660,7 @@ class SshConfigResolver {
     s = _expandTokens(
       s,
       alias: alias,
-      hostname: alias,
+      hostname: hostname ?? alias,
       username: username,
       port: port,
       warn: onWarning,
@@ -710,11 +720,28 @@ class SshConfigResolver {
     return buffer.toString();
   }
 
-  /// `[user@]host[:port]`, with bracket-wrapped IPv6 addresses. Multi-hop
-  /// chains (`host1,host2`) are cut to the first hop — ShellVibe models a single
-  /// jump host per connection.
+  /// A `ProxyJump` value: comma-separated `[user@]host[:port]` hops, dialed in
+  /// order. Returns the last hop (the one the target connects through), with
+  /// the earlier ones chained on [SshJumpHostDraft.via]; null when any hop is
+  /// unparsable.
   SshJumpHostDraft? _parseJumpSpec(String spec) {
-    var s = spec.trim().split(',')[0].trim();
+    SshJumpHostDraft? chain;
+    for (final hop in spec.split(',')) {
+      final parsed = _parseJumpHop(hop);
+      if (parsed == null) return null;
+      chain = SshJumpHostDraft(
+        username: parsed.username,
+        host: parsed.host,
+        port: parsed.port,
+        via: chain,
+      );
+    }
+    return chain;
+  }
+
+  /// One `[user@]host[:port]` hop, with bracket-wrapped IPv6 addresses.
+  SshJumpHostDraft? _parseJumpHop(String spec) {
+    var s = spec.trim();
     if (s.isEmpty) return null;
 
     String? user;
@@ -732,7 +759,7 @@ class SshConfigResolver {
       final host = s.substring(1, close);
       final rest = s.substring(close + 1);
       if (rest.startsWith(':')) {
-        port = int.tryParse(rest.substring(1));
+        port = _parsePort(rest.substring(1));
         if (port == null) return null;
       } else if (rest.isNotEmpty) {
         return null;
@@ -742,26 +769,57 @@ class SshConfigResolver {
 
     final colon = s.lastIndexOf(':');
     if (colon != -1 && s.indexOf(':') == colon) {
-      final p = int.tryParse(s.substring(colon + 1));
-      if (p != null) {
-        port = p;
-        s = s.substring(0, colon);
-      }
+      port = _parsePort(s.substring(colon + 1));
+      if (port == null) return null;
+      s = s.substring(0, colon);
     }
     if (s.isEmpty) return null;
     return SshJumpHostDraft(username: user, host: s, port: port);
   }
 
-  /// Extracts the jump host from `ssh -W %h:%p [user@]host` style commands.
+  static int? _parsePort(String value) {
+    final port = int.tryParse(value);
+    return port == null || port < 1 || port > 65535 ? null : port;
+  }
+
+  /// ssh(1) options that take a value as the next argument.
+  static const _sshValueOptions = {
+    '-B', '-b', '-c', '-D', '-E', '-e', '-F', '-I', '-i', '-J', '-L', '-l', //
+    '-m', '-O', '-o', '-P', '-p', '-Q', '-R', '-S', '-W', '-w',
+  };
+
+  /// Extracts the jump host from `ssh [options] -W %h:%p [user@]host` style
+  /// commands: the destination is the first argument that is neither an
+  /// option nor an option's value, and `-p` / `-l` carry its port and user.
   SshJumpHostDraft? _jumpFromProxyCommand(List<String> tokens) {
-    String? jumpSpec;
-    for (final t in tokens) {
-      if (t == 'ssh' || t.startsWith('-')) continue;
-      if (t.contains('%h') || t.contains('%p') || t.contains('%n')) continue;
-      jumpSpec = t;
+    String? destination;
+    String? portArg;
+    String? userArg;
+    for (var i = 1; i < tokens.length; i++) {
+      final t = tokens[i];
+      if (_sshValueOptions.contains(t)) {
+        if (i + 1 >= tokens.length) return null;
+        final value = tokens[++i];
+        if (t == '-p') portArg = value;
+        if (t == '-l') userArg = value;
+        continue;
+      }
+      if (t.startsWith('-')) continue; // flags, or an option with its value
+      destination ??= t;
     }
-    if (jumpSpec == null) return null;
-    return _parseJumpSpec(jumpSpec);
+    if (destination == null || destination.contains('%')) return null;
+    final hop = _parseJumpHop(destination);
+    if (hop == null) return null;
+    int? port = hop.port;
+    if (portArg != null) {
+      port = _parsePort(portArg);
+      if (port == null) return null;
+    }
+    return SshJumpHostDraft(
+      username: hop.username ?? userArg,
+      host: hop.host,
+      port: port,
+    );
   }
 
   // ── Forward parsing ─────────────────────────────────────────────────────
@@ -839,13 +897,18 @@ class SshConfigResolver {
             'port 0 are not supported',
       );
     }
+    // The tunnel model names its fields from this side: `localPort` is the
+    // local end and `remotePort` the server end, whichever one listens. A
+    // RemoteForward listens on the server and connects out from here, so its
+    // listen port is the server end and its destination the local one.
+    final remote = type == 'remote';
     return (
       draft: SshForwardDraft(
         type: type,
-        localPort: listen.port,
+        localPort: remote ? dest.port : listen.port,
         bindAddress: listen.bind,
         remoteHost: dest.host,
-        remotePort: dest.port,
+        remotePort: remote ? listen.port : dest.port,
       ),
       reason: null,
     );
