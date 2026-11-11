@@ -80,6 +80,16 @@ class CommandClassifier {
     );
 
     if (best.category == RiskCategory.readonlySafe) {
+      // The shell ignores everything after a comment, the regexes here do
+      // not: `mv a b # git log` must not ride on the `git log` it mentions.
+      if (_hasUnquotedComment(trimmed)) {
+        return const CommandClassification(
+          RiskCategory.unclassified,
+          reason:
+              'contains a shell comment (`#`), which the classifier does not '
+              'parse; treated as risky by default',
+        );
+      }
       return const CommandClassification(RiskCategory.readonlySafe);
     }
     return CommandClassification(
@@ -136,6 +146,30 @@ class CommandClassifier {
   );
 
   List<String> _splitSegments(String command) => command.split(_operatorSplit);
+
+  /// Whether [command] holds a shell comment: an unquoted, unescaped `#`
+  /// that starts a word. A `#` inside a word (`a#b`, `^#`) is literal.
+  static bool _hasUnquotedComment(String command) {
+    String? quote;
+    for (var i = 0; i < command.length; i++) {
+      final c = command[i];
+      if (quote != null) {
+        if (c == quote) {
+          quote = null;
+        } else if (c == r'\' && quote == '"') {
+          i++;
+        }
+      } else if (c == r'\') {
+        i++;
+      } else if (c == "'" || c == '"') {
+        quote = c;
+      } else if (c == '#' &&
+          (i == 0 || ' \t\n;&|()'.contains(command[i - 1]))) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   // ---------------------------------------------------------------------
   // opaqueExec — checked against the whole command, before splitting.
@@ -262,12 +296,25 @@ class CommandClassifier {
 
   // -- secretRead -----------------------------------------------------------
 
+  /// Readers on the [_readonlyLead] whitelist that print the contents of
+  /// the files they are handed. The same string feeds [_secretReadCommand],
+  /// so a reader can never be whitelisted as safe without its arguments also
+  /// being checked for credential paths (`tac .env`).
+  static const String _readonlyReaders = 'cat|head|tac|nl|cut|grep|egrep|fgrep';
+
+  /// Every command that prints file contents: the whitelisted readers, the
+  /// readers with their own readonlySafe rule below (`tail`, `sort`, `uniq`,
+  /// `sed`), and dump/copy tools that are never readonlySafe.
   static final RegExp _secretReadCommand = RegExp(
-    r'^\s*(?:cat|head|tail|grep|egrep|fgrep|strings|xxd|od|hexdump|cp|scp)\b',
+    '^\\s*(?:$_readonlyReaders|tail|sort|uniq|sed|strings|xxd|od|hexdump|'
+    'cp|scp)\\b',
     caseSensitive: false,
   );
+  // Anything under `.ssh`, and private keys by their bare file name, so
+  // `cd ~/.ssh && cat id_ed25519` is caught too.
   static final RegExp _credentialPath = RegExp(
-    r'\.ssh/id_(?:rsa|dsa|ecdsa|ed25519)(?:\.pub)?\b'
+    r'\.ssh\b'
+    r'|\bid_(?:rsa|dsa|ecdsa|ed25519)\b'
     r'|\.env(?:\.[\w.-]+)?\b'
     r'|/etc/shadow\b'
     r'|/etc/gshadow\b'
@@ -285,8 +332,70 @@ class CommandClassifier {
     caseSensitive: false,
   );
 
+  /// Names a glob in a reader's arguments must not be able to expand to.
+  static const List<String> _secretNames = [
+    '.env',
+    '.ssh',
+    '.aws',
+    '.netrc',
+    '.pgpass',
+    '.git-credentials',
+    'credentials',
+    'shadow',
+    'gshadow',
+    'id_rsa',
+    'id_dsa',
+    'id_ecdsa',
+    'id_ed25519',
+    'x.pem',
+    'x.key',
+  ];
+
+  /// Whether a glob or brace word in [segment] could expand to one of
+  /// [_secretNames] (`cat .e*`, `cat /etc/sha*`, `cat .{env,bak}`). Each
+  /// path component is matched on its own; `[…]` counts as any one
+  /// character and `{…}` as anything, which only ever over-matches. As in
+  /// the shell, a pattern matches a dotfile only if it starts with `.`.
+  static bool _globMayHitSecret(String segment) {
+    for (final word in segment.split(RegExp(r'\s+'))) {
+      for (final part in word.replaceAll(RegExp('[\'"]'), '').split('/')) {
+        if (!part.contains(RegExp(r'[*?[{]'))) continue;
+        final regex = StringBuffer('^');
+        for (var i = 0; i < part.length; i++) {
+          final c = part[i];
+          final close = switch (c) {
+            '[' => part.indexOf(']', i + 1),
+            '{' => part.indexOf('}', i + 1),
+            _ => -1,
+          };
+          if (c == '*') {
+            regex.write('.*');
+          } else if (c == '?') {
+            regex.write('.');
+          } else if (close > i) {
+            regex.write(c == '[' ? '.' : '.*');
+            i = close;
+          } else {
+            regex.write(RegExp.escape(c));
+          }
+        }
+        regex.write(r'$');
+        final pattern = RegExp(regex.toString());
+        if (_secretNames.any(
+          (name) =>
+              (part.startsWith('.') || !name.startsWith('.')) &&
+              pattern.hasMatch(name),
+        )) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   _SegmentResult? _checkSecretRead(String s) {
-    if (_secretReadCommand.hasMatch(s) && _credentialPath.hasMatch(s)) {
+    if (_secretReadCommand.hasMatch(s) &&
+        (_credentialPath.hasMatch(s) || _globMayHitSecret(s))) {
       return const _SegmentResult(
         RiskCategory.secretRead,
         reason: 'reads a path that typically holds credential material',
@@ -449,8 +558,9 @@ class CommandClassifier {
     r'\bfind\b.*-exec\b.*\brm\b',
     caseSensitive: false,
   );
+  // `-i` alone or bundled with other flags (`-Ei`, `-ni.bak`).
   static final RegExp _sedInPlace = RegExp(
-    r'\bsed\b.*(?:-i\b|--in-place\b)',
+    r'\bsed\b.*(?:\s-[A-Za-z]*i|--in-place\b)',
     caseSensitive: false,
   );
   static final RegExp _journalctlVacuum = RegExp(
@@ -856,9 +966,9 @@ class CommandClassifier {
   // -- readonlySafe -----------------------------------------------------
 
   static final RegExp _readonlyLead = RegExp(
-    r'^\s*(?:ls|cat|head|grep|egrep|fgrep|du|df|ps|free|uptime|uname|id|stat|'
-    r'wc|pwd|whoami|hostname|date|echo|printf|which|type|cd|seq|cut|tr|tac|'
-    r'nl|basename|dirname|realpath)\b',
+    '^\\s*(?:$_readonlyReaders|ls|du|df|ps|free|uptime|uname|id|stat|wc|pwd|'
+    'whoami|hostname|date|echo|printf|which|type|cd|seq|tr|basename|dirname|'
+    'realpath)\\b',
     caseSensitive: false,
   );
   // `sort` and `uniq` read, except for the forms that write a file or run a
@@ -872,8 +982,11 @@ class CommandClassifier {
     r'^\s*uniq(?:\s+-[a-z]+)*\s*$',
     caseSensitive: false,
   );
+  // Tool and subcommand are anchored to the start of the segment: unanchored,
+  // `git commit -am "fix log"` or `kubectl apply -f x # get` matched on the
+  // word alone.
   static final RegExp _systemctlStatus = RegExp(
-    r'\bsystemctl\b.*\bstatus\b',
+    r'^\s*systemctl\s+status\b',
     caseSensitive: false,
   );
   static final RegExp _journalctlLead = RegExp(
@@ -881,19 +994,32 @@ class CommandClassifier {
     caseSensitive: false,
   );
   static final RegExp _dockerReadonly = RegExp(
-    r'\bdocker\b.*\b(?:ps|logs|inspect)\b',
+    r'^\s*docker(?:-compose|\s+compose)?\s+(?:ps|logs|inspect)\b',
     caseSensitive: false,
   );
   static final RegExp _kubectlReadonly = RegExp(
-    r'\bkubectl\b.*\b(?:get|describe|logs)\b',
+    r'^\s*kubectl\s+(?:get|describe|logs)\b',
     caseSensitive: false,
   );
+  // `git log`/`git diff --output=FILE` writes a file.
   static final RegExp _gitReadonly = RegExp(
-    r'\bgit\b.*\b(?:status|log|diff)\b',
+    r'^\s*git\s+(?:status|log|diff)\b(?!.*--output)',
     caseSensitive: false,
   );
   static final RegExp _findLead = RegExp(r'^\s*find\b', caseSensitive: false);
+  // find actions that run a program or write a file.
+  static final RegExp _findActs = RegExp(
+    r'\s-(?:exec|execdir|ok|okdir|delete|fprint0?|fprintf|fls)\b',
+  );
   static final RegExp _sedLead = RegExp(r'^\s*sed\b', caseSensitive: false);
+  // sed scripts that run a command or write a file: the `e` command and the
+  // `s///e` flag, `w`/`W` and the `s///w` flag, or a script read from a file
+  // (`-f`) the classifier never sees. Over-matches a bare ` e ` inside a
+  // substitution, which only costs an approval.
+  static final RegExp _sedActs = RegExp(
+    r'''[\s'";{}/!$0-9][gpiImM0-9]*[ewW](?=[\s'";}]|$)'''
+    r'|\s-[A-Za-z]*f|--file\b',
+  );
 
   _SegmentResult? _checkReadonlySafe(String s) {
     // `_topLead`/`_tailLead` batch/non-follow forms fall through to here only
@@ -905,8 +1031,8 @@ class CommandClassifier {
         _dockerReadonly.hasMatch(s) ||
         _kubectlReadonly.hasMatch(s) ||
         _gitReadonly.hasMatch(s) ||
-        _findLead.hasMatch(s) ||
-        _sedLead.hasMatch(s) ||
+        (_findLead.hasMatch(s) && !_findActs.hasMatch(s)) ||
+        (_sedLead.hasMatch(s) && !_sedActs.hasMatch(s)) ||
         _sortReadonly.hasMatch(s) ||
         _uniqReadonly.hasMatch(s) ||
         (_topLead.hasMatch(s) && _batchFlag.hasMatch(s)) ||

@@ -46,9 +46,9 @@ class TerminalTabSessionMirror implements McpSessionMirror {
       [
         '',
         '$_cyan┌ AI session$_reset $_dim· read-only$_reset',
-        '$_dim│ agent$_reset  $clientName',
-        '$_dim│ host$_reset   $hostLabel $_dim($mode)$_reset',
-        '$_dim│ cwd$_reset    $cwd',
+        '$_dim│ agent$_reset  ${_inert(clientName)}',
+        '$_dim│ host$_reset   ${_inert(hostLabel)} $_dim($mode)$_reset',
+        '$_dim│ cwd$_reset    ${_inert(cwd)}',
         '$_dim└ closing this tab ends the session$_reset',
         '',
       ].join('\n'),
@@ -62,7 +62,11 @@ class TerminalTabSessionMirror implements McpSessionMirror {
     required String command,
     required String cwd,
   }) {
-    _write(surfaceId, '$_dim$cwd$_reset\n$_cyan❯$_reset $_bold$command$_reset');
+    _write(
+      surfaceId,
+      '$_dim${_inert(cwd)}$_reset\n'
+      '$_cyan❯$_reset $_bold${_inert(command)}$_reset',
+    );
   }
 
   @override
@@ -74,8 +78,8 @@ class TerminalTabSessionMirror implements McpSessionMirror {
     required int durationMs,
   }) {
     final buffer = StringBuffer();
-    if (stdout.isNotEmpty) buffer.write(stdout);
-    if (stderr.isNotEmpty) buffer.write('$_red$stderr$_reset');
+    if (stdout.isNotEmpty) buffer.write(_inert(stdout));
+    if (stderr.isNotEmpty) buffer.write('$_red${_inert(stderr)}$_reset');
     final exitColour = exitCode == 0 ? _green : _red;
     buffer.write(
       '$exitColour exit $exitCode$_reset $_dim· ${durationMs}ms$_reset\n',
@@ -85,8 +89,24 @@ class TerminalTabSessionMirror implements McpSessionMirror {
 
   @override
   void writeNotice(String surfaceId, String message) {
-    _write(surfaceId, '$_dim— $message$_reset');
+    _write(surfaceId, '$_dim— ${_inert(message)}$_reset');
   }
+
+  // C0 controls other than tab and line feed (keeping CRLF intact), DEL and
+  // C1 controls.
+  static final RegExp _controlChars = RegExp(
+    '[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F-\\x9F]|\\r(?!\\n)',
+  );
+
+  /// [text] from the agent or the remote host with every control character
+  /// shown as `⟨U+XXXX⟩` instead of interpreted, so neither can clear the
+  /// tab's scrollback (`\x1b[3J`) or rewrite a line already shown in it —
+  /// the tab is the user's record of what the agent did.
+  static String _inert(String text) => text.replaceAllMapped(
+    _controlChars,
+    (m) =>
+        '⟨U+${m[0]!.codeUnitAt(0).toRadixString(16).toUpperCase().padLeft(4, '0')}⟩',
+  );
 
   @override
   Future<void> close(String surfaceId, {String? reason}) =>

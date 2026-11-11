@@ -97,7 +97,7 @@ class McpHostConnector {
       await targetManager.connect(config, viaClient: viaClient);
 
       return McpConnection(target: targetManager, jumpManagers: jumpManagers);
-    } on SSHHostKeyRejectedException catch (e) {
+    } on SSHHostKeyRejectedException {
       for (final jumpManager in jumpManagers.reversed) {
         await jumpManager.close();
       }
@@ -111,7 +111,7 @@ class McpHostConnector {
         'trusted yet: MCP never accepts a fingerprint on the user\'s behalf. '
         'The user needs to connect to this host once from a ShellVibe '
         'terminal tab and accept the fingerprint there; it will then '
-        'connect from here too. Retrying will not help until they do. ($e)',
+        'connect from here too. Retrying will not help until they do.',
         details: {'hostId': host.id},
       );
     } catch (_) {
