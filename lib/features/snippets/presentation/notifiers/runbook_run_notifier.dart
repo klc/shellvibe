@@ -6,6 +6,7 @@ import '../../data/run_providers.dart';
 import '../../domain/models/active_run.dart';
 import '../../domain/models/run_strategy.dart';
 import '../../domain/models/runbook_model.dart';
+import '../../domain/models/variable_declaration.dart';
 import '../../domain/services/run_variables.dart';
 import '../../domain/services/runbook_run_service.dart';
 import 'snippets_notifier.dart';
@@ -55,6 +56,26 @@ class RunbookRunNotifier extends _$RunbookRunNotifier {
       for (final s in await ref.read(snippetsProvider.future)) s.id: s,
     };
     if (!ref.mounted || isRunning) return;
+    // Snippet steps declare their own variables; a secret declared there is
+    // one too.
+    final declarations = collectRunVariables(
+      runbook,
+      snippets: snippets,
+    ).declarations;
+    final secretNames = {
+      for (final d in declarations)
+        if (d.type == VariableType.secret) d.name,
+    };
+    // Settled: a secret is never kept past its run ("never remembered"), so
+    // Run again and Re-run failed hosts ask for it afresh.
+    void settle() => state = state?.copyWith(
+      running: false,
+      finishedAt: DateTime.now(),
+      variableValues: {
+        for (final e in variableValues.entries)
+          if (!secretNames.contains(e.key)) e.key: e.value,
+      },
+    );
     state = ActiveRun(
       id: runId,
       triggeredBy: triggeredBy,
@@ -75,12 +96,7 @@ class RunbookRunNotifier extends _$RunbookRunNotifier {
           runbook,
           hosts,
           variableValues: variableValues,
-          // Snippet steps declare their own variables; a secret declared there
-          // is one too.
-          secretValues: secretValuesOf(
-            collectRunVariables(runbook, snippets: snippets).declarations,
-            variableValues,
-          ),
+          secretValues: secretValuesOf(declarations, variableValues),
           strategy: strategy,
           onEvent: _apply,
         );
@@ -88,8 +104,13 @@ class RunbookRunNotifier extends _$RunbookRunNotifier {
     try {
       await run.result;
       if (!ref.mounted) return;
-      state = state?.copyWith(running: false, finishedAt: DateTime.now());
+      settle();
       await _record();
+    } catch (_) {
+      // A run that blew up must still free the slot, or every later start is
+      // refused as "already in progress" until the app restarts.
+      if (ref.mounted) settle();
+      rethrow;
     } finally {
       _run = null;
     }

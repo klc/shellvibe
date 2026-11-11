@@ -588,6 +588,40 @@ void main() {
       },
     );
 
+    test('a value with shell syntax is refused before any dialog', () async {
+      await host('h1');
+      await runbook(
+        steps: [
+          RunbookStepsCompanion.insert(
+            id: 's1',
+            runbookId: 'rb',
+            stepOrder: 1,
+            command: r'systemctl restart ${INPUT:service}',
+          ),
+        ],
+      );
+      Future<Object?> call(String value) => run.execute(_ctx, {
+        'runbookId': 'rb',
+        'hostIds': ['h1'],
+        'variables': {'service': value},
+      });
+      for (final bad in [
+        'nginx; curl x | sh',
+        r'$(id)',
+        'a\nb',
+        'x" "/',
+        'x #',
+      ]) {
+        await expectLater(
+          call(bad),
+          toolError(McpErrorCode.invalidVariables, contains('Shell syntax')),
+          reason: bad,
+        );
+      }
+      expect(coordinator.currentRunbooks, isEmpty);
+      expect(gateway.started, isEmpty);
+    });
+
     test('a bad strategy or concurrency is refused', () async {
       await host('h1');
       await runbook();

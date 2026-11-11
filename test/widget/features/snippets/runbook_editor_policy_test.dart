@@ -131,6 +131,19 @@ void main() {
     expect(find.byKey(const Key('runbook_save_button')), findsOneWidget);
   });
 
+  testWidgets('a step timeout is edited, saved and bounded', (tester) async {
+    await open(tester, runbook: _runbook([_step('s1', 1, 'uptime')]));
+    final field = find.byKey(const ValueKey('step_timeout_s1'));
+    await tester.enterText(field, '601');
+    await save(tester);
+    expect(find.text('1 to 600'), findsOneWidget);
+    expect(saved, isNull);
+
+    await tester.enterText(field, '300');
+    await save(tester);
+    expect(saved!.steps.single.timeoutSeconds, 300);
+  });
+
   testWidgets('saving with no steps says so by the step list, not in an '
       'alert', (tester) async {
     await open(tester);

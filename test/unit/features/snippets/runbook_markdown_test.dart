@@ -211,6 +211,33 @@ void main() {
   });
 
   group('lenient import', () {
+    test('a code block inside an HTML comment is not a step', () {
+      final book = import('''
+<!--
+```sh
+rm -rf /old
+```
+-->
+<!-- one-line comment -->
+```sh
+uptime
+```
+''');
+      expect(book.steps.map((s) => s.command), ['uptime']);
+    });
+
+    test('a heading keeps a trailing # that is part of a word, drops a '
+        'closing run, and a long line of spaces parses fast', () {
+      expect(import('# C#\n```sh\nx\n```\n').title, 'C#');
+      expect(import('# Deploy ##\n```sh\nx\n```\n').title, 'Deploy');
+      final watch = Stopwatch()..start();
+      expect(
+        import('# a${' ' * 5000}b\n```sh\nx\n```\n').title,
+        startsWith('a'),
+      );
+      expect(watch.elapsedMilliseconds, lessThan(200));
+    });
+
     test('plain sh and bash blocks are steps with the defaults', () {
       final book = import('''
 # Nightly checks
@@ -318,6 +345,17 @@ echo b
       () => fails('---\ntitle: 2024\n---\n\n```sh\necho hi\n```\n', 'title'),
     );
     test('no steps', () => fails('# Just prose\n', 'No steps found'));
+    test(
+      'a variable field of the wrong type',
+      () => fails(
+        '---\nvariables: [{"name":"x","label":5}]\n---\n\n```sh\necho hi\n```\n',
+        'variables',
+      ),
+    );
+    test(
+      'a timeout past the limit',
+      () => fails('```sh {"timeout":601}\necho a\n```\n', '1 to 600'),
+    );
     test(
       'an unclosed frontmatter',
       () => fails('---\ntitle: x\n', 'frontmatter'),

@@ -78,6 +78,10 @@ class BroadcastInputRouter {
   /// inside the paste markers, which a shell takes as text rather than Enter,
   /// so the command would be left sitting on the prompt.
   ///
+  /// [textFor], when given, decides each pane's text instead of [text], for
+  /// text that differs per pane (a snippet's `${SV:...}` filled from the
+  /// pane's own host).
+  ///
   /// Returns the number of panes that received the text. Panes without a live
   /// session (still connecting, or disconnected) are skipped.
   int sendTextToPanes({
@@ -85,6 +89,7 @@ class BroadcastInputRouter {
     required List<TerminalTabSession> tabs,
     required String text,
     bool submit = false,
+    String Function(TerminalTabSession tab)? textFor,
   }) {
     final tabsById = {for (final tab in tabs) tab.id: tab};
     var sent = 0;
@@ -92,7 +97,7 @@ class BroadcastInputRouter {
       final tab = tabsById[id];
       if (tab == null || tab.outputChain.base == null) continue;
       tab.outputChain.without(_key(id), () {
-        tab.terminal.paste(text);
+        tab.terminal.paste(textFor?.call(tab) ?? text);
         if (submit) tab.terminal.textInput('\r');
       });
       sent++;

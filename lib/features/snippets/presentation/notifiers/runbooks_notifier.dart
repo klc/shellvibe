@@ -29,13 +29,17 @@ class RunbooksNotifier extends _$RunbooksNotifier {
   /// Runs [op], then reloads the list in place: an add, edit or delete must
   /// not blank the list to a spinner on the way through, and saving default
   /// hosts happens as a run starts and must not blank it under the run.
+  ///
+  /// A failed [op] throws to the caller, which has to say the save did not
+  /// happen, and leaves the list as it was: it is a write that failed, not
+  /// the list.
   Future<void> _mutate(Future<void> Function() op) async {
-    state = await AsyncValue.guard(() async {
-      await op();
-      return ref
+    await op();
+    state = await AsyncValue.guard(
+      () => ref
           .read(runbooksRepositoryProvider)
-          .getRunbooksByWorkspace(ref.read(activeWorkspaceIdProvider));
-    });
+          .getRunbooksByWorkspace(ref.read(activeWorkspaceIdProvider)),
+    );
   }
 
   Future<void> addRunbook({

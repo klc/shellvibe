@@ -80,21 +80,33 @@ class _TemplateEditorPanelState extends ConsumerState<TemplateEditorPanel> {
     if (name.isEmpty) return;
     final description = _descriptionController.text.trim();
     setState(() => _saving = true);
-    await ref
-        .read(templatesProvider.notifier)
-        .updateTemplate(
-          TemplateModel(
-            id: _draft.id,
-            workspaceId: _draft.workspaceId,
-            name: name,
-            description: description.isEmpty ? null : description,
-            panes: _draft.panes,
-            activePaneId: _draft.activePaneId,
-            createdAt: _draft.createdAt,
-            onOpenRunbookId: _draft.onOpenRunbookId,
-            onOpenConfirm: _draft.onOpenConfirm,
-          ),
-        );
+    try {
+      await ref
+          .read(templatesProvider.notifier)
+          .updateTemplate(
+            TemplateModel(
+              id: _draft.id,
+              workspaceId: _draft.workspaceId,
+              name: name,
+              description: description.isEmpty ? null : description,
+              panes: _draft.panes,
+              activePaneId: _draft.activePaneId,
+              createdAt: _draft.createdAt,
+              onOpenRunbookId: _draft.onOpenRunbookId,
+              onOpenConfirm: _draft.onOpenConfirm,
+            ),
+          );
+    } catch (e) {
+      // Stays open with the edits, rather than closing as if it had saved.
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ShadToaster.maybeOf(context)?.show(
+        ShadToast.destructive(
+          description: Text('Could not save the template: $e'),
+        ),
+      );
+      return;
+    }
     if (mounted) Navigator.of(context).pop();
   }
 
@@ -627,7 +639,20 @@ class _PaneRow extends StatelessWidget {
                     value: () => onStartupSnippet(snippet.id),
                     child: Text(snippet.title, overflow: TextOverflow.ellipsis),
                   ),
-                if (runbooks.isNotEmpty) const PopupMenuDivider(),
+                if (runbooks.isNotEmpty) ...[
+                  const PopupMenuDivider(),
+                  // A pane's shell runs the steps, not the runbook engine.
+                  PopupMenuItem(
+                    key: const Key('template_startup_runbook_note'),
+                    enabled: false,
+                    child: Text(
+                      'A runbook\'s steps are typed into the pane\'s shell: '
+                      'a failing step does not stop the ones after it. Use '
+                      '&& inside a step if it must.',
+                      style: TextStyle(fontSize: 11, color: tokens.textMuted),
+                    ),
+                  ),
+                ],
                 for (final runbook in runbooks)
                   PopupMenuItem(
                     key: Key('template_startup_runbook_${runbook.id}'),

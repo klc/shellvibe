@@ -8,22 +8,22 @@ import '../domain/services/template_runner.dart';
 
 /// Drives the real terminal notifier for a template replay.
 ///
-/// [readActiveTabId] reads the notifier's current state through the provider
-/// rather than the notifier object, which is how every open and split reports
-/// back the id of the pane it just created.
+/// [readTabIds] reads the notifier's current state through the provider
+/// rather than the notifier object; the runner compares it across an open or
+/// split to learn the id of the pane that call created.
 class LiveTemplateRunnerTarget implements TemplateRunnerTarget {
   final TerminalTabsNotifier notifier;
-  final String? Function() readActiveTabId;
+  final List<String> Function() readTabIds;
   final HostKeyPromptCallback? onHostKeyPrompt;
 
   const LiveTemplateRunnerTarget({
     required this.notifier,
-    required this.readActiveTabId,
+    required this.readTabIds,
     this.onHostKeyPrompt,
   });
 
   @override
-  String? get activeTabId => readActiveTabId();
+  List<String> get tabIds => readTabIds();
 
   @override
   Future<void> openTabForHost(
