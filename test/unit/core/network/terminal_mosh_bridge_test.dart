@@ -43,6 +43,16 @@ void main() {
       expect(utf8.decode(session.sentBytes.first), equals('ls -la\n'));
     });
 
+    test('terminal replies are sent to the session, not through onOutput', () {
+      // Broadcast wraps onOutput; a reply going through it would be typed
+      // into every other selected pane.
+      terminal.onOutput = (_) => fail('reply went through onOutput');
+
+      terminal.write('\x1b[c');
+
+      expect(utf8.decode(session.sentBytes.single), startsWith('\x1b[?'));
+    });
+
     test('connects prediction confirmation and echo ack streams', () async {
       bridge.predictionEngine.mode = MoshPredictionMode.always;
 

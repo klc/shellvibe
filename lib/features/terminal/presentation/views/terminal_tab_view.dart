@@ -244,46 +244,50 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
 
     return [
       const AdaptiveMenuDivider(),
-      // A local shell has no remote side to transfer files to.
-      if (pane.sessionType == TerminalSessionType.ssh)
+      // A local shell has no remote side to transfer files to, and an AI
+      // pane's connection is the agent's, not the user's. An AI tab is not
+      // split either (see TerminalTabsNotifier.splitTab).
+      if (pane.sessionType == TerminalSessionType.ssh && !pane.isMcp)
         AdaptiveMenuAction(
           itemKey: const Key('terminal_menu_sftp'),
           icon: LucideIcons.folderSync,
           label: 'File Transfer (SFTP)',
           value: () => openSftpForPane(context, pane),
         ),
-      AdaptiveMenuAction(
-        itemKey: const Key('terminal_menu_split_vertical'),
-        icon: LucideIcons.columns2,
-        label: 'Split Side by Side',
-        shortcut: shortcutLabel(AppCommand.splitSideBySide),
-        value: () => unawaited(
-          notifier.splitTab(
-            pane.id,
-            direction: Axis.horizontal,
-            onHostKeyPrompt: _launcher.promptHostKey,
+      if (!pane.isMcp) ...[
+        AdaptiveMenuAction(
+          itemKey: const Key('terminal_menu_split_vertical'),
+          icon: LucideIcons.columns2,
+          label: 'Split Side by Side',
+          shortcut: shortcutLabel(AppCommand.splitSideBySide),
+          value: () => unawaited(
+            notifier.splitTab(
+              pane.id,
+              direction: Axis.horizontal,
+              onHostKeyPrompt: _launcher.promptHostKey,
+            ),
           ),
         ),
-      ),
-      AdaptiveMenuAction(
-        itemKey: const Key('terminal_menu_split_horizontal'),
-        icon: LucideIcons.rows2,
-        label: 'Split Top / Bottom',
-        shortcut: shortcutLabel(AppCommand.splitTopBottom),
-        value: () => unawaited(
-          notifier.splitTab(
-            pane.id,
-            direction: Axis.vertical,
-            onHostKeyPrompt: _launcher.promptHostKey,
+        AdaptiveMenuAction(
+          itemKey: const Key('terminal_menu_split_horizontal'),
+          icon: LucideIcons.rows2,
+          label: 'Split Top / Bottom',
+          shortcut: shortcutLabel(AppCommand.splitTopBottom),
+          value: () => unawaited(
+            notifier.splitTab(
+              pane.id,
+              direction: Axis.vertical,
+              onHostKeyPrompt: _launcher.promptHostKey,
+            ),
           ),
         ),
-      ),
-      AdaptiveMenuAction(
-        itemKey: const Key('terminal_menu_split_host'),
-        icon: LucideIcons.serverCog,
-        label: 'Split with Another Host…',
-        value: () => _startSplitWithHost(pane.id),
-      ),
+        AdaptiveMenuAction(
+          itemKey: const Key('terminal_menu_split_host'),
+          icon: LucideIcons.serverCog,
+          label: 'Split with Another Host…',
+          value: () => _startSplitWithHost(pane.id),
+        ),
+      ],
       const AdaptiveMenuDivider(),
       AdaptiveMenuAction(
         itemKey: const Key('terminal_menu_snippets'),

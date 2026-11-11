@@ -38,12 +38,18 @@ class MobileExtraKeysBar extends StatefulWidget {
   /// longer exists, which breaks backspace and replays stale text.
   final VoidCallback? onFlushInput;
 
+  /// Pastes the clipboard the way the desktop paste does, with the multi-line
+  /// confirmation and bracketed paste. A phone has no paste shortcut, and the
+  /// keyboard's own paste reaches the shell as raw typing. No key when null.
+  final VoidCallback? onPaste;
+
   const MobileExtraKeysBar({
     super.key,
     this.terminal,
     this.outputChain,
     this.onInput,
     this.onFlushInput,
+    this.onPaste,
   });
 
   @override
@@ -132,16 +138,30 @@ class _MobileExtraKeysBarState extends State<MobileExtraKeysBar> {
     super.dispose();
   }
 
-  void _sendData(String rawChar, {String? ctrlChar, String? escapeCode}) {
-    // The IME may still be holding a half-typed word the terminal has never
-    // seen. Commit it first so this key arrives after it, in the order the
-    // user typed. The bar's own interceptor stays out of that text, so a
-    // sticky modifier is spent on the bar key rather than on the flush.
+  /// [key] is a key the terminal encodes itself: an arrow is `ESC O A`
+  /// rather than `ESC [ A` once an app (htop, nano, mc) asks for application
+  /// cursor keys, and a held modifier becomes part of the sequence
+  /// (`ESC [1;5A` for Ctrl) instead of being dropped. [escapeCode] stays the
+  /// fallback for a bar with no terminal behind it.
+  void _sendData(
+    String rawChar, {
+    String? ctrlChar,
+    String? escapeCode,
+    TerminalKey? key,
+  }) {
+    _flushInput();
     final chain = _chain;
-    if (chain != null) {
-      chain.without(_chainKey, () => widget.onFlushInput?.call());
-    } else {
-      widget.onFlushInput?.call();
+
+    final terminal = widget.terminal;
+    if (key != null && widget.onInput == null && terminal != null) {
+      // Out of this bar's interceptor, through the rest of the chain, like
+      // the keys below.
+      chain?.without(
+        _chainKey,
+        () => terminal.keyInput(key, ctrl: _ctrlActive, alt: _altActive),
+      );
+      _resetModifiers();
+      return;
     }
 
     String output = escapeCode ?? rawChar;
@@ -168,7 +188,24 @@ class _MobileExtraKeysBarState extends State<MobileExtraKeysBar> {
       chain?.without(_chainKey, () => widget.terminal!.onOutput?.call(output));
     }
 
-    // Reset sticky keys after next keypress
+    _resetModifiers();
+  }
+
+  /// The IME may still be holding a half-typed word the terminal has never
+  /// seen. Commit it first so a bar key arrives after it, in the order the
+  /// user typed. The bar's own interceptor stays out of that text, so a
+  /// sticky modifier is spent on the bar key rather than on the flush.
+  void _flushInput() {
+    final chain = _chain;
+    if (chain != null) {
+      chain.without(_chainKey, () => widget.onFlushInput?.call());
+    } else {
+      widget.onFlushInput?.call();
+    }
+  }
+
+  /// Reset sticky keys after next keypress
+  void _resetModifiers() {
     if (_ctrlActive || _altActive) {
       setState(() {
         _ctrlActive = false;
@@ -314,23 +351,50 @@ class _MobileExtraKeysBarState extends State<MobileExtraKeysBar> {
             _buildKeyButton(
               key: const Key('key_arrow_left'),
               label: '←',
-              onTap: () => _sendData('left', escapeCode: '\x1b[D'),
+              onTap: () => _sendData(
+                'left',
+                escapeCode: '\x1b[D',
+                key: TerminalKey.arrowLeft,
+              ),
             ),
             _buildKeyButton(
               key: const Key('key_arrow_up'),
               label: '↑',
-              onTap: () => _sendData('up', escapeCode: '\x1b[A'),
+              onTap: () => _sendData(
+                'up',
+                escapeCode: '\x1b[A',
+                key: TerminalKey.arrowUp,
+              ),
             ),
             _buildKeyButton(
               key: const Key('key_arrow_down'),
               label: '↓',
-              onTap: () => _sendData('down', escapeCode: '\x1b[B'),
+              onTap: () => _sendData(
+                'down',
+                escapeCode: '\x1b[B',
+                key: TerminalKey.arrowDown,
+              ),
             ),
             _buildKeyButton(
               key: const Key('key_arrow_right'),
               label: '→',
-              onTap: () => _sendData('right', escapeCode: '\x1b[C'),
+              onTap: () => _sendData(
+                'right',
+                escapeCode: '\x1b[C',
+                key: TerminalKey.arrowRight,
+              ),
             ),
+            if (widget.onPaste case final onPaste?) ...[
+              const SizedBox(width: 6),
+              _buildKeyButton(
+                key: const Key('key_paste'),
+                label: 'Paste',
+                onTap: () {
+                  _flushInput();
+                  onPaste();
+                },
+              ),
+            ],
           ],
         ),
       ),
