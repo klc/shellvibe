@@ -350,6 +350,22 @@ class _AccountSettingsSectionState
       await ref.read(accountProvider.notifier).signOut(everywhere: everywhere);
       await ref.read(entitlementProvider.notifier).clearCache();
       _passwordController.clear();
+    } on ApiFailure catch (e) {
+      // Only signing out everywhere throws: the other devices' tokens are
+      // still good, and this one is still signed in to try again.
+      debugPrint('Sign-out everywhere failed: $e');
+      if (!mounted) return;
+      ShadToaster.maybeOf(context)?.show(
+        ShadToast.destructive(
+          description: Text(
+            e is ApiTransportException
+                ? 'The server could not be reached, so your other devices are '
+                      'still signed in. This device is too; try again.'
+                : 'The server did not sign out your other devices. This '
+                      'device is still signed in; try again.',
+          ),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }

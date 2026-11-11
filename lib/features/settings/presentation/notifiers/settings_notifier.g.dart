@@ -57,54 +57,6 @@ final class SettingsRepositoryProvider
 String _$settingsRepositoryHash() =>
     r'718b69644c76e869689bd7ec94b4a8e9b6251501';
 
-@ProviderFor(biometricLockService)
-final biometricLockServiceProvider = BiometricLockServiceProvider._();
-
-final class BiometricLockServiceProvider
-    extends
-        $FunctionalProvider<
-          BiometricLockService,
-          BiometricLockService,
-          BiometricLockService
-        >
-    with $Provider<BiometricLockService> {
-  BiometricLockServiceProvider._()
-    : super(
-        from: null,
-        argument: null,
-        retry: null,
-        name: r'biometricLockServiceProvider',
-        isAutoDispose: true,
-        dependencies: null,
-        $allTransitiveDependencies: null,
-      );
-
-  @override
-  String debugGetCreateSourceHash() => _$biometricLockServiceHash();
-
-  @$internal
-  @override
-  $ProviderElement<BiometricLockService> $createElement(
-    $ProviderPointer pointer,
-  ) => $ProviderElement(pointer);
-
-  @override
-  BiometricLockService create(Ref ref) {
-    return biometricLockService(ref);
-  }
-
-  /// {@macro riverpod.override_with_value}
-  Override overrideWithValue(BiometricLockService value) {
-    return $ProviderOverride(
-      origin: this,
-      providerOverride: $SyncValueProvider<BiometricLockService>(value),
-    );
-  }
-}
-
-String _$biometricLockServiceHash() =>
-    r'7da2795890f61cfe920aeaa39dbcbe6c90527c0b';
-
 @ProviderFor(clipboardAutoClearService)
 final clipboardAutoClearServiceProvider = ClipboardAutoClearServiceProvider._();
 

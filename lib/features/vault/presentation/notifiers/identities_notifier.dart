@@ -18,6 +18,7 @@ VaultKeyService vaultKeyService(Ref ref) {
   return VaultKeyService(
     encryptionEngine: ref.watch(encryptionEngineProvider),
     secureStorageService: ref.watch(secureStorageServiceProvider),
+    hasEncryptedData: () => ref.read(appDatabaseProvider).hasVaultSecrets(),
   );
 }
 

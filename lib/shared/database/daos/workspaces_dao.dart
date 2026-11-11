@@ -41,14 +41,28 @@ class WorkspacesDao extends DatabaseAccessor<AppDatabase>
         into(workspaces).insert(workspace, mode: InsertMode.insertOrIgnore),
   );
 
+  /// Creates workspace [id] when it is missing, so a row can be put in it.
+  ///
+  /// Recorded for sync like any other new workspace: an unrecorded one would
+  /// exist on this device only, and the other devices would skip every row
+  /// put in it. A workspace this device deleted is not brought back, under
+  /// its id for a name, by a write that arrives late: that throws instead.
   Future<void> ensureWorkspaceExists(String id, {String? name}) async {
-    await into(workspaces).insert(
+    if (await getWorkspaceById(id) != null) return;
+    final tombstone =
+        await (select(db.syncTombstones)..where(
+              (t) => t.entityType.equals('workspaces') & t.entityId.equals(id),
+            ))
+            .getSingleOrNull();
+    if (tombstone != null) {
+      throw StateError('Workspace $id was deleted.');
+    }
+    await insertWorkspace(
       WorkspacesCompanion(
         id: Value(id),
         name: Value(name ?? (id == 'default' ? 'Default Workspace' : id)),
         createdAt: Value(DateTime.now()),
       ),
-      mode: InsertMode.insertOrIgnore,
     );
   }
 

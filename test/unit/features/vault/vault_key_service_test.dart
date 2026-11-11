@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
@@ -16,6 +17,18 @@ class _FailingWrappedDekDelete extends SecureStorageService {
   }
 }
 
+/// A keychain that stores the wrapped key garbled, as a failing write might.
+class _GarblingWrappedDekWrite extends SecureStorageService {
+  @override
+  Future<void> write({required String key, required String value}) =>
+      super.write(
+        key: key,
+        value: key == SecureStorageKeys.wrappedDek
+            ? base64.encode(List.filled(60, 1))
+            : value,
+      );
+}
+
 class _DelayedEncryptionEngine extends EncryptionEngine {
   final EncryptionEngine delegate;
   final Completer<void> started = Completer<void>();
@@ -27,12 +40,14 @@ class _DelayedEncryptionEngine extends EncryptionEngine {
   Future<SecretKey> deriveMasterKeyInBackground({
     required String masterPassword,
     required Uint8List salt,
+    Argon2Params? params,
   }) async {
     started.complete();
     await release.future;
     return delegate.deriveMasterKeyInBackground(
       masterPassword: masterPassword,
       salt: salt,
+      params: params,
     );
   }
 
@@ -211,6 +226,130 @@ void main() {
       expect(await service.isMasterPasswordConfigured(), isFalse);
       final reopened = buildService();
       expect(await (await reopened.getDek()).extractBytes(), equals(original));
+    });
+  });
+
+  group('a lost key', () {
+    test('is not replaced while encrypted rows remain', () async {
+      // The keychain came back empty (an Android keystore reset, a transfer
+      // that carried the database only), the database did not.
+      final storage = SecureStorageService();
+      final service = VaultKeyService(
+        encryptionEngine: engine,
+        secureStorageService: storage,
+        hasEncryptedData: () async => true,
+      );
+
+      expect(await service.isKeyLost(), isTrue);
+      await expectLater(
+        service.getDek(),
+        throwsA(isA<VaultKeyLostException>()),
+      );
+      expect(await storage.getMasterKey(), isNull);
+    });
+
+    test('is not replaced while a wrapped copy remains', () async {
+      await buildService().configureMasterPassword('correct horse battery');
+      // Only the salt went: the vault now reads as unprotected.
+      await SecureStorageService().deleteMasterSalt();
+
+      final service = buildService();
+      expect(await service.isKeyLost(), isTrue);
+      await expectLater(
+        service.getDek(),
+        throwsA(isA<VaultKeyLostException>()),
+      );
+    });
+
+    test('is reported when the wrapped key is gone', () async {
+      await buildService().configureMasterPassword('correct horse battery');
+      await SecureStorageService().delete(key: SecureStorageKeys.wrappedDek);
+
+      expect(await buildService().isKeyLost(), isTrue);
+    });
+
+    test('a first run is not a lost key', () async {
+      final service = VaultKeyService(
+        encryptionEngine: engine,
+        secureStorageService: SecureStorageService(),
+        hasEncryptedData: () async => false,
+      );
+      expect(await service.isKeyLost(), isFalse);
+      expect(await service.getDek(), isNotNull);
+      expect(await service.isKeyLost(), isFalse);
+    });
+
+    test('a reset starts over under a new key', () async {
+      final service = buildService();
+      final original = await (await service.getDek()).extractBytes();
+      await service.configureMasterPassword('correct horse battery');
+
+      await service.reset();
+
+      expect(await service.isMasterPasswordConfigured(), isFalse);
+      expect(await service.isKeyLost(), isFalse);
+      final fresh = await (await service.getDek()).extractBytes();
+      expect(fresh, isNot(equals(original)));
+      expect(
+        await SecureStorageService().read(key: SecureStorageKeys.wrappedDek),
+        isNull,
+      );
+    });
+  });
+
+  group('setting a master password', () {
+    test(
+      'keeps the plaintext key when the stored record does not open',
+      () async {
+        final storage = _GarblingWrappedDekWrite();
+        final service = VaultKeyService(
+          encryptionEngine: engine,
+          secureStorageService: storage,
+        );
+        final original = await (await service.getDek()).extractBytes();
+
+        await expectLater(
+          service.configureMasterPassword('correct horse battery'),
+          throwsStateError,
+        );
+
+        expect(await service.isMasterPasswordConfigured(), isFalse);
+        expect(await storage.getMasterKey(), equals(original));
+        expect(await buildService().isKeyLost(), isFalse);
+      },
+    );
+
+    test('an unlock clears a plaintext key a setup left behind', () async {
+      final storage = SecureStorageService();
+      final service = buildService();
+      final original = await (await service.getDek()).extractBytes();
+      await service.configureMasterPassword('correct horse battery');
+      // As if setup had stopped before deleting it.
+      await storage.saveMasterKey(original);
+
+      final restarted = buildService();
+      expect(await restarted.unlock('correct horse battery'), isTrue);
+
+      expect(await storage.getMasterKey(), isNull);
+      expect(await (await restarted.getDek()).extractBytes(), equals(original));
+    });
+
+    test('unlocks under the KDF cost it was set with', () async {
+      await buildService().configureMasterPassword('correct horse battery');
+
+      // A later build raised the default cost.
+      final costlier = VaultKeyService(
+        encryptionEngine: EncryptionEngine(
+          kdf: Argon2id(
+            parallelism: 1,
+            memory: 16,
+            iterations: 2,
+            hashLength: 32,
+          ),
+        ),
+        secureStorageService: SecureStorageService(),
+      );
+      expect(await costlier.unlock('correct horse battery'), isTrue);
     });
   });
 }
