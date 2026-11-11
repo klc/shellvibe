@@ -197,17 +197,30 @@ void main() {
     );
   });
 
-  test(
-    'the runbook can be edited or deleted and history still renders',
-    () async {
-      await db.runbooksDao.insertRunbook(RunbooksCompanionHelper.minimal('rb'));
-      final id = await repo.save(run());
-      await db.runbooksDao.deleteRunbook('rb');
-      final stored = await repo.load(id);
-      expect(stored, isNotNull);
-      expect(stored!.run.runbook.title, 'Deploy');
-    },
-  );
+  test('the runbook can be edited and history still renders', () async {
+    await db.runbooksDao.insertRunbook(RunbooksCompanionHelper.minimal('rb'));
+    final id = await repo.save(run());
+    await db.runbooksDao.updateRunbook(
+      RunbooksCompanion.insert(
+        id: 'rb',
+        workspaceId: 'default',
+        title: 'Renamed',
+        createdAt: DateTime(2026),
+      ),
+    );
+    final stored = await repo.load(id);
+    expect(stored, isNotNull);
+    expect(stored!.run.runbook.title, 'Deploy');
+  });
+
+  test('deleting the runbook deletes its history, and only its', () async {
+    await db.runbooksDao.insertRunbook(RunbooksCompanionHelper.minimal('rb'));
+    final id = await repo.save(run());
+    final other = await repo.save(run(book: runbook(id: 'other')));
+    await db.runbooksDao.deleteRunbook('rb');
+    expect(await repo.load(id), isNull);
+    expect(await repo.load(other), isNotNull);
+  });
 
   test('a snippet run is stored without a runbook id', () async {
     final snippetBook = runbook(id: 'snippet:sn');

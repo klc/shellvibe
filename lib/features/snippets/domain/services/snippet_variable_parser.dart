@@ -29,11 +29,23 @@ class SnippetVariableParser {
 
   /// Substitutes `${SV:…}` placeholders in [code] from [values]. A name with no
   /// entry is left as written, so a typo shows instead of vanishing.
+  ///
+  /// Each value goes in as one shell word ([shellQuote]): a label such as
+  /// `Ali's box` must not open a quote, nor `$(...)` in one run anything.
   static String substituteBuiltins(String code, Map<String, String> values) {
     return code.replaceAllMapped(_builtinRegex, (match) {
-      return values[match.group(1)] ?? match.group(0)!;
+      final value = values[match.group(1)];
+      return value == null ? match.group(0)! : shellQuote(value);
     });
   }
+
+  static final _shellSafe = RegExp(r'^[A-Za-z0-9_@%+=:,./-]*$');
+
+  /// [value] as one POSIX shell word: as is when it holds nothing the shell
+  /// would read (a hostname, a user, a port), else single-quoted.
+  static String shellQuote(String value) => _shellSafe.hasMatch(value)
+      ? value
+      : "'${value.replaceAll("'", r"'\''")}'";
 
   /// Extracts unique `${INPUT:…}` variable names from [code].
   static List<String> extractVariables(String code) {

@@ -11,8 +11,10 @@ import 'api_transport.dart';
 typedef ApiTokenProvider = Future<String?> Function();
 
 /// Called when the server rejects the stored token, so the session layer can
-/// drop it without the client depending on storage.
-typedef ApiUnauthenticatedCallback = Future<void> Function();
+/// drop it without the client depending on storage. Given the token the
+/// rejected request carried, which may no longer be the stored one.
+typedef ApiUnauthenticatedCallback =
+    Future<void> Function(String rejectedToken);
 
 /// JSON client for the ShellVibe Server v1 API.
 ///
@@ -140,8 +142,9 @@ final class ApiClient {
       headers['Content-Type'] = 'application/json';
     }
 
+    String? token;
     if (authenticated) {
-      final token = await tokenProvider?.call();
+      token = await tokenProvider?.call();
       if (token == null || token.isEmpty) {
         throw const ApiException(
           statusCode: 401,
@@ -184,8 +187,8 @@ final class ApiClient {
       retryAfterSeconds: int.tryParse(raw.header('retry-after') ?? ''),
     );
 
-    if (authenticated && failure.isUnauthenticated) {
-      await onUnauthenticated?.call();
+    if (token != null && failure.isUnauthenticated) {
+      await onUnauthenticated?.call(token);
     }
 
     throw failure;

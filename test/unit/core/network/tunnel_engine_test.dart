@@ -60,6 +60,9 @@ void main() {
 
       expect(tunnelEngine.isTunnelActive('r_remote'), isTrue);
       expect(fakeListener.isClosed, isFalse);
+      // Loopback on the server, as `ssh -R` binds it; no host means every
+      // interface.
+      expect(fakeSshClient.lastRemoteForwardHost, 'localhost');
 
       await tunnelEngine.stopTunnel('r_remote');
 
@@ -247,6 +250,9 @@ class FakeSSHClient extends Fake implements SSHClient {
 
   FakeSSHClient({this.remoteForwardResult});
 
+  /// The bind address the last remote forward asked the server for.
+  String? lastRemoteForwardHost;
+
   @override
   Future<void> get done => doneCompleter.future;
 
@@ -264,15 +270,22 @@ class FakeSSHClient extends Fake implements SSHClient {
     String? host,
     int? port,
   }) async {
+    lastRemoteForwardHost = host;
     return remoteForwardResult;
   }
 }
 
 
 /// A forward channel whose remote end never answers; what is written to it
-/// is buffered.
+/// is taken and dropped, as a real channel takes what fits in its window.
 class _FakeForwardChannel extends Fake implements SSHForwardChannel {
+  _FakeForwardChannel() {
+    unawaited(_outgoing.stream.drain<void>());
+  }
+
   final _incoming = StreamController<Uint8List>();
+  // Closed by whoever writes to it, through [sink], as the real one is.
+  // ignore: close_sinks
   final _outgoing = StreamController<List<int>>();
 
   @override
@@ -286,7 +299,8 @@ class _FakeForwardChannel extends Fake implements SSHForwardChannel {
 
   @override
   Future<void> close() async {
-    await _outgoing.close();
+    // Like the real channel, closing it leaves the outgoing sink alone: the
+    // pipe may still be feeding it through addStream.
     await _incoming.close();
   }
 

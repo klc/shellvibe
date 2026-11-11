@@ -54,5 +54,10 @@ void main() {
     expect(find.text('Could not save file'), findsOneWidget);
     final field = tester.widget<TextField>(find.byType(TextField));
     expect(field.controller!.text, 'typed edits');
+    // Code, not prose: no smart punctuation or autocorrect rewriting it.
+    expect(field.autocorrect, isFalse);
+    expect(field.enableSuggestions, isFalse);
+    expect(field.smartDashesType, SmartDashesType.disabled);
+    expect(field.smartQuotesType, SmartQuotesType.disabled);
   });
 }

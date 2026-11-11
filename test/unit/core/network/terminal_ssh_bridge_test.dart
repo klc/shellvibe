@@ -6,6 +6,8 @@ import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/core/network/coalescing_terminal_writer.dart';
 import 'package:shellvibe/core/network/terminal_ssh_bridge.dart';
+import 'package:shellvibe/features/terminal/domain/models/terminal_tab_session.dart';
+import 'package:shellvibe/features/terminal/domain/services/broadcast_input_router.dart';
 import 'package:xterm3/xterm.dart';
 
 /// Fake implementation of [SSHSession] for testing stream bridge behavior.
@@ -201,6 +203,54 @@ void main() {
         terminal.buffer.getText(),
         contains('[Session closed / Process exited]'),
       );
+    });
+
+    test('terminal replies go to their own session, never broadcast', () async {
+      final otherSession = FakeSSHSession();
+      final otherTerminal = Terminal();
+      final otherBridge = TerminalSSHBridge(
+        terminal: otherTerminal,
+        session: otherSession,
+        writerOverride: CoalescingTerminalWriter(
+          PacedTerminalWriter(otherTerminal),
+          waitForFrame: () async {},
+        ),
+      );
+      addTearDown(() async {
+        await otherBridge.dispose(closeSession: false);
+        otherSession.close();
+      });
+      TerminalTabSession pane(String id, Terminal terminal) =>
+          TerminalTabSession(
+            id: id,
+            title: id,
+            sessionType: TerminalSessionType.ssh,
+            terminal: terminal,
+            isConnected: true,
+          );
+      final tabs = [pane('a', terminal), pane('b', otherTerminal)];
+      final selected = {'a', 'b'};
+      final router = BroadcastInputRouter();
+      router.forwardCallback = (origin, data) => router.forwardToOthers(
+        originId: origin,
+        selectedIds: selected,
+        tabs: tabs,
+        data: data,
+      );
+      router.sync(selectedIds: selected, tabs: tabs);
+
+      // A device attributes and a cursor position query from pane A's host.
+      session.emitStdout('\x1b[c\x1b[6n');
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      final replies = session.writtenBytes.map(utf8.decode).join();
+      expect(replies, contains('\x1b[?'));
+      expect(replies, contains('R'));
+      expect(otherSession.writtenBytes, isEmpty);
+
+      // Typing still broadcasts.
+      terminal.textInput('x');
+      expect(otherSession.writtenBytes.map(utf8.decode), ['x']);
     });
   });
 }

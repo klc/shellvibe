@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'dart:io';
+
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/core/network/ssh_session_manager.dart';
@@ -279,6 +281,41 @@ void main() {
         expect(
           () => sessionManager.connect(config),
           throwsA(isA<FormatException>()),
+        );
+      },
+    );
+
+    test(
+      'a server that breaks off the handshake is not reported as a failed login',
+      () async {
+        // The bug this pins: every failure after the socket opened was wrapped
+        // as "SSH authentication failed", so a key exchange or cipher mismatch
+        // sent the user hunting for a wrong password.
+        final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+        addTearDown(server.close);
+        server.listen((socket) {
+          socket
+            ..write('SSH-2.0-broken\r\n')
+            ..add(List<int>.filled(64, 0xFF));
+          unawaited(socket.flush().then((_) => socket.destroy()));
+        });
+
+        await expectLater(
+          sessionManager.connect(
+            SSHConnectConfig(
+              hostname: '127.0.0.1',
+              port: server.port,
+              username: 'root',
+              password: 'secret',
+              timeout: const Duration(seconds: 5),
+            ),
+          ),
+          throwsA(
+            predicate(
+              (e) => '$e'.contains('SSH connection failed for root@'),
+              'a connection failure, not an authentication one',
+            ),
+          ),
         );
       },
     );

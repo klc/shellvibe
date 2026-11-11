@@ -249,46 +249,50 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
 
     return [
       const AdaptiveMenuDivider(),
-      // A local shell has no remote side to transfer files to.
-      if (pane.sessionType == TerminalSessionType.ssh)
+      // A local shell has no remote side to transfer files to, and an AI
+      // pane's connection is the agent's, not the user's. An AI tab is not
+      // split either (see TerminalTabsNotifier.splitTab).
+      if (pane.sessionType == TerminalSessionType.ssh && !pane.isMcp)
         AdaptiveMenuAction(
           itemKey: const Key('terminal_menu_sftp'),
           icon: LucideIcons.folderSync,
           label: 'File Transfer (SFTP)',
           value: () => openSftpForPane(context, pane),
         ),
-      AdaptiveMenuAction(
-        itemKey: const Key('terminal_menu_split_vertical'),
-        icon: LucideIcons.columns2,
-        label: 'Split Side by Side',
-        shortcut: shortcutLabel(AppCommand.splitSideBySide),
-        value: () => unawaited(
-          notifier.splitTab(
-            pane.id,
-            direction: Axis.horizontal,
-            onHostKeyPrompt: _launcher.promptHostKey,
+      if (!pane.isMcp) ...[
+        AdaptiveMenuAction(
+          itemKey: const Key('terminal_menu_split_vertical'),
+          icon: LucideIcons.columns2,
+          label: 'Split Side by Side',
+          shortcut: shortcutLabel(AppCommand.splitSideBySide),
+          value: () => unawaited(
+            notifier.splitTab(
+              pane.id,
+              direction: Axis.horizontal,
+              onHostKeyPrompt: _launcher.promptHostKey,
+            ),
           ),
         ),
-      ),
-      AdaptiveMenuAction(
-        itemKey: const Key('terminal_menu_split_horizontal'),
-        icon: LucideIcons.rows2,
-        label: 'Split Top / Bottom',
-        shortcut: shortcutLabel(AppCommand.splitTopBottom),
-        value: () => unawaited(
-          notifier.splitTab(
-            pane.id,
-            direction: Axis.vertical,
-            onHostKeyPrompt: _launcher.promptHostKey,
+        AdaptiveMenuAction(
+          itemKey: const Key('terminal_menu_split_horizontal'),
+          icon: LucideIcons.rows2,
+          label: 'Split Top / Bottom',
+          shortcut: shortcutLabel(AppCommand.splitTopBottom),
+          value: () => unawaited(
+            notifier.splitTab(
+              pane.id,
+              direction: Axis.vertical,
+              onHostKeyPrompt: _launcher.promptHostKey,
+            ),
           ),
         ),
-      ),
-      AdaptiveMenuAction(
-        itemKey: const Key('terminal_menu_split_host'),
-        icon: LucideIcons.serverCog,
-        label: 'Split with Another Host…',
-        value: () => _startSplitWithHost(pane.id),
-      ),
+        AdaptiveMenuAction(
+          itemKey: const Key('terminal_menu_split_host'),
+          icon: LucideIcons.serverCog,
+          label: 'Split with Another Host…',
+          value: () => _startSplitWithHost(pane.id),
+        ),
+      ],
       const AdaptiveMenuDivider(),
       AdaptiveMenuAction(
         itemKey: const Key('terminal_menu_snippets'),
@@ -364,16 +368,19 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
 
   /// Sends snippet text to the focused pane, or to every selected pane while
   /// broadcast input is active (two or more panes selected).
-  void _sendToPanes(TerminalTabsState tabsState, String code) {
+  /// True when some pane got `${SV:...}` as written, having no host to fill
+  /// it from.
+  bool _sendToPanes(TerminalTabsState tabsState, String code) {
     if (tabsState.isBroadcasting) {
-      ref.read(terminalTabsProvider.notifier).sendTextToSelectedPanes(code);
-      return;
+      return broadcastFilled(ref.read(terminalTabsProvider.notifier), code);
     }
     final target =
         tabsState.activeTab ??
         (tabsState.tabs.isEmpty ? null : tabsState.tabs.first);
-    if (target == null) return;
-    target.terminal.paste(code);
+    if (target == null) return false;
+    final filled = fillBuiltinsFor(target, code);
+    target.terminal.paste(filled.code);
+    return filled.unresolved;
   }
 
   /// Opens the snippet picker for whatever the next send would target, and
@@ -413,12 +420,11 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
     }
     if (!mounted) return;
     final tabsState = ref.read(terminalTabsProvider);
-    final filled = fillPaneBuiltins(
+    final unresolved = _sendToPanes(
       tabsState,
       SnippetVariableParser.substituteVariables(snippet.code, values),
     );
-    _sendToPanes(tabsState, filled.code);
-    if (filled.unresolved) {
+    if (unresolved) {
       ShadToaster.of(context).show(
         ShadToast(
           description: Text(

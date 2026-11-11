@@ -114,6 +114,55 @@ void main() {
     expect(ended, [first]);
   });
 
+  group('two agent windows sharing one client token', () {
+    Future<McpToolContext> call(String connection) async {
+      await dispatcher.handle(
+        'client-1',
+        JsonRpcRequest(
+          id: ++ids,
+          method: McpMethod.toolsCall,
+          params: const {'name': 'record'},
+        ),
+        connection,
+      );
+      return tool.calls.last;
+    }
+
+    Future<void> hello(String connection, Object? clientInfo) =>
+        dispatcher.handle(
+          'client-1',
+          JsonRpcRequest(
+            id: ++ids,
+            method: McpMethod.initialize,
+            params: {'clientInfo': ?clientInfo},
+          ),
+          connection,
+        );
+
+    test(
+      'get separate scopes, and one handshake does not end the other\'s',
+      () async {
+        await hello('window-a', null);
+        final a = (await call('window-a')).connectionScopeId;
+        await hello('window-b', null);
+        final b = (await call('window-b')).connectionScopeId;
+
+        expect(b, isNot(a));
+        expect(ended, isEmpty);
+        expect((await call('window-a')).connectionScopeId, a);
+      },
+    );
+
+    test('are named by what they report in clientInfo', () async {
+      await hello('window-a', {'name': 'claude-code\u001b[2J', 'version': '1'});
+      await hello('window-b', {'name': 'cursor'});
+
+      expect((await call('window-a')).clientName, 'claude-code[2J');
+      expect((await call('window-b')).clientName, 'cursor');
+      expect((await call('window-c')).clientName, 'Agent client-1');
+    });
+  });
+
   test('one client reconnecting does not end another\'s session', () async {
     await initialize('client-1');
     await initialize('client-2');
@@ -124,4 +173,45 @@ void main() {
     expect(await scopeOfACall('client-2'), other);
     expect(ended, isNot(contains(other)));
   });
+
+  test(
+    'an unmodelled tool error never carries its text to the agent',
+    () async {
+      final leaky = McpRequestDispatcher(
+        registry: McpToolRegistry([_ThrowingTool()]),
+        lookupClient: (clientId) async =>
+            (name: 'Agent $clientId', workspaceId: 'default'),
+        onScopeEnded: (_) {},
+      );
+
+      final result = await leaky.handle(
+        'client-1',
+        JsonRpcRequest(
+          id: ++ids,
+          method: McpMethod.toolsCall,
+          params: const {'name': 'throw'},
+        ),
+      );
+
+      expect(result.toString(), contains('throw failed'));
+      expect(result.toString(), isNot(contains('db.internal.example')));
+    },
+  );
+}
+
+/// Fails the way the SSH layer does: with the target's address in the text.
+final class _ThrowingTool implements McpToolHandler {
+  @override
+  String get name => 'throw';
+
+  @override
+  McpToolDefinition get definition => const McpToolDefinition(
+    name: 'throw',
+    description: 'Always throws.',
+    inputSchema: {'type': 'object'},
+  );
+
+  @override
+  Future<Object?> execute(McpToolContext ctx, Map<String, Object?> args) =>
+      throw Exception('Failed to connect to db.internal.example:22');
 }

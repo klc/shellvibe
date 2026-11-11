@@ -33,20 +33,20 @@ Future<PersistentShellSession> _session(
 
 void main() {
   group('initialize', () {
-    test('normalizes the shell with exec /bin/sh before the exports', () async {
+    test('normalizes the shell without an exec line on stdin', () async {
       final channel = FakeShellChannel();
       await _session(channel);
 
-      // `exec /bin/sh` must come first: on fish or csh the export lines are
-      // syntax errors, not no-ops.
-      expect(channel.writes.first, 'exec /bin/sh\n');
-      expect(channel.writes[1], contains('TERM=dumb'));
-      expect(channel.writes[1], contains('PAGER=cat'));
-      expect(channel.writes[1], contains('unset HISTFILE'));
+      // The channel is opened on /bin/sh already: an `exec /bin/sh` line
+      // would make dash, which reads stdin in blocks, lose everything after.
+      expect(channel.writes.join(), isNot(contains('exec /bin/sh')));
+      expect(channel.writes.first, contains('TERM=dumb'));
+      expect(channel.writes.first, contains('PAGER=cat'));
+      expect(channel.writes.first, contains('unset HISTFILE'));
       // Guarded, not bare: a bare `set +o history` is fatal on dash, whose
       // `set` has no such option — see [PersistentShellSession.initialize].
       expect(
-        channel.writes[1],
+        channel.writes.first,
         contains('(set +o history) 2>/dev/null && set +o history'),
       );
     });
@@ -57,28 +57,24 @@ void main() {
       expect(session.cwd, '/srv/app');
     });
 
-    test(
-      'throws SHELL_UNSUPPORTED when the probe never answers',
-      () async {
-        final channel = FakeShellChannel(autoRespond: false);
-        final session = PersistentShellSession(
-          channel: channel,
-          reopen: () async => FakeShellChannel(),
-        );
+    test('throws SHELL_UNSUPPORTED when the probe never answers', () async {
+      final channel = FakeShellChannel(autoRespond: false);
+      final session = PersistentShellSession(
+        channel: channel,
+        reopen: () async => FakeShellChannel(),
+      );
 
-        await expectLater(
-          session.initialize(),
-          throwsA(
-            isA<McpToolException>().having(
-              (e) => e.code,
-              'code',
-              McpErrorCode.shellUnsupported,
-            ),
+      await expectLater(
+        session.initialize(),
+        throwsA(
+          isA<McpToolException>().having(
+            (e) => e.code,
+            'code',
+            McpErrorCode.shellUnsupported,
           ),
-        );
-      },
-      timeout: const Timeout(Duration(seconds: 30)),
-    );
+        ),
+      );
+    }, timeout: const Timeout(Duration(seconds: 30)));
   });
 
   group('running a command', () {
@@ -136,7 +132,7 @@ void main() {
       await session.run('echo hi # trailing comment');
       expect(
         channel.envelopes[1],
-        matches(RegExp(r'echo hi # trailing comment\n\} ; printf')),
+        matches(RegExp(r'echo hi # trailing comment\n\} </dev/null ; printf')),
       );
     });
 
@@ -304,26 +300,22 @@ void main() {
       timeout: const Timeout(Duration(seconds: 60)),
     );
 
-    test(
-      'the session is usable again after a reset',
-      () async {
-        final channel = FakeShellChannel();
-        final reopened = <FakeShellChannel>[];
-        final session = await _session(channel, reopened: reopened);
+    test('the session is usable again after a reset', () async {
+      final channel = FakeShellChannel();
+      final reopened = <FakeShellChannel>[];
+      final session = await _session(channel, reopened: reopened);
 
-        channel.autoRespond = false;
-        await session.run('hang', timeout: const Duration(milliseconds: 50));
+      channel.autoRespond = false;
+      await session.run('hang', timeout: const Duration(milliseconds: 50));
 
-        final result = await session.run('echo back');
-        expect(result.exitCode, 0);
-        expect(result.sessionReset, isFalse);
-        expect(
-          reopened.single.commandAt(reopened.single.envelopes.length - 1),
-          'echo back',
-        );
-      },
-      timeout: const Timeout(Duration(seconds: 60)),
-    );
+      final result = await session.run('echo back');
+      expect(result.exitCode, 0);
+      expect(result.sessionReset, isFalse);
+      expect(
+        reopened.single.commandAt(reopened.single.envelopes.length - 1),
+        'echo back',
+      );
+    }, timeout: const Timeout(Duration(seconds: 60)));
   });
 
   group('ordering', () {
@@ -437,33 +429,35 @@ void main() {
   });
 
   group('interrupt races', () {
-    test('a run started right after an idle interrupt waits for the rebuild',
-        () async {
-      // interrupt() does not take the run queue, so a command enqueued while
-      // it rebuilds used to be written into the channel being closed and
-      // then sat out its whole timeout.
-      final channel = FakeShellChannel();
-      final reopened = <FakeShellChannel>[];
-      final session = await _session(channel, reopened: reopened);
-      final envelopesBefore = channel.envelopes.length;
+    test(
+      'a run started right after an idle interrupt waits for the rebuild',
+      () async {
+        // interrupt() does not take the run queue, so a command enqueued while
+        // it rebuilds used to be written into the channel being closed and
+        // then sat out its whole timeout.
+        final channel = FakeShellChannel();
+        final reopened = <FakeShellChannel>[];
+        final session = await _session(channel, reopened: reopened);
+        final envelopesBefore = channel.envelopes.length;
 
-      final interrupting = session.interrupt();
-      final result = await session.run(
-        'echo next',
-        timeout: const Duration(seconds: 1),
-      );
-      await interrupting;
+        final interrupting = session.interrupt();
+        final result = await session.run(
+          'echo next',
+          timeout: const Duration(seconds: 1),
+        );
+        await interrupting;
 
-      expect(result.exitCode, 0);
-      expect(result.sessionReset, isFalse);
-      expect(
-        channel.envelopes.length,
-        envelopesBefore,
-        reason: 'nothing may be written to the channel being torn down',
-      );
-      expect(reopened, hasLength(1));
-      expect(reopened.single.envelopes.last, contains('echo next'));
-    });
+        expect(result.exitCode, 0);
+        expect(result.sessionReset, isFalse);
+        expect(
+          channel.envelopes.length,
+          envelopesBefore,
+          reason: 'nothing may be written to the channel being torn down',
+        );
+        expect(reopened, hasLength(1));
+        expect(reopened.single.envelopes.last, contains('echo next'));
+      },
+    );
 
     test('an interrupt during a hang-recovery rebuild joins it', () async {
       final channel = FakeShellChannel();
@@ -483,7 +477,10 @@ void main() {
       await session.initialize();
 
       channel.autoRespond = false;
-      final run = session.run('hang', timeout: const Duration(milliseconds: 50));
+      final run = session.run(
+        'hang',
+        timeout: const Duration(milliseconds: 50),
+      );
       // Step 3 of recovery is now rebuilding the channel.
       await reopenStarted.future;
 
@@ -506,5 +503,123 @@ void main() {
       await session.close();
       expect(channel.isClosed, isTrue);
     });
+
+    test('wakes a pending run instead of leaving it to its timeout', () async {
+      final channel = FakeShellChannel();
+      final reopened = <FakeShellChannel>[];
+      final session = await _session(channel, reopened: reopened);
+
+      channel.autoRespond = false;
+      final stopwatch = Stopwatch()..start();
+      final run = session.run('sleep 100', timeout: const Duration(minutes: 5));
+      await pumpEventQueue();
+      await session.close();
+
+      final result = await run;
+      expect(stopwatch.elapsed, lessThan(const Duration(seconds: 5)));
+      expect(result.interrupted, isTrue);
+      expect(reopened, isEmpty, reason: 'a closed session is not reopened');
+    });
+  });
+
+  group('the shell ending by itself', () {
+    test(
+      'returns the exit status at once and reopens for the next command',
+      () async {
+        final channel = FakeShellChannel(cwd: '/srv/app');
+        final reopened = <FakeShellChannel>[];
+        final session = await _session(channel, reopened: reopened);
+
+        channel.autoRespond = false;
+        final stopwatch = Stopwatch()..start();
+        final run = session.run('systemctl restart app; exit 3');
+        await pumpEventQueue();
+        channel.emitStdout('restarted\n');
+        await channel.endRemotely(3);
+
+        final result = await run;
+        expect(stopwatch.elapsed, lessThan(const Duration(seconds: 5)));
+        expect(result.exitCode, 3);
+        expect(result.stdout, 'restarted\n');
+        expect(result.sessionReset, isTrue);
+        expect(result.timedOut, isFalse);
+        expect(result.interrupted, isFalse);
+        expect(reopened, hasLength(1));
+        expect(session.cwd, '/srv/app', reason: 'the cwd is restored');
+
+        final next = await session.run('echo again');
+        expect(next.exitCode, 0);
+        expect(next.sessionReset, isFalse);
+        expect(reopened.single.envelopes.last, contains('echo again'));
+      },
+    );
+
+    test('a dropped connection reports an unknown exit code', () async {
+      final channel = FakeShellChannel();
+      final session = await _session(channel);
+
+      channel.autoRespond = false;
+      final run = session.run('long job');
+      await pumpEventQueue();
+      await channel.endRemotely(null);
+
+      final result = await run;
+      expect(result.exitCode, -1);
+      expect(result.sessionReset, isTrue);
+    });
+  });
+
+  group('expected cwd', () {
+    test(
+      'a command approved for one directory is not run in another',
+      () async {
+        final channel = FakeShellChannel(cwd: '/home/app');
+        final session = await _session(channel);
+
+        // Another call on the session moved it while this one was approved.
+        channel.cwd = '/var/lib/postgresql';
+        await session.run('cd /var/lib/postgresql');
+        final envelopes = channel.envelopes.length;
+
+        await expectLater(
+          session.run('rm -rf ./cache', expectedCwd: '/home/app'),
+          throwsA(
+            isA<McpToolException>().having(
+              (e) => e.code,
+              'code',
+              McpErrorCode.policyDenied,
+            ),
+          ),
+        );
+        expect(channel.envelopes.length, envelopes, reason: 'never written');
+
+        final ok = await session.run('ls', expectedCwd: '/var/lib/postgresql');
+        expect(ok.exitCode, 0);
+      },
+    );
+  });
+
+  group('timeout', () {
+    test(
+      'keeps the last bytes of a prompt the command is waiting on',
+      () async {
+        final channel = FakeShellChannel();
+        final session = await _session(channel);
+
+        // The command's own sentinel never comes; the recovery probe answers.
+        channel.holdNext = true;
+        final run = session.run(
+          'apt-get upgrade',
+          timeout: const Duration(milliseconds: 50),
+        );
+        await pumpEventQueue();
+        channel.emitStdout('Do you want to continue? [Y/n] ');
+
+        final result = await run;
+        expect(result.timedOut, isTrue);
+        expect(result.stdout, 'Do you want to continue? [Y/n] ');
+      },
+      timeout: const Timeout(Duration(seconds: 30)),
+    );
   });
 }

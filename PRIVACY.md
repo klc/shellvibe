@@ -42,11 +42,22 @@ and Android, the app's private storage, which other apps cannot read):
 | Account session, backup passphrase, recovery code | In the operating system's keychain or credential store, only when you sign in and set up backup |
 | Crash logs | A local file; see **Crashes** below |
 
-Identity secrets are encrypted with a key derived from your master password and
-held in your operating system's keychain or credential store (the Keychain on
-iOS, Keystore-backed storage on Android). Without that
-password the encrypted rows are not readable, including by anyone who copies the
-database file.
+Identity secrets and vault environment variables are encrypted (AES-256-GCM)
+with a random key that is kept in your operating system's keychain or
+credential store (the Keychain on macOS and iOS, Keystore-backed storage on
+Android), never in the database file. Someone who copies only the database
+file cannot read them.
+
+The master password is optional. Without one, that key sits in the keychain
+as it is, so anyone who can use your unlocked operating-system account can
+use your secrets. With one, the key is stored only wrapped under a key derived
+from the password (Argon2id), and the secrets cannot be read without the
+password, including from a copy of the keychain. A forgotten master password
+cannot be recovered; resetting the vault deletes the secrets it protected.
+
+On macOS and Linux the database file is readable by your user account only.
+On Android it is excluded from cloud backup and from device-to-device
+transfer.
 
 ## When ShellVibe uses the network
 
@@ -82,10 +93,6 @@ thing, and only when you start it:
 
 - **Camera** — to scan the QR code a desktop shows when you pair it for Device
   Link. The code is read on the device; no picture is stored or sent anywhere.
-- **Face ID, Touch ID or fingerprint** — to unlock the app if you turn on the
-  biometric lock. The check is done by the operating system, which tells
-  ShellVibe only whether it succeeded; ShellVibe never sees your biometric
-  data.
 - **Local network** (iOS) — to find and connect to your paired desktop for
   Device Link.
 - **Notifications and a foreground service** (Android) — while an SSH session

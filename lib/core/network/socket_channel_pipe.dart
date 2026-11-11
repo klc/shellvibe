@@ -9,6 +9,29 @@ import 'package:dartssh2/dartssh2.dart';
 /// hold the socket open forever.
 const _kSocketFlushTimeout = Duration(seconds: 10);
 
+/// How long opening a forward channel may take before it is given up.
+const kForwardChannelOpenTimeout = Duration(seconds: 30);
+
+/// Waits at most [timeout] for [pending] to open.
+///
+/// A plain `.timeout` stops waiting but leaves the open in flight, so a
+/// channel the server grants later stays open with nothing holding it. This
+/// closes that one as soon as it arrives.
+Future<SSHForwardChannel> openForwardChannel(
+  Future<SSHForwardChannel> pending, {
+  Duration timeout = kForwardChannelOpenTimeout,
+}) {
+  return pending.timeout(
+    timeout,
+    onTimeout: () {
+      unawaited(
+        pending.then<void>((channel) => channel.destroy(), onError: (Object _) {}),
+      );
+      throw TimeoutException('Opening the forward channel timed out', timeout);
+    },
+  );
+}
+
 /// Pipes bytes both ways between a local TCP [socket] and an SSH forward
 /// [channel], the way OpenSSH does for `-L`, `-R` and `-D` forwards.
 ///
@@ -35,7 +58,7 @@ class SocketChannelPipe {
   final void Function()? onClosed;
 
   StreamSubscription<Uint8List>? _socketSub;
-  StreamSubscription<Uint8List>? _channelSub;
+  StreamController<Uint8List>? _fromSocket;
   Future<void>? _socketWriteClosed;
   bool _socketEnded = false;
   bool _channelEnded = false;
@@ -61,17 +84,39 @@ class SocketChannelPipe {
       _toChannel(initialBytes);
     }
 
-    _socketSub = (socketSubscription ?? socket.listen(null))
-      ..onData(_toChannel)
-      ..onError((Object _) => close())
-      ..onDone(_onSocketDone);
-    if (_socketSub!.isPaused) _socketSub!.resume();
-
-    _channelSub = channel.stream.listen(
-      _toSocket,
-      onError: (Object _) => close(),
-      onDone: _onChannelDone,
+    // Both directions are piped with addStream rather than add(), so a slow
+    // side pushes back instead of the difference piling up on the Dart heap.
+    // Towards the channel, the upload loop stops reading while the peer grants
+    // no window and that pause travels back through [fromSocket] to the
+    // socket, so the kernel stops taking bytes from the client. Towards the
+    // socket, dart:io pauses the channel stream while the kernel's send
+    // buffer is full, and a paused channel grants the peer no more window.
+    final fromSocket = _fromSocket = StreamController<Uint8List>(
+      onPause: () => _socketSub?.pause(),
+      onResume: () => _socketSub?.resume(),
     );
+    _socketSub = (socketSubscription ?? socket.listen(null))
+      ..onData((data) {
+        if (_finished || _socketEnded) return;
+        onBytes?.call(data.length);
+        fromSocket.add(data);
+      })
+      ..onError((Object _) => close())
+      ..onDone(() => unawaited(fromSocket.close()));
+    if (_socketSub!.isPaused) _socketSub!.resume();
+    if (socketEnded) unawaited(fromSocket.close());
+    channel.sink
+        .addStream(fromSocket.stream)
+        .then((_) => _onSocketDone(), onError: (Object _) => close());
+
+    socket
+        .addStream(
+          channel.stream.map((data) {
+            onBytes?.call(data.length);
+            return data;
+          }),
+        )
+        .then((_) => _onChannelDone(), onError: (Object _) => close());
 
     channel.done.then(
       (_) => _onChannelClosed(),
@@ -83,8 +128,6 @@ class SocketChannelPipe {
     // as an unhandled error and the channel stays open until the far side
     // ends it.
     socket.done.then((_) {}, onError: (Object _) => close());
-
-    if (socketEnded) _onSocketDone();
   }
 
   /// Tears the connection down in both directions right away.
@@ -98,16 +141,6 @@ class SocketChannelPipe {
     if (_finished || _socketEnded) return;
     try {
       channel.sink.add(data);
-      onBytes?.call(data.length);
-    } catch (_) {
-      close();
-    }
-  }
-
-  void _toSocket(Uint8List data) {
-    if (_finished || _channelEnded) return;
-    try {
-      socket.add(data);
       onBytes?.call(data.length);
     } catch (_) {
       close();
@@ -150,7 +183,7 @@ class SocketChannelPipe {
     if (_finished) return;
     _finished = true;
     unawaited(_socketSub?.cancel());
-    unawaited(_channelSub?.cancel());
+    unawaited(_fromSocket?.close());
     try {
       unawaited(channel.close().catchError((Object _) {}));
     } catch (_) {}

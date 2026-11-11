@@ -398,6 +398,11 @@ class _Reader {
         pty.kill(ProcessSignal.sighup);
       } catch (_) {}
     }
+    try {
+      // Closes the master fd and the plugin's wake pipe, which nothing else
+      // does: a closed tab would otherwise leak three descriptors for good.
+      pty.destroy();
+    } catch (_) {}
     _commands.close();
     // Exits with the acknowledgement so it cannot be lost behind the exit.
     Isolate.exit(events, const [_Wire.disposed]);

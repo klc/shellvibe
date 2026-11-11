@@ -12,7 +12,10 @@ import 'package:shellvibe/features/snippets/data/run_providers.dart';
 import 'package:shellvibe/features/snippets/domain/services/remote_command_session.dart';
 import 'package:shellvibe/features/snippets/presentation/notifiers/snippets_notifier.dart';
 import 'package:shellvibe/features/snippets/presentation/screens/snippets_screen.dart';
+import 'package:shellvibe/features/terminal/domain/models/terminal_tab_session.dart';
+import 'package:shellvibe/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import 'package:shellvibe/shared/database/app_database.dart';
+import 'package:xterm3/xterm.dart';
 import 'package:shellvibe/shared/providers/database_providers.dart';
 
 class _FakeSession implements RemoteCommandSession {
@@ -55,6 +58,22 @@ class _FakeFactory implements RemoteCommandSessionFactory {
     sessions.add(session);
     return session;
   }
+}
+
+/// One open local pane, without the sockets the real notifier builds.
+class _OneTab extends TerminalTabsNotifier {
+  @override
+  TerminalTabsState build() => TerminalTabsState(
+    tabs: [
+      TerminalTabSession(
+        id: 't',
+        title: 't',
+        sessionType: TerminalSessionType.local,
+        terminal: Terminal(),
+      ),
+    ],
+    activeTabId: 't',
+  );
 }
 
 void main() {
@@ -123,12 +142,14 @@ void main() {
     WidgetTester tester,
     _FakeFactory factory, {
     AutomationSection section = AutomationSection.runbooks,
+    bool openTerminal = false,
   }) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
           remoteCommandSessionFactoryProvider.overrideWithValue(factory),
+          if (openTerminal) terminalTabsProvider.overrideWith(_OneTab.new),
         ],
         child: ShadTheme(
           data: ShadThemeData(
@@ -281,6 +302,40 @@ void main() {
         code: r'echo ${HOME}',
       ),
     );
+
+    testWidgets('a snippet with a secret is not offered to a terminal pane', (
+      tester,
+    ) async {
+      await seedSnippet();
+      await db.snippetsDao.insertSnippet(
+        SnippetsCompanion.insert(
+          id: 'sec',
+          workspaceId: 'default',
+          title: 'Login',
+          code: r'login ${INPUT:token}',
+          variables: const Value('[{"name":"token","type":"secret"}]'),
+        ),
+      );
+      await pumpScreen(
+        tester,
+        _FakeFactory(),
+        section: AutomationSection.snippets,
+        openTerminal: true,
+      );
+
+      await tester.tap(find.byKey(const Key('snippet_run_sn')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('run_target_active_pane')), findsOneWidget);
+      Navigator.of(
+        tester.element(find.byKey(const Key('run_target_confirm'))),
+      ).pop();
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('snippet_run_sec')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('run_target_confirm')), findsOneWidget);
+      expect(find.byKey(const Key('run_target_active_pane')), findsNothing);
+    });
 
     testWidgets('runs on a host target and shows the result', (tester) async {
       await seedSnippet();

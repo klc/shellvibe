@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 
@@ -115,8 +116,34 @@ class AppDatabase extends _$AppDatabase {
           );
   }
 
+  /// Whether any row holds a secret encrypted under the vault key.
+  Future<bool> hasVaultSecrets() async {
+    final rows = await customSelect(
+      'SELECT 1 FROM ${identities.actualTableName} '
+      'WHERE password_encrypted IS NOT NULL '
+      'OR private_key_encrypted IS NOT NULL '
+      'OR passphrase_encrypted IS NOT NULL '
+      'UNION ALL SELECT 1 FROM ${vaultEnvVars.actualTableName} LIMIT 1',
+    ).get();
+    return rows.isNotEmpty;
+  }
+
+  /// Drops every secret encrypted under the vault key, for a vault reset:
+  /// identities keep everything but their secrets, environment variables
+  /// (nothing but a secret) go.
+  ///
+  /// Deliberately not journaled. Each device encrypts under its own key, so
+  /// the other devices' copies are still good, and must not be cleared too.
+  Future<void> discardVaultSecrets() => transaction(() async {
+    await customStatement(
+      'UPDATE ${identities.actualTableName} SET password_encrypted = NULL, '
+      'private_key_encrypted = NULL, passphrase_encrypted = NULL',
+    );
+    await customStatement('DELETE FROM ${vaultEnvVars.actualTableName}');
+  });
+
   @override
-  int get schemaVersion => 22;
+  int get schemaVersion => 23;
 
   @override
   MigrationStrategy get migration {
@@ -138,7 +165,12 @@ class AppDatabase extends _$AppDatabase {
           );
         }
       },
-      onUpgrade: (m, from, to) async {
+      // One transaction for the whole upgrade, the new version included. Drift
+      // runs these steps one statement at a time otherwise, and several of the
+      // early ones (`addColumn` before v16) cannot run twice: an upgrade cut
+      // short would leave their columns behind under the old version, and the
+      // next launch would fail on "duplicate column name" for good.
+      onUpgrade: (m, from, to) => transaction(() async {
         if (from < 2) {
           await m.addColumn(hosts, hosts.username);
         }
@@ -367,7 +399,36 @@ class AppDatabase extends _$AppDatabase {
             );
           }
         }
-      },
+        if (from < 23) {
+          // One grant per (client, host). Nothing enforced it, and a second
+          // row made every lookup of the pair throw. Keep the newest of any
+          // duplicates, then let the database refuse another. `createTable`
+          // does not create indexes, so this runs on every path up from below
+          // v23, the v8 one included. Skipped where the table is absent:
+          // every real database has had it since v8.
+          final grants = await customSelect(
+            'PRAGMA table_info("${mcpHostGrants.actualTableName}")',
+          ).get();
+          if (grants.isNotEmpty) {
+            await customStatement(
+              'DELETE FROM mcp_host_grants WHERE EXISTS ('
+              'SELECT 1 FROM mcp_host_grants g '
+              'WHERE g.client_id = mcp_host_grants.client_id '
+              'AND g.host_id = mcp_host_grants.host_id '
+              'AND (g.granted_at > mcp_host_grants.granted_at '
+              'OR (g.granted_at = mcp_host_grants.granted_at '
+              'AND g.rowid > mcp_host_grants.rowid)))',
+            );
+            await customStatement(
+              'CREATE UNIQUE INDEX IF NOT EXISTS mcp_host_grants_client_host '
+              'ON mcp_host_grants (client_id, host_id)',
+            );
+          }
+        }
+        // Inside the transaction, so the version moves with the steps or not
+        // at all. Drift writes it again afterwards, to the same value.
+        await customStatement('PRAGMA user_version = $to');
+      }),
     );
   }
 
@@ -506,16 +567,73 @@ class AppDatabase extends _$AppDatabase {
 
 LazyDatabase _openConnection() {
   return LazyDatabase(() async {
-    final dbFolder = await getApplicationDocumentsDirectory();
-    final file = File(p.join(dbFolder.path, 'shellvibe.sqlite'));
-    final legacyFile = File(p.join(dbFolder.path, 'terly2.sqlite'));
-    if (!await file.exists() && await legacyFile.exists()) {
-      try {
-        await legacyFile.rename(file.path);
-      } catch (_) {
-        return NativeDatabase.createInBackground(legacyFile);
-      }
-    }
+    final file = await resolveDatabaseFile(
+      supportDir: await getApplicationSupportDirectory(),
+      documentsDir: await getApplicationDocumentsDirectory(),
+    );
+    await _restrictToOwner(file);
     return NativeDatabase.createInBackground(file);
   });
+}
+
+/// The database file, in the application-support directory.
+///
+/// It used to live in Documents, which iCloud Drive's "Desktop & Documents"
+/// or OneDrive may sync: that sent an unencrypted host inventory, run history
+/// and audit log off the machine, and two machines syncing one SQLite file
+/// corrupt it. The first launch after the change moves it, once. A file
+/// already in application support is never overwritten. If the move cannot
+/// happen, the old file is opened where it is and the move is tried again on
+/// the next launch.
+@visibleForTesting
+Future<File> resolveDatabaseFile({
+  required Directory supportDir,
+  required Directory documentsDir,
+}) async {
+  final file = File(p.join(supportDir.path, 'shellvibe.sqlite'));
+  if (await file.exists()) return file;
+  // `terly2` is the name before the rename to ShellVibe.
+  for (final name in const ['shellvibe.sqlite', 'terly2.sqlite']) {
+    final legacy = File(p.join(documentsDir.path, name));
+    if (!await legacy.exists()) continue;
+    return await _moveDatabase(legacy, file) ? file : legacy;
+  }
+  return file;
+}
+
+/// Moves [from] to [to], or leaves both alone and returns false.
+///
+/// Only a cleanly closed database moves. A rollback journal or WAL beside it
+/// holds changes that belong to it, and moving one file without the other
+/// could lose or corrupt them; SQLite settles them when it opens the file in
+/// place, and the next launch moves it.
+Future<bool> _moveDatabase(File from, File to) async {
+  for (final suffix in const ['-journal', '-wal', '-shm']) {
+    if (await File('${from.path}$suffix').exists()) return false;
+  }
+  try {
+    await to.parent.create(recursive: true);
+    if (await to.exists()) return false;
+    // A rename, so the file is never half copied. It fails across volumes,
+    // which then keeps the old location.
+    await from.rename(to.path);
+    return true;
+  } on FileSystemException {
+    return false;
+  }
+}
+
+/// Makes [file] readable by its owner only, where file modes exist.
+///
+/// Created first if missing, so SQLite opens a file that already has the
+/// mode, and gives its journal the same one. Best effort: the database
+/// opens either way.
+Future<void> _restrictToOwner(File file) async {
+  if (!(Platform.isMacOS || Platform.isLinux)) return;
+  try {
+    if (!await file.exists()) await file.create(recursive: true);
+    await Process.run('chmod', ['600', file.path]);
+  } catch (_) {
+    // Hardening only; the directory is already the user's own.
+  }
 }

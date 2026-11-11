@@ -277,9 +277,17 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
       ],
     );
 
+    // A remote forward runs the other way: the server listens on remotePort
+    // and connections come back to remoteHost:localPort on this side.
     final route = _TunnelRoute(
-      from: '127.0.0.1:${rule.localPort}',
-      to: isDynamic ? 'socks5 bridge' : '${rule.remoteHost}:${rule.remotePort}',
+      from: rule.type == 'remote'
+          ? 'remote:${rule.remotePort}'
+          : '127.0.0.1:${rule.localPort}',
+      to: isDynamic
+          ? 'socks5 bridge'
+          : rule.type == 'remote'
+          ? '${rule.remoteHost ?? '127.0.0.1'}:${rule.localPort}'
+          : '${rule.remoteHost}:${rule.remotePort}',
       accent: accent,
       lit: isActive || hasError,
     );

@@ -47,7 +47,9 @@ class TerminalMoshBridge {
   /// jump ahead of output still queued here.
   late final CoalescingTerminalWriter _writer =
       writerOverride ??
-      CoalescingTerminalWriter(PacedTerminalWriter(terminal));
+      CoalescingTerminalWriter(
+        PacedTerminalWriter(terminal, waitForFrame: nextFrameOrTimeout),
+      );
 
   /// Replaces the write stack so a test can drive it without a frame pipeline.
   ///
@@ -72,7 +74,7 @@ class TerminalMoshBridge {
 
   void _bind() {
     // 1. User input from xterm -> Mosh input queue.
-    terminal.onOutput = (String data) {
+    void send(String data) {
       if (_isDisposed) return;
       try {
         final inputStateNum = session.send(utf8.encode(data));
@@ -82,7 +84,14 @@ class TerminalMoshBridge {
       } catch (e) {
         _writer.write('\r\n\x1b[33m[Mosh write error: $e]\x1b[0m\r\n');
       }
-    };
+    }
+
+    terminal.onOutput = send;
+    // Replies the terminal makes on its own (device attributes, cursor
+    // position, focus reports) go straight to this session. Left to fall back
+    // on onOutput they would pass through broadcast and reach every other
+    // selected pane as if typed there.
+    terminal.onReply = send;
 
     // 2. Host output -> xterm. Decoded through the stream transformer rather
     // than per chunk: a screen diff can split a multi-byte sequence across
@@ -169,6 +178,7 @@ class TerminalMoshBridge {
     _isDisposed = true;
 
     terminal.onOutput = null;
+    terminal.onReply = null;
     terminal.onResize = null;
 
     await _stdoutSubscription?.cancel();

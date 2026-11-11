@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:isolate';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/core/network/device_link/device_link_identity.dart';
@@ -38,6 +39,26 @@ void main() {
     () {
       final identity = DeviceLinkIdentity.generate();
 
+      expect(() => identity.createServerSecurityContext(), returnsNormally);
+    },
+    timeout: const Timeout(Duration(seconds: 20)),
+  );
+
+  test(
+    'can be generated off the UI isolate and handed back',
+    () async {
+      // The desktop host generates it with Isolate.run, so it has to survive
+      // the trip back intact.
+      final identity = await Isolate.run(DeviceLinkIdentity.generate);
+
+      expect(identity.spkiSha256Base64, isNotEmpty);
+      expect(
+        DeviceLinkIdentity.matchesSpkiPin(
+          _certificateDer(identity.certificatePem),
+          identity.spkiSha256Base64,
+        ),
+        isTrue,
+      );
       expect(() => identity.createServerSecurityContext(), returnsNormally);
     },
     timeout: const Timeout(Duration(seconds: 20)),

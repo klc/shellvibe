@@ -458,6 +458,11 @@ class McpClients extends Table {
 }
 
 /// 14. MCP Host Grants — (client x host) access grants.
+@TableIndex(
+  name: 'mcp_host_grants_client_host',
+  columns: {#clientId, #hostId},
+  unique: true,
+)
 class McpHostGrants extends Table {
   TextColumn get id => text()();
   TextColumn get clientId =>

@@ -22,7 +22,7 @@ enum SettingsSection {
   security(
     'Security',
     LucideIcons.shieldCheck,
-    'Clipboard, host keys and biometrics.',
+    'Clipboard, host keys and the vault.',
   ),
   deviceLink(
     'Device Link',

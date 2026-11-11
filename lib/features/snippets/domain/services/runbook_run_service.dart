@@ -97,8 +97,9 @@ class RunHandle {
 
   RunHandle(this.result, this._cancel, this._approve);
 
-  /// Continues approval step [stepId] for the whole run: every host waiting at
-  /// it is released, and hosts that reach it later pass straight through.
+  /// Continues approval step [stepId]: every host waiting at it is released.
+  /// In a parallel run hosts that reach it later pass straight through; in a
+  /// rolling run each later host stops at it again.
   void approve(String stepId) => _approve(stepId);
 
   /// Interrupts and closes every open session and marks unfinished steps
@@ -178,11 +179,16 @@ class RunbookRunService {
     final steps = runbook.orderedSteps;
     final cancelSignal = Completer<void>();
     final openSessions = <RemoteCommandSession>{};
-    // One decision per approval step for the whole run: the first Continue
-    // releases every host waiting at it and pre-approves it for the rest.
-    final approvals = <String, Completer<void>>{};
-    Completer<void> approvalFor(String stepId) =>
-        approvals.putIfAbsent(stepId, Completer<void>.new);
+    // Parallel: one decision per approval step for the whole run; the first
+    // Continue releases every host waiting at it and pre-approves it for the
+    // rest. Rolling: one per host, so each wave of a canary stops at the gate
+    // again instead of riding the first host's Continue.
+    final approvals = <(String?, String), Completer<void>>{};
+    Completer<void> approvalFor(String hostId, String stepId) =>
+        approvals.putIfAbsent((
+          strategy.isRolling ? hostId : null,
+          stepId,
+        ), Completer<void>.new);
     var cancelled = false;
     var rollingStopped = false;
 
@@ -267,11 +273,12 @@ class RunbookRunService {
           awaitApproval: (step) async {
             // Already approved for the run: no wait, and no flicker of a
             // banner for a host that never stops.
-            if (!approvalFor(step.id).isCompleted) {
+            final gate = approvalFor(host.id, step.id);
+            if (!gate.isCompleted) {
               emit(StepStatusEvent(host.id, step.id, RunStepStatus.waiting));
             }
             final approved = await Future.any<bool>([
-              approvalFor(step.id).future.then((_) => true),
+              gate.future.then((_) => true),
               cancelSignal.future.then((_) => false),
             ]);
             return approved;
@@ -337,7 +344,14 @@ class RunbookRunService {
     }
 
     void approve(String stepId) {
-      final gate = approvalFor(stepId);
+      if (strategy.isRolling) {
+        // Only the hosts already waiting at it: a later wave asks again.
+        for (final MapEntry(key: (_, id), value: gate) in approvals.entries) {
+          if (id == stepId && !gate.isCompleted) gate.complete();
+        }
+        return;
+      }
+      final gate = approvalFor('', stepId);
       if (!gate.isCompleted) gate.complete();
     }
 

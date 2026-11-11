@@ -21,13 +21,15 @@ typedef TemplateIdentityResolver =
 /// Exists so replay ordering can be tested without opening real SSH sessions;
 /// [LiveTemplateRunnerTarget] is the production implementation.
 abstract class TemplateRunnerTarget {
-  /// Id of the pane created by the most recent open/split call — every one of
-  /// them focuses the pane it created.
+  /// Ids of every pane now in the tab list.
   ///
-  /// It is read as soon as the call returns, before its future completes: the
-  /// pane is in the tab list and focused from the start, and the future only
-  /// tracks the connection that pane is making.
-  String? get activeTabId;
+  /// The runner reads it around each open/split call: the one new id is the
+  /// pane that call created. It is read as soon as the call returns, before
+  /// its future completes: the pane is in the tab list from the start, and
+  /// the future only tracks the connection that pane is making. (Not the
+  /// focused pane: the user can close or focus another one while a
+  /// credentials prompt is open.)
+  List<String> get tabIds;
 
   /// Opens a tab for [host]. The returned future completes once the
   /// connection attempt settles, however it went.
@@ -130,6 +132,11 @@ class TemplateRunner {
           ? null
           : panes.where((p) => p.id == pane.parentPaneId).firstOrNull;
 
+      if (pane.parentPaneId != null && parentPane == null) {
+        skip(pane, '$label: the pane it splits from is not in the template.');
+        continue;
+      }
+
       // A pane whose parent never came up has nothing to split, so the whole
       // subtree drops out with a single warning for the parent.
       if (pane.parentPaneId != null &&
@@ -166,6 +173,15 @@ class TemplateRunner {
         continue;
       }
 
+      // The credentials prompt above may have been open a while: the pane to
+      // split may have been closed meanwhile.
+      if (pane.parentPaneId != null &&
+          !target.tabIds.contains(liveIds[pane.parentPaneId])) {
+        skip(pane, '$label: the pane it splits from was closed.');
+        continue;
+      }
+
+      final before = target.tabIds.toSet();
       if (pane.parentPaneId == null) {
         if (host != null) {
           track(
@@ -192,7 +208,8 @@ class TemplateRunner {
         );
       }
 
-      final liveId = target.activeTabId;
+      final created = target.tabIds.where((id) => !before.contains(id));
+      final liveId = created.length == 1 ? created.single : null;
       if (liveId == null) {
         skip(pane, '$label: could not be opened.');
         continue;

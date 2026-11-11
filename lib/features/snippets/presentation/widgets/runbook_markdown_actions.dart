@@ -8,6 +8,7 @@ import '../../../../app/widgets/adaptive_modal.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../data/services/runbook_file_service.dart';
 import '../../domain/models/runbook_model.dart';
+import '../../domain/models/runbook_step_model.dart';
 import '../../domain/services/runbook_markdown.dart';
 import '../notifiers/runbooks_notifier.dart';
 import '../notifiers/snippets_notifier.dart';
@@ -64,16 +65,26 @@ Future<void> importRunbookMarkdown(
     builder: (_) => RunbookImportDialog(workspaceId: workspaceId),
   );
   if (imported == null || !context.mounted) return;
-  await ref
-      .read(runbooksProvider.notifier)
-      .addRunbook(
-        workspaceId: imported.workspaceId,
-        title: imported.title,
-        description: imported.description,
-        steps: imported.steps,
-        variables: imported.variables,
-        tags: imported.tags,
-      );
+  try {
+    await ref
+        .read(runbooksProvider.notifier)
+        .addRunbook(
+          workspaceId: imported.workspaceId,
+          title: imported.title,
+          description: imported.description,
+          steps: imported.steps,
+          variables: imported.variables,
+          tags: imported.tags,
+        );
+  } catch (e) {
+    if (!context.mounted) return;
+    ShadToaster.maybeOf(context)?.show(
+      ShadToast.destructive(
+        description: Text('Could not import "${imported.title}": $e'),
+      ),
+    );
+    return;
+  }
   if (!context.mounted) return;
   ShadToaster.maybeOf(context)?.show(
     ShadToast(
@@ -109,6 +120,21 @@ class _RunbookImportDialogState extends ConsumerState<RunbookImportDialog> {
   final _text = TextEditingController();
   String? _error;
 
+  /// What Import would create from the text as it stands, so the steps are
+  /// seen before anything is saved. Null while the text does not parse.
+  RunbookModel? _preview;
+
+  void _refreshPreview() {
+    try {
+      _preview = RunbookMarkdown.import(
+        _text.text,
+        workspaceId: widget.workspaceId,
+      );
+    } on RunbookMarkdownException {
+      _preview = null;
+    }
+  }
+
   @override
   void dispose() {
     _text.dispose();
@@ -124,6 +150,7 @@ class _RunbookImportDialogState extends ConsumerState<RunbookImportDialog> {
       setState(() {
         _text.text = contents;
         _error = null;
+        _refreshPreview();
       });
     } catch (e) {
       if (mounted) setState(() => _error = 'Could not read that file: $e');
@@ -187,10 +214,33 @@ class _RunbookImportDialogState extends ConsumerState<RunbookImportDialog> {
             minHeight: 160,
             maxHeight: 280,
             placeholder: const Text('```sh\nuptime\n```'),
-            onChanged: (_) {
-              if (_error != null) setState(() => _error = null);
-            },
+            onChanged: (_) => setState(() {
+              _error = null;
+              _refreshPreview();
+            }),
           ),
+          if (_preview case final preview?)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 120),
+                child: SingleChildScrollView(
+                  key: const Key('runbook_import_preview'),
+                  child: Text(
+                    [
+                      '"${preview.title}" will have '
+                          '${preview.steps.length} '
+                          '${preview.steps.length == 1 ? 'step' : 'steps'}:',
+                      for (final step in preview.steps)
+                        '${step.stepOrder}. '
+                            '${step.kind == StepKind.approval ? 'Approval: ' : ''}'
+                            '${step.command.split('\n').first}',
+                    ].join('\n'),
+                    style: TextStyle(color: tokens.textMuted, fontSize: 11),
+                  ),
+                ),
+              ),
+            ),
           if (_error != null)
             Padding(
               padding: const EdgeInsets.only(top: 8),

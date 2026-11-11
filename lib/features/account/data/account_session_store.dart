@@ -46,7 +46,7 @@ final class AccountSessionStore {
       userId: userId,
       deviceId: deviceId,
       email: await readEmail() ?? '',
-      name: '',
+      name: await storage.read(key: SecureStorageKeys.accountName) ?? '',
     );
   }
 
@@ -68,6 +68,10 @@ final class AccountSessionStore {
       key: SecureStorageKeys.accountEmail,
       value: session.email,
     );
+    await storage.write(
+      key: SecureStorageKeys.accountName,
+      value: session.name,
+    );
   }
 
   /// Drops the token and user identity, keeping the device id.
@@ -77,6 +81,7 @@ final class AccountSessionStore {
   Future<void> clearSession() async {
     await storage.delete(key: SecureStorageKeys.accountToken);
     await storage.delete(key: SecureStorageKeys.accountUserId);
+    await storage.delete(key: SecureStorageKeys.accountName);
   }
 
   /// Forgets everything, including the device identity.

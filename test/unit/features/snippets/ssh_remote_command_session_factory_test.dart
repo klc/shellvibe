@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shellvibe/core/mcp/shell/persistent_shell_session.dart';
 import 'package:shellvibe/core/network/ssh_session_manager.dart';
 import 'package:shellvibe/features/hosts/domain/models/host_model.dart';
 import 'package:shellvibe/features/mcp/data/mcp_host_connector.dart';
@@ -18,15 +19,16 @@ class _ChannelSession implements SSHSession {
   final FakeShellChannel fake;
 
   @override
-  Stream<Uint8List> get stdout =>
-      fake.stdout.map((b) => Uint8List.fromList(b));
+  Stream<Uint8List> get stdout => fake.stdout.map((b) => Uint8List.fromList(b));
 
   @override
-  Stream<Uint8List> get stderr =>
-      fake.stderr.map((b) => Uint8List.fromList(b));
+  Stream<Uint8List> get stderr => fake.stderr.map((b) => Uint8List.fromList(b));
 
   @override
-  Future<void> get done => Completer<void>().future;
+  Future<void> get done => fake.done;
+
+  @override
+  int? get exitCode => fake.exitStatus;
 
   @override
   void write(Uint8List data) => fake.write(data);
@@ -45,19 +47,14 @@ class _ShellManager implements SSHSessionManager {
   _ShellManager(this.first);
 
   final FakeShellChannel first;
+  final List<String> commands = [];
   int opened = 0;
 
   @override
-  Future<SSHSession> openShell({
-    String terminalType = 'xterm-256color',
-    int width = 80,
-    int height = 24,
-    int pixelWidth = 0,
-    int pixelHeight = 0,
-    Map<String, String>? environment,
-    bool requestPty = true,
-  }) async =>
-      _ChannelSession(opened++ == 0 ? first : FakeShellChannel());
+  Future<SSHSession> openExec(String command) async {
+    commands.add(command);
+    return _ChannelSession(opened++ == 0 ? first : FakeShellChannel());
+  }
 
   @override
   Future<void> close() async {}
@@ -91,6 +88,14 @@ class _ThrowingConnector implements McpHostConnector {
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
+
+final _host = HostModel(
+  id: 'h',
+  workspaceId: 'w',
+  label: 'box',
+  hostname: 'box.example.com',
+  createdAt: DateTime(2026),
+);
 
 void main() {
   test('rejects local hosts before touching the network', () async {
@@ -147,6 +152,75 @@ void main() {
         ),
       ),
     );
+    await session.close();
+  }, timeout: const Timeout(Duration(seconds: 30)));
+
+  test('opens /bin/sh on an exec channel, through the login shell', () async {
+    final manager = _ShellManager(FakeShellChannel());
+    final factory = SshRemoteCommandSessionFactory(
+      connector: _ShellConnector(manager),
+    );
+    final session = await factory.open(_host);
+
+    expect(manager.commands, [PersistentShellSession.remoteCommand]);
+    await session.close();
+  });
+
+  test('a step that exits the shell returns its exit status at once', () async {
+    final channel = FakeShellChannel();
+    final factory = SshRemoteCommandSessionFactory(
+      connector: _ShellConnector(_ShellManager(channel)),
+    );
+    final session = await factory.open(_host);
+
+    channel.autoRespond = false;
+    final run = session.run(
+      'systemctl restart app; exit 0',
+      const Duration(seconds: 30),
+    );
+    await pumpEventQueue();
+    channel.emitStdout('restarted\n');
+    await channel.endRemotely(0);
+
+    expect(await run, ('restarted\n', 0));
+    // The next step runs in the reopened shell.
+    final (output, exitCode) = await session.run(
+      'echo next',
+      const Duration(seconds: 5),
+    );
+    expect(exitCode, 0);
+    expect(output, isEmpty);
+    await session.close();
+  });
+
+  test('after a hung step resets the shell, later steps are not run', () async {
+    final channel = FakeShellChannel();
+    final manager = _ShellManager(channel);
+    final factory = SshRemoteCommandSessionFactory(
+      connector: _ShellConnector(manager),
+    );
+    final session = await factory.open(_host);
+
+    channel.autoRespond = false;
+    await expectLater(
+      session.run('sleep 999', const Duration(milliseconds: 50)),
+      throwsA(isA<TimeoutException>()),
+    );
+
+    // A retry, or a step after a "continue" failure, would run with the
+    // earlier `cd`/exports gone.
+    final opened = manager.opened;
+    await expectLater(
+      session.run('rm -rf "\$REL"/tmp', const Duration(seconds: 5)),
+      throwsA(
+        isA<RemoteCommandException>().having(
+          (e) => e.message,
+          'message',
+          contains('reset'),
+        ),
+      ),
+    );
+    expect(manager.opened, opened);
     await session.close();
   }, timeout: const Timeout(Duration(seconds: 30)));
 }

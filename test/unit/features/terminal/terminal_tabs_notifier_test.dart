@@ -1498,6 +1498,50 @@ void main() {
       // this pane takes no typing at all.
       expect(container.read(terminalTabsProvider).selectedPaneIds, isEmpty);
     });
+
+    test('a close callback that throws does not stop the cascade', () async {
+      final notifier = container.read(terminalTabsProvider.notifier);
+      var childClosed = false;
+      notifier.registerDeviceLinkSession(
+        TerminalTabSession(
+          id: 'root',
+          title: 'root',
+          sessionType: TerminalSessionType.ssh,
+          terminal: Terminal(maxLines: 100),
+        ),
+        onClose: () => throw StateError('peer gone'),
+      );
+      notifier.registerDeviceLinkSession(
+        TerminalTabSession(
+          id: 'child',
+          title: 'child',
+          sessionType: TerminalSessionType.ssh,
+          terminal: Terminal(maxLines: 100),
+          splitParentId: 'root',
+          splitDirection: Axis.horizontal,
+        ),
+        onClose: () => childClosed = true,
+      );
+
+      await notifier.closeTab('root');
+
+      expect(childClosed, isTrue);
+      expect(container.read(terminalTabsProvider).tabs, isEmpty);
+    });
+
+    test('an AI tab cannot be split', () {
+      final notifier = container.read(terminalTabsProvider.notifier);
+      final tabId = notifier.openMcpTab(
+        mcpSessionId: 'mcp-1',
+        title: 'prod-web-01',
+        onClose: () {},
+      );
+
+      // Its session ending closes the tab with every pane in it, so a pane
+      // of the user's inside it would die with the agent's.
+      expect(notifier.splitTab(tabId), isNull);
+      expect(container.read(terminalTabsProvider).tabs.single.id, tabId);
+    });
   });
 
   group('Local shell environment', () {

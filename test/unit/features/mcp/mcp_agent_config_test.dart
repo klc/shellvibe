@@ -154,4 +154,35 @@ void main() {
       McpAgentConfigStatus.installed,
     );
   }, skip: Platform.isWindows);
+
+  test(
+    'installing writes through a symlink and leaves no temp file behind',
+    () async {
+      final dir = await Directory.systemTemp.createTemp('mcp_agent_config');
+      addTearDown(() => dir.delete(recursive: true));
+      final real = File('${dir.path}/dotfiles/claude.json')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('{"theme": "dark"}');
+      final link = Link('${dir.path}/.claude.json')..createSync(real.path);
+
+      await installMcpAgentServer(McpAgentApp.claudeCode, link.path, _bridge);
+
+      expect(FileSystemEntity.isLinkSync(link.path), isTrue);
+      final written = jsonDecode(real.readAsStringSync()) as Map;
+      expect(written['theme'], 'dark');
+      expect(
+        mcpAgentConfigStatus(
+          McpAgentApp.claudeCode,
+          real.readAsStringSync(),
+          _bridge,
+        ),
+        McpAgentConfigStatus.installed,
+      );
+      expect(
+        dir.listSync(recursive: true).map((e) => e.path),
+        everyElement(isNot(contains('shellvibe-tmp'))),
+      );
+    },
+    skip: Platform.isWindows,
+  );
 }

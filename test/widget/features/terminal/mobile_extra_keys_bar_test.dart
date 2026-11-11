@@ -195,6 +195,33 @@ void main() {
       expect(received, equals(['\x1f']));
     });
 
+    testWidgets('Arrow keys follow cursor key mode and keep the modifier', (
+      tester,
+    ) async {
+      final terminal = Terminal();
+      final received = <String>[];
+      terminal.onOutput = received.add;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: MobileExtraKeysBar(terminal: terminal)),
+        ),
+      );
+
+      await tester.tap(find.byKey(const Key('key_arrow_up')));
+      // htop, nano and mc switch to application cursor keys (DECCKM) and
+      // only understand ESC O A from then on.
+      terminal.write('\x1b[?1h');
+      await tester.tap(find.byKey(const Key('key_arrow_up')));
+      terminal.write('\x1b[?1l');
+      await tester.tap(find.byKey(const Key('key_ctrl')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('key_arrow_left')));
+      await tester.pump();
+
+      expect(received, equals(['\x1b[A', '\x1bOA', '\x1b[1;5D']));
+    });
+
     testWidgets('Sticky Alt prepends ESC to keyboard-typed char', (
       tester,
     ) async {

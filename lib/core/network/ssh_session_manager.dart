@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../shared/database/app_database.dart';
 import '../../shared/database/daos/known_hosts_dao.dart';
+import 'socket_channel_pipe.dart';
 
 /// Upper bound on how long the handshake waits for the user to answer the
 /// host key prompt, so an unanswered dialog cannot hold the socket forever.
@@ -156,9 +157,10 @@ class SSHSessionManager {
     // SSHSocket, so it drops straight in).
     try {
       if (viaClient != null) {
-        _socket = await viaClient
-            .forwardLocal(config.hostname, config.port)
-            .timeout(config.timeout);
+        _socket = await openForwardChannel(
+          viaClient.forwardLocal(config.hostname, config.port),
+          timeout: config.timeout,
+        );
       } else {
         _socket = await SSHSocket.connect(
           config.hostname,
@@ -266,8 +268,12 @@ class SSHSessionManager {
           port: config.port,
         );
       }
+      // Only a rejected login is an authentication failure; a key exchange
+      // or cipher mismatch, a dropped socket or a timeout must not read as a
+      // wrong password.
+      final stage = e is SSHAuthFailError ? 'authentication' : 'connection';
       throw Exception(
-        'SSH authentication failed for ${config.username}@${config.hostname}: $e',
+        'SSH $stage failed for ${config.username}@${config.hostname}: $e',
       );
     }
   }
@@ -449,6 +455,18 @@ class SSHSessionManager {
           : null,
       environment: environment,
     );
+  }
+
+  /// Runs [command] on a PTY-less exec channel and returns its session.
+  ///
+  /// For programmatic callers (the MCP and runbook shells) that need a known
+  /// program on the other end rather than the user's login shell.
+  Future<SSHSession> openExec(String command) async {
+    final activeClient = _client;
+    if (activeClient == null || !_isConnected || activeClient.isClosed) {
+      throw StateError('SSHClient is not connected. Call connect() first.');
+    }
+    return await activeClient.execute(command);
   }
 
   /// Sends a keep-alive ping to the remote server.

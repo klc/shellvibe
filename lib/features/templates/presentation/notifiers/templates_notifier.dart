@@ -85,13 +85,16 @@ class TemplatesNotifier extends _$TemplatesNotifier {
 
   /// Runs [op], then reloads the list in place: a save, edit or delete must
   /// not blank the list to a spinner on the way through.
+  ///
+  /// A failed [op] throws to the caller, which has to say the save did not
+  /// happen, and leaves the list as it was.
   Future<void> _mutate(Future<void> Function() op) async {
-    state = await AsyncValue.guard(() async {
-      await op();
-      return ref
+    await op();
+    state = await AsyncValue.guard(
+      () => ref
           .read(templatesRepositoryProvider)
-          .getTemplatesByWorkspace(ref.read(activeWorkspaceIdProvider));
-    });
+          .getTemplatesByWorkspace(ref.read(activeWorkspaceIdProvider)),
+    );
   }
 
   Future<void> updateTemplate(TemplateModel template) => _mutate(
@@ -145,7 +148,9 @@ class TemplatesNotifier extends _$TemplatesNotifier {
       template,
       target: LiveTemplateRunnerTarget(
         notifier: notifier,
-        readActiveTabId: () => ref.read(terminalTabsProvider).activeTabId,
+        readTabIds: () => [
+          for (final tab in ref.read(terminalTabsProvider).tabs) tab.id,
+        ],
         onHostKeyPrompt: onHostKeyPrompt,
       ),
       hostsById: hostsById,

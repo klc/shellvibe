@@ -16,6 +16,23 @@ class VaultLockedException implements Exception {
       'VaultLockedException: the vault is locked. Unlock it with the master password first.';
 }
 
+/// Thrown when the vault key is gone from the keychain while what it
+/// encrypted is still here.
+///
+/// A keystore reset, a device-to-device transfer that carried the database
+/// but not the key, or a keychain item deleted by hand all end here. A new
+/// key would open none of the existing secrets, so none is made: the user
+/// resets the vault instead, knowingly.
+class VaultKeyLostException implements Exception {
+  const VaultKeyLostException();
+
+  @override
+  String toString() =>
+      'VaultKeyLostException: the vault key is missing from the keychain, '
+      'but secrets encrypted with it are still stored. Reset the vault to '
+      'start over.';
+}
+
 /// Owns the vault Data Encryption Key (DEK) and its two protection modes.
 ///
 /// The DEK is a random 256-bit key that encrypts every identity secret. It is
@@ -34,6 +51,10 @@ class VaultKeyService {
   final EncryptionEngine encryptionEngine;
   final SecureStorageService secureStorageService;
 
+  /// Whether the database holds anything encrypted under the DEK. Asked only
+  /// when the keychain has no key, to tell a first run from a lost key.
+  final Future<bool> Function()? hasEncryptedData;
+
   SecretKey? _unlockedDek;
   int _lifecycleGeneration = 0;
 
@@ -44,6 +65,7 @@ class VaultKeyService {
   VaultKeyService({
     required this.encryptionEngine,
     required this.secureStorageService,
+    this.hasEncryptedData,
   });
 
   /// True when a master password protects the DEK.
@@ -51,13 +73,34 @@ class VaultKeyService {
     return secureStorageService.containsKey(key: SecureStorageKeys.masterSalt);
   }
 
+  /// True when the key that opens this vault's data is gone. See
+  /// [VaultKeyLostException].
+  Future<bool> isKeyLost() async {
+    if (await isMasterPasswordConfigured()) {
+      return !await secureStorageService.containsKey(
+        key: SecureStorageKeys.wrappedDek,
+      );
+    }
+    if (await secureStorageService.getMasterKey() != null) return false;
+    return _plainKeyLost();
+  }
+
+  /// No plaintext key, yet something says there was one: a wrapped copy
+  /// whose salt went missing, or encrypted rows.
+  Future<bool> _plainKeyLost() async =>
+      await secureStorageService.containsKey(
+        key: SecureStorageKeys.wrappedDek,
+      ) ||
+      (await hasEncryptedData?.call() ?? false);
+
   /// True when the vault is protected and currently unlocked in memory.
   bool get isUnlockedInMemory => _unlockedDek != null;
 
   /// Returns the DEK, creating it on first use in unprotected mode.
   ///
   /// Throws [VaultLockedException] when a master password is configured and the
-  /// vault has not been unlocked yet.
+  /// vault has not been unlocked yet, and [VaultKeyLostException] when there
+  /// is no key but there is data encrypted under one.
   Future<SecretKey> getDek() async {
     if (await isMasterPasswordConfigured()) {
       final dek = _unlockedDek;
@@ -85,6 +128,7 @@ class VaultKeyService {
   Future<SecretKey> _readOrCreatePlainDek() async {
     final existing = await secureStorageService.getMasterKey();
     if (existing != null) return SecretKey(existing);
+    if (await _plainKeyLost()) throw const VaultKeyLostException();
 
     final generated = encryptionEngine.generateKey();
     await secureStorageService.saveMasterKey(generated);
@@ -106,9 +150,11 @@ class VaultKeyService {
     final dekBytes = await dek.extractBytes();
 
     final salt = encryptionEngine.generateSalt();
+    final params = encryptionEngine.kdfParams;
     final kek = await encryptionEngine.deriveMasterKeyInBackground(
       masterPassword: masterPassword,
       salt: salt,
+      params: params,
     );
     final wrapped = await encryptionEngine.encrypt(
       plaintext: base64.encode(dekBytes),
@@ -119,7 +165,25 @@ class VaultKeyService {
       key: SecureStorageKeys.wrappedDek,
       value: wrapped,
     );
+    await secureStorageService.write(
+      key: SecureStorageKeys.masterKdf,
+      value: jsonEncode(params.toJson()),
+    );
+    // The salt is the mode flag, so it goes last.
     await secureStorageService.saveMasterSalt(salt);
+
+    // The plaintext copy is the only way back, so before it goes, open what
+    // was just stored the way the next launch will: read back and derived
+    // again from the password as typed. A write the keychain dropped or
+    // garbled must not cost the vault.
+    final reopened = await _unwrap(masterPassword);
+    if (reopened == null || !constantTimeEquals(reopened, dekBytes)) {
+      await _forgetWrappedKey();
+      throw StateError(
+        'The master password could not be verified. Nothing was changed.',
+      );
+    }
+
     // The plaintext copy must go away, otherwise the master password is cosmetic.
     await secureStorageService.deleteMasterKey();
 
@@ -133,15 +197,40 @@ class VaultKeyService {
   /// Unwraps the DEK with [masterPassword]. Returns false on a wrong password.
   Future<bool> unlock(String masterPassword) async {
     final generation = _lifecycleGeneration;
+    final dek = await _unwrap(masterPassword);
+    if (dek == null || generation != _lifecycleGeneration) return false;
+    _unlockedDek = SecretKey(dek);
+
+    // A setup that stopped between wrapping the key and deleting the
+    // plaintext copy left that copy behind, and nothing else removes it.
+    if (await secureStorageService.containsKey(
+      key: SecureStorageKeys.masterKey,
+    )) {
+      await secureStorageService.deleteMasterKey();
+    }
+    return true;
+  }
+
+  /// The DEK as stored under [masterPassword], or null when the password is
+  /// wrong or nothing is stored.
+  Future<Uint8List?> _unwrap(String masterPassword) async {
     final salt = await secureStorageService.getMasterSalt();
     final wrapped = await secureStorageService.read(
       key: SecureStorageKeys.wrappedDek,
     );
-    if (salt == null || wrapped == null) return false;
+    if (salt == null || wrapped == null) return null;
+    final storedParams = await secureStorageService.read(
+      key: SecureStorageKeys.masterKdf,
+    );
 
     final kek = await encryptionEngine.deriveMasterKeyInBackground(
       masterPassword: masterPassword,
       salt: salt,
+      params: storedParams == null
+          ? Argon2Params.legacy
+          : Argon2Params.fromJson(
+              jsonDecode(storedParams) as Map<String, dynamic>,
+            ),
     );
 
     try {
@@ -149,13 +238,19 @@ class VaultKeyService {
         encryptedBase64: wrapped,
         secretKey: kek,
       );
-      if (generation != _lifecycleGeneration) return false;
-      _unlockedDek = SecretKey(Uint8List.fromList(base64.decode(dekBase64)));
-      return true;
+      return Uint8List.fromList(base64.decode(dekBase64));
     } on CryptoException {
       // AES-GCM MAC failure == wrong password.
-      return false;
+      return null;
     }
+  }
+
+  /// Drops the wrapped key, salt first: the salt is the mode flag, so a
+  /// crash part-way leaves plain mode with a harmless leftover.
+  Future<void> _forgetWrappedKey() async {
+    await secureStorageService.deleteMasterSalt();
+    await secureStorageService.delete(key: SecureStorageKeys.wrappedDek);
+    await secureStorageService.delete(key: SecureStorageKeys.masterKdf);
   }
 
   /// Drops the unwrapped DEK from memory.
@@ -172,9 +267,16 @@ class VaultKeyService {
     if (dek == null) throw const VaultLockedException();
 
     await secureStorageService.saveMasterKey(await dek.extractBytes());
-    // The salt is the mode flag: drop it first. A crash after that leaves
-    // only a harmless stale wrapped key in plain mode.
-    await secureStorageService.deleteMasterSalt();
-    await secureStorageService.delete(key: SecureStorageKeys.wrappedDek);
+    await _forgetWrappedKey();
+  }
+
+  /// Forgets the DEK in every form it is stored in, for a vault reset.
+  ///
+  /// Whatever it encrypted can never be opened again; the caller discards
+  /// those secrets. The next [getDek] creates a new key.
+  Future<void> reset() async {
+    lock();
+    await _forgetWrappedKey();
+    await secureStorageService.deleteMasterKey();
   }
 }

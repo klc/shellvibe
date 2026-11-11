@@ -177,11 +177,24 @@ final class DeviceLinkServer {
   final DeviceLinkPairedDeviceRemover? pairedDeviceRemover;
   final DeviceLinkPairingCompletedCallback? onPairingCompleted;
 
+  /// How long a connection may stay open before it says hello.
+  final Duration helloTimeout;
+
+  /// Most WebSocket connections one remote address may hold at a time.
+  ///
+  /// Anything on the LAN can complete the TLS handshake, so this bounds what
+  /// a peer that never pairs can hold open. A phone needs one, plus a stale
+  /// one or two while a dropped socket waits for its ping timeout.
+  final int maxConnectionsPerAddress;
+
   late final DeviceLinkPairingTokenStore pairingTokens =
       DeviceLinkPairingTokenStore(ttl: pairingTokenTtl);
 
   HttpServer? _httpServer;
   final Set<DeviceLinkServerConnection> _connections = {};
+
+  /// Open and upgrading connections per remote address.
+  final Map<String, int> _connectionsPerAddress = {};
 
   /// Devices whose session was ended here. Their stored-secret reconnects are
   /// refused until they pair again: a phone that was asleep never got the
@@ -202,6 +215,8 @@ final class DeviceLinkServer {
     required this.pairedDevicePersister,
     this.pairedDeviceRemover,
     this.onPairingCompleted,
+    this.helloTimeout = const Duration(seconds: 10),
+    this.maxConnectionsPerAddress = 8,
   }) : bindAddress = bindAddress ?? InternetAddress.anyIPv4;
 
   bool get isRunning => _httpServer != null;
@@ -290,30 +305,53 @@ final class DeviceLinkServer {
       return;
     }
 
+    final address = request.connectionInfo?.remoteAddress.address ?? '';
+    final open = _connectionsPerAddress[address] ?? 0;
+    if (open >= maxConnectionsPerAddress) {
+      request.response.statusCode = HttpStatus.serviceUnavailable;
+      await request.response.close();
+      return;
+    }
+    // Counted before the upgrade completes, so a burst of handshakes cannot
+    // all pass the check before any of them is recorded.
+    _connectionsPerAddress[address] = open + 1;
+
     try {
-      // Frame-size limits (see device_link_protocol.dart) are enforced on
-      // decode, which is *after* dart:io has buffered the whole message:
-      // WebSocketTransformer exposes no maximum message size. The pin is on
-      // the server certificate, so it authenticates this desktop to the phone
-      // and not the other way round — any LAN peer that completes the
-      // handshake reaches the framing layer before the pairing secret is
-      // checked, and can make this process allocate an oversized payload.
-      // What the limits do buy: an oversized frame closes the connection
-      // instead of only erroring, so a single socket cannot repeat it, and no
-      // oversized payload ever reaches the PTY or the snapshot decoder.
-      // Capping the allocation itself would mean framing the socket by hand.
+      // The pin is on the server certificate, so it authenticates this
+      // desktop to the phone and not the other way round — any LAN peer that
+      // completes the handshake reaches the framing layer before the pairing
+      // secret is checked. dart:io drops a connection whose frame announces
+      // more than [deviceLinkMaxBinaryFrameLength] before buffering it, and
+      // with compression off a small frame cannot inflate into a large one.
+      // The cap is per frame, not per message: a peer can still fragment one
+      // message across many frames, which the hello timeout and the
+      // per-address connection limit bound in time and in count.
       //
       // The WebSocket owns the upgraded HTTP sink after upgrade.
       // ignore: close_sinks
-      final socket = await WebSocketTransformer.upgrade(request);
+      final socket = await WebSocketTransformer.upgrade(
+        request,
+        compression: CompressionOptions.compressionOff,
+        maxPayloadLength: deviceLinkMaxBinaryFrameLength,
+      );
       socket.pingInterval = deviceLinkPingInterval;
-      final connection = DeviceLinkServerConnection._(this, socket);
+      final connection = DeviceLinkServerConnection._(this, socket, address);
       _connections.add(connection);
       connection._listen();
     } catch (_) {
+      _releaseAddress(address);
       try {
         await request.response.close();
       } catch (_) {}
+    }
+  }
+
+  void _releaseAddress(String address) {
+    final open = (_connectionsPerAddress[address] ?? 1) - 1;
+    if (open <= 0) {
+      _connectionsPerAddress.remove(address);
+    } else {
+      _connectionsPerAddress[address] = open;
     }
   }
 
@@ -508,7 +546,11 @@ final class DeviceLinkServer {
     try {
       final result = await transport.attach(
         connection: connection,
-        request: request,
+        request: DeviceLinkAttach(
+          sessionId: request.sessionId,
+          cols: _clampDimension(request.cols),
+          rows: _clampDimension(request.rows),
+        ),
       );
       if (!identical(connection._attachedTransport, transport)) {
         // The connection closed or detached while attach was still running.
@@ -569,8 +611,8 @@ final class DeviceLinkServer {
     try {
       await transport.resize(
         connection: connection,
-        columns: request.cols,
-        rows: request.rows,
+        columns: _clampDimension(request.cols),
+        rows: _clampDimension(request.rows),
       );
     } on DeviceLinkSessionException catch (error) {
       await connection._error(error.code, error.message);
@@ -581,6 +623,12 @@ final class DeviceLinkServer {
       );
     }
   }
+
+  /// Bounds a terminal size the phone asked for. The terminal allocates a
+  /// buffer for whatever it is given and a PTY refuses anything past 32767,
+  /// so an unchecked `cols` of a billion is a memory spike, not a resize.
+  static int _clampDimension(int value) =>
+      value.clamp(1, deviceLinkMaxTerminalDimension);
 
   Future<void> _detach(DeviceLinkServerConnection connection) async {
     final transport = connection._attachedTransport;
@@ -673,7 +721,9 @@ final class DeviceLinkServer {
   }
 
   void _remove(DeviceLinkServerConnection connection) {
-    _connections.remove(connection);
+    if (_connections.remove(connection)) {
+      _releaseAddress(connection._remoteAddress);
+    }
   }
 
   /// Local addresses the phone can dial for a listener bound to [bindAddress].
@@ -712,7 +762,9 @@ final class DeviceLinkServer {
 final class DeviceLinkServerConnection {
   final DeviceLinkServer _server;
   final WebSocket _socket;
+  final String _remoteAddress;
   StreamSubscription<Object?>? _subscription;
+  Timer? _helloTimer;
   Future<void> _messageQueue = Future<void>.value();
   bool _closed = false;
   bool _helloReceived = false;
@@ -721,7 +773,7 @@ final class DeviceLinkServerConnection {
   String? _deviceName;
   DeviceLinkSessionTransport? _attachedTransport;
 
-  DeviceLinkServerConnection._(this._server, this._socket);
+  DeviceLinkServerConnection._(this._server, this._socket, this._remoteAddress);
 
   String? get deviceId => _deviceId;
   String? get deviceName => _deviceName;
@@ -733,12 +785,16 @@ final class DeviceLinkServerConnection {
     _deviceId = deviceId;
     _deviceName = deviceName;
     _helloReceived = true;
+    _helloTimer?.cancel();
   }
 
   /// The peer proved it holds a paired-device secret, or was just issued one.
   void _markAuthenticated() => _authenticated = true;
 
   void _listen() {
+    _helloTimer = Timer(_server.helloTimeout, () {
+      if (!_helloReceived) unawaited(close());
+    });
     _subscription = _socket.listen(
       (Object? message) {
         // A link that completes with an error turns the whole chain into an
@@ -848,6 +904,7 @@ final class DeviceLinkServerConnection {
   Future<void> close() async {
     if (_closed) return;
     _closed = true;
+    _helloTimer?.cancel();
     await _server._connectionClosed(this);
     await _subscription?.cancel();
     _subscription = null;

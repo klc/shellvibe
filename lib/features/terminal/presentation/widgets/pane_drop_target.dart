@@ -6,6 +6,17 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../domain/models/terminal_tab_session.dart';
 
+/// What a pane header carries while it is dragged.
+///
+/// A type of its own, not the pane id as a bare `String`: a tab chip is
+/// dragged too, and a [DragTarget] tells the two apart only by type. Sharing
+/// one let a chip dropped on a pane swap it, and a header dropped on a tab
+/// merge that whole tab.
+class PaneDrag {
+  final String paneId;
+  const PaneDrag(this.paneId);
+}
+
 /// Drop half of the pane drag-and-drop: wraps one pane and turns a drop on it
 /// into either a swap or a dock, depending on where inside the pane the pointer
 /// was released.
@@ -103,9 +114,9 @@ class _PaneDropTargetState extends State<PaneDropTarget> {
   @override
   Widget build(BuildContext context) {
     final tokens = widget.tokens;
-    return DragTarget<String>(
+    return DragTarget<PaneDrag>(
       onWillAcceptWithDetails: (details) =>
-          widget.acceptedPaneIds.contains(details.data),
+          widget.acceptedPaneIds.contains(details.data.paneId),
       onMove: (details) => _updateHover(details.offset),
       onLeave: (_) => _clearHover(),
       onAcceptWithDetails: (details) {
@@ -115,9 +126,9 @@ class _PaneDropTargetState extends State<PaneDropTarget> {
         _clearHover();
         final edge = resolved?.edge;
         if (edge == null) {
-          widget.onSwap(details.data);
+          widget.onSwap(details.data.paneId);
         } else {
-          widget.onDock(details.data, edge);
+          widget.onDock(details.data.paneId, edge);
         }
       },
       builder: (context, candidates, rejected) {

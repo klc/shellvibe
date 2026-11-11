@@ -4,6 +4,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/features/hosts/domain/models/host_model.dart';
+import 'package:shellvibe/features/snippets/data/repositories/snippets_repository.dart';
 import 'package:shellvibe/features/snippets/data/run_providers.dart';
 import 'package:shellvibe/features/snippets/domain/models/runbook_model.dart';
 import 'package:shellvibe/features/snippets/domain/models/runbook_step_model.dart';
@@ -51,8 +52,17 @@ class _EchoSession implements RemoteCommandSession {
 }
 
 class _EchoFactory implements RemoteCommandSessionFactory {
+  _EchoFactory({this.connectDelay = Duration.zero});
+
+  /// A real connect takes a while; long enough for an auto-disposed provider
+  /// read at start to be gone by the time a step runs.
+  final Duration connectDelay;
+
   @override
-  Future<RemoteCommandSession> open(HostModel host) async => _EchoSession();
+  Future<RemoteCommandSession> open(HostModel host) async {
+    await Future<void>.delayed(connectDelay);
+    return _EchoSession();
+  }
 }
 
 class _FakeSnippets extends SnippetsNotifier {
@@ -188,7 +198,10 @@ void main() {
         .read(runbookRunProvider.notifier)
         .start(snippetRunbook, [host], variableValues: {'TOKEN': 'hunter2'});
 
-    final result = container.read(runbookRunProvider)!.hosts.single.results;
+    final settled = container.read(runbookRunProvider)!;
+    // Not kept past the run: a re-run has to ask for it again.
+    expect(settled.variableValues, isNot(contains('TOKEN')));
+    final result = settled.hosts.single.results;
     expect(result, isNotEmpty);
     for (final r in result.values) {
       expect(r.command, isNot(contains('hunter2')));
@@ -245,6 +258,96 @@ void main() {
           .forRunbook('rb');
       expect(runs, hasLength(1));
       expect(runs.single.status, 'cancelled');
+    });
+
+    test('a snippet step runs through the real run service', () async {
+      // No override of runbookRunServiceProvider: the service is the one the
+      // app builds, so its snippet lookup must outlive the provider read.
+      const snippet = SnippetModel(
+        id: 'sn',
+        workspaceId: 'w',
+        title: 'sn',
+        code: 'uptime',
+      );
+      await SnippetsRepository(db.snippetsDao).addSnippet(snippet);
+      final container = ProviderContainer(
+        overrides: [
+          remoteCommandSessionFactoryProvider.overrideWithValue(
+            _EchoFactory(connectDelay: const Duration(milliseconds: 50)),
+          ),
+          snippetsProvider.overrideWith(() => _FakeSnippets(const [snippet])),
+          appDatabaseProvider.overrideWithValue(db),
+        ],
+      );
+      addTearDown(container.dispose);
+      final snippetRunbook = RunbookModel(
+        id: 'rb3',
+        workspaceId: 'w',
+        title: 'rb3',
+        createdAt: DateTime(2026),
+        steps: const [
+          RunbookStepModel(
+            id: 's1',
+            runbookId: 'rb3',
+            stepOrder: 1,
+            command: '',
+            kind: StepKind.snippet,
+            snippetId: 'sn',
+          ),
+        ],
+      );
+
+      await container
+          .read(runbookRunProvider.notifier)
+          .start(snippetRunbook, [host])
+          .timeout(const Duration(seconds: 2));
+
+      final run = container.read(runbookRunProvider)!;
+      expect(run.running, isFalse);
+      expect(run.hosts.single.status, RunHostStatus.succeeded);
+      expect(run.hosts.single.results['s1']!.output, 'ran uptime');
+    });
+
+    test('a run that throws is not left running', () async {
+      final container = ProviderContainer(
+        overrides: [
+          remoteCommandSessionFactoryProvider.overrideWithValue(_EchoFactory()),
+          snippetsProvider.overrideWith(() => _FakeSnippets(const [])),
+          appDatabaseProvider.overrideWithValue(db),
+          runbookRunServiceProvider.overrideWithValue(
+            RunbookRunService(
+              sessionFactory: _EchoFactory(),
+              lookupSnippet: (_) async => throw StateError('boom'),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      final snippetRunbook = RunbookModel(
+        id: 'rb4',
+        workspaceId: 'w',
+        title: 'rb4',
+        createdAt: DateTime(2026),
+        steps: const [
+          RunbookStepModel(
+            id: 's1',
+            runbookId: 'rb4',
+            stepOrder: 1,
+            command: '',
+            kind: StepKind.snippet,
+            snippetId: 'sn',
+          ),
+        ],
+      );
+      final notifier = container.read(runbookRunProvider.notifier);
+
+      await expectLater(
+        notifier.start(snippetRunbook, [host]),
+        throwsA(isA<StateError>()),
+      );
+
+      expect(notifier.isRunning, isFalse);
+      expect(container.read(runbookRunProvider)!.finishedAt, isNotNull);
     });
 
     test('a history failure does not fail the run', () async {

@@ -22,6 +22,7 @@ import '../../../settings/domain/models/app_settings_model.dart';
 import '../../../settings/presentation/notifiers/settings_notifier.dart';
 import '../../../snippets/presentation/notifiers/runbooks_notifier.dart';
 import '../../../snippets/presentation/notifiers/snippets_notifier.dart';
+import '../../../tunnels/presentation/providers/tunnels_providers.dart';
 import '../../../device_link/data/repositories/device_link_pairing_repository.dart';
 import '../../../vault/data/repositories/vault_env_repository.dart';
 import '../../../vault/domain/models/identity_model.dart';
@@ -100,6 +101,24 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     return _vaultAllowsDeviceLink(vault);
   }
 
+  /// Starts the forwards set to auto-start with an SSH connection to the
+  /// host [tab] just connected to; a reconnect brings them back up too, since
+  /// they stopped with the client they rode on.
+  Future<void> _autoStartTunnels(TerminalTabSession tab) async {
+    final hostId = tab.host?.id;
+    if (hostId == null || _notifierDisposed) return;
+    // The tunnels notifier disposes itself once nobody listens, and starting
+    // a rule reads providers across awaits; hold it alive for the call.
+    final keepAlive = ref.listen(tunnelsProvider, (_, _) {});
+    try {
+      await ref.read(tunnelsProvider.notifier).autoStartRulesForHost(hostId);
+    } catch (_) {
+      // Best effort: the session is up either way.
+    } finally {
+      keepAlive.close();
+    }
+  }
+
   bool _vaultAllowsDeviceLink(AsyncValue<VaultState> vault) {
     return vault.hasValue &&
         !vault.isLoading &&
@@ -123,7 +142,10 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       notifyChanged: () => state = state.copyWith(tabs: [...state.tabs]),
       syncBroadcast: _syncBroadcast,
       watchConnectivity: _watchConnectivity,
-      onSessionLive: (tab) => unawaited(_startupSnippets.onSessionLive(tab)),
+      onSessionLive: (tab) {
+        unawaited(_startupSnippets.onSessionLive(tab));
+        unawaited(_autoStartTunnels(tab));
+      },
     );
     _deviceLinkHost = DeviceLinkServerHost(
       pairingRepository: () => ref.read(deviceLinkPairingRepositoryProvider),
@@ -483,15 +505,23 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
 
   /// Ends a tab's session once it has left `state`: the owner's close
   /// callback first (a Device Link peer, the MCP pool), then the tab itself.
+  ///
+  /// Never throws: callers tear several panes down in a row, and one failing
+  /// step must not leave the panes after it with their sessions open.
   Future<void> _teardown(TerminalTabSession tab) async {
     final onClose = _tabCloseCallbacks.remove(tab.id);
     try {
       await onClose?.call();
-    } finally {
-      await tab.dispose();
-      _deviceLinkTransports.remove(tab.id);
-      _ownedTabs.remove(tab);
+    } catch (e) {
+      debugPrint('[Terminal] close callback of ${tab.id} failed: $e');
     }
+    try {
+      await tab.dispose();
+    } catch (e) {
+      debugPrint('[Terminal] dispose of ${tab.id} failed: $e');
+    }
+    _deviceLinkTransports.remove(tab.id);
+    _ownedTabs.remove(tab);
   }
 
   /// Closes every tab except the one rooted at [tabId].
@@ -851,12 +881,17 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
 
   /// Sends [code] to every selected pane of the active tab (origin included)
   /// — the snippet path while broadcasting. With [submit] the command is also run (Enter).
-  void sendTextToSelectedPanes(String code, {bool submit = false}) {
+  void sendTextToSelectedPanes(
+    String code, {
+    bool submit = false,
+    String Function(TerminalTabSession pane)? textFor,
+  }) {
     _broadcastRouter.sendTextToPanes(
       selectedIds: state.activeSelection,
       tabs: state.tabs,
       text: code,
       submit: submit,
+      textFor: textFor,
     );
   }
 
@@ -878,6 +913,9 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     if (parentIndex == -1) return null;
 
     final parentTab = state.tabs[parentIndex];
+    // An AI tab is the agent's, as in [mergeTab]: a pane of the user's inside
+    // it would be closed with it when the agent's session ends.
+    if (parentTab.isMcp) return null;
     final splitId = const Uuid().v4();
 
     // Without an explicit target a split pane mirrors the session type of the

@@ -36,6 +36,7 @@ void main() {
     expect(restored!.userId, session.userId);
     expect(restored.deviceId, session.deviceId);
     expect(restored.email, session.email);
+    expect(restored.name, session.name);
   });
 
   test('clearSession keeps the device id so the next sign-in reuses it', () async {

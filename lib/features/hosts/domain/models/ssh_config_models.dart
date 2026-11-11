@@ -82,13 +82,23 @@ class SshForwardDraft {
   });
 }
 
-/// First hop of a `ProxyJump` chain (`[user@]host[:port]`).
+/// One hop of a `ProxyJump` chain (`[user@]host[:port]`).
+///
+/// A host's `jumpHost` is the hop it connects through directly — the last one
+/// in `ProxyJump a,b` — and [via] is the hop that one is reached through in
+/// turn, so `a,b` reads as `b` via `a`.
 class SshJumpHostDraft {
   final String? username;
   final String host;
   final int? port;
+  final SshJumpHostDraft? via;
 
-  const SshJumpHostDraft({this.username, required this.host, this.port});
+  const SshJumpHostDraft({
+    this.username,
+    required this.host,
+    this.port,
+    this.via,
+  });
 }
 
 /// Effective configuration resolved for one concrete `Host <alias>` entry.

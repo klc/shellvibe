@@ -119,17 +119,37 @@ Future<McpAgentConfigStatus> readMcpAgentConfigStatus(
 }
 
 /// Points [app]'s config file at [command], creating it if needed.
+///
+/// The tool may be running and rewriting the same file (Claude Code keeps
+/// `~/.claude.json` up to date as it runs), so the new content goes to a
+/// sibling that is renamed over the original: a reader never sees a
+/// half-written file. The sibling starts as a copy of the original so it
+/// keeps its mode (`~/.claude.json` is 0600). If the original changed while
+/// the update was being made, it is made again on top of that change rather
+/// than overwriting it.
 Future<void> installMcpAgentServer(
   McpAgentApp app,
   String path,
   String command,
 ) async {
-  final file = File(path);
-  final updated = withMcpAgentServer(app, await _readIfExists(path), command);
+  var file = File(path);
+  // Through a symlink (a dotfiles repo), not over it.
+  if (await file.exists()) file = File(await file.resolveSymbolicLinks());
   await file.parent.create(recursive: true);
-  // Rewritten in place, not through a temp file and a rename, which would
-  // swap ~/.claude.json's 0600 for the default mode.
-  await file.writeAsString(updated, flush: true);
+  final temp = File('${file.path}.shellvibe-tmp');
+  try {
+    for (var attempt = 0; ; attempt++) {
+      final original = await _readIfExists(file.path);
+      final updated = withMcpAgentServer(app, original, command);
+      if (original != null) await file.copy(temp.path);
+      await temp.writeAsString(updated, flush: true);
+      if (await _readIfExists(file.path) != original && attempt < 2) continue;
+      await temp.rename(file.path);
+      return;
+    }
+  } finally {
+    if (await temp.exists()) await temp.delete();
+  }
 }
 
 Future<String?> _readIfExists(String path) async {

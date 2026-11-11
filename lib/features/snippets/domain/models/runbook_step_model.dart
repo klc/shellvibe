@@ -54,6 +54,9 @@ class RunbookStepModel {
 
   static const int maxRetries = 5;
 
+  /// The longest a step may run; the shell session caps a command here anyway.
+  static const int maxTimeoutSeconds = 600;
+
   const RunbookStepModel({
     required this.id,
     required this.runbookId,

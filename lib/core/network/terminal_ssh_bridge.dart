@@ -39,7 +39,9 @@ class TerminalSSHBridge {
   /// jump ahead of output still queued here.
   late final CoalescingTerminalWriter _writer =
       writerOverride ??
-      CoalescingTerminalWriter(PacedTerminalWriter(terminal));
+      CoalescingTerminalWriter(
+        PacedTerminalWriter(terminal, waitForFrame: nextFrameOrTimeout),
+      );
 
   /// Replaces the writer so a test can drive the write path without a frame
   /// pipeline.
@@ -68,14 +70,21 @@ class TerminalSSHBridge {
 
   void _bind() {
     // 1. Wire user input from xterm Terminal -> SSH session stdin
-    terminal.onOutput = (String data) {
+    void send(String data) {
       if (_isDisposed) return;
       try {
         session.write(Uint8List.fromList(utf8.encode(data)));
       } catch (e) {
         _writer.write('\r\n\x1b[33m[SSH write error: $e]\x1b[0m\r\n');
       }
-    };
+    }
+
+    terminal.onOutput = send;
+    // Replies the terminal makes on its own (device attributes, cursor
+    // position, focus reports) go straight to this session. Left to fall back
+    // on onOutput they would pass through broadcast and reach every other
+    // selected pane as if typed there.
+    terminal.onReply = send;
 
     // 2. Wire remote output streams (stdout, stderr) from SSH session -> xterm Terminal
     _stdoutSubscription = session.stdout
@@ -146,6 +155,7 @@ class TerminalSSHBridge {
     _isDisposed = true;
 
     terminal.onOutput = null;
+    terminal.onReply = null;
     terminal.onResize = null;
 
     await _stdoutSubscription?.cancel();

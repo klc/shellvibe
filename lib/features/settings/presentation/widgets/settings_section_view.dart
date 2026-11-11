@@ -8,7 +8,6 @@ import '../../../../app/notifications/notification_providers.dart';
 import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/theme/ui_font.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
-import '../../../../core/constants/app_constants.dart';
 import '../../../../core/models/mosh_prediction_mode.dart';
 import '../../../../core/utils/platform_capabilities.dart';
 import '../../../account/presentation/widgets/account_settings_section.dart';
@@ -85,42 +84,6 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
         ),
       );
     });
-  }
-
-  Future<void> _handleTestBiometrics() async {
-    final service = ref.read(biometricLockServiceProvider);
-    final canCheck = await service.canCheckBiometrics();
-    if (!canCheck) {
-      if (mounted) {
-        ShadToaster.of(context).show(
-          const ShadToast(
-            description: Text(
-              'Biometric authentication is not available on this device.',
-            ),
-          ),
-        );
-      }
-      return;
-    }
-
-    final success = await service.authenticate(
-      localizedReason: 'Test ${AppConstants.appName} Biometric Lock',
-    );
-    if (mounted) {
-      if (success) {
-        ShadToaster.of(context).show(
-          const ShadToast(
-            description: Text('Biometric Authentication Successful!'),
-          ),
-        );
-      } else {
-        ShadToaster.of(context).show(
-          const ShadToast.destructive(
-            description: Text('Biometric Authentication Failed/Cancelled.'),
-          ),
-        );
-      }
-    }
   }
 
   List<Widget> _sectionChildren(
@@ -522,28 +485,11 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
         ];
       case SettingsSection.security:
         return [
-          // --- Section 2: Security & Biometrics ---
-          _buildSectionHeader(
-            'Security & Biometric Controls',
-            LucideIcons.shieldCheck,
-          ),
+          // --- Section 2: Security ---
+          _buildSectionHeader('Security Controls', LucideIcons.shieldCheck),
           ShadCard(
             child: Column(
               children: [
-                ListTile(
-                  title: const Text(
-                    'Biometric Lock (FaceID / TouchID / Windows Hello)',
-                  ),
-                  subtitle: const Text(
-                    'Verify identity on app launch or resume',
-                  ),
-                  trailing: ShellVibeButton(
-                    key: const Key('test_biometrics_button'),
-                    label: 'Test Lock',
-                    onPressed: _handleTestBiometrics,
-                  ),
-                ),
-                const Divider(),
                 ListTile(
                   title: const Text('Auto-Lock Timer'),
                   subtitle: Text(

@@ -33,10 +33,14 @@ class OutputRedactor {
     r'-----BEGIN [A-Z ]*PRIVATE KEY-----'
     r'(?:\r?\n(?:[A-Za-z0-9+/=]+|[A-Za-z-]+: [^\r\n]*)?)*',
   );
-  static final RegExp _orphanKeyTailPattern = RegExp(
-    r'(?:^[A-Za-z0-9+/=]+\r?\n)*-----END [A-Z ]*PRIVATE KEY-----',
-    multiLine: true,
+  // The tail half is found from its footer and walked backwards in
+  // [_redactOrphanTail]. As a forward regex (`(?:^base64\n)*-----END…`) it
+  // re-scanned every following base64-looking line from every line start,
+  // which is quadratic: `seq 1 10000` took ten seconds on the UI isolate.
+  static final RegExp _keyFooterPattern = RegExp(
+    r'-----END [A-Z ]*PRIVATE KEY-----',
   );
+  static final RegExp _base64Line = RegExp(r'^[A-Za-z0-9+/=]+\r?$');
 
   static final RegExp _awsKeyPattern = RegExp(r'AKIA[0-9A-Z]{16}');
 
@@ -104,7 +108,17 @@ class OutputRedactor {
     for (final step in <(RegExp, String)>[
       (_privateKeyPattern, 'private_key'),
       (_orphanKeyHeadPattern, 'private_key'),
-      (_orphanKeyTailPattern, 'private_key'),
+    ]) {
+      final result = _redactWhole(text, step.$1, step.$2);
+      text = result.text;
+      total += result.count;
+    }
+
+    final tailResult = _redactOrphanTail(text);
+    text = tailResult.text;
+    total += tailResult.count;
+
+    for (final step in <(RegExp, String)>[
       (_awsKeyPattern, 'aws_key'),
       (_githubTokenPattern, 'github_token'),
       (_apiKeyPattern, 'api_key'),
@@ -138,6 +152,35 @@ class OutputRedactor {
       return '[REDACTED:$type]';
     });
     return RedactionResult(result, count);
+  }
+
+  /// Masks each private-key footer left after the whole-block pass, together
+  /// with the run of base64 lines straight above it. Each walk stops at the
+  /// first line that is not base64, and a footer line never is, so every
+  /// line is visited at most once.
+  RedactionResult _redactOrphanTail(String text) {
+    final out = StringBuffer();
+    var count = 0;
+    var copied = 0;
+    for (final footer in _keyFooterPattern.allMatches(text)) {
+      var start = footer.start;
+      while (start > copied && text[start - 1] == '\n') {
+        final lineStart = start < 2 ? 0 : text.lastIndexOf('\n', start - 2) + 1;
+        if (lineStart < copied ||
+            !_base64Line.hasMatch(text.substring(lineStart, start - 1))) {
+          break;
+        }
+        start = lineStart;
+      }
+      out
+        ..write(text.substring(copied, start))
+        ..write('[REDACTED:private_key]');
+      copied = footer.end;
+      count++;
+    }
+    if (count == 0) return RedactionResult(text, 0);
+    out.write(text.substring(copied));
+    return RedactionResult(out.toString(), count);
   }
 
   /// Masks only the `user:pass@` segment of a database URL, keeping the

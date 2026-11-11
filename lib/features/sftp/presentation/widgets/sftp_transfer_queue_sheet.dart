@@ -152,7 +152,7 @@ class _TransferTile extends ConsumerWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  item.fileName,
+                  item.label,
                   style: const TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: 14,

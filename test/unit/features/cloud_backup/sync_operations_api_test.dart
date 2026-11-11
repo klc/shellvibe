@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/core/api/api_client.dart';
 import 'package:shellvibe/features/cloud_backup/data/sync_operations_api.dart';
@@ -45,6 +47,34 @@ void main() {
       expect(query['cursor'], 'seq');
       expect(query['since_clock'], '40');
       expect(query.containsKey('since_seq'), isFalse);
+    });
+
+    test('a push carries each operation\'s own id', () async {
+      // A push retried after a reply that never arrived is the same
+      // operations again; without the id the server cannot tell, and stores
+      // and charges them twice.
+      transport.enqueue(
+        status: 201,
+        body: {
+          'data': <Object?>[],
+          'meta': {'count': 1},
+        },
+      );
+
+      await api().push(const [
+        SyncOperationDto(
+          id: 'op-1',
+          deviceId: 'device-a',
+          logicalClock: 3,
+          entityType: 'alias-type',
+          entityId: 'alias-id',
+          operation: 'upsert',
+          encryptedPayload: 'sealed',
+        ),
+      ]);
+
+      final body = jsonDecode(transport.lastRequest!.body!) as Map;
+      expect((body['operations'] as List).single['id'], 'op-1');
     });
   });
 

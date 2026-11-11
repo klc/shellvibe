@@ -175,7 +175,15 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
 
   @override
   Future<CloudBackupState> build() async {
-    ref.onDispose(() => _schedule?.cancel());
+    ref.onDispose(() {
+      _schedule?.cancel();
+      // A rebuild keeps this instance and hands it a new `ref`, so
+      // `ref.mounted` cannot tell a run started by the build before from one
+      // of this build's. The service can: a run that finds a different one
+      // -- or none, while this build is still working out the account --
+      // belongs to a build that is gone.
+      _service = null;
+    });
     ref.watch(secureStorageServiceProvider);
 
     final account = await ref.watch(accountProvider.future);
@@ -746,9 +754,9 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
 
   /// The scheduled backup already running, if one is.
   ///
-  /// Static, not a field: a rebuild is a new instance, and each build
-  /// schedules a run. Held per instance, the run the old one started and the
-  /// run the new one schedules would seal and upload side by side.
+  /// Static, not a field: each build schedules a run, and the run an
+  /// earlier build started and the one the next schedules would otherwise
+  /// seal and upload side by side.
   static Future<void>? _scheduledRun;
 
   /// Backs up if one is due and anything has changed.
@@ -760,11 +768,11 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
   /// Two overlapping runs would each seal the vault, and whichever finished
   /// second read the other's result as its own and left the mark unwritten.
   Future<void> maybeBackUpOnSchedule() async {
-    // A run in flight may belong to a previous instance (a rebuild). Joining
-    // it would adopt its result, but that instance's `ref` is unmounted and
-    // its `_backUpIfDue` bails out early -- so wait for it, then ask the
-    // question again on this instance. Calls on the same instance still
-    // dedupe: the second call waits for the first and finds nothing due.
+    // A run in flight may belong to an earlier build. Joining it would adopt
+    // its result, but its `_backUpIfDue` bails out early once the service it
+    // started with is gone -- so wait for it, then ask the question again.
+    // Calls within one build still dedupe: the second waits for the first
+    // and finds nothing due.
     final previous = _scheduledRun;
     if (previous != null) await previous.catchError((_) {});
     if (!ref.mounted) return;
@@ -784,11 +792,17 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
     final interval = frequency.interval;
     if (interval == null) return;
 
-    if (_service == null || _deviceId == null) return;
+    final service = _service;
+    if (service == null || _deviceId == null) return;
+
+    // Every await below may outlive the build that started this run. A
+    // disposed provider makes `ref` and `state` throw; a rebuild does not,
+    // but replaces the service -- and a run carrying on past it would upload
+    // under whichever account signed in meanwhile.
+    bool gone() => !ref.mounted || !identical(service, _service);
+
     if (!await _store.isConfigured()) return;
-    // Every await below may outlive this instance (a rebuild disposes it);
-    // `ref` and `state` throw once it has.
-    if (!ref.mounted) return;
+    if (gone()) return;
 
     // A conflict waits for the user: restore the other device's backup or
     // overwrite it. Retrying on the next tick cannot settle it, and each try
@@ -796,7 +810,7 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
     if (state.value?.conflictingServerRevision != null) return;
 
     final mark = await _store.readAutoBackupMark();
-    if (!ref.mounted) return;
+    if (gone()) return;
     final now = DateTime.now();
 
     if (mark != null && now.difference(mark.at) < interval) return;
@@ -809,7 +823,7 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
         (await ref.read(appDatabaseProvider).syncJournal?.readState())
             ?.lastSeenClock ??
         0;
-    if (!ref.mounted) return;
+    if (gone()) return;
 
     if (mark != null && clock == mark.clock) {
       // Nothing to write, but the schedule has been honoured. Recording it
@@ -840,7 +854,7 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
     // wrote or restored, and overwriting that without being asked is the one
     // move here that destroys someone's data.
     await backUpNow();
-    if (!ref.mounted) return;
+    if (gone()) return;
 
     // The mark is only written for an upload that actually landed. Writing it
     // after a refusal -- a conflict, a throttle, a body over the plan's limit,
