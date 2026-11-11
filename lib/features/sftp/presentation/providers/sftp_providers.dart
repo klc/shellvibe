@@ -71,6 +71,14 @@ Stream<List<TransferItem>> transferQueueStream(Ref ref) {
 
 class SftpState {
   final SftpClient? remoteClient;
+
+  /// The SSH connection [remoteClient] was opened on. It lives here, not in
+  /// the screen, so re-entering the screen sees the channel is already open
+  /// instead of opening a new one and closing the old under its transfers.
+  final SSHClient? remoteSshClient;
+
+  /// Name of the server [remoteClient] talks to; stamped on transfers.
+  final String? remoteHostLabel;
   final String? remoteSessionId;
   final String remotePath;
   final String localPath;
@@ -84,6 +92,8 @@ class SftpState {
 
   const SftpState({
     this.remoteClient,
+    this.remoteSshClient,
+    this.remoteHostLabel,
     this.remoteSessionId,
     this.remotePath = '/',
     this.localPath = '/',
@@ -98,6 +108,8 @@ class SftpState {
 
   SftpState copyWith({
     SftpClient? remoteClient,
+    SSHClient? remoteSshClient,
+    String? remoteHostLabel,
     bool clearRemoteClient = false,
     String? remoteSessionId,
     bool clearRemoteSessionId = false,
@@ -115,6 +127,14 @@ class SftpState {
       remoteClient: clearRemoteClient
           ? null
           : (remoteClient ?? this.remoteClient),
+      // The connection and its name go with the client: a new client never
+      // inherits the last one's.
+      remoteSshClient: clearRemoteClient || remoteClient != null
+          ? remoteSshClient
+          : this.remoteSshClient,
+      remoteHostLabel: clearRemoteClient || remoteClient != null
+          ? remoteHostLabel
+          : this.remoteHostLabel,
       remoteSessionId: clearRemoteSessionId
           ? null
           : (remoteSessionId ?? this.remoteSessionId),
@@ -155,7 +175,12 @@ class SftpNotifier extends _$SftpNotifier {
     }
   }
 
-  Future<void> setRemoteClient(SftpClient? client, {String? sessionId}) async {
+  Future<void> setRemoteClient(
+    SftpClient? client, {
+    String? sessionId,
+    SSHClient? sshClient,
+    String? hostLabel,
+  }) async {
     final old = state.remoteClient;
     if (client == null &&
         sessionId != null &&
@@ -173,6 +198,8 @@ class SftpNotifier extends _$SftpNotifier {
     } else {
       state = state.copyWith(
         remoteClient: client,
+        remoteSshClient: sshClient,
+        remoteHostLabel: hostLabel,
         remoteSessionId: sessionId,
         clearRemoteSessionId: sessionId == null,
       );
@@ -180,13 +207,18 @@ class SftpNotifier extends _$SftpNotifier {
     }
 
     // A replaced or cleared client must not leak its socket; the notifier
-    // dispose hook only closes the client currently referenced by state.
+    // dispose hook only closes the client currently referenced by state. The
+    // worker holds it open until the transfers running on it are done.
     if (old != null && !identical(old, client)) {
-      try {
-        old.close();
-      } catch (_) {}
+      ref.read(sftpTransferQueueWorkerProvider).releaseClient(old);
     }
   }
+
+  /// Whether the remote pane already runs over [sshClient] for [sessionId].
+  bool isAttachedTo(String sessionId, SSHClient sshClient) =>
+      state.remoteClient != null &&
+      state.remoteSessionId == sessionId &&
+      identical(state.remoteSshClient, sshClient);
 
   Future<void> loadRemoteDirectory([String? path]) async {
     // The notifier may have been disposed while awaiting; writing state then
@@ -319,81 +351,58 @@ class SftpNotifier extends _$SftpNotifier {
     loadLocalDirectory(parent);
   }
 
+  // The file operations below throw on failure and leave the listing alone:
+  // one failed operation is the caller's to report, not a reason to replace
+  // the whole pane with an error.
+
   Future<void> createRemoteFolder(String name) async {
     final client = state.remoteClient;
     if (client == null) return;
-    try {
-      final fullPath = buildSafeRemoteChildPath(state.remotePath, name);
-      await ref.read(sftpServiceProvider).createDirectory(client, fullPath);
-      await loadRemoteDirectory();
-    } catch (e) {
-      if (!ref.mounted) return;
-      state = state.copyWith(remoteError: 'Failed to create directory: $e');
-    }
+    final fullPath = buildSafeRemoteChildPath(state.remotePath, name);
+    await ref.read(sftpServiceProvider).createDirectory(client, fullPath);
+    await loadRemoteDirectory();
   }
 
   Future<void> createRemoteFile(String name) async {
     final client = state.remoteClient;
     if (client == null) return;
-    try {
-      final fullPath = buildSafeRemoteChildPath(state.remotePath, name);
-      await ref.read(sftpServiceProvider).createFile(client, fullPath);
-      await loadRemoteDirectory();
-    } catch (e) {
-      if (!ref.mounted) return;
-      state = state.copyWith(remoteError: 'Failed to create file: $e');
-    }
+    final fullPath = buildSafeRemoteChildPath(state.remotePath, name);
+    await ref.read(sftpServiceProvider).createFile(client, fullPath);
+    await loadRemoteDirectory();
   }
 
   Future<void> deleteRemoteItem(SftpFileItem item) async {
     final client = state.remoteClient;
     if (client == null) return;
-    try {
-      // A symlink is unlinked, never rmdir'd: its target is left alone.
-      await ref
-          .read(sftpServiceProvider)
-          .deleteItem(
-            client,
-            item.path,
-            isDirectory: item.isDirectory && !item.isSymlink,
-          );
-      await loadRemoteDirectory();
-    } catch (e) {
-      if (!ref.mounted) return;
-      state = state.copyWith(remoteError: 'Failed to delete item: $e');
-    }
+    // A symlink is unlinked, never rmdir'd: its target is left alone.
+    await ref
+        .read(sftpServiceProvider)
+        .deleteItem(
+          client,
+          item.path,
+          isDirectory: item.isDirectory && !item.isSymlink,
+        );
+    await loadRemoteDirectory();
   }
 
   Future<void> deleteLocalItem(SftpFileItem item) async {
-    try {
-      if (item.isDirectory) {
-        await Directory(item.path).delete(recursive: true);
-      } else {
-        await File(item.path).delete();
-      }
-      await loadLocalDirectory();
-    } catch (e) {
-      if (!ref.mounted) return;
-      state = state.copyWith(localError: 'Failed to delete local item: $e');
+    if (item.isDirectory) {
+      await Directory(item.path).delete(recursive: true);
+    } else {
+      await File(item.path).delete();
     }
+    await loadLocalDirectory();
   }
 
   Future<void> renameRemoteItem(SftpFileItem item, String newName) async {
     final client = state.remoteClient;
     if (client == null) return;
-    try {
-      final newPath = buildSafeRemoteChildPath(
-        p.posix.dirname(item.path),
-        newName,
-      );
-      await ref
-          .read(sftpServiceProvider)
-          .renameItem(client, item.path, newPath);
-      await loadRemoteDirectory();
-    } catch (e) {
-      if (!ref.mounted) return;
-      state = state.copyWith(remoteError: 'Failed to rename: $e');
-    }
+    final newPath = buildSafeRemoteChildPath(
+      p.posix.dirname(item.path),
+      newName,
+    );
+    await ref.read(sftpServiceProvider).renameItem(client, item.path, newPath);
+    await loadRemoteDirectory();
   }
 
   Future<void> changeRemotePermissions(
@@ -402,15 +411,10 @@ class SftpNotifier extends _$SftpNotifier {
   ) async {
     final client = state.remoteClient;
     if (client == null) return;
-    try {
-      await ref
-          .read(sftpServiceProvider)
-          .changePermissions(client, item.path, permissions);
-      await loadRemoteDirectory();
-    } catch (e) {
-      if (!ref.mounted) return;
-      state = state.copyWith(remoteError: 'Failed to change permissions: $e');
-    }
+    await ref
+        .read(sftpServiceProvider)
+        .changePermissions(client, item.path, permissions);
+    await loadRemoteDirectory();
   }
 
   Future<void> changeRemoteOwner(
@@ -420,15 +424,10 @@ class SftpNotifier extends _$SftpNotifier {
   }) async {
     final client = state.remoteClient;
     if (client == null) return;
-    try {
-      await ref
-          .read(sftpServiceProvider)
-          .changeOwner(client, item.path, uid: uid, gid: gid);
-      await loadRemoteDirectory();
-    } catch (e) {
-      if (!ref.mounted) return;
-      state = state.copyWith(remoteError: 'Failed to change owner: $e');
-    }
+    await ref
+        .read(sftpServiceProvider)
+        .changeOwner(client, item.path, uid: uid, gid: gid);
+    await loadRemoteDirectory();
   }
 
   Future<String> readRemoteFileContent(String path) async {
@@ -447,6 +446,27 @@ class SftpNotifier extends _$SftpNotifier {
     await loadRemoteDirectory();
   }
 
+  /// Whether downloading [item] would replace a local file.
+  Future<bool> downloadWouldOverwrite(SftpFileItem item) async =>
+      await FileSystemEntity.type(p.join(state.localPath, item.name)) !=
+      FileSystemEntityType.notFound;
+
+  /// Whether uploading [localPath] would replace a remote file.
+  Future<bool> uploadWouldOverwrite(String localPath) async {
+    final client = state.remoteClient;
+    if (client == null) return false;
+    try {
+      await client.stat(_uploadDestination(localPath));
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Throws [FormatException] for a file name that is not one safe segment.
+  String _uploadDestination(String localPath) =>
+      buildSafeRemoteChildPath(state.remotePath, p.basename(localPath));
+
   void downloadItem(SftpFileItem item) {
     final client = state.remoteClient;
     if (client == null) return;
@@ -459,22 +479,16 @@ class SftpNotifier extends _$SftpNotifier {
           remotePath: item.path,
           localPath: localDest,
           size: item.size,
+          sessionId: state.remoteSessionId,
+          hostLabel: state.remoteHostLabel,
         );
   }
 
+  /// Throws [FormatException] for a file name that is not one safe segment.
   void uploadLocalItem(String localPath) {
     final client = state.remoteClient;
     if (client == null) return;
-    String remoteDest;
-    try {
-      remoteDest = buildSafeRemoteChildPath(
-        state.remotePath,
-        p.basename(localPath),
-      );
-    } on FormatException catch (e) {
-      state = state.copyWith(remoteError: 'Failed to upload: $e');
-      return;
-    }
+    final remoteDest = _uploadDestination(localPath);
 
     ref
         .read(sftpTransferQueueWorkerProvider)
@@ -482,6 +496,8 @@ class SftpNotifier extends _$SftpNotifier {
           client: client,
           localPath: localPath,
           remotePath: remoteDest,
+          sessionId: state.remoteSessionId,
+          hostLabel: state.remoteHostLabel,
         );
   }
 

@@ -16,27 +16,37 @@ class TransferRowActions extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final worker = ref.watch(sftpTransferQueueWorkerProvider);
-    // Resume and retry re-open the remote file, so they need a live client.
-    final client = ref.watch(sftpProvider.select((s) => s.remoteClient));
+    // Resume and retry re-open the remote file, so they need a live client,
+    // and it has to be the one the transfer started on: another host's would
+    // write the file there, or download its namesake over the local file.
+    final (client, sessionId) = ref.watch(
+      sftpProvider.select((s) => (s.remoteClient, s.remoteSessionId)),
+    );
+    final sameConnection = sessionId == item.sessionId;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        // A paused transfer keeps no partial file: "resume" starts it over,
+        // and the labels say so.
         if (item.status == TransferStatus.inProgress)
           ShellVibeIconButton(
             icon: LucideIcons.pause,
-            tooltip: 'Pause transfer',
+            tooltip: 'Stop transfer (restart later)',
             onPressed: () => worker.pauseTransfer(item.id),
           )
-        else if (item.status == TransferStatus.paused && client != null)
+        else if (item.status == TransferStatus.paused &&
+            client != null &&
+            sameConnection)
           ShellVibeIconButton(
             icon: LucideIcons.play,
-            tooltip: 'Resume transfer',
+            tooltip: 'Restart transfer from the beginning',
             onPressed: () => worker.resumeTransfer(client, item.id),
           )
         else if ((item.status == TransferStatus.failed ||
                 item.status == TransferStatus.cancelled) &&
-            client != null)
+            client != null &&
+            sameConnection)
           ShellVibeIconButton(
             icon: LucideIcons.refreshCw,
             tooltip: 'Retry transfer',

@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:dartssh2/dartssh2.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../../../../app/theme/shellvibe_tokens.dart';
@@ -54,10 +56,6 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
   SSHSessionManager? _subscribedSession;
   String? _subscribedTabId;
   int _attachmentGeneration = 0;
-  // The SSH client the current SftpClient was opened from. Every terminal-tabs
-  // emission re-runs the sync; without this, each one opened a fresh SFTP
-  // channel and closed the old one under in-flight transfers.
-  SSHClient? _attachedSshClient;
 
   @override
   void initState() {
@@ -89,7 +87,6 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
         session == null) {
       await _stopWatchingSession();
       if (!mounted || generation != _attachmentGeneration) return;
-      _attachedSshClient = null;
       await ref.read(sftpProvider.notifier).setRemoteClient(null);
       return;
     }
@@ -99,18 +96,16 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     final sshClient = session.client;
     if (!session.isConnected || sshClient == null || sshClient.isClosed) {
       if (!mounted || generation != _attachmentGeneration) return;
-      _attachedSshClient = null;
       await ref
           .read(sftpProvider.notifier)
           .setRemoteClient(null, sessionId: activeTab.id);
       return;
     }
 
-    // Already attached to this very client: nothing to reopen.
-    final sftpState = ref.read(sftpProvider);
-    if (sftpState.remoteClient != null &&
-        sftpState.remoteSessionId == activeTab.id &&
-        identical(sshClient, _attachedSshClient)) {
+    // Already attached to this very client: nothing to reopen. Every
+    // terminal-tabs emission and every visit to this screen re-runs the sync;
+    // reopening here closed the old channel under in-flight transfers.
+    if (ref.read(sftpProvider.notifier).isAttachedTo(activeTab.id, sshClient)) {
       return;
     }
 
@@ -121,15 +116,19 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
         await client.close();
         return;
       }
-      _attachedSshClient = sshClient;
       await ref
           .read(sftpProvider.notifier)
-          .setRemoteClient(client, sessionId: activeTab.id);
+          .setRemoteClient(
+            client,
+            sessionId: activeTab.id,
+            sshClient: sshClient,
+            hostLabel:
+                widget.hostLabel ?? activeTab.host?.label ?? activeTab.title,
+          );
     } catch (error) {
       if (!_isCurrentSession(generation, activeTab.id, session, sshClient)) {
         return;
       }
-      _attachedSshClient = null;
       await ref
           .read(sftpProvider.notifier)
           .setRemoteClient(null, sessionId: activeTab.id);
@@ -191,11 +190,85 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     );
   }
 
-  void _handleDragAndDropUpload(List<DropItem> droppedFiles) {
-    final notifier = ref.read(sftpProvider.notifier);
-    for (final file in droppedFiles) {
-      notifier.uploadLocalItem(file.path);
+  void _showError(String title, Object detail) {
+    ShadToaster.maybeOf(context)?.show(
+      ShadToast.destructive(title: Text(title), description: Text('$detail')),
+    );
+  }
+
+  /// Runs one file operation; a failure is a toast and the listing stays.
+  Future<void> _run(String failure, Future<void> Function() operation) async {
+    try {
+      await operation();
+    } catch (error) {
+      if (mounted) _showError(failure, error);
     }
+  }
+
+  /// Queues an upload of each of [paths] into the remote folder, asking
+  /// before one would replace a file that is already there.
+  Future<void> _upload(List<String> paths) async {
+    final notifier = ref.read(sftpProvider.notifier);
+    for (var i = 0; i < paths.length; i++) {
+      final path = paths[i];
+      if (FileSystemEntity.isDirectorySync(path)) {
+        if (mounted) _showError('Folders cannot be uploaded', p.basename(path));
+        continue;
+      }
+      if (await notifier.uploadWouldOverwrite(path)) {
+        final overwrite = await _confirmOverwrite(
+          p.basename(path),
+          canSkip: i < paths.length - 1,
+        );
+        if (overwrite == null) return;
+        if (!overwrite) continue;
+      }
+      if (!mounted) return;
+      await _run(
+        'Failed to upload',
+        () async => notifier.uploadLocalItem(path),
+      );
+    }
+  }
+
+  Future<void> _download(SftpFileItem item) async {
+    final notifier = ref.read(sftpProvider.notifier);
+    if (await notifier.downloadWouldOverwrite(item) &&
+        await _confirmOverwrite(item.name) != true) {
+      return;
+    }
+    notifier.downloadItem(item);
+  }
+
+  /// true to overwrite, false to skip this one, null to stop.
+  Future<bool?> _confirmOverwrite(String name, {bool canSkip = false}) async {
+    if (!mounted) return null;
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => ShadDialog.alert(
+        title: Text('Replace $name?'),
+        description: const Text(
+          'A file with this name is already there. Overwriting replaces it.',
+        ),
+        actions: adaptiveDialogActions(context, [
+          ShellVibeButton.secondary(
+            label: 'Cancel',
+            onPressed: () => Navigator.of(ctx).pop(),
+          ),
+          if (canSkip)
+            ShellVibeButton.secondary(
+              label: 'Skip',
+              onPressed: () => Navigator.of(ctx).pop(false),
+            ),
+          ShellVibeButton.danger(
+            buttonKey: const Key('sftp_overwrite_confirm'),
+            label: 'Overwrite',
+            onPressed: () => Navigator.of(ctx).pop(true),
+          ),
+        ]),
+        actionsAxis: adaptiveDialogActionsAxis(context),
+      ),
+    );
   }
 
   @override
@@ -375,25 +448,27 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     );
   }
 
+  // No drop target here: a file dropped on the local side has nowhere to go.
   Widget _buildLocalPane(SftpState state, SftpNotifier notifier) {
-    return DropTarget(
-      onDragDone: (details) => _handleDragAndDropUpload(details.files),
-      child: _buildPane(
-        title: 'Local Workstation',
-        path: state.localPath,
-        files: state.localFiles,
-        isLoading: state.isLoadingLocal,
-        error: state.localError,
-        isLocal: true,
-        onNavigateUp: notifier.navigateLocalUp,
-        onItemTap: (item) {
-          if (item.isDirectory) {
-            notifier.loadLocalDirectory(item.path);
-          }
-        },
-        onDelete: (item) => _confirmDelete(item, notifier.deleteLocalItem),
-        onUpload: (item) => notifier.uploadLocalItem(item.path),
+    return _buildPane(
+      title: 'Local Workstation',
+      path: state.localPath,
+      files: state.localFiles,
+      isLoading: state.isLoadingLocal,
+      error: state.localError,
+      isLocal: true,
+      onNavigateUp: notifier.navigateLocalUp,
+      onItemTap: (item) {
+        if (item.isDirectory) {
+          notifier.loadLocalDirectory(item.path);
+        }
+      },
+      onDelete: (item) => _confirmDelete(
+        item,
+        (item) =>
+            _run('Failed to delete', () => notifier.deleteLocalItem(item)),
       ),
+      onUpload: (item) => _upload([item.path]),
     );
   }
 
@@ -403,7 +478,8 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     String? connectionLabel,
   ) {
     return DropTarget(
-      onDragDone: (details) => _handleDragAndDropUpload(details.files),
+      onDragDone: (details) =>
+          _upload([for (final file in details.files) file.path]),
       child: _buildPane(
         title: state.remoteClient != null
             ? (connectionLabel == null
@@ -425,8 +501,12 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
             _openFileEditor(item);
           }
         },
-        onDelete: (item) => _confirmDelete(item, notifier.deleteRemoteItem),
-        onDownload: (item) => notifier.downloadItem(item),
+        onDelete: (item) => _confirmDelete(
+          item,
+          (item) =>
+              _run('Failed to delete', () => notifier.deleteRemoteItem(item)),
+        ),
+        onDownload: _download,
         onEditPermissions: _openPermissionsDialog,
         onEditContent: _openFileEditor,
         onCreateFolder: () => _showCreateDialog(isFolder: true),
@@ -766,8 +846,9 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
                 if (val == 'rename' && onRename != null) onRename();
                 if (val == 'delete') onDelete();
               },
+              // Transfers move single files; folders are not offered them.
               itemBuilder: (context) => [
-                if (isLocal && onUpload != null)
+                if (isLocal && !item.isDirectory && onUpload != null)
                   const PopupMenuItem(
                     value: 'upload',
                     child: Row(
@@ -778,7 +859,7 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
                       ],
                     ),
                   ),
-                if (!isLocal && onDownload != null)
+                if (!isLocal && !item.isDirectory && onDownload != null)
                   const PopupMenuItem(
                     value: 'download',
                     child: Row(
@@ -884,14 +965,16 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
 
     if (result != null) {
       final notifier = ref.read(sftpProvider.notifier);
-      await notifier.changeRemotePermissions(item, result.mode);
-      if (result.uid != null || result.gid != null) {
-        await notifier.changeRemoteOwner(
-          item,
-          uid: result.uid,
-          gid: result.gid,
-        );
-      }
+      // A blank field keeps the current id; setstat needs both together.
+      final uid = result.uid ?? item.ownerId;
+      final gid = result.gid ?? item.groupId;
+      await _run('Failed to change permissions', () async {
+        // Only when asked, and before the mode: chown clears setuid/setgid.
+        if (uid != item.ownerId || gid != item.groupId) {
+          await notifier.changeRemoteOwner(item, uid: uid, gid: gid);
+        }
+        await notifier.changeRemotePermissions(item, result.mode);
+      });
     }
   }
 
@@ -908,9 +991,12 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     if (name != null && name.isNotEmpty) {
       final notifier = ref.read(sftpProvider.notifier);
       if (isFolder) {
-        notifier.createRemoteFolder(name);
+        _run(
+          'Failed to create folder',
+          () => notifier.createRemoteFolder(name),
+        );
       } else {
-        notifier.createRemoteFile(name);
+        _run('Failed to create file', () => notifier.createRemoteFile(name));
       }
     }
   }
@@ -927,7 +1013,10 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
     );
 
     if (newName != null && newName.isNotEmpty && newName != item.name) {
-      ref.read(sftpProvider.notifier).renameRemoteItem(item, newName);
+      _run(
+        'Failed to rename',
+        () => ref.read(sftpProvider.notifier).renameRemoteItem(item, newName),
+      );
     }
   }
 }
