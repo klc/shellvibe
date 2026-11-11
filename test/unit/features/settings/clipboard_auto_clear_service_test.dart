@@ -90,5 +90,27 @@ void main() {
       expect(currentData?.text, equals('OtherUserContent'));
       expect(wasCleared, isFalse);
     });
+
+    test('clearNow clears a pending secret before its timer', () async {
+      await service.copyAndScheduleClear('SecretPassword123');
+
+      await service.clearNow();
+
+      expect((await Clipboard.getData(Clipboard.kTextPlain))?.text, '');
+    });
+
+    test('a clipboard that throws does not escape the timer', () async {
+      await service.copyAndScheduleClear(
+        'SecretPassword123',
+        duration: const Duration(milliseconds: 10),
+      );
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, (_) async {
+            throw PlatformException(code: 'busy');
+          });
+
+      // An uncaught error in the timer would fail this test.
+      await Future.delayed(const Duration(milliseconds: 50));
+    });
   });
 }

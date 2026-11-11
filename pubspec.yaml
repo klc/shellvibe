@@ -96,7 +96,6 @@ dependencies:
   cryptography: ^2.9.0
   # Device Link self-signed X.509/CSR generation and PEM encoding.
   basic_utils: ^5.8.2
-  local_auth: ^3.0.2
 
   # Desktop & Window Management
   window_manager: ^0.5.2

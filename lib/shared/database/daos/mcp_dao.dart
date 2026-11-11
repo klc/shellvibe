@@ -109,22 +109,27 @@ class McpDao extends DatabaseAccessor<AppDatabase> with _$McpDaoMixin {
   /// Updates the existing (client, host) grant if one exists, otherwise
   /// inserts a new row.
   ///
-  /// [McpHostGrants] has no unique constraint on (clientId, hostId) — a row
-  /// is looked up via [findGrant] first so that a user re-approving access
-  /// after a revoke reuses the existing id (and whatever else may reference
-  /// it) instead of accumulating duplicate grant rows for the same pair.
-  Future<int> upsertGrant(McpHostGrantsCompanion grant) async {
+  /// (clientId, hostId) is unique. The row is looked up via [findGrant] first
+  /// so that a user re-approving access after a revoke reuses the existing id
+  /// (and whatever else may reference it); the lookup and the write share a
+  /// transaction, so two upserts for the same pair cannot both insert.
+  Future<int> upsertGrant(McpHostGrantsCompanion grant) {
     assert(
       grant.clientId.present && grant.hostId.present,
       'upsertGrant requires clientId and hostId to look up the existing row',
     );
-    final existing = await findGrant(grant.clientId.value, grant.hostId.value);
-    if (existing == null) {
-      return into(mcpHostGrants).insert(grant);
-    }
-    return (update(
-      mcpHostGrants,
-    )..where((t) => t.id.equals(existing.id))).write(grant);
+    return transaction(() async {
+      final existing = await findGrant(
+        grant.clientId.value,
+        grant.hostId.value,
+      );
+      if (existing == null) {
+        return into(mcpHostGrants).insert(grant);
+      }
+      return (update(
+        mcpHostGrants,
+      )..where((t) => t.id.equals(existing.id))).write(grant);
+    });
   }
 
   Future<int> deleteGrant(String id) {

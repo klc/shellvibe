@@ -62,7 +62,7 @@ final class VaultKeyServiceProvider
   }
 }
 
-String _$vaultKeyServiceHash() => r'caadb88781a273b41c629f9b10b13975fbacfc9f';
+String _$vaultKeyServiceHash() => r'246517fd14b103059c992630e59469b0d78e8c9e';
 
 /// E2EE backup service. Needs the vault key to make backups self-contained.
 

@@ -14562,6 +14562,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $RunbookRunStepsTable runbookRunSteps = $RunbookRunStepsTable(
     this,
   );
+  late final Index mcpHostGrantsClientHost = Index(
+    'mcp_host_grants_client_host',
+    'CREATE UNIQUE INDEX mcp_host_grants_client_host ON mcp_host_grants (client_id, host_id)',
+  );
   late final HostsDao hostsDao = HostsDao(this as AppDatabase);
   late final IdentitiesDao identitiesDao = IdentitiesDao(this as AppDatabase);
   late final KnownHostsDao knownHostsDao = KnownHostsDao(this as AppDatabase);
@@ -14611,6 +14615,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     runbookRuns,
     runbookRunHosts,
     runbookRunSteps,
+    mcpHostGrantsClientHost,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([

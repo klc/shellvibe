@@ -193,6 +193,9 @@ void main() {
     );
 
     test('repairing an identity keeps its id and clears the flag', () async {
+      // This install has a key of its own; the row was written under another.
+      // (With no key at all the vault would read as lost instead.)
+      await container.read(vaultKeyServiceProvider).getDek();
       await db.identitiesDao.insertIdentity(
         IdentitiesCompanion.insert(
           id: 'needs-repair',
