@@ -197,7 +197,7 @@ class SSHSessionManager {
       // SFTP upload pinned a core at that rate. OpenSSH prefers ChaCha20
       // too; GCM and CTR stay as fallbacks for servers that disable it.
       algorithms: SSHAlgorithms(
-        hostkey: await _preferredHostkeyOrder(config.hostname, config.port),
+        hostkey: await preferredHostkeyOrder(config.hostname, config.port),
         cipher: const [
           SSHCipherType.chacha20poly1305,
           SSHCipherType.aes256gcm,
@@ -329,7 +329,8 @@ class SSHSessionManager {
   /// key (a MITM) in [verifyHostKey]. Same as OpenSSH's HostKeyAlgorithms
   /// ordering. RSA is one key under three algorithm names, so all of them
   /// move together.
-  Future<List<SSHHostkeyType>> _preferredHostkeyOrder(
+  @visibleForTesting
+  Future<List<SSHHostkeyType>> preferredHostkeyOrder(
     String hostname,
     int port,
   ) async {
