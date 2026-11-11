@@ -483,15 +483,23 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
 
   /// Ends a tab's session once it has left `state`: the owner's close
   /// callback first (a Device Link peer, the MCP pool), then the tab itself.
+  ///
+  /// Never throws: callers tear several panes down in a row, and one failing
+  /// step must not leave the panes after it with their sessions open.
   Future<void> _teardown(TerminalTabSession tab) async {
     final onClose = _tabCloseCallbacks.remove(tab.id);
     try {
       await onClose?.call();
-    } finally {
-      await tab.dispose();
-      _deviceLinkTransports.remove(tab.id);
-      _ownedTabs.remove(tab);
+    } catch (e) {
+      debugPrint('[Terminal] close callback of ${tab.id} failed: $e');
     }
+    try {
+      await tab.dispose();
+    } catch (e) {
+      debugPrint('[Terminal] dispose of ${tab.id} failed: $e');
+    }
+    _deviceLinkTransports.remove(tab.id);
+    _ownedTabs.remove(tab);
   }
 
   /// Closes every tab except the one rooted at [tabId].
@@ -873,6 +881,9 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     if (parentIndex == -1) return null;
 
     final parentTab = state.tabs[parentIndex];
+    // An AI tab is the agent's, as in [mergeTab]: a pane of the user's inside
+    // it would be closed with it when the agent's session ends.
+    if (parentTab.isMcp) return null;
     final splitId = const Uuid().v4();
 
     // Without an explicit target a split pane mirrors the session type of the

@@ -49,11 +49,14 @@ TerminalTabSession? _sftpTargetPane(
   TerminalTabSession? activeRootTab,
 ) {
   final focused = tabsState.activeTab;
-  if (focused != null && focused.sessionType == TerminalSessionType.ssh) {
+  if (focused != null &&
+      focused.sessionType == TerminalSessionType.ssh &&
+      !focused.isMcp) {
     return focused;
   }
   if (activeRootTab != null &&
-      activeRootTab.sessionType == TerminalSessionType.ssh) {
+      activeRootTab.sessionType == TerminalSessionType.ssh &&
+      !activeRootTab.isMcp) {
     return activeRootTab;
   }
   return null;
@@ -144,8 +147,9 @@ class TerminalTabStrip extends ConsumerWidget {
           label: 'File Transfer (SFTP) — ${sftpTarget.title}',
           onPressed: () => openSftpForPane(context, sftpTarget),
         ),
-      // Split Pane Action Buttons (Vertical & Horizontal Split)
-      if (activeRootTab != null) ...[
+      // Split Pane Action Buttons (Vertical & Horizontal Split). An AI tab is
+      // never split.
+      if (activeRootTab?.isMcp == false) ...[
         _TabBarAction(
           buttonKey: const Key('split_vertical_button'),
           icon: LucideIcons.columns2,
@@ -247,10 +251,11 @@ class TerminalTabStrip extends ConsumerWidget {
                 // A tab is dragged by the tab itself. Dropped on either side
                 // of another tab it moves there; dropped on its middle, it
                 // joins that tab as a split. Past the last tab, it goes last.
-                child: DragTarget<String>(
-                  onWillAcceptWithDetails: (details) => isRootTab(details.data),
+                child: DragTarget<_TabDrag>(
+                  onWillAcceptWithDetails: (details) =>
+                      isRootTab(details.data.tabId),
                   onAcceptWithDetails: (details) =>
-                      notifier.moveTab(details.data, rootTabs.length - 1),
+                      notifier.moveTab(details.data.tabId, rootTabs.length - 1),
                   builder: (context, _, _) => ListView.builder(
                     scrollDirection: Axis.horizontal,
                     padding: EdgeInsets.zero,
@@ -462,15 +467,15 @@ class TerminalTabStrip extends ConsumerWidget {
                       // still selects. A finger has to hold first: on a phone a
                       // swipe along the strip is how the tabs are scrolled.
                       final draggable = isMobilePlatform
-                          ? LongPressDraggable<String>(
-                              data: tab.id,
+                          ? LongPressDraggable<_TabDrag>(
+                              data: _TabDrag(tab.id),
                               dragAnchorStrategy: pointerDragAnchorStrategy,
                               feedback: feedback,
                               childWhenDragging: dimmed,
                               child: labelledChip,
                             )
-                          : Draggable<String>(
-                              data: tab.id,
+                          : Draggable<_TabDrag>(
+                              data: _TabDrag(tab.id),
                               dragAnchorStrategy: pointerDragAnchorStrategy,
                               feedback: feedback,
                               childWhenDragging: dimmed,
@@ -580,6 +585,13 @@ class TerminalTabStrip extends ConsumerWidget {
 
 enum _TabDropZone { before, merge, after }
 
+/// What a tab chip carries while it is dragged. Its own type so a pane's drop
+/// target never takes a tab, nor a tab's a pane header (see `PaneDrag`).
+class _TabDrag {
+  final String tabId;
+  const _TabDrag(this.tabId);
+}
+
 /// One tab as a drop target: its outer quarters reorder, its middle merges.
 ///
 /// Accepts the tab it wraps as well, so dropping a tab back on itself does
@@ -650,17 +662,17 @@ class _TabDropTargetState extends State<_TabDropTarget> {
   @override
   Widget build(BuildContext context) {
     final brand = widget.tokens.brand;
-    return DragTarget<String>(
-      onWillAcceptWithDetails: (details) => widget.isTab(details.data),
+    return DragTarget<_TabDrag>(
+      onWillAcceptWithDetails: (details) => widget.isTab(details.data.tabId),
       onMove: (details) {
-        _show(_zoneAt(details.offset, details.data));
+        _show(_zoneAt(details.offset, details.data.tabId));
         _autoScroll(details.offset);
       },
       onLeave: (_) => _show(null),
       onAcceptWithDetails: (details) {
-        final zone = _zoneAt(details.offset, details.data);
+        final zone = _zoneAt(details.offset, details.data.tabId);
         _show(null);
-        if (zone != null) widget.onDrop(details.data, zone);
+        if (zone != null) widget.onDrop(details.data.tabId, zone);
       },
       builder: (context, _, _) => Stack(
         children: [
