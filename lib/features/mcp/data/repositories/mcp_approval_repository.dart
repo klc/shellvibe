@@ -22,8 +22,9 @@ class McpApprovalRepository {
 
   const McpApprovalRepository(this.dao);
 
-  /// Collapses leading/trailing and repeated whitespace in [command].
-  /// Nothing else.
+  /// Trims [command] and collapses runs of spaces and tabs. Nothing else:
+  /// a line break separates commands, so `echo ok\nrm x` must never share
+  /// a key with `echo ok rm x`.
   ///
   /// This is the ONLY normalization an approval's match key ever goes
   /// through. Anything smarter — stripping quotes, sorting flags, resolving
@@ -33,7 +34,7 @@ class McpApprovalRepository {
   /// double-spaces from an agent's own formatting don't defeat a match the
   /// user clearly intended to cover.
   String normalizeCommand(String command) {
-    return command.trim().replaceAll(RegExp(r'\s+'), ' ');
+    return command.trim().replaceAll(RegExp(r'[ \t]+'), ' ');
   }
 
   /// Lowercase hex SHA-256 of [normalized], used as the DB lookup index
