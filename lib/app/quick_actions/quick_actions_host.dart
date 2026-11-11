@@ -40,8 +40,14 @@ class QuickActionsHost extends ConsumerStatefulWidget {
   ConsumerState<QuickActionsHost> createState() => _QuickActionsHostState();
 }
 
-class _QuickActionsHostState extends ConsumerState<QuickActionsHost> {
+class _QuickActionsHostState extends ConsumerState<QuickActionsHost>
+    with WidgetsBindingObserver {
   late final QuickActionsController _controller;
+
+  /// Whether the app is out of sight. The icon menu is only ever read then,
+  /// and the auto-lock only lands on the way back in, so a guarded vault
+  /// withholds its hosts for the whole absence.
+  bool _backgrounded = false;
   late final QuickActionDispatcher _dispatcher;
 
   /// How many frames a waiting press is retried for while only the navigator
@@ -53,6 +59,7 @@ class _QuickActionsHostState extends ConsumerState<QuickActionsHost> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _controller = QuickActionsController(
       gateway: ref.read(quickActionsGatewayProvider),
     );
@@ -69,7 +76,17 @@ class _QuickActionsHostState extends ConsumerState<QuickActionsHost> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final backgrounded =
+        state == AppLifecycleState.hidden || state == AppLifecycleState.paused;
+    if (backgrounded == _backgrounded) return;
+    _backgrounded = backgrounded;
+    _syncShortcuts();
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _controller.dispose();
     _dispatcher.clear();
     super.dispose();
@@ -98,8 +115,11 @@ class _QuickActionsHostState extends ConsumerState<QuickActionsHost> {
     if (!mounted) return;
     // Unresolved is not locked: the shortcuts wait for an answer rather than
     // guess one.
-    if (ref.read(vaultProvider).value == null) return;
-    final locked = isVaultLockedOrUnknown(ref);
+    final status = ref.read(vaultProvider).value?.status;
+    if (status == null) return;
+    final locked =
+        isVaultLockedOrUnknown(ref) ||
+        (_backgrounded && status != VaultStatus.unconfigured);
 
     final hosts = ref.read(hostsProvider).value;
     final bookmarks = ref.read(bookmarksProvider).value;

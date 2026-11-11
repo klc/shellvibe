@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../../core/network/device_link/device_link_server.dart';
 import '../../core/utils/platform_capabilities.dart';
@@ -21,6 +22,7 @@ import '../../features/vault/presentation/screens/vault_screen.dart';
 import '../../features/workspaces/presentation/screens/workspace_manager_screen.dart';
 import '../theme/shellvibe_tokens.dart';
 import '../widgets/app_navigation_shell.dart';
+import '../widgets/shellvibe_ui.dart';
 import '../widgets/window_chrome_frame.dart';
 
 /// Route showing the master password prompt while the vault is locked.
@@ -31,10 +33,20 @@ const kUnlockRoute = '/unlock';
 /// [status] is null while [vaultProvider] is still resolving — which
 /// also happens *during* an unlock attempt, so a null status must never bounce
 /// the user off the unlock screen mid-verification.
-String? resolveVaultRedirect(VaultStatus? status, String location) {
+///
+/// [failed] is a vault whose state could not be read at all. It fails closed:
+/// the unlock route shows the error and a retry instead of the app, since the
+/// vault might well be locked.
+String? resolveVaultRedirect(
+  VaultStatus? status,
+  String location, {
+  bool failed = false,
+}) {
   final isAtUnlock = location == kUnlockRoute;
 
-  if (status == VaultStatus.locked) return isAtUnlock ? null : kUnlockRoute;
+  if (status == VaultStatus.locked || failed) {
+    return isAtUnlock ? null : kUnlockRoute;
+  }
   if (isAtUnlock && status == null) return null;
   if (isAtUnlock) return '/terminal';
   return null;
@@ -69,15 +81,19 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     refreshListenable: vaultRouterNotifier,
     // Gate the whole app behind the unlock screen while the vault is locked.
     // Without this the master password would never be asked for.
-    redirect: (context, state) => resolveVaultRedirect(
-      ref.read(vaultProvider).value?.status,
-      state.matchedLocation,
-    ),
+    redirect: (context, state) {
+      final vault = ref.read(vaultProvider);
+      return resolveVaultRedirect(
+        vault.value?.status,
+        state.matchedLocation,
+        failed: vault.hasError && !vault.hasValue,
+      );
+    },
     routes: [
       GoRoute(path: '/', redirect: (context, state) => '/terminal'),
       GoRoute(
         path: kUnlockRoute,
-        builder: (context, state) => const VaultUnlockDialog(),
+        builder: (context, state) => const _VaultGate(),
       ),
       // File transfer is no longer a rail module: it is always opened for one
       // specific session (`tab`), pushed over the shell so the user returns to
@@ -243,3 +259,32 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     ],
   );
 });
+
+/// The unlock screen, or, when the vault state could not be read at all (a
+/// keychain that refused or is not unlocked yet), that error and a retry.
+class _VaultGate extends ConsumerWidget {
+  const _VaultGate();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final vault = ref.watch(vaultProvider);
+    if (vault.hasValue || !vault.hasError) return const VaultUnlockDialog();
+    return Scaffold(
+      body: ShellVibeEmptyState(
+        icon: LucideIcons.triangleAlert,
+        title: 'Vault Unavailable',
+        description:
+            'The vault state could not be read from the system keychain: '
+            '${vault.error}',
+        actions: [
+          ShellVibeButton(
+            key: const Key('vault_retry_button'),
+            label: 'Try Again',
+            busy: vault.isLoading,
+            onPressed: () => ref.invalidate(vaultProvider),
+          ),
+        ],
+      ),
+    );
+  }
+}

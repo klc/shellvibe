@@ -91,6 +91,20 @@ class FocusPaneIntent extends Intent {
   const FocusPaneIntent(this.direction);
 }
 
+/// A [CallbackAction] that claims its chord only while [enabledFor] allows.
+///
+/// A disabled action leaves the key unhandled, so a terminal passes it on to
+/// the PTY: Alt + arrow with no pane to move to stays readline's word motion
+/// and tmux's `M-arrow` instead of being swallowed.
+class GatedCallbackAction<T extends Intent> extends CallbackAction<T> {
+  GatedCallbackAction({required this.enabledFor, required super.onInvoke});
+
+  final bool Function(T intent) enabledFor;
+
+  @override
+  bool isEnabled(T intent) => enabledFor(intent);
+}
+
 /// Opens Settings.
 class OpenSettingsIntent extends Intent {
   const OpenSettingsIntent();

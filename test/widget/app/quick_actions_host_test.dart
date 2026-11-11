@@ -186,6 +186,33 @@ void main() {
     expect(gateway.lastTypes, ['host:b', kQuickConnectShortcutType]);
   });
 
+  // The menu is read from the home screen, with the app in the background
+  // and the auto-lock not due until it comes back.
+  testWidgets('a guarded vault withholds its hosts while in the background', (
+    tester,
+  ) async {
+    await pumpHost(tester);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    await tester.pump();
+    await tester.pump();
+    expect(gateway.lastTypes, [kQuickConnectShortcutType]);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump(const Duration(seconds: 1));
+    expect(gateway.lastTypes, ['host:b', kQuickConnectShortcutType]);
+  });
+
+  testWidgets('no master password keeps the hosts in the background', (
+    tester,
+  ) async {
+    await pumpHost(tester, status: VaultStatus.unconfigured);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    await tester.pump(const Duration(seconds: 1));
+    expect(gateway.lastTypes, ['host:b', kQuickConnectShortcutType]);
+  });
+
   testWidgets('a press on an unlocked app runs straight away', (tester) async {
     await pumpHost(tester);
 

@@ -12,12 +12,19 @@ class SettingsRepository {
 
   SettingsRepository(this._storage);
 
+  /// The stored settings, or the defaults when none are stored.
+  ///
+  /// A failed read throws rather than returning the defaults: a denied
+  /// keychain prompt or a Linux keyring that is not unlocked yet does not mean
+  /// there are no settings, and treating it that way lets the next edit
+  /// overwrite them all with defaults. A blob that cannot be parsed is another
+  /// matter; nothing in it can be recovered, so it reads as no settings.
   Future<AppSettingsModel> loadSettings() async {
+    final jsonStr = await _storage.read(key: _settingsKey);
+    if (jsonStr == null || jsonStr.isEmpty) {
+      return const AppSettingsModel();
+    }
     try {
-      final jsonStr = await _storage.read(key: _settingsKey);
-      if (jsonStr == null || jsonStr.isEmpty) {
-        return const AppSettingsModel();
-      }
       final jsonMap = jsonDecode(jsonStr) as Map<String, dynamic>;
       return AppSettingsModel.fromJson(jsonMap);
     } catch (_) {

@@ -53,6 +53,16 @@ class ForegroundServiceController {
     }
   }
 
+  /// Tries again to bring the service to what is wanted, at a moment the
+  /// platform may allow what it refused before: Android 12+ refuses a start
+  /// from the background, and once the app is back the counts that asked for
+  /// it may never change again. A pending debounced command is left to run.
+  void retry() {
+    if (_disposed || _timer != null) return;
+    if (planServiceCommand(shown: _shown, wanted: _wanted) == null) return;
+    unawaited(_reconcile());
+  }
+
   /// Runs commands until the service shows what is wanted. One at a time: the
   /// platform calls are slow enough for the wanted counts to change under a
   /// call in flight, and a second loop would issue its commands over the first.

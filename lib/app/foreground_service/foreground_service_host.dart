@@ -59,7 +59,8 @@ class ForegroundServiceHost extends ConsumerStatefulWidget {
       _ForegroundServiceHostState();
 }
 
-class _ForegroundServiceHostState extends ConsumerState<ForegroundServiceHost> {
+class _ForegroundServiceHostState extends ConsumerState<ForegroundServiceHost>
+    with WidgetsBindingObserver {
   late final ForegroundServiceController _controller;
 
   /// Set once the platform side is set up. Counts that arrive before that are
@@ -69,6 +70,7 @@ class _ForegroundServiceHostState extends ConsumerState<ForegroundServiceHost> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _controller = ForegroundServiceController(
       gateway: ref.read(foregroundServiceGatewayProvider),
     );
@@ -86,8 +88,17 @@ class _ForegroundServiceHostState extends ConsumerState<ForegroundServiceHost> {
     );
   }
 
+  /// Back in the foreground, where Android lets a service start: a start the
+  /// system refused while the app was away (a session that finished
+  /// connecting behind a 2FA app) is tried again.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _ready) _controller.retry();
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     // The service outliving the app would be a notification for sockets that
     // are gone.
     unawaited(_controller.dispose());

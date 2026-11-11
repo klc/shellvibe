@@ -64,15 +64,8 @@ final class UpdateCheckUnavailable extends UpdateCheckResult {
 /// update check that runs on its own is a request that reports back when the
 /// app was last launched.
 ///
-/// **The repository this points at is not public yet.** GitHub answers an
-/// unauthenticated request for a private repository's releases with 404 — the
-/// same answer it gives for a repository that does not exist, deliberately, so
-/// that a 404 reveals nothing. Until the source moves to its public home the
-/// check therefore reports that no published releases are visible, which is
-/// the honest answer. Embedding a token to work around this is not an option:
-/// a token shipped inside a distributed binary is a published token. When the
-/// repository becomes public, [releasesRepository] is the only line that has
-/// to change.
+/// The request is unauthenticated, which a public repository needs. A token
+/// shipped inside a distributed binary would be a published token.
 class UpdateCheckService {
   UpdateCheckService({ReleaseFetcher? fetch}) : _fetch = fetch ?? _httpGet;
 

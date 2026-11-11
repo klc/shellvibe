@@ -1,13 +1,14 @@
-import 'dart:typed_data';
-
 import 'package:drift/native.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/app/app.dart';
 import 'package:shellvibe/core/network/local_pty_manager.dart';
 import 'package:shellvibe/core/network/providers/network_providers.dart';
+import 'package:shellvibe/core/utils/platform_capabilities.dart';
 import 'package:shellvibe/features/settings/presentation/notifiers/settings_notifier.dart';
 import 'package:shellvibe/features/vault/presentation/notifiers/vault_notifier.dart';
 import 'package:shellvibe/shared/database/app_database.dart';
@@ -127,8 +128,12 @@ void main() {
     await pumpApp(tester, autoLock: 60);
 
     lifecycle(tester, [AppLifecycleState.inactive]);
-    now = now.add(const Duration(hours: 1));
-    await tester.pump(const Duration(minutes: 2));
+    // Input keeps arriving, so only an absence clock could lock here.
+    for (var i = 0; i < 4; i++) {
+      now = now.add(const Duration(seconds: 30));
+      await tester.pump(const Duration(seconds: 30));
+      await tester.sendKeyEvent(LogicalKeyboardKey.shiftLeft);
+    }
     lifecycle(tester, [AppLifecycleState.resumed]);
 
     expect(vault.locks, 0);
@@ -143,15 +148,112 @@ void main() {
 
     expect(vault.locks, 0);
   });
+  group('on a desktop', () {
+    setUp(() => debugPlatformCapabilitiesOverride = TargetPlatform.macOS);
+    tearDown(() => debugPlatformCapabilitiesOverride = null);
+
+    Future<void> idle(WidgetTester tester, Duration duration) async {
+      now = now.add(duration);
+      await tester.pump(duration);
+    }
+
+    // A window can stay in plain view while its user walks away or the OS
+    // session is locked; it is never hidden or paused for that.
+    testWidgets('locks after the delay without input, window in view', (
+      tester,
+    ) async {
+      await pumpApp(tester, autoLock: 60);
+
+      await idle(tester, const Duration(seconds: 59));
+      expect(vault.locks, 0);
+      await idle(tester, const Duration(seconds: 2));
+      expect(vault.locks, 1);
+    });
+
+    testWidgets('input pushes the lock back', (tester) async {
+      await pumpApp(tester, autoLock: 60);
+
+      await idle(tester, const Duration(seconds: 40));
+      await tester.sendKeyEvent(LogicalKeyboardKey.shiftLeft);
+      await idle(tester, const Duration(seconds: 40));
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await gesture.addPointer(location: const Offset(10, 10));
+      await gesture.moveTo(const Offset(20, 20));
+      await idle(tester, const Duration(seconds: 40));
+      expect(vault.locks, 0);
+
+      await idle(tester, const Duration(seconds: 21));
+      expect(vault.locks, 1);
+      await gesture.removePointer();
+    });
+
+    // The idle timer counts on the monotonic clock, which stops while the
+    // machine sleeps.
+    testWidgets('the first input after a sleep locks', (tester) async {
+      await pumpApp(tester, autoLock: 60);
+
+      now = now.add(const Duration(hours: 8));
+      await tester.sendKeyEvent(LogicalKeyboardKey.shiftLeft);
+      expect(vault.locks, 1);
+    });
+
+    testWidgets('auto-lock off runs no idle lock', (tester) async {
+      await pumpApp(tester, autoLock: 0);
+
+      await idle(tester, const Duration(hours: 3));
+      await tester.sendKeyEvent(LogicalKeyboardKey.shiftLeft);
+      expect(vault.locks, 0);
+    });
+  });
+
+  group('on Android', () {
+    const channel = MethodChannel('dev.shellvibe.app/secure_window');
+    late List<Object?> secure;
+
+    setUp(() {
+      debugPlatformCapabilitiesOverride = TargetPlatform.android;
+      secure = [];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            if (call.method == 'setSecure') secure.add(call.arguments);
+            return null;
+          });
+    });
+    tearDown(() {
+      debugPlatformCapabilitiesOverride = null;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    // The thumbnail is taken on the way out; the auto-lock lands on the way
+    // back in, after it.
+    testWidgets('a master password keeps the window out of the recent-apps '
+        'thumbnail and screenshots', (tester) async {
+      await pumpApp(tester, autoLock: 60);
+
+      expect(secure, [true]);
+    });
+
+    testWidgets('no master password leaves the window as it is', (
+      tester,
+    ) async {
+      vault = _RecordingVaultNotifier(VaultStatus.unconfigured);
+      await pumpApp(tester, autoLock: 60);
+
+      expect(secure.last, isFalse);
+    });
+  });
 }
 
 /// An unlocked vault that counts the locks it is asked for.
 class _RecordingVaultNotifier extends VaultNotifier {
+  _RecordingVaultNotifier([this.initial = VaultStatus.unlocked]);
+
+  final VaultStatus initial;
   int locks = 0;
 
   @override
-  Future<VaultState> build() async =>
-      const VaultState(status: VaultStatus.unlocked);
+  Future<VaultState> build() async => VaultState(status: initial);
 
   @override
   Future<void> lock() async {

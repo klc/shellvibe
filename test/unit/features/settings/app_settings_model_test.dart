@@ -116,5 +116,35 @@ void main() {
         }
       },
     );
+
+    test('a field of the wrong type takes its default, not the model', () {
+      final restored = AppSettingsModel.fromJson({
+        'autoLockTimerSeconds': '30',
+        'keepRunningInTray': 'no',
+        'fontFamily': 12,
+        'clipboardAutoClearSeconds': 15,
+      });
+
+      expect(restored.autoLockTimerSeconds, 0);
+      expect(restored.keepRunningInTray, isTrue);
+      expect(restored.fontFamily, 'RobotoMono');
+      expect(restored.clipboardAutoClearSeconds, 15);
+    });
+
+    test('sizes are held to the sliders\' ranges', () {
+      final big = AppSettingsModel.fromJson({
+        'fontSize': 400,
+        'lineHeightFactor': 9,
+      });
+      final small = AppSettingsModel.fromJson({
+        'fontSize': 1,
+        'lineHeightFactor': 0.1,
+      });
+
+      expect(big.fontSize, kTerminalFontSizeMax);
+      expect(big.lineHeightFactor, kLineHeightFactorMax);
+      expect(small.fontSize, kTerminalFontSizeMin);
+      expect(small.lineHeightFactor, kLineHeightFactorMin);
+    });
   });
 }

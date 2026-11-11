@@ -46,12 +46,15 @@ SingleInstance? _singleInstance;
 Future<bool> _claimSingleInstance() async {
   try {
     final support = await getApplicationSupportDirectory();
+    // An AppImage runs from a new temporary mount every launch; the file it
+    // names is the install.
+    final install =
+        Platform.environment['APPIMAGE'] ?? Platform.resolvedExecutable;
     _singleInstance = await SingleInstance.claim(
       directory: Directory(p.join(support.path, 'instance')),
       // One claim per install: a debug build beside the installed app, or two
       // installs, run side by side as they always have.
-      name:
-          'shellvibe-${fnv1a32(Platform.resolvedExecutable).toRadixString(16)}',
+      name: 'shellvibe-${fnv1a32(install).toRadixString(16)}',
       onActivate: () => unawaited(showHostWindow()),
     );
     return _singleInstance != null;
@@ -116,21 +119,23 @@ void main(List<String> args) async {
       // A terminal grid is only worth as much as the columns it can show, and
       // the desktop shell puts a rail, a work area and a session tree side by
       // side — none of which fit that default without an immediate resize.
-      await windowManager.waitUntilReadyToShow(null, () async {
-        // Before show: hiding the title bar on a visible window flashes it away.
-        await applyWindowChrome();
-        // The shell adapts down to a phone layout, but the modules underneath
-        // it still need room to be worth opening: below this the SFTP panes
-        // have no height left for a file list and the terminal loses its tab
-        // strip. A floor is kinder than a layout that technically renders.
-        await windowManager.setMinimumSize(kMinimumWindowSize);
-        if (startHidden) {
-          await hideHostWindowAtLaunch();
-        } else {
-          await windowManager.maximize();
-          await windowManager.show();
-        }
-      });
+      // Awaited here rather than passed as its callback, which
+      // window_manager calls without awaiting: a failure in it escaped this
+      // try and a hidden launch was not done hiding before runApp.
+      await windowManager.waitUntilReadyToShow();
+      // Before show: hiding the title bar on a visible window flashes it away.
+      await applyWindowChrome();
+      // The shell adapts down to a phone layout, but the modules underneath
+      // it still need room to be worth opening: below this the SFTP panes
+      // have no height left for a file list and the terminal loses its tab
+      // strip. A floor is kinder than a layout that technically renders.
+      await windowManager.setMinimumSize(kMinimumWindowSize);
+      if (startHidden) {
+        await hideHostWindowAtLaunch();
+      } else {
+        await windowManager.maximize();
+        await windowManager.show();
+      }
     } catch (e) {
       debugPrint('[WindowManager Init Warning] $e');
     }

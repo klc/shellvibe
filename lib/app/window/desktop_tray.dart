@@ -25,6 +25,7 @@ import '../../features/vault/presentation/notifiers/vault_notifier.dart';
 import '../notifications/notification_providers.dart';
 import 'desktop_tray_menu.dart';
 import 'host_navigation.dart';
+import 'quit_guard.dart';
 import 'tray_icon_state.dart';
 import 'window_chrome.dart';
 import '../../features/templates/presentation/template_launch.dart';
@@ -33,6 +34,40 @@ import '../../features/templates/presentation/template_launch.dart';
 /// Windows and Linux path on any host.
 @visibleForTesting
 bool? debugTrayInterceptsCloseOverride;
+
+/// Overrides whether something is there to show the tray icon.
+@visibleForTesting
+bool? debugTrayHostAvailableOverride;
+
+Future<bool>? _linuxTrayHost;
+
+/// Whether anything will show the tray icon. On Linux the icon is a
+/// StatusNotifierItem, and tray_manager's setIcon succeeds with nothing to
+/// host it (stock GNOME): the window then hid behind an icon nobody could see.
+/// So the item's host is asked for on D-Bus, once per run. Where `dbus-send`
+/// cannot be run there is no telling, and the icon is tried as before.
+Future<bool> _trayHostAvailable() {
+  final override = debugTrayHostAvailableOverride;
+  if (override != null) return Future.value(override);
+  if (!Platform.isLinux) return Future.value(true);
+  return _linuxTrayHost ??= () async {
+    try {
+      final result = await Process.run('dbus-send', [
+        '--session',
+        '--dest=org.freedesktop.DBus',
+        '--type=method_call',
+        '--print-reply',
+        '/org/freedesktop/DBus',
+        'org.freedesktop.DBus.NameHasOwner',
+        'string:org.kde.StatusNotifierWatcher',
+      ]);
+      return result.exitCode == 0 &&
+          '${result.stdout}'.contains('boolean true');
+    } on ProcessException {
+      return true;
+    }
+  }();
+}
 
 /// Puts ShellVibe in the system tray (the menu bar on macOS) and, where the
 /// platform would otherwise quit, turns closing the window into hiding it.
@@ -124,13 +159,16 @@ class _DesktopTrayHostState extends ConsumerState<DesktopTrayHost>
 
   Future<void> _apply() async {
     if (!mounted) return;
-    final enabled = _enabled;
+    final enabled = _enabled && (_trayShown || await _trayHostAvailable());
+    if (!mounted) return;
+
+    // Always intercepted where closing the window ends the process: a close
+    // with nothing to hide behind quits through [_quit], which asks first
+    // while sessions are running. [_onWindowClose] hides only while the icon
+    // is up, so a close in between never leaves the window with no way back.
+    if (_interceptsClose) await windowManager.setPreventClose(true);
 
     if (!enabled) {
-      // Let the close through before the icon goes: in between, a close that
-      // is still intercepted would hide the window with no icon to bring it
-      // back through.
-      if (_interceptsClose) await windowManager.setPreventClose(false);
       if (_trayShown) {
         await trayManager.destroy();
         _trayShown = false;
@@ -150,35 +188,24 @@ class _DesktopTrayHostState extends ConsumerState<DesktopTrayHost>
     );
 
     if (!_trayShown || iconState != _shownIcon) {
-      try {
-        await trayManager.setIcon(
-          trayIconAsset(
-            iconState,
-            isMacOS: Platform.isMacOS,
-            isWindows: Platform.isWindows,
-          ),
-          // The menu bar tints a template from its alpha, so it may not carry
-          // colour; the variants differ in shape instead.
-          isTemplate: Platform.isMacOS,
-        );
-        if (!_trayShown && !Platform.isLinux) {
-          await trayManager.setToolTip('ShellVibe');
-        }
-      } catch (_) {
-        // A desktop without a tray host (a bare Linux window manager) still
-        // runs the app, but has no icon to hide behind, so closing the window
-        // has to go on quitting it.
-        if (!_trayShown && _interceptsClose) {
-          await windowManager.setPreventClose(false);
-        }
-        rethrow;
+      // A desktop without a tray host (a bare Linux window manager) fails
+      // here. [_trayShown] then stays false, so a close goes on quitting.
+      await trayManager.setIcon(
+        trayIconAsset(
+          iconState,
+          isMacOS: Platform.isMacOS,
+          isWindows: Platform.isWindows,
+        ),
+        // The menu bar tints a template from its alpha, so it may not carry
+        // colour; the variants differ in shape instead.
+        isTemplate: Platform.isMacOS,
+      );
+      if (!_trayShown && !Platform.isLinux) {
+        await trayManager.setToolTip('ShellVibe');
       }
       _trayShown = true;
       _shownIcon = iconState;
     }
-    // Only once the icon is up: intercepting the close earlier hides the
-    // window with nothing on screen to show it again.
-    if (_interceptsClose) await windowManager.setPreventClose(true);
     // Recorded before the await: a change that lands while the plugin is busy
     // must compare against what is being shown, not what was shown before.
     _lastMenuData = data;
@@ -294,6 +321,7 @@ class _DesktopTrayHostState extends ConsumerState<DesktopTrayHost>
   }
 
   Future<void> _quit() async {
+    if (!await confirmQuit(ref)) return;
     try {
       await trayManager.destroy();
       _trayShown = false;

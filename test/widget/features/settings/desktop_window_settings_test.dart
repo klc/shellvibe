@@ -12,10 +12,13 @@ import 'package:shellvibe/app/notifications/notification_policy.dart';
 import 'package:shellvibe/app/notifications/notification_presenter.dart';
 import 'package:shellvibe/app/notifications/notification_providers.dart';
 import 'package:shellvibe/app/window/launch_at_login.dart';
+import 'package:shellvibe/features/settings/data/repositories/settings_repository.dart';
+import 'package:shellvibe/features/settings/domain/models/app_settings_model.dart';
 import 'package:shellvibe/features/settings/presentation/notifiers/settings_notifier.dart';
 import 'package:shellvibe/features/settings/presentation/screens/settings_screen.dart';
 import 'package:shellvibe/shared/database/app_database.dart';
 import 'package:shellvibe/shared/providers/database_providers.dart';
+import 'package:shellvibe/shared/storage/secure_storage_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -35,7 +38,10 @@ void main() {
     await db.close();
   });
 
-  Future<ProviderContainer> pumpSettings(WidgetTester tester) async {
+  Future<ProviderContainer> pumpSettings(
+    WidgetTester tester, {
+    SettingsRepository? repository,
+  }) async {
     tester.view.physicalSize = const Size(1600, 2400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() => tester.view.resetPhysicalSize());
@@ -45,6 +51,8 @@ void main() {
         appDatabaseProvider.overrideWithValue(db),
         launchAtLoginProvider.overrideWithValue(login),
         notificationPresenterProvider.overrideWithValue(presenter),
+        if (repository != null)
+          settingsRepositoryProvider.overrideWithValue(repository),
       ],
     );
     addTearDown(container.dispose);
@@ -115,6 +123,19 @@ void main() {
       // Turning it on is the moment macOS has to be asked.
       expect(presenter.permissionRequests, 1);
     });
+  });
+
+  testWidgets('a refused settings write is reported', (tester) async {
+    await pumpSettings(tester, repository: _RefusingRepository());
+    const key = 'settings_keep_running_in_tray_switch';
+
+    await tapSwitch(tester, key);
+
+    expect(switchValue(tester, key), isTrue);
+    expect(
+      find.textContaining('The setting could not be saved'),
+      findsOneWidget,
+    );
   });
 
   group('Start at Login switch', () {
@@ -237,4 +258,12 @@ class _FakePresenter implements NotificationPresenter {
 
   @override
   Future<void> dispose() async {}
+}
+
+class _RefusingRepository extends SettingsRepository {
+  _RefusingRepository() : super(SecureStorageService());
+
+  @override
+  Future<void> saveSettings(AppSettingsModel settings) async =>
+      throw StateError('storage refused');
 }

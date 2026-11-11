@@ -25,7 +25,10 @@ void main() {
     );
     expect(first, isNotNull);
 
-    await SingleInstance.activateRunning(File('${dir.path}/app.port'));
+    expect(
+      await SingleInstance.activateRunning(File('${dir.path}/app.port')),
+      isTrue,
+    );
     await activated.future.timeout(const Duration(seconds: 2));
 
     await first!.release();
@@ -55,15 +58,20 @@ void main() {
     await first!.release();
   });
 
-  test(
-    'an unreachable first copy does not throw at the later launch',
-    () async {
-      await File(
-        '${dir.path}/app.port',
-      ).writeAsString(jsonEncode({'port': 1, 'token': 'x'}));
-      await SingleInstance.activateRunning(File('${dir.path}/app.port'));
-    },
-  );
+  // The later launch then starts rather than exit with no window.
+  test('an unreachable first copy is reported, not thrown', () async {
+    await File(
+      '${dir.path}/app.port',
+    ).writeAsString(jsonEncode({'port': 1, 'token': 'x'}));
+    expect(
+      await SingleInstance.activateRunning(File('${dir.path}/app.port')),
+      isFalse,
+    );
+    expect(
+      await SingleInstance.activateRunning(File('${dir.path}/missing.port')),
+      isFalse,
+    );
+  });
 
   test('a released claim can be taken again', () async {
     final first = await SingleInstance.claim(

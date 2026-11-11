@@ -132,7 +132,12 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
               return null;
             },
           ),
-          FocusPaneIntent: CallbackAction<FocusPaneIntent>(
+          FocusPaneIntent: GatedCallbackAction<FocusPaneIntent>(
+            enabledFor: (intent) =>
+                ref
+                    .read(terminalTabsProvider.notifier)
+                    .paneToward(intent.direction) !=
+                null,
             onInvoke: (intent) => ref
                 .read(terminalTabsProvider.notifier)
                 .focusPane(intent.direction),

@@ -47,6 +47,29 @@ void main() {
       expect(await log.readUnoffered(), contains('new'));
     });
 
+    test('stays under its cap, without offering old crashes again', () async {
+      log = CrashLog(dir, maxBytes: 2000);
+      final file = File('${dir.path}/crash.log');
+      var i = 0;
+      while (!await file.exists() || await file.length() < 1800) {
+        await log.append(
+          'FlutterError',
+          StateError('old ${i++} ${'x' * 80}'),
+          null,
+        );
+      }
+      await log.markOffered();
+
+      // Over the cap: the oldest half goes, and some offered entries stay.
+      await log.append('FlutterError', StateError('new ${'y' * 200}'), null);
+
+      expect(await file.length(), lessThanOrEqualTo(2000));
+      expect(await file.readAsString(), contains('old'));
+      final unoffered = await log.readUnoffered();
+      expect(unoffered, contains('new'));
+      expect(unoffered, isNot(contains('old')));
+    });
+
     test('the tail keeps the newest text', () async {
       await log.append('FlutterError', StateError('old ${'x' * 200}'), null);
       await log.append('FlutterError', StateError('newest'), null);
@@ -82,6 +105,19 @@ void main() {
         expect(out, isNot(contains(leaked)), reason: leaked);
       }
       expect(out, contains('~/.ssh/id_ed25519'));
+    });
+
+    test('masks the host names socket errors spell out', () {
+      const raw =
+          "SocketException: Failed host lookup: 'db.prod.lan' (OS Error)\n"
+          'SocketException: Connection timed out, address = bastion, port = 22';
+
+      final out = CrashReport.scrub(raw);
+
+      expect(out, isNot(contains('db.prod.lan')));
+      expect(out, isNot(contains('bastion')));
+      expect(out, contains("Failed host lookup: '<host>'"));
+      expect(out, contains('address = <host>, port = 22'));
     });
 
     test('leaves timestamps and stack frames readable', () {
