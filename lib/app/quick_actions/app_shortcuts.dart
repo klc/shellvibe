@@ -134,8 +134,9 @@ List<AppShortcut> buildAppShortcuts({
     hostShortcuts.add(
       AppShortcut(
         type: hostShortcutType(host.id),
+        // The label only: the menu is readable from the home screen, and an
+        // address says more about the user's network than they chose to.
         title: host.label,
-        subtitle: host.hostname,
       ),
     );
   }

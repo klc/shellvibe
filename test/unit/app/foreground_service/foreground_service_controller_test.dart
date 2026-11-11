@@ -269,6 +269,25 @@ void main() {
       });
     });
 
+    test('a start refused in the background is retried on return', () {
+      withController((async) {
+        gateway.failStartWith = StateError('not allowed from background');
+        controller.update(_one);
+        _settle(async);
+        expect(gateway.calls, ['permission']);
+
+        // Back in the foreground with the same counts.
+        gateway.failStartWith = null;
+        controller.retry();
+        _settle(async);
+        expect(gateway.calls, ['permission', 'start:ShellVibe|1 session']);
+
+        controller.retry();
+        _settle(async);
+        expect(gateway.calls, hasLength(2), reason: 'nothing left to do');
+      });
+    });
+
     test('a failed update falls back to starting afresh', () {
       withController((async) {
         controller.update(_one);

@@ -26,7 +26,7 @@ void main() {
         kQuickConnectShortcutType,
       ]);
       expect(shortcuts.first.title, 'Host c');
-      expect(shortcuts.first.subtitle, 'c.example.com');
+      expect(shortcuts.first.subtitle, isNull);
     });
 
     test('caps hosts at three and the whole menu at four', () {

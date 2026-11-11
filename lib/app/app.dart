@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:ui' show AppExitResponse;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
@@ -23,6 +26,7 @@ import 'theme/app_palette_definitions.dart';
 import 'theme/app_theme.dart';
 import 'widgets/window_caption_strip.dart';
 import 'window/desktop_tray.dart';
+import 'window/quit_guard.dart';
 import 'window/window_chrome.dart';
 
 /// Overrides the wall clock an auto-lock absence is measured against, so a
@@ -54,6 +58,21 @@ class _ShellVibeAppState extends ConsumerState<ShellVibeApp>
   /// Auto-lock delay in force for the current absence, read when it began.
   Duration _autoLockDelay = Duration.zero;
 
+  /// Desktop only: the last pointer or key event the app saw, and the timer
+  /// that locks once none has arrived for the auto-lock delay. A desktop
+  /// window can sit in plain view while its user walks away or the OS session
+  /// is locked, and is never hidden or paused for it.
+  DateTime _lastInputAt = _wallClockNow();
+  Timer? _idleTimer;
+
+  /// Android: whether the window was last asked to be kept out of
+  /// screenshots, screen recordings and the recent-apps thumbnail.
+  bool? _secureWindow;
+
+  static const _secureWindowChannel = MethodChannel(
+    'dev.shellvibe.app/secure_window',
+  );
+
   /// Last canvas and brightness handed to the window frame, so a rebuild that
   /// did not change the theme does not cross the method channel again.
   (Color, Brightness)? _appliedChrome;
@@ -62,19 +81,32 @@ class _ShellVibeAppState extends ConsumerState<ShellVibeApp>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    if (!isMobilePlatform) {
+      GestureBinding.instance.pointerRouter.addGlobalRoute(_onPointerInput);
+      HardwareKeyboard.instance.addHandler(_onKeyInput);
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _maybeOpenLaunchShell(ref.read(vaultProvider));
+      _syncSecureWindow(ref.read(vaultProvider));
       _syncWindowChrome();
-      _offerUnreportedCrash();
+      _offerUnreportedCrash(ref.read(vaultProvider));
     });
   }
+
+  bool _crashOffered = false;
 
   /// A crash from the last run, offered once as a GitHub issue the user files
   /// themselves. On the root navigator: this widget sits above the router and
   /// has no navigator of its own.
-  void _offerUnreportedCrash() {
+  ///
+  /// Not over the unlock screen: the report quotes the log, which can name
+  /// hosts, to whoever is at the machine. Offered once the vault opens.
+  void _offerUnreportedCrash(AsyncValue<VaultState> vault) {
+    if (_crashOffered) return;
+    if (!vault.hasValue || vault.value!.status == VaultStatus.locked) return;
     final context = rootNavigatorKey.currentContext;
     if (context == null) return;
+    _crashOffered = true;
     unawaited(
       offerUnreportedCrash(context).catchError((Object error) {
         debugPrint('[CrashLog] could not offer the last crash: $error');
@@ -128,18 +160,12 @@ class _ShellVibeAppState extends ConsumerState<ShellVibeApp>
   ///
   /// The gate waits for the vault status to resolve — at first frame it is
   /// still loading, and treating "not locked yet" as "not locked" is exactly
-  /// the case being guarded against. A vault that fails to *load* is not a
-  /// lock (the router lets the app through too), so the shell opens.
-  ///
-  /// Device Link is gated more tightly than the shell: an unresolved or failed
-  /// vault opens no LAN listener, but it must still leave the user with a
-  /// usable local terminal.
+  /// the case being guarded against. A vault that fails to *load* might be
+  /// locked too, so it fails closed the same way: the router shows the error
+  /// and a retry, and the shell opens once a retry reads the vault.
   void _maybeOpenLaunchShell(AsyncValue<VaultState> vault) {
-    // A failed vault read keeps `isLoading` set while Riverpod retries it, so
-    // "still loading" has to mean no value *and* no error — otherwise a vault
-    // that cannot be read at all would hold the shell back forever.
-    if (vault.isLoading && !vault.hasValue && !vault.hasError) return;
-    if (vault.value?.status == VaultStatus.locked) return;
+    if (!vault.hasValue) return;
+    if (vault.value!.status == VaultStatus.locked) return;
     if (!_launchShellOpened) {
       _launchShellOpened = true;
       if (supportsLocalShell) {
@@ -150,6 +176,25 @@ class _ShellVibeAppState extends ConsumerState<ShellVibeApp>
       _reconnectDeviceLinkIfVaultUnlocked();
       if (supportsLocalShell) unawaited(_ensureDeviceLinkServerSafely());
     }
+  }
+
+  /// Android only: FLAG_SECURE while a master password guards the vault. The
+  /// auto-lock lands on the way back in, so without it the recent-apps
+  /// thumbnail goes on showing an unlocked session after the lock is due. A
+  /// vault not read yet counts as guarded. iOS covers its snapshot natively
+  /// (SceneDelegate).
+  void _syncSecureWindow(AsyncValue<VaultState> vault) {
+    if (runtimeTargetPlatform != TargetPlatform.android) return;
+    final secure = vault.value?.status != VaultStatus.unconfigured;
+    if (secure == _secureWindow) return;
+    _secureWindow = secure;
+    unawaited(
+      _secureWindowChannel.invokeMethod<void>('setSecure', secure).catchError((
+        Object error,
+      ) {
+        debugPrint('[SecureWindow] $error');
+      }),
+    );
   }
 
   bool _vaultAllowsDeviceLink(AsyncValue<VaultState> vault) {
@@ -225,6 +270,53 @@ class _ShellVibeAppState extends ConsumerState<ShellVibeApp>
     });
   }
 
+  Duration get _autoLockSetting => Duration(
+    seconds: ref.read(settingsProvider).value?.autoLockTimerSeconds ?? 0,
+  );
+
+  void _onPointerInput(PointerEvent event) => _onInput();
+
+  bool _onKeyInput(KeyEvent event) {
+    _onInput();
+    return false; // Observed only; the key goes on to whoever has focus.
+  }
+
+  void _onInput() {
+    final now = _wallClockNow();
+    final idle = now.difference(_lastInputAt);
+    _lastInputAt = now;
+    // The idle timer counts on the monotonic clock, which stops while the
+    // machine sleeps. The first input after a gap it did not see locks before
+    // it reaches anything behind the lock.
+    final delay = _autoLockSetting;
+    if (delay > Duration.zero && (idle.isNegative || idle >= delay)) {
+      _lockIfUnlocked();
+    }
+    if (_idleTimer == null) _checkIdle();
+  }
+
+  /// Locks once the app has seen no input for the auto-lock delay, else
+  /// checks again when it would be due. Re-armed by the next input after a
+  /// lock or while auto-lock is off, so an idle app runs no timer at all.
+  void _checkIdle() {
+    _idleTimer?.cancel();
+    _idleTimer = null;
+    if (isMobilePlatform) return;
+    final delay = _autoLockSetting;
+    if (delay <= Duration.zero) return;
+    final idle = _wallClockNow().difference(_lastInputAt);
+    if (idle.isNegative || idle >= delay) {
+      _lockIfUnlocked();
+      return;
+    }
+    _idleTimer = Timer(delay - idle, _checkIdle);
+  }
+
+  void _lockIfUnlocked() {
+    if (ref.read(vaultProvider).value?.status != VaultStatus.unlocked) return;
+    unawaited(ref.read(vaultProvider.notifier).lock());
+  }
+
   void _onReturned() {
     final backgroundedAt = _backgroundedAt;
     if (backgroundedAt == null) return;
@@ -258,9 +350,22 @@ class _ShellVibeAppState extends ConsumerState<ShellVibeApp>
     unawaited(ref.read(cloudBackupProvider.notifier).maybeBackUpOnSchedule());
   }
 
+  /// macOS: ⌘Q, the app menu, the Dock and the tray's Quit all end here.
+  /// Windows and Linux quit through the tray host, which asks the same way.
+  @override
+  Future<AppExitResponse> didRequestAppExit() async {
+    if (isMobilePlatform || await confirmQuit(ref)) return AppExitResponse.exit;
+    return AppExitResponse.cancel;
+  }
+
   @override
   void dispose() {
     _autoLockTimer?.cancel();
+    _idleTimer?.cancel();
+    if (!isMobilePlatform) {
+      GestureBinding.instance.pointerRouter.removeGlobalRoute(_onPointerInput);
+      HardwareKeyboard.instance.removeHandler(_onKeyInput);
+    }
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -277,11 +382,17 @@ class _ShellVibeAppState extends ConsumerState<ShellVibeApp>
     // that begins locked has to try again once it opens.
     ref.listen(vaultProvider, (_, next) {
       _maybeOpenLaunchShell(next);
+      _offerUnreportedCrash(next);
+      _syncSecureWindow(next);
       unawaited(
         ref.read(mcpSettingsProvider.notifier).ensureServerMatchesSetting(),
       );
     });
-    ref.listen(settingsProvider, (_, _) => _syncWindowChrome());
+    ref.listen(settingsProvider, (_, _) {
+      _syncWindowChrome();
+      // A changed delay applies from now, not from the next input.
+      _checkIdle();
+    });
 
     // Watched, not read: this is what builds the MCP settings at boot, which
     // is where the persisted master switch gets reconciled against what is

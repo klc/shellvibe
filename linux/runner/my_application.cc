@@ -16,6 +16,13 @@ G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 
 // Called when first Flutter frame received.
 static void first_frame_cb(MyApplication* self, FlView* view) {
+  // A launch at login (--hidden) leaves showing to Dart, which keeps the
+  // window in the tray or shows it when there is no tray to keep it in.
+  // Showing it here flashed it on screen before Dart could hide it again.
+  if (self->dart_entrypoint_arguments != nullptr &&
+      g_strv_contains(self->dart_entrypoint_arguments, "--hidden")) {
+    return;
+  }
   gtk_widget_show(gtk_widget_get_toplevel(GTK_WIDGET(view)));
 }
 

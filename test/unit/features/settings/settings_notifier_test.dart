@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,6 +8,7 @@ import 'package:shellvibe/features/settings/data/repositories/settings_repositor
 import 'package:shellvibe/features/settings/domain/models/app_settings_model.dart';
 import 'package:shellvibe/features/settings/presentation/notifiers/settings_notifier.dart';
 import 'package:shellvibe/features/terminal/domain/models/terminal_palette.dart';
+import 'package:shellvibe/shared/providers/database_providers.dart';
 import 'package:shellvibe/shared/storage/secure_storage_service.dart';
 
 void main() {
@@ -96,6 +98,107 @@ void main() {
     expect(shown.fontSize, 16);
     expect(shown.themeMode, ThemeMode.light);
   });
+
+  group('a failed read', () {
+    const stored =
+        '{"autoLockTimerSeconds":30,"clipboardAutoClearSeconds":15,'
+        '"keepRunningInTray":false,"fontSize":18.0}';
+
+    ProviderContainer containerOver(SecureStorageService storage) {
+      final container = ProviderContainer(
+        // Riverpod retries a failed build on a timer; the test drives it.
+        retry: (_, _) => null,
+        overrides: [secureStorageServiceProvider.overrideWithValue(storage)],
+      );
+      addTearDown(container.dispose);
+      return container;
+    }
+
+    setUp(
+      () => FlutterSecureStorage.setMockInitialValues({
+        'shellvibe_app_settings': stored,
+      }),
+    );
+
+    test('is an error, not the defaults', () async {
+      final container = containerOver(_RefusesFirstRead());
+
+      await expectLater(
+        container.read(settingsProvider.future),
+        throwsA(isA<PlatformException>()),
+      );
+      expect(container.read(settingsProvider).hasError, isTrue);
+    });
+
+    test('refuses edits instead of overwriting what is stored', () async {
+      final container = containerOver(_RefusesFirstRead());
+      await container
+          .read(settingsProvider.future)
+          .then((_) {}, onError: (_) {});
+      final notifier = container.read(settingsProvider.notifier);
+
+      // The zoom shortcut used to write the defaults with one field changed:
+      // auto-lock off, clipboard back to 30s, the tray back on.
+      await expectLater(notifier.stepFontSize(1), throwsA(anything));
+      await expectLater(
+        notifier.setThemeMode(ThemeMode.light),
+        throwsA(anything),
+      );
+
+      expect(
+        await SecureStorageService().read(key: 'shellvibe_app_settings'),
+        stored,
+      );
+    });
+
+    test('an edit made once the read succeeds keeps the rest', () async {
+      final container = containerOver(_RefusesFirstRead());
+      await container
+          .read(settingsProvider.future)
+          .then((_) {}, onError: (_) {});
+      container.invalidate(settingsProvider);
+      await container.read(settingsProvider.future);
+
+      await container.read(settingsProvider.notifier).stepFontSize(1);
+
+      final reloaded = await SettingsRepository(
+        SecureStorageService(),
+      ).loadSettings();
+      expect(reloaded.fontSize, 19);
+      expect(reloaded.autoLockTimerSeconds, 30);
+      expect(reloaded.clipboardAutoClearSeconds, 15);
+      expect(reloaded.keepRunningInTray, isFalse);
+    });
+
+    test('an edit made while the read is in flight waits for it', () async {
+      final container = containerOver(SecureStorageService());
+      final notifier = container.read(settingsProvider.notifier);
+
+      await notifier.setThemeMode(ThemeMode.light);
+
+      final reloaded = await SettingsRepository(
+        SecureStorageService(),
+      ).loadSettings();
+      expect(reloaded.themeMode, ThemeMode.light);
+      expect(reloaded.autoLockTimerSeconds, 30);
+      expect(reloaded.keepRunningInTray, isFalse);
+    });
+  });
+}
+
+/// A keychain that refuses the first read, as a denied macOS prompt or a
+/// Linux keyring that is not unlocked yet does.
+class _RefusesFirstRead extends SecureStorageService {
+  var _refused = false;
+
+  @override
+  Future<String?> read({required String key}) async {
+    if (!_refused) {
+      _refused = true;
+      throw PlatformException(code: 'denied', message: 'user canceled');
+    }
+    return super.read(key: key);
+  }
 }
 
 class _FailingRepository extends SettingsRepository {

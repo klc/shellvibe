@@ -287,6 +287,54 @@ void main() {
       expect(rows.map((row) => row.label), isNot(contains('New local tab')));
     });
   });
+
+  // A terminal hands every chord to the app keymap first and encodes for the
+  // PTY only what comes back unhandled.
+  testWidgets('Alt + arrow with no pane to move to is left unhandled', (
+    tester,
+  ) async {
+    var hasNeighbour = false;
+    var moved = 0;
+    var passedOn = 0;
+    await tester.pumpWidget(
+      Focus(
+        onKeyEvent: (_, event) {
+          if (event is KeyDownEvent) passedOn++;
+          return KeyEventResult.handled;
+        },
+        child: Shortcuts(
+          shortcuts: appKeymap(
+            platform: TargetPlatform.linux,
+            terminalFocused: true,
+          ),
+          child: Actions(
+            actions: {
+              FocusPaneIntent: GatedCallbackAction<FocusPaneIntent>(
+                enabledFor: (_) => hasNeighbour,
+                onInvoke: (_) => moved++,
+              ),
+            },
+            child: const Focus(autofocus: true, child: SizedBox()),
+          ),
+        ),
+      ),
+    );
+
+    Future<void> altLeft() async {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+    }
+
+    await altLeft();
+    expect(moved, 0);
+    expect(passedOn, 2, reason: 'Alt and the arrow both went on');
+
+    hasNeighbour = true;
+    await altLeft();
+    expect(moved, 1);
+    expect(passedOn, 3, reason: 'only Alt went on');
+  });
 }
 
 /// Whether Ctrl + [key] is one of the C0 control codes a shell reads:

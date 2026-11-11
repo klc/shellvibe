@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -16,7 +17,12 @@ final class CrashLog {
   /// Directory holding `crash.log` and its offset marker.
   final Directory directory;
 
-  const CrashLog(this.directory);
+  const CrashLog(this.directory, {this.maxBytes = 256 * 1024});
+
+  /// Past this the oldest half of the log is dropped. A loop that throws on
+  /// every frame would otherwise grow it without end, and it is read whole on
+  /// the next launch.
+  final int maxBytes;
 
   /// The log in the per-user application-support directory.
   static Future<CrashLog> open() async =>
@@ -40,9 +46,20 @@ final class CrashLog {
         mode: FileMode.append,
         flush: true,
       );
+      if (await _log.length() > maxBytes) await _dropOldest();
     } catch (_) {
       // Logging must never throw back into the error handler.
     }
+  }
+
+  /// Keeps the newest half of [maxBytes], and moves the offered marker back
+  /// by what was dropped, so nothing already offered is offered again.
+  Future<void> _dropOldest() async {
+    final bytes = await _log.readAsBytes();
+    final dropped = bytes.length - maxBytes ~/ 2;
+    await _log.writeAsBytes(bytes.sublist(dropped), flush: true);
+    final offered = await _readOffset();
+    await _offered.writeAsString('${max(0, offered - dropped)}', flush: true);
   }
 
   /// Everything written since the log was last offered, or null when nothing
@@ -204,6 +221,10 @@ final class CrashReport {
   );
   static final RegExp _userAtHost = RegExp(r'[\w.+-]+@[\w-]+(?:\.[\w-]+)*');
   static final RegExp _ipv4 = RegExp(r'\b(?:\d{1,3}\.){3}\d{1,3}\b');
+  // The two places dart:io puts a bare host name: a failed DNS lookup and a
+  // socket error's `address = ...`.
+  static final RegExp _hostLookup = RegExp(r"(Failed host lookup: ')[^']+'");
+  static final RegExp _socketAddress = RegExp(r'(address = )[^\s,]+');
   // Four or more groups, or a `::` elision: a timestamp's `10:00:00` and a
   // stack frame's `file.dart:12:5` stay as they are.
   static final RegExp _ipv6 = RegExp(
@@ -212,10 +233,11 @@ final class CrashReport {
     r'|::1\b',
   );
 
-  /// Replaces the home directory, `user@host` pairs and IP addresses.
+  /// Replaces the home directory, `user@host` pairs, IP addresses and the
+  /// host names dart:io's socket errors spell out.
   ///
-  /// Not a guarantee. A bare host name looks like any other word, which is
-  /// why the user reads the report before it goes anywhere.
+  /// Not a guarantee. A bare host name anywhere else looks like any other
+  /// word, which is why the user reads the report before it goes anywhere.
   static String scrub(String text, {String? homeDirectory}) {
     var out = text;
     if (homeDirectory != null && homeDirectory.length > 1) {
@@ -224,6 +246,8 @@ final class CrashReport {
     return out
         .replaceAll(_homePath, '~')
         .replaceAll(_userAtHost, '<user@host>')
+        .replaceAllMapped(_hostLookup, (m) => "${m[1]}<host>'")
+        .replaceAllMapped(_socketAddress, (m) => '${m[1]}<host>')
         .replaceAll(_ipv6, '<ip>')
         .replaceAll(_ipv4, '<ip>');
   }

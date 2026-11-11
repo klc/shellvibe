@@ -897,6 +897,8 @@ void main() {
       final two = container.read(terminalTabsProvider).activeTabId!;
 
       for (final direction in AxisDirection.values) {
+        // Nothing to move to, so the chord is left to the PTY.
+        expect(notifier.paneToward(direction), isNull);
         notifier.focusPane(direction);
         expect(container.read(terminalTabsProvider).activeTabId, two);
       }

@@ -11,6 +11,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/app/notifications/notification_providers.dart';
 import 'package:shellvibe/app/router/app_router.dart';
 import 'package:shellvibe/app/window/desktop_tray.dart';
+import 'package:shellvibe/app/window/desktop_tray_menu.dart';
+import 'package:shellvibe/app/window/quit_guard.dart';
 import 'package:shellvibe/core/network/local_pty_manager.dart';
 import 'package:shellvibe/core/network/providers/network_providers.dart';
 import 'package:shellvibe/features/bookmarks/presentation/notifiers/bookmarks_notifier.dart';
@@ -54,6 +56,7 @@ void main() {
     log = [];
     preventClose = false;
     failSetIcon = false;
+    debugTrayHostAvailableOverride = true;
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(const MethodChannel('tray_manager'), (
@@ -100,6 +103,7 @@ void main() {
     );
     messenger.setMockMethodCallHandler(SystemChannels.platform, null);
     debugTrayInterceptsCloseOverride = null;
+    debugTrayHostAvailableOverride = null;
     await db.close();
   });
 
@@ -247,42 +251,99 @@ void main() {
     await unpump(tester, container);
   });
 
-  testWidgets('the close is intercepted only once the icon is up', (
-    tester,
-  ) async {
-    debugTrayInterceptsCloseOverride = true;
-    final container = await pumpTray(tester);
-
-    expect(preventClose, isTrue);
-    expect(
-      log.indexOf('tray.setIcon'),
-      lessThan(log.indexOf('window.setPreventClose(true)')),
-    );
-
-    await unpump(tester, container);
-  });
-
   // A desktop with no tray host still has to be closable: hiding the window
   // there leaves nothing on screen to bring it back.
-  testWidgets('a tray that cannot show an icon leaves the close alone', (
+  testWidgets('a close with no icon to hide behind quits instead', (
     tester,
   ) async {
     debugTrayInterceptsCloseOverride = true;
     failSetIcon = true;
     final container = await pumpTray(tester);
-
     expect(trayCalls.map((c) => c.method), contains('setIcon'));
-    expect(preventClose, isFalse);
-    expect(
-      windowCalls.where(
-        (c) =>
-            c.method == 'setPreventClose' &&
-            (c.arguments as Map)['isPreventClose'] == true,
-      ),
-      isEmpty,
-    );
+
+    final host = tester.state(find.byType(DesktopTrayHost)) as WindowListener;
+    host.onWindowClose();
+    await settle(tester);
+
+    expect(windowCalls.map((c) => c.method), isNot(contains('hide')));
+    expect(windowCalls.map((c) => c.method), contains('destroy'));
 
     await unpump(tester, container);
+  });
+
+  // Stock GNOME has no StatusNotifierItem host, and setIcon still succeeds.
+  testWidgets('no tray host: no icon, and a close quits', (tester) async {
+    debugTrayInterceptsCloseOverride = true;
+    debugTrayHostAvailableOverride = false;
+    final container = await pumpTray(tester);
+    expect(trayCalls.map((c) => c.method), isNot(contains('setIcon')));
+
+    final host = tester.state(find.byType(DesktopTrayHost)) as WindowListener;
+    host.onWindowClose();
+    await settle(tester);
+
+    expect(windowCalls.map((c) => c.method), isNot(contains('hide')));
+    expect(windowCalls.map((c) => c.method), contains('destroy'));
+
+    await unpump(tester, container);
+  });
+
+  group('quitting', () {
+    tearDown(debugResetQuitGuard);
+
+    Future<ProviderContainer> pumpWithSession(WidgetTester tester) async {
+      debugTrayInterceptsCloseOverride = true;
+      final container = await pumpTray(tester, withNavigator: true);
+      container.read(terminalTabsProvider.notifier).openLocalTab();
+      await settle(tester);
+      // After the (null) shell spawn has settled the tab.
+      container.read(terminalTabsProvider).tabs.single.isConnected = true;
+      return container;
+    }
+
+    testWidgets('asks first while a session is connected', (tester) async {
+      final container = await pumpWithSession(tester);
+
+      clickTray(tester, TrayKeys.quit);
+      await tester.pumpAndSettle();
+      expect(find.text('Quit ShellVibe?'), findsOneWidget);
+      expect(find.textContaining('1 connected session'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('quit_cancel_button')));
+      await tester.pumpAndSettle();
+      expect(windowCalls.map((c) => c.method), isNot(contains('destroy')));
+
+      clickTray(tester, TrayKeys.quit);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('quit_confirm_button')));
+      await settle(tester);
+      expect(windowCalls.map((c) => c.method), contains('destroy'));
+
+      await unpump(tester, container);
+    });
+
+    testWidgets('closing the window with the tray off asks the same way', (
+      tester,
+    ) async {
+      final container = await pumpWithSession(tester);
+      await container
+          .read(settingsProvider.notifier)
+          .setKeepRunningInTray(false);
+      await settle(tester);
+      expect(preventClose, isTrue);
+
+      final host = tester.state(find.byType(DesktopTrayHost)) as WindowListener;
+      host.onWindowClose();
+      await tester.pumpAndSettle();
+      expect(find.text('Quit ShellVibe?'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('quit_cancel_button')));
+      await tester.pumpAndSettle();
+
+      expect(windowCalls.map((c) => c.method), isNot(contains('destroy')));
+      expect(windowCalls.map((c) => c.method), isNot(contains('hide')));
+
+      await unpump(tester, container);
+    });
   });
 
   group('the icon', () {

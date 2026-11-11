@@ -142,10 +142,11 @@ void main() {
     },
   );
 
-  testWidgets('ShellVibeApp opens the launch shell but no Device Link listener '
-      'when the vault fails to load', (WidgetTester tester) async {
+  testWidgets('ShellVibeApp fails closed when the vault fails to load, and '
+      'opens once a retry reads it', (WidgetTester tester) async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(() => db.close());
+    late _FailingVaultKeyService keyService;
 
     await tester.pumpWidget(
       ProviderScope(
@@ -153,7 +154,7 @@ void main() {
           appDatabaseProvider.overrideWithValue(db),
           localPtyManagerProvider.overrideWithValue(_NullPtyManager()),
           vaultKeyServiceProvider.overrideWith(
-            (ref) => _FailingVaultKeyService(
+            (ref) => keyService = _FailingVaultKeyService(
               encryptionEngine: ref.watch(encryptionEngineProvider),
               secureStorageService: ref.watch(secureStorageServiceProvider),
             ),
@@ -170,15 +171,25 @@ void main() {
     );
 
     expect(container.read(vaultProvider).hasError, isTrue);
-    // A vault that fails to load is not a lock — the router lets the app
-    // through, so leaving the user without a terminal would strand them.
-    expect(container.read(terminalTabsProvider).tabs.length, equals(1));
-    // Device Link is gated harder than the shell: an unresolved vault opens
-    // no LAN listener.
+    // The vault might be locked: no hosts behind it, no login shell, no LAN
+    // listener, only the error and a way to try again.
+    expect(find.text('Vault Unavailable'), findsOneWidget);
+    expect(find.text('Local Shell'), findsNothing);
+    expect(container.read(terminalTabsProvider).tabs, isEmpty);
     expect(
       container.read(terminalTabsProvider.notifier).isDeviceLinkServerRunning,
       isFalse,
     );
+
+    keyService.fail = false;
+    await tester.tap(find.byKey(const Key('vault_retry_button')));
+    await tester.pumpAndSettle();
+
+    expect(
+      container.read(vaultProvider).value?.status,
+      VaultStatus.unconfigured,
+    );
+    expect(container.read(terminalTabsProvider).tabs.length, equals(1));
   });
 }
 
@@ -190,8 +201,11 @@ class _FailingVaultKeyService extends VaultKeyService {
     required super.secureStorageService,
   });
 
+  var fail = true;
+
   @override
   Future<bool> isMasterPasswordConfigured() async {
-    throw const FileSystemException('keychain unavailable');
+    if (fail) throw const FileSystemException('keychain unavailable');
+    return false;
   }
 }

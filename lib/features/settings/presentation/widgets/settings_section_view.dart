@@ -74,6 +74,19 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
     );
   }
 
+  /// Shows a failed settings write instead of dropping it. The notifier has
+  /// already put the stored value back on screen.
+  void _save(Future<void> write) {
+    write.catchError((Object error) {
+      if (!mounted) return;
+      ShadToaster.of(context).show(
+        ShadToast.destructive(
+          description: Text('The setting could not be saved: $error'),
+        ),
+      );
+    });
+  }
+
   Future<void> _handleTestBiometrics() async {
     final service = ref.read(biometricLockServiceProvider);
     final canCheck = await service.canCheckBiometrics();
@@ -143,7 +156,7 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
                     ],
                     onChanged: (mode) {
                       if (mode != null) {
-                        notifier.setThemeMode(mode);
+                        _save(notifier.setThemeMode(mode));
                       }
                     },
                   ),
@@ -165,7 +178,7 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
                     ],
                     onChanged: (palette) {
                       if (palette != null) {
-                        notifier.setPalette(palette);
+                        _save(notifier.setPalette(palette));
                       }
                     },
                   ),
@@ -189,7 +202,7 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
                     ],
                     onChanged: (font) {
                       if (font != null) {
-                        notifier.setUiFontFamily(font);
+                        _save(notifier.setUiFontFamily(font));
                       }
                     },
                   ),
@@ -222,7 +235,8 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
                                   'from the tray menu.',
                       ),
                       value: settings.keepRunningInTray,
-                      onChanged: (val) => notifier.setKeepRunningInTray(val),
+                      onChanged: (val) =>
+                          _save(notifier.setKeepRunningInTray(val)),
                     ),
                     LaunchAtLoginTile(trayEnabled: settings.keepRunningInTray),
                     SwitchListTile(
@@ -235,7 +249,7 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
                       ),
                       value: settings.desktopNotifications,
                       onChanged: (val) {
-                        notifier.setDesktopNotifications(val);
+                        _save(notifier.setDesktopNotifications(val));
                         // macOS asks for permission the first time it is
                         // needed, which is now if it is being turned on.
                         if (val) {
@@ -327,7 +341,7 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
                     ],
                     onChanged: (palette) {
                       if (palette != null) {
-                        notifier.setTerminalPalette(palette);
+                        _save(notifier.setTerminalPalette(palette));
                       }
                     },
                   ),
@@ -356,7 +370,7 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
                     ],
                     onChanged: (mode) {
                       if (mode != null) {
-                        notifier.setMoshPrediction(mode);
+                        _save(notifier.setMoshPrediction(mode));
                       }
                     },
                   ),
@@ -391,7 +405,7 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
                     ],
                     onChanged: (font) {
                       if (font != null) {
-                        notifier.setFontFamily(font);
+                        _save(notifier.setFontFamily(font));
                       }
                     },
                   ),
@@ -414,7 +428,7 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
                       'Enable programming ligatures (e.g. ->, ==, !=, =>)',
                     ),
                     value: settings.enableLigatures,
-                    onChanged: (val) => notifier.setEnableLigatures(val),
+                    onChanged: (val) => _save(notifier.setEnableLigatures(val)),
                   ),
                 ),
                 const Divider(),
@@ -430,7 +444,7 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
                     ),
                     value: settings.drawBoldTextWithBrightColors,
                     onChanged: (val) =>
-                        notifier.setDrawBoldTextWithBrightColors(val),
+                        _save(notifier.setDrawBoldTextWithBrightColors(val)),
                   ),
                 ),
                 const Divider(),
@@ -445,7 +459,8 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
                       'on its own',
                     ),
                     value: settings.confirmMultiLinePaste,
-                    onChanged: (val) => notifier.setConfirmMultiLinePaste(val),
+                    onChanged: (val) =>
+                        _save(notifier.setConfirmMultiLinePaste(val)),
                   ),
                 ),
                 const Divider(),
@@ -459,7 +474,7 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
                         .toInt(),
                     value: settings.fontSize,
                     label: '${settings.fontSize.toInt()} px',
-                    onChanged: (val) => notifier.setFontSize(val),
+                    onChanged: (val) => _save(notifier.setFontSize(val)),
                   ),
                   trailing: Text('${settings.fontSize.toInt()} px'),
                 ),
@@ -468,12 +483,13 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
                   title: const Text('Line Height'),
                   subtitle: Slider(
                     key: const Key('settings_line_height_slider'),
-                    min: 1.0,
-                    max: 2.0,
+                    min: kLineHeightFactorMin,
+                    max: kLineHeightFactorMax,
                     divisions: 20,
                     value: settings.lineHeightFactor,
                     label: '${settings.lineHeightFactor.toStringAsFixed(2)}x',
-                    onChanged: (val) => notifier.setLineHeightFactor(val),
+                    onChanged: (val) =>
+                        _save(notifier.setLineHeightFactor(val)),
                   ),
                   trailing: Text(
                     '${settings.lineHeightFactor.toStringAsFixed(2)}x',
@@ -493,7 +509,7 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
                     ],
                     onChanged: (style) {
                       if (style != null) {
-                        notifier.setCursorStyle(style);
+                        _save(notifier.setCursorStyle(style));
                       }
                     },
                   ),
@@ -530,6 +546,13 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
                 const Divider(),
                 ListTile(
                   title: const Text('Auto-Lock Timer'),
+                  subtitle: Text(
+                    isMobilePlatform
+                        ? 'Locks the vault once the app has been in the '
+                              'background this long'
+                        : 'Locks the vault after this long without keyboard '
+                              'or mouse input in ShellVibe',
+                  ),
                   trailing: ShadSelect<int>(
                     key: const Key('settings_autolock_dropdown'),
                     initialValue: settings.autoLockTimerSeconds,
@@ -541,7 +564,7 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
                     ],
                     onChanged: (sec) {
                       if (sec != null) {
-                        notifier.setAutoLockTimer(sec);
+                        _save(notifier.setAutoLockTimer(sec));
                       }
                     },
                   ),
@@ -563,7 +586,7 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
                     ],
                     onChanged: (sec) {
                       if (sec != null) {
-                        notifier.setClipboardAutoClear(sec);
+                        _save(notifier.setClipboardAutoClear(sec));
                       }
                     },
                   ),

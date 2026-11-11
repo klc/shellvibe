@@ -28,6 +28,12 @@ void main() {
           equals('/terminal'));
     });
 
+    test('fails closed when the vault state could not be read', () {
+      expect(resolveVaultRedirect(null, '/hosts', failed: true),
+          equals(kUnlockRoute));
+      expect(resolveVaultRedirect(null, kUnlockRoute, failed: true), isNull);
+    });
+
     test('does not interfere with normal navigation', () {
       expect(resolveVaultRedirect(VaultStatus.unlocked, '/sftp'), isNull);
       expect(resolveVaultRedirect(VaultStatus.unconfigured, '/hosts'), isNull);

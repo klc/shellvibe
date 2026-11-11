@@ -95,6 +95,10 @@ class SettingsNotifier extends _$SettingsNotifier {
   /// -- but it is not something to do without saying so, which is why the
   /// changes are returned rather than only applied.
   Future<List<String>> applyRestoredSettings(Map<String, dynamic> json) async {
+    // The notes compare against what is stored. A restore replaces every
+    // field, so unlike an edit it does not need the stored model to be read
+    // and goes ahead when it cannot be; the notes then compare to defaults.
+    if (_lastKnown == null) await future.then((_) {}, onError: (_) {});
     final current = _base;
     var restored = AppSettingsModel.fromJson(json);
 
@@ -151,6 +155,7 @@ class SettingsNotifier extends _$SettingsNotifier {
   /// One point bigger or smaller per press of the zoom shortcuts, held to the
   /// slider's range; a [step] of zero restores the default size.
   Future<void> stepFontSize(int step) async {
+    if (_lastKnown == null) await future;
     final current = _base.fontSize;
     final next = step == 0
         ? const AppSettingsModel().fontSize
@@ -195,6 +200,16 @@ class SettingsNotifier extends _$SettingsNotifier {
   Future<void> setActiveWorkspace(String workspaceId) =>
       _edit((s) => s.copyWith(activeWorkspaceId: workspaceId));
 
-  Future<void> _edit(AppSettingsModel Function(AppSettingsModel s) change) =>
-      updateSettings(change(_base));
+  /// Waits for the stored settings before deriving the edit from them, and
+  /// throws when they could not be read: an edit built on the defaults would
+  /// write every other field back as a default, so one zoom shortcut pressed
+  /// while the keychain refused reads used to switch auto-lock off. Awaits
+  /// only while nothing is known yet, so edits on a loaded model still apply
+  /// synchronously and in order.
+  Future<void> _edit(
+    AppSettingsModel Function(AppSettingsModel s) change,
+  ) async {
+    if (_lastKnown == null) await future;
+    return updateSettings(change(_base));
+  }
 }

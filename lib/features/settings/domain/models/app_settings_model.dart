@@ -54,6 +54,10 @@ extension MoshPredictionModeLabel on MoshPredictionMode {
 const double kTerminalFontSizeMin = 10;
 const double kTerminalFontSizeMax = 24;
 
+/// The Settings line height slider's ends.
+const double kLineHeightFactorMin = 1;
+const double kLineHeightFactorMax = 2;
+
 /// Model representing global application settings.
 class AppSettingsModel {
   final ThemeMode themeMode;
@@ -239,28 +243,39 @@ class AppSettingsModel {
         (e) => e.name == json['terminalPalette'],
         orElse: () => TerminalPalette.matchApp,
       ),
-      fontFamily: (json['fontFamily'] as String?) ?? 'RobotoMono',
-      uiFontFamily: (json['uiFontFamily'] as String?) ?? 'InterTight',
-      fontSize: (json['fontSize'] as num?)?.toDouble() ?? 14.0,
-      lineHeightFactor: (json['lineHeightFactor'] as num?)?.toDouble() ?? 1.4,
+      fontFamily: _read<String>(json['fontFamily']) ?? 'RobotoMono',
+      uiFontFamily: _read<String>(json['uiFontFamily']) ?? 'InterTight',
+      fontSize: (_read<num>(json['fontSize'])?.toDouble() ?? 14.0).clamp(
+        kTerminalFontSizeMin,
+        kTerminalFontSizeMax,
+      ),
+      lineHeightFactor:
+          (_read<num>(json['lineHeightFactor'])?.toDouble() ?? 1.4).clamp(
+            kLineHeightFactorMin,
+            kLineHeightFactorMax,
+          ),
       cursorStyle: AppCursorStyle.values.firstWhere(
         (e) => e.name == json['cursorStyle'],
         orElse: () => AppCursorStyle.block,
       ),
-      enableLigatures: (json['enableLigatures'] as bool?) ?? true,
+      enableLigatures: _read<bool>(json['enableLigatures']) ?? true,
       drawBoldTextWithBrightColors:
-          (json['drawBoldTextWithBrightColors'] as bool?) ?? true,
+          _read<bool>(json['drawBoldTextWithBrightColors']) ?? true,
       moshPrediction: MoshPredictionMode.values.firstWhere(
         (e) => e.name == json['moshPrediction'],
         orElse: () => MoshPredictionMode.adaptive,
       ),
-      autoLockTimerSeconds: (json['autoLockTimerSeconds'] as int?) ?? 0,
+      autoLockTimerSeconds: _read<int>(json['autoLockTimerSeconds']) ?? 0,
       clipboardAutoClearSeconds:
-          (json['clipboardAutoClearSeconds'] as int?) ?? 30,
-      activeWorkspaceId: (json['activeWorkspaceId'] as String?) ?? 'default',
-      keepRunningInTray: (json['keepRunningInTray'] as bool?) ?? true,
-      desktopNotifications: (json['desktopNotifications'] as bool?) ?? true,
-      confirmMultiLinePaste: (json['confirmMultiLinePaste'] as bool?) ?? true,
+          _read<int>(json['clipboardAutoClearSeconds']) ?? 30,
+      activeWorkspaceId: _read<String>(json['activeWorkspaceId']) ?? 'default',
+      keepRunningInTray: _read<bool>(json['keepRunningInTray']) ?? true,
+      desktopNotifications: _read<bool>(json['desktopNotifications']) ?? true,
+      confirmMultiLinePaste: _read<bool>(json['confirmMultiLinePaste']) ?? true,
     );
   }
+
+  /// [value] when it has the expected type, else null so the field takes its
+  /// default: a blob from another build must not throw the whole model away.
+  static T? _read<T>(Object? value) => value is T ? value : null;
 }

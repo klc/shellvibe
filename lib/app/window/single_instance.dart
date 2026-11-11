@@ -40,7 +40,9 @@ class SingleInstance {
   /// Returns the claim when this is the first copy; [onActivate] then runs
   /// each time a later launch asks to be shown. Returns null when another copy
   /// already holds the claim — it has been asked to show itself, and the
-  /// caller should exit.
+  /// caller should exit. Throws when the lock cannot be taken and no copy
+  /// answers: a filesystem without locks, or a copy that hung. Starting then
+  /// beats exiting with no window and no word.
   ///
   /// [name] distinguishes installs sharing one [directory], e.g. a debug build
   /// beside the installed app.
@@ -58,8 +60,13 @@ class SingleInstance {
       await lock.lock(FileLock.exclusive);
     } on FileSystemException {
       await lock.close();
-      await activateRunning(portFile);
-      return null;
+      // The holder writes its port just after taking the lock, so a launch
+      // right behind it (a double-click) can find the file missing or stale.
+      for (var attempt = 0; attempt < 3; attempt++) {
+        if (await activateRunning(portFile)) return null;
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+      }
+      throw StateError('the lock is held, but no running copy answered');
     }
 
     final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
@@ -95,14 +102,14 @@ class SingleInstance {
     await _lock.close();
   }
 
-  /// Asks the copy holding the claim to show its window. Best effort: if it
-  /// cannot be reached this launch still exits rather than run beside it.
+  /// Asks the copy holding the claim to show its window. Returns whether it
+  /// was reached.
   ///
   /// Public for tests: two claims from one process do not contend for the
   /// lock (POSIX record locks belong to the process), so a test plays the
   /// second launch by calling this directly.
   @visibleForTesting
-  static Future<void> activateRunning(File portFile) async {
+  static Future<bool> activateRunning(File portFile) async {
     try {
       final endpoint =
           jsonDecode(await portFile.readAsString()) as Map<String, dynamic>;
@@ -114,8 +121,10 @@ class SingleInstance {
       socket.writeln('show ${endpoint['token']}');
       await socket.flush();
       await socket.close();
+      return true;
     } catch (e) {
       debugPrint('[SingleInstance] could not reach the running copy: $e');
+      return false;
     }
   }
 
