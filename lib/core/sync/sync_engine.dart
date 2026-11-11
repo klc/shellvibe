@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:cryptography/cryptography.dart';
 
@@ -122,6 +123,46 @@ final class SyncEngine {
     BackupCategory.bookmarks: ['bookmarks'],
   };
 
+  /// References into another category, by table and column.
+  ///
+  /// A device that does not sync the category a reference points into holds
+  /// it cleared -- the target never arrived -- and has no way to know what it
+  /// was. See [_seal].
+  static const Map<String, Map<String, String>> _crossCategoryReferences = {
+    'hosts': {'identityId': 'identities', 'startupSnippetId': 'snippets'},
+    'templates': {'onOpenRunbookId': 'runbooks'},
+    'template_panes': {
+      'startupSnippetId': 'snippets',
+      'startupRunbookId': 'runbooks',
+    },
+  };
+
+  /// How far past anything verified a clock-paged cursor may move in one
+  /// page.
+  ///
+  /// The clocks outside the ciphertext are the server's to write. Followed
+  /// as they are, one operation at clock 2^63-1 moved the cursor past
+  /// everything any device will ever send. Bounded, an operation this device
+  /// cannot open still gets stepped over -- a page of them at a time -- and
+  /// a forged clock buys the server a page, not the log.
+  static const int _unverifiedClockLead = SyncOperationsApi.defaultLimit;
+
+  /// Operations whose parent had not arrived yet, tried again after every
+  /// later page.
+  ///
+  /// A parent can come after its child: a workspace renamed before it was
+  /// sent is coalesced to a clock above the hosts created in it. With a page
+  /// boundary between the two, the host used to be skipped for good, because
+  /// the cursor had already moved past it.
+  // ponytail: in memory, so a restart before the parent arrives still drops
+  // the child. Durable parking needs a table of its own.
+  final List<_IncomingOperation> _waitingForParent = [];
+
+  /// How many [_waitingForParent] holds before the oldest are let go: a
+  /// parent that never comes -- deleted, or in a category this device does
+  /// not sync -- must not keep its children forever.
+  static const int _maxWaitingForParent = 1000;
+
   /// Whether this device syncs [entityType].
   ///
   /// Workspaces and host groups are always in: everything else is filed under
@@ -207,12 +248,21 @@ final class SyncEngine {
         // is nothing after it. Kept, so the next pull asks by position.
         final start = batch.maxSeq;
         if (start != null && state.pulledThroughSeq == null) {
-          await journal.acknowledgePullSeq(start, maxClock: batch.maxClock);
+          // The clock is the server's word alone here: there is no
+          // operation it could be checked against.
+          await journal.acknowledgePullSeq(
+            start,
+            maxClock: state.pulledThroughClock,
+          );
         }
         break;
       }
 
-      final outcome = await _apply(batch, sinceClock: state.pulledThroughClock);
+      final outcome = await _apply(
+        batch,
+        sinceClock: state.pulledThroughClock,
+        lastSeenClock: state.lastSeenClock,
+      );
       pulled += outcome.pulled;
       skipped += outcome.skipped;
       repaired += outcome.repaired;
@@ -263,10 +313,18 @@ final class SyncEngine {
   Future<SyncResult> _apply(
     SyncOperationPage batch, {
     required int sinceClock,
+    required int lastSeenClock,
   }) async {
     final decoded = <_IncomingOperation>[];
     var unreadable = 0;
+    var skipped = 0;
     final vaultKey = _LazyKey(_vaultKey);
+
+    // The highest clock this page proves. Only an operation that opened
+    // under the sync key and carried its clock sealed inside says anything
+    // about the log's time; the copy outside is the server's to write, and
+    // a Lamport clock taken from it could be pushed to overflow.
+    var verifiedClock = 0;
 
     for (final operation in batch.operations) {
       // This device's own operations come back on the next pull. Applying
@@ -277,6 +335,17 @@ final class SyncEngine {
       final incoming = await _open(operation, vaultKey);
       if (incoming == null) {
         unreadable++;
+        continue;
+      }
+      if (incoming.sealed) {
+        verifiedClock = max(verifiedClock, incoming.logicalClock);
+      }
+
+      // A table a newer build syncs and this one does not know. Readable, so
+      // not counted with the operations a wrong key produces -- that count
+      // tells the user their key does not match the account.
+      if (!SyncRowCodec.syncableTypes.contains(incoming.entityType)) {
+        skipped++;
         continue;
       }
       if (!syncs(incoming.entityType)) continue;
@@ -296,14 +365,16 @@ final class SyncEngine {
     });
 
     var applied = 0;
-    var skipped = 0;
     var repaired = 0;
+    final stillWaiting = <_IncomingOperation>[];
 
     await db.transaction(() async {
       // Self-references cannot be checked while the rows are still arriving.
       await db.customStatement('PRAGMA defer_foreign_keys = ON;');
 
-      for (final incoming in decoded) {
+      // This page first, then what earlier pages left waiting: their parent
+      // may have been in this one.
+      for (final incoming in [...decoded, ..._waitingForParent]) {
         // An unsealed operation only ever brings a row this device does not
         // have. Against one it holds -- versioned or not -- its contents are
         // whatever older copy the server chose to serve.
@@ -333,17 +404,32 @@ final class SyncEngine {
           continue;
         }
 
-        final result = await SyncRowWriter.write(
-          db,
-          incoming.entityType,
-          incoming.row!,
-        );
+        final RowWriteResult result;
+        try {
+          result = await SyncRowWriter.write(
+            db,
+            incoming.entityType,
+            incoming.row!,
+          );
+          // A row missing a required field, or holding one of the wrong
+          // type, is data from elsewhere rather than a bug here. It fails
+          // before anything is written; let through, it rolled the page back
+          // and failed the same way on every pull after.
+          // ignore: avoid_catching_errors
+        } on TypeError {
+          skipped++;
+          continue;
+        } on FormatException {
+          skipped++;
+          continue;
+        }
 
         if (result.written) {
           await _recordVersion(incoming);
           applied++;
           repaired += result.clearedReferences.length;
         } else {
+          stillWaiting.add(incoming);
           skipped++;
         }
       }
@@ -355,17 +441,33 @@ final class SyncEngine {
       // rows it accounts for are durable turns an interrupted sync into
       // permanent loss: the skipped operations are never offered again.
       //
-      // The clock still moves to the top of the page whatever the cursor
-      // does. Lamport: this device has *seen* everything the page carried,
-      // and the next change it makes has to be ordered after it.
+      // The clock still moves to the top of what the page proved, whatever
+      // the cursor does. Lamport: this device has *seen* everything the page
+      // carried, and the next change it makes has to be ordered after it.
       final maxSeq = batch.maxSeq;
       if (maxSeq != null) {
-        await journal.acknowledgePullSeq(maxSeq, maxClock: batch.maxClock);
+        await journal.acknowledgePullSeq(maxSeq, maxClock: verifiedClock);
       } else {
-        await journal.observeClock(batch.maxClock);
-        await journal.acknowledgePull(_cursorFor(batch, sinceClock));
+        await journal.observeClock(verifiedClock);
+        final ceiling = max(max(lastSeenClock, verifiedClock), sinceClock);
+        await journal.acknowledgePull(
+          min(_cursorFor(batch, sinceClock), ceiling + _unverifiedClockLead),
+        );
       }
     });
+
+    // After the commit, so a page that rolled back leaves the list as it
+    // was. One entry per row, the latest; the oldest go once it is full.
+    final byRow = <String, _IncomingOperation>{};
+    for (final o in stillWaiting) {
+      final key = '${o.entityType}/${o.entityId}';
+      final kept = byRow[key];
+      if (kept == null || o.compareTo(kept) > 0) byRow[key] = o;
+    }
+    final waiting = byRow.values;
+    _waitingForParent
+      ..clear()
+      ..addAll(waiting.skip(max(0, waiting.length - _maxWaitingForParent)));
 
     return SyncResult(
       pulled: applied,
@@ -478,6 +580,18 @@ final class SyncEngine {
     final row = operation.payload == null
         ? null
         : jsonDecode(operation.payload!) as Map<String, dynamic>;
+
+    // A reference into a category this device does not sync is null here
+    // because its target never arrived, not because anyone cleared it. Sent
+    // as null, the next edit of the row cleared it on every device. Left
+    // out, a receiver keeps what it has (see `SyncRowWriter.write`).
+    final references = _crossCategoryReferences[operation.entityType];
+    if (row != null && references != null) {
+      for (final MapEntry(key: column, value: target) in references.entries) {
+        if (row[column] == null && !syncs(target)) row.remove(column);
+      }
+    }
+
     final underSyncKey = row == null
         ? const <String>[]
         : await _secretsToSyncKey(operation.entityType, row, vaultKey);
@@ -602,7 +716,6 @@ final class SyncEngine {
     final entityType = body['t'] as String?;
     final entityId = body['i'] as String?;
     if (entityType == null || entityId == null) return null;
-    if (!SyncRowCodec.syncableTypes.contains(entityType)) return null;
 
     // The alias is recomputed from what was inside the ciphertext. The server
     // cannot forge one without the sync key, so a mismatch means the payload
@@ -635,6 +748,20 @@ final class SyncEngine {
       return null;
     }
     if (!isSealed && operation.isDelete) return null;
+
+    // Authentic, but for a table this build does not know. The caller skips
+    // it; the row is not this build's to read.
+    if (!SyncRowCodec.syncableTypes.contains(entityType)) {
+      return _IncomingOperation(
+        entityType: entityType,
+        entityId: entityId,
+        deviceId: operation.deviceId,
+        logicalClock: isSealed ? operation.logicalClock : 0,
+        isDelete: operation.isDelete,
+        row: null,
+        sealed: isSealed,
+      );
+    }
 
     final rawRow = body['r'];
     if (rawRow != null && rawRow is! Map<String, Object?>) return null;

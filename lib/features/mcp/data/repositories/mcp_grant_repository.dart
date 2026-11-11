@@ -32,13 +32,20 @@ class McpGrantRepository {
   /// denial. Every caller only needs "may this client proceed on this host",
   /// so collapsing those three into one null keeps the policy engine from
   /// having to know about cooldowns and expiry as separate concepts.
+  ///
+  /// With [connectionScopeId], a "this session" grant made under another
+  /// connection does not count: every agent window shares one client, and
+  /// one window's session grant is not another's.
   Future<McpAccessMode?> effectiveMode(
     String clientId,
     String hostId, {
+    String? connectionScopeId,
     DateTime? now,
   }) async {
     final grant = await dao.findGrant(clientId, hostId);
-    if (grant == null || !_isLive(grant, now ?? DateTime.now().toUtc())) {
+    if (grant == null ||
+        !_isLive(grant, now ?? DateTime.now().toUtc()) ||
+        !_inScope(grant, connectionScopeId)) {
       return null;
     }
     return McpAccessMode.fromName(grant.mode);
@@ -48,12 +55,20 @@ class McpGrantRepository {
   /// [effectiveMode] filters a single pair.
   Future<List<McpHostGrant>> activeGrantsForClient(
     String clientId, {
+    String? connectionScopeId,
     DateTime? now,
   }) async {
     final at = now ?? DateTime.now().toUtc();
     final grants = await dao.getGrantsForClient(clientId);
-    return grants.where((g) => _isLive(g, at)).toList();
+    return grants
+        .where((g) => _isLive(g, at) && _inScope(g, connectionScopeId))
+        .toList();
   }
+
+  static bool _inScope(McpHostGrant grant, String? connectionScopeId) =>
+      connectionScopeId == null ||
+      grant.connectionScopeId == null ||
+      grant.connectionScopeId == connectionScopeId;
 
   /// True while a prior denial for this pair is still cooling down.
   Future<bool> isInCooldown(

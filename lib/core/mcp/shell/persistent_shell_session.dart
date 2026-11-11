@@ -56,6 +56,14 @@ class PersistentShellSession {
   StreamSubscription<List<int>>? _stdoutSub;
   StreamSubscription<List<int>>? _stderrSub;
 
+  /// Completes once the current channel has ended on its own and all of its
+  /// stdout has been fed to the framers, with the shell's exit status. Set
+  /// for each channel by [_attachListeners].
+  Future<int?> _ended = Completer<int?>().future;
+
+  /// Set by [close]; no command runs and no channel is reopened after it.
+  bool _closed = false;
+
   /// Bumped by every [interrupt]. A [run] captures it before it starts
   /// waiting and compares afterwards, which is how it tells "my sentinel
   /// never came" apart from "someone pulled the channel out from under me".
@@ -104,17 +112,35 @@ class PersistentShellSession {
   /// arrival order. See the ordering section of the class docstring.
   Future<void> _mutex = Future<void>.value();
 
+  /// The exec request a channel for this session is opened with (sshd runs
+  /// it as `$SHELL -c <this>`).
+  ///
+  /// `/bin/sh` comes up through the user's login shell (`-l`), so it
+  /// inherits what `~/.profile`, `~/.bash_profile` or `~/.zprofile` set up —
+  /// PATH entries for Homebrew, `~/.local/bin`, nvm — as an interactive
+  /// login would. Neither shell reads stdin before `/bin/sh` does, which is
+  /// what an `exec /bin/sh` line written to a login shell's stdin got wrong
+  /// on dash (see [initialize]). csh and tcsh reject `-l` next to `-c`; for
+  /// them `/bin/sh` is exec'd directly, with the environment their own
+  /// `-c` startup (`.cshrc`/`.tcshrc`) already set up. The wrapper is plain
+  /// `sh` inside single quotes so it reads the same to sh, bash, zsh, fish
+  /// and csh as the outer shell.
+  static const remoteCommand =
+      '/bin/sh -c \'case "\${SHELL##*/}" in ""|csh|tcsh) exec /bin/sh;; esac; '
+      'exec "\$SHELL" -l -c "exec /bin/sh"\'';
+
   static const _kMaxTimeout = Duration(seconds: 600);
   static const _kRecoveryWait = Duration(seconds: 3);
   static const _kProbeTimeout = Duration(seconds: 10);
 
-  /// Normalizes the remote login shell into a known-good, script-friendly
-  /// `/bin/sh`, then confirms it is actually responding before returning.
+  /// Normalizes the channel's `/bin/sh` into a known-good, script-friendly
+  /// shell, then confirms it is actually responding before returning.
   ///
-  /// `exec /bin/sh` runs first because the login shell may be fish or csh,
-  /// where the `export VAR=` lines below are syntax errors, not no-ops —
-  /// normalizing must not depend on which shell the user happens to have
-  /// configured.
+  /// The channel must already run `/bin/sh` (an exec request, not a login
+  /// shell): the login shell may be fish or csh, where the `export VAR=`
+  /// lines below are syntax errors, and switching from it with an
+  /// `exec /bin/sh` line on stdin does not work everywhere — dash reads its
+  /// input in blocks, so the exec'd shell never sees the lines after it.
   ///
   /// History is disabled in two portable steps rather than a bare
   /// `set +o history`. On Debian and Ubuntu `/bin/sh` is dash, which has no
@@ -132,7 +158,6 @@ class PersistentShellSession {
   /// or `set +o history` would misbehave in ways far harder to diagnose
   /// than an upfront refusal to open at all.
   Future<void> initialize() async {
-    _channel.write(utf8.encode('exec /bin/sh\n'));
     _channel.write(
       utf8.encode(
         'export PS1= PS2= TERM=dumb PAGER=cat GIT_PAGER=cat LESS=FRX\n'
@@ -174,12 +199,19 @@ class PersistentShellSession {
   /// [timeout] is capped at 600 seconds regardless of what the caller
   /// requests — an unbounded wait would let one stuck agent tool call block
   /// the session (and the mutex behind it) indefinitely.
+  ///
+  /// [expectedCwd] is the working directory the command was approved for.
+  /// It is checked once this call holds the queue, so a `cd` that ran in
+  /// between (another call on the same session) cannot move an approved
+  /// command somewhere it was never approved for: the command is refused
+  /// with [McpErrorCode.policyDenied] instead of being run.
   Future<ShellCommandResult> run(
     String command, {
     Duration timeout = const Duration(seconds: 60),
+    String? expectedCwd,
   }) {
     final effectiveTimeout = timeout > _kMaxTimeout ? _kMaxTimeout : timeout;
-    return _enqueue(() => _runLocked(command, effectiveTimeout));
+    return _enqueue(() => _runLocked(command, effectiveTimeout, expectedCwd));
   }
 
   /// Stops whatever [run] call is currently in flight, from outside the run
@@ -207,7 +239,15 @@ class PersistentShellSession {
     await reset;
   }
 
+  /// Closes the session for good. A [run] still waiting on its command is
+  /// woken at once and comes back `interrupted`, rather than waiting out its
+  /// timeout on a channel that is gone.
   Future<void> close() async {
+    _closed = true;
+    _interruptCount++;
+    final waiter = _interruptSignal;
+    _interruptSignal = Completer<void>();
+    if (!waiter.isCompleted) waiter.complete();
     await _detachListeners();
     await _channel.close();
   }
@@ -215,6 +255,7 @@ class PersistentShellSession {
   Future<ShellCommandResult> _runLocked(
     String command,
     Duration timeout,
+    String? expectedCwd,
   ) async {
     final stopwatch = Stopwatch()..start();
 
@@ -227,6 +268,26 @@ class PersistentShellSession {
         // A failed rebuild leaves a dead channel behind; this command's own
         // hang recovery tries to rebuild it again.
       }
+    }
+
+    if (_closed) {
+      throw const McpToolException(
+        McpErrorCode.sessionNotFound,
+        'This session has been closed.',
+      );
+    }
+    // The previous command ended the shell and reopening it failed then;
+    // try once more rather than writing into a dead channel.
+    if (_channel.isClosed) await _resetChannel();
+
+    if (expectedCwd != null && expectedCwd != _cwd) {
+      throw McpToolException(
+        McpErrorCode.policyDenied,
+        'The working directory changed from "$expectedCwd" to "$_cwd" '
+        'before this command could run, so it was not run. Send it again '
+        'to have it checked against the new directory.',
+        details: {'cwd': _cwd},
+      );
     }
 
     final framer = ShellOutputFramer(
@@ -257,8 +318,35 @@ class PersistentShellSession {
       );
     }
 
+    final channel = _channel;
+    final ended = _ended;
+
+    // The command ended the shell itself (`exit`, `exec`, `set -e` and a
+    // failure) or the connection dropped. Its sentinel will never come, but
+    // the remote's exit status is the command's own result. A fresh shell is
+    // opened for the next command; `sessionReset` says its state is gone.
+    Future<ShellCommandResult> shellEndedResult() async {
+      final status = await ended.timeout(_kRecoveryWait, onTimeout: () => null);
+      try {
+        await _resetChannel();
+      } catch (_) {
+        // Retried by the next run, which then fails honestly if it still
+        // cannot reopen; this command's result is already known.
+      }
+      return ShellCommandResult(
+        stdout: framer.stdout,
+        stderr: framer.stderr,
+        exitCode: status ?? -1,
+        cwd: _cwd,
+        durationMs: stopwatch.elapsedMilliseconds,
+        truncated: framer.truncation,
+        sessionReset: true,
+        binary: framer.binary,
+      );
+    }
+
     try {
-      _channel.write(utf8.encode(_buildEnvelope(command, framer.nonce)));
+      channel.write(utf8.encode(_buildEnvelope(command, framer.nonce)));
 
       final epoch = _interruptCount;
       var match = await _waitSentinel(framer, timeout);
@@ -267,6 +355,7 @@ class PersistentShellSession {
         return _resultFrom(framer, match, stopwatch.elapsedMilliseconds);
       }
       if (_interruptCount != epoch) return await interruptedResult();
+      if (channel.isClosed) return await shellEndedResult();
 
       // --- Hang-recovery chain -------------------------------------------
       //
@@ -300,6 +389,7 @@ class PersistentShellSession {
       if (_interruptCount != epoch) {
         return await interruptedResult(timedOut: true);
       }
+      if (channel.isClosed) return await shellEndedResult();
 
       // Step 2: probe with a fresh sentinel. Ctrl-C can land on a subshell
       // or a process that ignores SIGINT while the outer shell is actually
@@ -320,17 +410,23 @@ class PersistentShellSession {
           // The original command's exit code is genuinely unknown — only
           // reporting -1 here (rather than the probe's own, always-zero
           // exit code) keeps the result honest about what we do not know.
+          // The original framer also read the probe's sentinel line, which
+          // is not the command's output.
+          final out = framer.stdout;
+          final probeAt = out.lastIndexOf('\n__TERLY_${probeFramer.nonce}__');
           return _resultFrom(
             framer,
             SentinelMatch(exitCode: -1, cwd: probeMatch.cwd),
             stopwatch.elapsedMilliseconds,
             interrupted: true,
             timedOut: true,
+            stdout: probeAt == -1 ? out : out.substring(0, probeAt),
           );
         }
         if (_interruptCount != epoch) {
           return await interruptedResult(timedOut: true);
         }
+        if (channel.isClosed) return await shellEndedResult();
       } finally {
         _liveFramers.remove(probeFramer);
       }
@@ -363,15 +459,23 @@ class PersistentShellSession {
   /// except that `cd` (variables, background jobs) is gone for good.
   ///
   /// Joins the rebuild already in progress, if there is one (see [_reset]).
-  Future<void> _resetChannel() =>
-      _reset ??= _rebuildChannel().whenComplete(() => _reset = null);
+  Future<void> _resetChannel() {
+    if (_closed) return Future<void>.value();
+    return _reset ??= _rebuildChannel().whenComplete(() => _reset = null);
+  }
 
   Future<void> _rebuildChannel() async {
     final previousCwd = _cwd;
     _liveFramers.clear();
     await _detachListeners();
     await _channel.close();
-    _channel = await _reopen();
+    final next = await _reopen();
+    // [close] ran while the new channel was being opened.
+    if (_closed) {
+      await next.close();
+      return;
+    }
+    _channel = next;
     _attachListeners();
     await initialize();
     await _restoreCwd(previousCwd);
@@ -423,11 +527,14 @@ class PersistentShellSession {
   }
 
   void _attachListeners() {
-    _stdoutSub = _channel.stdout.listen((chunk) {
+    final channel = _channel;
+    final stdoutDone = Completer<void>();
+    _ended = stdoutDone.future.then((_) => channel.done);
+    _stdoutSub = channel.stdout.listen((chunk) {
       for (final framer in _liveFramers) {
         framer.feedStdout(chunk);
       }
-    });
+    }, onDone: stdoutDone.complete);
     _stderrSub = _channel.stderr.listen((chunk) {
       for (final framer in _liveFramers) {
         framer.feedStderr(chunk);
@@ -452,6 +559,8 @@ class PersistentShellSession {
       return await Future.any<SentinelMatch?>([
         framer.sentinel,
         if (interruptible) interrupted.then<SentinelMatch?>((_) => null),
+        // A channel that ended can no longer deliver a sentinel.
+        _ended.then<SentinelMatch?>((_) => null),
       ]).timeout(wait);
     } on TimeoutException {
       return null;
@@ -464,9 +573,10 @@ class PersistentShellSession {
     int durationMs, {
     bool interrupted = false,
     bool timedOut = false,
+    String? stdout,
   }) {
     return ShellCommandResult(
-      stdout: framer.stdout,
+      stdout: stdout ?? framer.stdout,
       stderr: framer.stderr,
       exitCode: match.exitCode,
       cwd: match.cwd,
@@ -486,13 +596,21 @@ class PersistentShellSession {
 
   /// Wraps [command] so its completion, exit code and resulting cwd can be
   /// read back deterministically, as
-  /// `{ CMD\n} ; printf '\n__TERLY_%s__%s|%s\n' "NONCE" "$?" "$PWD"`.
+  /// `{ CMD\n} </dev/null ; printf '\n__TERLY_%s__%s|%s\n' "NONCE" "$?" "$(pwd -P)"`.
   /// The closing brace starts its own line so a trailing `# comment` or
   /// heredoc terminator in CMD cannot swallow it. The braces mean `$?`
   /// reflects the command's own exit status even when
   /// the command spans multiple statements.
+  ///
+  /// `</dev/null` keeps CMD off the shell's own stdin, which carries the
+  /// envelopes that follow: without it `cat`, `read`, or a nested shell
+  /// (`bash`, `sudo -s`, `ssh host`) would consume the next commands, and
+  /// those would then run as root or on another host. The braces still run
+  /// in the current shell, so `cd` and `export` persist.
+  ///
+  /// `pwd -P` rather than `$PWD`: the variable is whatever CMD assigned it.
   String _buildEnvelope(String command, String nonce) {
-    return '{ $command\n} ; printf \'\\n__TERLY_%s__%s|%s\\n\' "$nonce" "\$?" "\$PWD"\n';
+    return '{ $command\n} </dev/null ; printf \'\\n__TERLY_%s__%s|%s\\n\' "$nonce" "\$?" "\$(pwd -P 2>/dev/null)"\n';
   }
 
   /// POSIX single-quote escaping for interpolating [value] (a path) into a

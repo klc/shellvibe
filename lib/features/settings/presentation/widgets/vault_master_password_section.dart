@@ -19,10 +19,14 @@ class VaultMasterPasswordSection extends ConsumerStatefulWidget {
 class _VaultMasterPasswordSectionState
     extends ConsumerState<VaultMasterPasswordSection> {
   final _vaultPasswordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+  bool _obscure = true;
+  bool _busy = false;
 
   @override
   void dispose() {
     _vaultPasswordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
@@ -81,15 +85,39 @@ class _VaultMasterPasswordSectionState
             ShadInput(
               key: const Key('vault_master_password_field'),
               controller: _vaultPasswordController,
-              obscureText: true,
+              obscureText: _obscure,
               placeholder: const Text('New master password (min 8 characters)'),
+              trailing: ShellVibeIconButton(
+                key: const Key('vault_master_password_visibility'),
+                icon: _obscure ? LucideIcons.eye : LucideIcons.eyeOff,
+                tooltip: _obscure ? 'Show password' : 'Hide password',
+                onPressed: () => setState(() => _obscure = !_obscure),
+              ),
+            ),
+            const SizedBox(height: 12),
+            ShadInput(
+              key: const Key('vault_master_password_confirm_field'),
+              controller: _confirmPasswordController,
+              obscureText: _obscure,
+              placeholder: const Text('Repeat the master password'),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'There is no way to recover a forgotten master password. '
+              'Forgetting it means resetting the vault, which deletes every '
+              'stored password, key and vault variable.',
+              style: TextStyle(
+                fontSize: 12,
+                color: ShellVibeTokens.resolve(context).textMuted,
+              ),
             ),
             const SizedBox(height: 12),
             ShellVibeButton(
               key: const Key('set_master_password_button'),
               label: 'Set Master Password',
               icon: LucideIcons.lockKeyhole,
-              onPressed: _handleSetMasterPassword,
+              busy: _busy,
+              onPressed: _busy ? null : _handleSetMasterPassword,
             ),
           ],
         ],
@@ -179,13 +207,23 @@ class _VaultMasterPasswordSectionState
       );
       return;
     }
+    if (password != _confirmPasswordController.text) {
+      ShadToaster.of(context).show(
+        const ShadToast.destructive(
+          description: Text('The two passwords do not match.'),
+        ),
+      );
+      return;
+    }
 
+    setState(() => _busy = true);
     try {
       await ref.read(vaultProvider.notifier).setup(password);
       // The controller may already be disposed if the screen left the tree
       // while the (isolate-backed) setup was running.
       if (!mounted) return;
       _vaultPasswordController.clear();
+      _confirmPasswordController.clear();
       ShadToaster.of(context).show(
         const ShadToast(
           description: Text(
@@ -201,6 +239,8 @@ class _VaultMasterPasswordSectionState
           ),
         );
       }
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 }

@@ -1,14 +1,62 @@
 import 'dart:async';
 
+import 'package:drift/drift.dart' hide isNotNull, isNull;
+import 'package:drift/native.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:cryptography/cryptography.dart';
 import 'package:shellvibe/core/crypto/encryption_engine.dart';
+import 'package:shellvibe/features/vault/data/vault_key_service.dart';
+import 'package:shellvibe/shared/database/app_database.dart';
 import 'package:shellvibe/shared/providers/database_providers.dart';
 import 'package:shellvibe/shared/storage/secure_storage_service.dart';
 import 'package:shellvibe/features/vault/presentation/notifiers/identities_notifier.dart';
 import 'package:shellvibe/features/vault/presentation/notifiers/vault_notifier.dart';
+
+/// A keychain whose reads fail outright, as a denied prompt or a locked
+/// keyring can.
+class _UnreadableKeychain extends SecureStorageService {
+  @override
+  Future<String?> read({required String key}) =>
+      throw PlatformException(code: 'keychain', message: 'locked');
+
+  @override
+  Future<bool> containsKey({required String key}) =>
+      throw PlatformException(code: 'keychain', message: 'locked');
+}
+
+/// Holds every derivation until [release] completes.
+class _GatedEngine extends EncryptionEngine {
+  final EncryptionEngine delegate;
+  final Completer<void> started = Completer<void>();
+  final Completer<void> release = Completer<void>();
+
+  _GatedEngine(this.delegate);
+
+  @override
+  Future<SecretKey> deriveMasterKeyInBackground({
+    required String masterPassword,
+    required Uint8List salt,
+    Argon2Params? params,
+  }) async {
+    if (!started.isCompleted) started.complete();
+    await release.future;
+    return delegate.deriveMasterKeyInBackground(
+      masterPassword: masterPassword,
+      salt: salt,
+      params: params,
+    );
+  }
+
+  @override
+  Future<String> decrypt({
+    required String encryptedBase64,
+    required SecretKey secretKey,
+  }) =>
+      delegate.decrypt(encryptedBase64: encryptedBase64, secretKey: secretKey);
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -19,16 +67,224 @@ void main() {
 
   group('VaultNotifier State Transition Unit Tests', () {
     late ProviderContainer container;
+    late AppDatabase db;
+
+    ProviderContainer newContainer({EncryptionEngine? engine}) =>
+        ProviderContainer(
+          overrides: [
+            encryptionEngineProvider.overrideWithValue(engine ?? fastEngine),
+            appDatabaseProvider.overrideWithValue(db),
+          ],
+        );
 
     setUp(() {
       FlutterSecureStorage.setMockInitialValues({});
-      container = ProviderContainer(
-        overrides: [encryptionEngineProvider.overrideWithValue(fastEngine)],
+      db = AppDatabase(NativeDatabase.memory());
+      container = newContainer();
+    });
+
+    tearDown(() async {
+      container.dispose();
+      await db.close();
+    });
+
+    Future<void> insertIdentityWithSecret(String secret) =>
+        db.identitiesDao.insertIdentity(
+          IdentitiesCompanion.insert(
+            id: 'id-1',
+            workspaceId: 'default',
+            title: 'prod',
+            username: 'root',
+            authType: 'password',
+            passwordEncrypted: Value(secret),
+            createdAt: DateTime(2026),
+          ),
+        );
+
+    test('a missing key with encrypted rows reads as lost, not new', () async {
+      // The database survived, the keychain did not.
+      await insertIdentityWithSecret('ciphertext-under-a-gone-key');
+
+      final state = await container.read(vaultProvider.future);
+
+      expect(state.status, VaultStatus.locked);
+      expect(state.keyLost, isTrue);
+      await expectLater(
+        container.read(vaultKeyServiceProvider).getDek(),
+        throwsA(isA<VaultKeyLostException>()),
+      );
+      expect(
+        await container.read(secureStorageServiceProvider).getMasterKey(),
+        isNull,
       );
     });
 
-    tearDown(() {
+    test('a key that reads again on a retry is no longer lost', () async {
+      await insertIdentityWithSecret('ciphertext-under-this-key');
+      expect((await container.read(vaultProvider.future)).keyLost, isTrue);
+
+      // The keyring was locked; now it answers.
+      await container
+          .read(secureStorageServiceProvider)
+          .saveMasterKey(List.filled(32, 7));
+      container.invalidate(vaultProvider);
+
+      final state = await container.read(vaultProvider.future);
+      expect(state.keyLost, isFalse);
+      expect(state.status, VaultStatus.unconfigured);
+    });
+
+    test('a keychain read that fails is an error, never a lost key', () async {
+      await insertIdentityWithSecret('ciphertext-under-this-key');
       container.dispose();
+      container = ProviderContainer(
+        overrides: [
+          encryptionEngineProvider.overrideWithValue(fastEngine),
+          appDatabaseProvider.overrideWithValue(db),
+          secureStorageServiceProvider.overrideWithValue(
+            _UnreadableKeychain(),
+          ),
+        ],
+        retry: (_, _) => null,
+      );
+
+      await expectLater(
+        container.read(vaultProvider.future),
+        throwsA(isA<PlatformException>()),
+      );
+      expect(container.read(vaultProvider).value?.keyLost, isNot(isTrue));
+      await expectLater(
+        container.read(vaultKeyServiceProvider).getDek(),
+        throwsA(isA<PlatformException>()),
+      );
+      expect(
+        await const FlutterSecureStorage().read(
+          key: SecureStorageKeys.masterKey,
+        ),
+        isNull,
+        reason: 'no new key may be made over one that could not be read',
+      );
+    });
+
+    test('a lock keeps the lost-key state', () async {
+      await insertIdentityWithSecret('ciphertext-under-a-gone-key');
+      await container.read(vaultProvider.future);
+
+      await container.read(vaultProvider.notifier).lock();
+
+      expect(container.read(vaultProvider).value!.keyLost, isTrue);
+    });
+
+    test(
+      'resetting a lost vault discards its secrets and starts over',
+      () async {
+        await insertIdentityWithSecret('ciphertext-under-a-gone-key');
+        await db.vaultEnvVarsDao.insert(
+          VaultEnvVarsCompanion.insert(
+            id: 'env-1',
+            workspaceId: 'default',
+            name: 'TOKEN',
+            valueEncrypted: 'ciphertext',
+            createdAt: DateTime(2026),
+          ),
+        );
+        await container.read(vaultProvider.future);
+
+        await container.read(vaultProvider.notifier).resetVault();
+
+        expect(
+          container.read(vaultProvider).value!.status,
+          VaultStatus.unconfigured,
+        );
+        final identity = (await db.identitiesDao.getAllIdentities()).single;
+        expect(identity.title, 'prod');
+        expect(identity.passwordEncrypted, isNull);
+        expect(await db.hasVaultSecrets(), isFalse);
+        expect(
+          await container.read(vaultKeyServiceProvider).getDek(),
+          isNotNull,
+        );
+      },
+    );
+
+    test('resetting forgets a master password nobody remembers', () async {
+      final notifier = container.read(vaultProvider.notifier);
+      await notifier.setup('CorrectMasterPassword123!');
+      await notifier.lock();
+      for (var i = 0; i < 5; i++) {
+        await notifier.unlock('WrongPassword!');
+      }
+      expect(container.read(vaultProvider).value!.isLockedOut, isTrue);
+
+      await notifier.resetVault();
+
+      final state = container.read(vaultProvider).value!;
+      expect(state.status, VaultStatus.unconfigured);
+      expect(state.failedAttempts, 0);
+      final keyService = container.read(vaultKeyServiceProvider);
+      expect(await keyService.isMasterPasswordConfigured(), isFalse);
+      expect(await keyService.getDek(), isNotNull);
+    });
+
+    test('a setup that fails throws and leaves the vault as it was', () async {
+      final notifier = container.read(vaultProvider.notifier);
+      await notifier.setup('CorrectMasterPassword123!');
+
+      // A second tap: the password is already set.
+      await expectLater(
+        notifier.setup('CorrectMasterPassword123!'),
+        throwsStateError,
+      );
+
+      final state = container.read(vaultProvider);
+      expect(state.hasError, isFalse);
+      expect(state.value!.status, VaultStatus.unlocked);
+    });
+
+    test('an attempt is counted before the derivation finishes', () async {
+      final notifier = container.read(vaultProvider.notifier);
+      await notifier.setup('CorrectMasterPassword123!');
+      await notifier.lock();
+      container.dispose();
+
+      final slow = _GatedEngine(fastEngine);
+      container = newContainer(engine: slow);
+      await container.read(vaultProvider.future);
+      final attempt = container
+          .read(vaultProvider.notifier)
+          .unlock('WrongPassword!');
+      await slow.started.future;
+
+      // Killing the app here must not refund the attempt.
+      expect(
+        await container
+            .read(secureStorageServiceProvider)
+            .read(key: SecureStorageKeys.vaultFailedAttempts),
+        '1',
+      );
+      slow.release.complete();
+      expect(await attempt, isFalse);
+    });
+
+    test('a long run of failures stays locked out for an hour', () async {
+      final notifier = container.read(vaultProvider.notifier);
+      await notifier.setup('CorrectMasterPassword123!');
+      await notifier.lock();
+      container.dispose();
+      // Attempt 64: an uncapped `1 << 59` overflows and the lockout fell
+      // back to 30 seconds.
+      await SecureStorageService().write(
+        key: SecureStorageKeys.vaultFailedAttempts,
+        value: '63',
+      );
+
+      container = newContainer();
+      await container.read(vaultProvider.future);
+      await container.read(vaultProvider.notifier).unlock('WrongPassword!');
+
+      final state = container.read(vaultProvider).value!;
+      expect(state.failedAttempts, 64);
+      expect(state.remainingLockout, greaterThan(const Duration(minutes: 59)));
     });
 
     test(
@@ -252,9 +508,7 @@ void main() {
         }
         firstContainer.dispose();
 
-        final restartedContainer = ProviderContainer(
-          overrides: [encryptionEngineProvider.overrideWithValue(fastEngine)],
-        );
+        final restartedContainer = newContainer();
         addTearDown(restartedContainer.dispose);
 
         final restored = await restartedContainer.read(vaultProvider.future);

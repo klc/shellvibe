@@ -127,7 +127,10 @@ void main() {
     });
 
     test('a device with no key of its own takes the ground\'s', () async {
-      expect(await store.adoptGroundSyncKey(SecretKey(fixedKey(6))), isTrue);
+      // Taken, but not reported as a replacement: with no key it could not
+      // have sealed anything, so there is nothing to send again and no
+      // reason to rewrite the ground.
+      expect(await store.adoptGroundSyncKey(SecretKey(fixedKey(6))), isFalse);
       expect(await store.readSyncKey(), base64.encode(fixedKey(6)));
     });
   });

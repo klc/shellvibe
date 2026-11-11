@@ -142,5 +142,19 @@ void main() {
       expect(bookmarks.first.hostId, equals(hostId));
       expect(bookmarks.last.templateId, equals(template.id));
     });
+
+    test('a bookmark row id is derived from what it stars', () async {
+      // Two devices starring the same host must write the same row, or sync
+      // keeps both and the host shows up twice in the favourites.
+      final hostId = await addHost('web');
+      final notifier = container.read(bookmarksProvider.notifier);
+      await container.read(bookmarksProvider.future);
+
+      await notifier.toggleHost(hostId);
+      await notifier.toggleHost(hostId);
+      await notifier.toggleHost(hostId);
+
+      expect(container.read(bookmarksProvider).value!.single.id, 'host:$hostId');
+    });
   });
 }

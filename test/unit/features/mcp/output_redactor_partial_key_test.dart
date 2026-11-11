@@ -32,6 +32,25 @@ void main() {
     expect(r.count, 1);
   });
 
+  test('a CRLF footer half is masked up to the first non-base64 line', () {
+    final r = redactor.redact(
+      'keep me\r\n$body1\r\n$body2\r\n-----END RSA PRIVATE KEY-----\r\nafter',
+    );
+    expect(r.text, 'keep me\r\n[REDACTED:private_key]\r\nafter');
+    expect(r.count, 1);
+  });
+
+  // Every line of `seq` output is base64-shaped, which made the old
+  // footer-half regex quadratic: 10k lines took ~10 s on the UI isolate.
+  test('50k base64-shaped lines redact in well under a second', () {
+    final lines = [for (var i = 1; i <= 50000; i++) '$i'].join('\n');
+    for (final text in [lines, '$lines\n-----END RSA PRIVATE KEY-----']) {
+      final watch = Stopwatch()..start();
+      redactor.redact(text);
+      expect(watch.elapsed, lessThan(const Duration(seconds: 1)));
+    }
+  });
+
   test('a complete key is still masked once, as one block', () {
     final r = redactor.redact(
       '-----BEGIN RSA PRIVATE KEY-----\n$body1\n$body2\n'

@@ -189,9 +189,12 @@ class RunbookMarkdown {
           '${RunbookStepModel.maxRetries}.',
         );
       }
-      if (timeout is! int || timeout < 1) {
+      if (timeout is! int ||
+          timeout < 1 ||
+          timeout > RunbookStepModel.maxTimeoutSeconds) {
         throw RunbookMarkdownException(
-          '$label: timeout must be a positive number of seconds.',
+          '$label: timeout must be a whole number of seconds from 1 to '
+          '${RunbookStepModel.maxTimeoutSeconds}.',
         );
       }
       if (onFailure != 'stop' && onFailure != 'continue') {
@@ -230,6 +233,16 @@ class RunbookMarkdown {
     final fence = RegExp(r'^(\s*)(`{3,}|~{3,})\s*([^\s`]*)\s*(.*)$');
     while (cursor < lines.length) {
       final line = lines[cursor];
+      // An HTML comment hides what is inside it, a code block included.
+      final comment = line.trimLeft();
+      if (comment.startsWith('<!--') && !comment.contains('-->', 4)) {
+        cursor++;
+        while (cursor < lines.length && !lines[cursor].contains('-->')) {
+          cursor++;
+        }
+        cursor++;
+        continue;
+      }
       final open = fence.firstMatch(line);
       if (open != null) {
         final marker = open.group(2)!;
@@ -288,7 +301,7 @@ class RunbookMarkdown {
         continue;
       }
 
-      heading ??= RegExp(r'^#\s+(.+?)\s*#*\s*$').firstMatch(line)?.group(1);
+      heading ??= _heading(line);
       cursor++;
     }
 
@@ -316,6 +329,24 @@ class RunbookMarkdown {
       tags: _stringList(front['tags'], 'tags'),
       variables: _variablesOf(front['variables']),
     );
+  }
+
+  /// The text of a `# Title` line, without a closing run of `#`. Trimmed by
+  /// hand: a regex with a lazy group and two optional runs is cubic on a line
+  /// of spaces.
+  static String? _heading(String line) {
+    final match = RegExp(r'^#\s+(.*)$').firstMatch(line);
+    if (match == null) return null;
+    var text = match.group(1)!.trimRight();
+    var end = text.length;
+    while (end > 0 && text[end - 1] == '#') {
+      end--;
+    }
+    // `# C#` keeps its `#`; only a run after a space closes the heading.
+    if (end == 0 || text[end - 1] == ' ' || text[end - 1] == '\t') {
+      text = text.substring(0, end).trimRight();
+    }
+    return text.isEmpty ? null : text;
   }
 
   static Map<String, Object?> _optionsOf(String info, String label) {
@@ -358,7 +389,8 @@ class RunbookMarkdown {
       final declaration = VariableDeclaration.tryFromJson(item);
       if (declaration == null) {
         throw const RunbookMarkdownException(
-          'Each entry of "variables" needs at least a name.',
+          'Each entry of "variables" needs a name, and its other fields '
+          'must be text (options a list, required true or false).',
         );
       }
       result.add(declaration);

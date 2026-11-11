@@ -22,10 +22,13 @@ RemoteCommandSessionFactory remoteCommandSessionFactory(Ref ref) {
 
 @riverpod
 RunbookRunService runbookRunService(Ref ref) {
+  // Captured now, not read in the closure: callers `read` this auto-disposed
+  // provider once, so its ref is gone long before a snippet step runs.
+  final snippets = ref.watch(snippetsRepositoryProvider);
   return RunbookRunService(
     sessionFactory: ref.watch(remoteCommandSessionFactoryProvider),
     lookupSnippet: (id) async {
-      final all = await ref.read(snippetsRepositoryProvider).getAllSnippets();
+      final all = await snippets.getAllSnippets();
       return all.where((s) => s.id == id).firstOrNull?.code;
     },
   );

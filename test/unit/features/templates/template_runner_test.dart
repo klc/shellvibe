@@ -23,6 +23,9 @@ class _RecordingTarget implements TemplateRunnerTarget {
   var _counter = 0;
   String? _activeTabId;
 
+  /// Panes in the tab list, as the runner sees them.
+  final List<String> tabs = [];
+
   /// When set, every connection hangs on this until the test releases it.
   final Completer<void>? connectionGate;
 
@@ -30,11 +33,12 @@ class _RecordingTarget implements TemplateRunnerTarget {
 
   void _created(String kind) {
     _activeTabId = 'live_${_counter++}';
+    tabs.add(_activeTabId!);
     calls.add('$kind -> $_activeTabId');
   }
 
   @override
-  String? get activeTabId => _activeTabId;
+  List<String> get tabIds => [...tabs];
 
   @override
   Future<void> openTabForHost(
@@ -169,6 +173,51 @@ void main() {
       // host's own default to apply.
       expect(target.startupSnippets, {'live_0': 'sn', 'live_1': null});
       expect(target.startupRunbooks, {'live_0': null, 'live_1': 'rb'});
+    });
+
+    test('a parent closed while credentials are asked for is not replaced by '
+        'whatever pane is focused', () async {
+      final target = _RecordingTarget();
+      final result = await runner.run(
+        _template([
+          _pane(id: 'p0', order: 0, title: 'Root'),
+          _pane(id: 'other', order: 1, title: 'Other'),
+          _pane(
+            id: 'p1',
+            order: 2,
+            parentPaneId: 'p0',
+            splitDirection: Axis.vertical,
+            sessionType: TerminalSessionType.ssh,
+            hostId: 'b',
+            title: 'Child',
+          ),
+        ]),
+        target: target,
+        hostsById: {'b': _host('b')},
+        // The user closes the root while the prompt for the child is open.
+        resolveIdentity: (host) async {
+          target.tabs.remove('live_0');
+          return (ok: true, identity: null);
+        },
+      );
+
+      expect(result.openedPanes, 2);
+      expect(result.warnings.single, contains('was closed'));
+      expect(target.calls.where((c) => c.startsWith('splitTab')), isEmpty);
+    });
+
+    test('a split whose parent is not in the template is reported', () async {
+      final result = await runner.run(
+        _template([
+          _pane(id: 'p0', order: 0),
+          _pane(id: 'p1', order: 1, parentPaneId: 'gone', title: 'Orphan'),
+        ]),
+        target: _RecordingTarget(),
+        hostsById: const {},
+        resolveIdentity: _resolveOk,
+      );
+      expect(result.openedPanes, 1);
+      expect(result.warnings.single, contains('Orphan'));
     });
 
     test('recreates panes in capture order', () async {

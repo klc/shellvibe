@@ -81,7 +81,7 @@ final class RunbooksNotifierProvider
   RunbooksNotifier create() => RunbooksNotifier();
 }
 
-String _$runbooksNotifierHash() => r'c13e3270673aefebdcdb278624426c07e6ffed24';
+String _$runbooksNotifierHash() => r'f566acbd87131da5c6117195399408060ecb62d3';
 
 abstract class _$RunbooksNotifier extends $AsyncNotifier<List<RunbookModel>> {
   FutureOr<List<RunbookModel>> build();

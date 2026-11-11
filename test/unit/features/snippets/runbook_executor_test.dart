@@ -59,6 +59,32 @@ void main() {
       );
     });
 
+    test('an anchored pattern matches a line of multi-line output', () async {
+      final runbook = RunbookModel(
+        id: 'rb_ml',
+        workspaceId: 'ws_1',
+        title: 'Anchored',
+        createdAt: DateTime.now(),
+        steps: const [
+          RunbookStepModel(
+            id: 'step_1',
+            runbookId: 'rb_ml',
+            stepOrder: 1,
+            command: 'systemctl is-active app',
+            expectedOutputPattern: r'^active$',
+          ),
+        ],
+      );
+
+      // Shell output ends in a newline, and often has more than one line.
+      final result = await executor.executeRunbook(
+        runbook,
+        (command, timeoutSeconds) async => ('warning: x\nactive\n', 0),
+      );
+
+      expect(result.overallSuccess, isTrue);
+    });
+
     test('Stops execution when a step fails pattern match', () async {
       final runbook = RunbookModel(
         id: 'rb_2',

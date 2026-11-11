@@ -6,12 +6,20 @@ import 'mcp_protocol.dart';
 /// Handles one already-authenticated JSON-RPC request and returns the value
 /// that becomes the `result` field of the JSON-RPC response.
 ///
+/// [connectionId] is the bridge process the request came through (see
+/// [McpHttpTransport.connectionHeader]), or null from a client that does not
+/// send one.
+///
 /// Any exception thrown here is caught by [McpHttpTransport] itself (see its
 /// class docstring) and reported to the caller as a generic `-32603`
 /// internal error — this callback never needs its own top-level try/catch to
 /// keep the server alive.
 typedef McpTransportRequestHandler =
-    Future<Object?> Function(String clientId, JsonRpcRequest request);
+    Future<Object?> Function(
+      String clientId,
+      JsonRpcRequest request,
+      String? connectionId,
+    );
 
 /// Verifies a bearer token and returns the id of the client it belongs to,
 /// or `null` if the token is missing, malformed, revoked, or expired.
@@ -103,6 +111,11 @@ final class McpHttpTransport {
   /// to this server (the `shellvibe-mcp` stdio bridge, tests, ...) set this
   /// literal string themselves.
   static const String _allowedOrigin = 'shellvibe-bridge';
+
+  /// Header carrying the id the `shellvibe-mcp` bridge picks once per
+  /// process. Every agent presents the same bearer token, so this is the
+  /// only thing that tells two agent windows apart.
+  static const String connectionHeader = 'x-shellvibe-connection';
 
   /// Implementation-defined JSON-RPC error codes in the `-32000`..`-32099`
   /// "server error" range the spec reserves for transport-specific use.
@@ -290,7 +303,7 @@ final class McpHttpTransport {
       return null;
     }
 
-    if (!_admitRequest(clientId)) {
+    if (!_admitRequest('$clientId/${_connectionId(request) ?? ''}')) {
       await _respondError(
         request,
         HttpStatus.tooManyRequests,
@@ -306,9 +319,19 @@ final class McpHttpTransport {
     return clientId;
   }
 
-  bool _admitRequest(String clientId) {
+  /// At most 64 characters, so an id cannot grow the rate-limit table or
+  /// the scope keys without bound.
+  String? _connectionId(HttpRequest request) {
+    final id = request.headers.value(connectionHeader)?.trim();
+    if (id == null || id.isEmpty || id.length > 64) return null;
+    return id;
+  }
+
+  /// [key] is per client and connection, so one looping agent cannot use up
+  /// the budget of another window that shares its token.
+  bool _admitRequest(String key) {
     final now = DateTime.now();
-    final window = _rateWindows.putIfAbsent(clientId, () => _RateWindow(now));
+    final window = _rateWindows.putIfAbsent(key, () => _RateWindow(now));
     if (now.difference(window.start) >= _rateLimitWindow) {
       window.start = now;
       window.count = 0;
@@ -364,7 +387,7 @@ final class McpHttpTransport {
       case JsonRpcRequest():
         Object? result;
         try {
-          result = await onRequest(clientId, message);
+          result = await onRequest(clientId, message, _connectionId(request));
         } on JsonRpcErrorException catch (error) {
           await _respondJson(
             request,

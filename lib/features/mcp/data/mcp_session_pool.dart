@@ -17,6 +17,11 @@ class McpSession {
   final String sessionId;
   final String hostId;
   final String clientId;
+
+  /// The agent connection that opened this session. Every agent window
+  /// shares one client, so this is what keeps one window's sessions out of
+  /// another's reach.
+  final String connectionScopeId;
   final String hostLabel;
 
   /// Id of the read-only terminal tab this session surfaces as, once one has
@@ -37,6 +42,7 @@ class McpSession {
     required this.sessionId,
     required this.hostId,
     required this.clientId,
+    required this.connectionScopeId,
     required this.hostLabel,
     this.tabId,
     required this.connection,
@@ -107,6 +113,7 @@ class McpSessionPool {
   /// per-host limit.
   Future<McpSession> open({
     required String clientId,
+    required String connectionScopeId,
     required String clientName,
     required String mode,
     required HostModel host,
@@ -121,12 +128,15 @@ class McpSessionPool {
 
     final connection = await connector.connect(host);
 
-    // Opens a fresh PTY-less shell over the same still-authenticated SSH
+    // Opens a fresh PTY-less `/bin/sh` over the same still-authenticated SSH
     // client. Used both for the initial channel and as [PersistentShellSession]'s
     // `reopen` callback, so a stuck/desynced channel can be replaced without
-    // re-running the SSH handshake.
+    // re-running the SSH handshake. An exec channel, not a login shell: see
+    // [PersistentShellSession.initialize].
     Future<ShellChannel> openPtylessShell() async {
-      final session = await connection.target.openShell(requestPty: false);
+      final session = await connection.target.openExec(
+        PersistentShellSession.remoteCommand,
+      );
       return SshShellChannel(session);
     }
 
@@ -151,6 +161,7 @@ class McpSessionPool {
       sessionId: sessionId,
       hostId: host.id,
       clientId: clientId,
+      connectionScopeId: connectionScopeId,
       hostLabel: host.label,
       connection: connection,
       shell: shell,
@@ -190,12 +201,19 @@ class McpSessionPool {
 
   McpSession? find(String sessionId) => _sessions[sessionId];
 
-  /// [find], refusing an id that belongs to a different client: a client must
-  /// never be able to touch, list, or even learn of another client's session
-  /// by guessing its id, so "not yours" and "does not exist" read the same.
-  McpSession requireOwned(String clientId, String sessionId) {
+  /// [find], refusing an id that belongs to a different client or another
+  /// connection of it: an agent must never be able to touch, list, or even
+  /// learn of another agent's session by guessing its id, so "not yours" and
+  /// "does not exist" read the same.
+  McpSession requireOwned(
+    String clientId,
+    String connectionScopeId,
+    String sessionId,
+  ) {
     final session = find(sessionId);
-    if (session == null || session.clientId != clientId) {
+    if (session == null ||
+        session.clientId != clientId ||
+        session.connectionScopeId != connectionScopeId) {
       throw McpToolException(
         McpErrorCode.sessionNotFound,
         'No open session with id "$sessionId" for this client.',
@@ -204,8 +222,19 @@ class McpSessionPool {
     return session;
   }
 
-  List<McpSession> sessionsForClient(String clientId) =>
-      _sessions.values.where((s) => s.clientId == clientId).toList();
+  /// Every session [clientId] holds, or only those of one of its connections
+  /// when [connectionScopeId] is given.
+  List<McpSession> sessionsForClient(
+    String clientId, {
+    String? connectionScopeId,
+  }) => _sessions.values
+      .where(
+        (s) =>
+            s.clientId == clientId &&
+            (connectionScopeId == null ||
+                s.connectionScopeId == connectionScopeId),
+      )
+      .toList();
 
   /// Closes one session: the shell, then the SSH connection underneath.
   /// A no-op for an id that is not open (already closed, or never existed).

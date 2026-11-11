@@ -13,7 +13,7 @@ void main() {
 
   ApiClient client({
     String? token = 'test-token',
-    Future<void> Function()? onUnauthenticated,
+    Future<void> Function(String)? onUnauthenticated,
   }) => ApiClient(
     transport: transport,
     tokenProvider: () async => token,
@@ -124,7 +124,7 @@ void main() {
       var sessionDropped = false;
 
       await expectLater(
-        client(onUnauthenticated: () async => sessionDropped = true).get('/me'),
+        client(onUnauthenticated: (_) async => sessionDropped = true).get('/me'),
         throwsA(
           isA<ApiException>()
               .having((e) => e.code, 'code', ApiErrorCode.unauthenticated)
@@ -142,7 +142,7 @@ void main() {
       var sessionDropped = false;
 
       await expectLater(
-        client(onUnauthenticated: () async => sessionDropped = true).post(
+        client(onUnauthenticated: (_) async => sessionDropped = true).post(
           '/auth/login',
           body: const {'email': 'a@b.c', 'password': 'x'},
           authenticated: false,
@@ -274,6 +274,34 @@ void main() {
       },
     );
 
+    test(
+      'a push past the log ceiling is a plan limit, not a throttle',
+      () async {
+        // `pushOperations` says so with `details.max_bytes`. Read as a
+        // throttle it was retried as one, and failed the same way every time.
+        transport.enqueue(
+          status: 429,
+          body: {
+            'code': 'rate_limited',
+            'message': 'Sync log exceeds plan limit of 52428800 bytes.',
+            'details': {
+              'stored_bytes': 52000000,
+              'incoming_bytes': 900000,
+              'max_bytes': 52428800,
+            },
+          },
+        );
+
+        try {
+          await client().post('/sync/operations', body: const {});
+          fail('expected an ApiException');
+        } on ApiException catch (e) {
+          expect(e.isPlanSizeLimit, isTrue);
+          expect(e.isThrottled, isFalse);
+        }
+      },
+    );
+
     test('surfaces a sync conflict with the server head', () async {
       transport.enqueue(
         status: 409,
@@ -306,7 +334,7 @@ void main() {
       var sessionDropped = false;
 
       await expectLater(
-        client(onUnauthenticated: () async => sessionDropped = true).get('/me'),
+        client(onUnauthenticated: (_) async => sessionDropped = true).get('/me'),
         throwsA(isA<ApiException>()),
       );
 

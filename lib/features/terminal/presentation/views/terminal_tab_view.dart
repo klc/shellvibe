@@ -363,16 +363,19 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
 
   /// Sends snippet text to the focused pane, or to every selected pane while
   /// broadcast input is active (two or more panes selected).
-  void _sendToPanes(TerminalTabsState tabsState, String code) {
+  /// True when some pane got `${SV:...}` as written, having no host to fill
+  /// it from.
+  bool _sendToPanes(TerminalTabsState tabsState, String code) {
     if (tabsState.isBroadcasting) {
-      ref.read(terminalTabsProvider.notifier).sendTextToSelectedPanes(code);
-      return;
+      return broadcastFilled(ref.read(terminalTabsProvider.notifier), code);
     }
     final target =
         tabsState.activeTab ??
         (tabsState.tabs.isEmpty ? null : tabsState.tabs.first);
-    if (target == null) return;
-    target.terminal.paste(code);
+    if (target == null) return false;
+    final filled = fillBuiltinsFor(target, code);
+    target.terminal.paste(filled.code);
+    return filled.unresolved;
   }
 
   /// Opens the snippet picker for whatever the next send would target, and
@@ -412,12 +415,11 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
     }
     if (!mounted) return;
     final tabsState = ref.read(terminalTabsProvider);
-    final filled = fillPaneBuiltins(
+    final unresolved = _sendToPanes(
       tabsState,
       SnippetVariableParser.substituteVariables(snippet.code, values),
     );
-    _sendToPanes(tabsState, filled.code);
-    if (filled.unresolved) {
+    if (unresolved) {
       ShadToaster.of(context).show(
         ShadToast(
           description: Text(

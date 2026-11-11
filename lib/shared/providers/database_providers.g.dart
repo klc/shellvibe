@@ -644,11 +644,17 @@ final class EncryptionEngineProvider
 String _$encryptionEngineHash() => r'0e9c339ef18e10bc1703076e3e2a8e10a8e2b0f8';
 
 /// Provider for [SecureStorageService].
+///
+/// Kept alive: the service holds state (the macOS bundle cache and the queue
+/// that serializes writes to it), and a second instance would race the first.
 
 @ProviderFor(secureStorageService)
 final secureStorageServiceProvider = SecureStorageServiceProvider._();
 
 /// Provider for [SecureStorageService].
+///
+/// Kept alive: the service holds state (the macOS bundle cache and the queue
+/// that serializes writes to it), and a second instance would race the first.
 
 final class SecureStorageServiceProvider
     extends
@@ -659,13 +665,16 @@ final class SecureStorageServiceProvider
         >
     with $Provider<SecureStorageService> {
   /// Provider for [SecureStorageService].
+  ///
+  /// Kept alive: the service holds state (the macOS bundle cache and the queue
+  /// that serializes writes to it), and a second instance would race the first.
   SecureStorageServiceProvider._()
     : super(
         from: null,
         argument: null,
         retry: null,
         name: r'secureStorageServiceProvider',
-        isAutoDispose: true,
+        isAutoDispose: false,
         dependencies: null,
         $allTransitiveDependencies: null,
       );
@@ -694,4 +703,4 @@ final class SecureStorageServiceProvider
 }
 
 String _$secureStorageServiceHash() =>
-    r'0295e42b0c2763787b4b230961936eabcd0d0877';
+    r'e6a02a22edfe9ccff4d341f7d1d14daf7cade897';

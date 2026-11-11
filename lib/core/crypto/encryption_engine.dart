@@ -138,26 +138,52 @@ class EncryptionEngine {
     }
   }
 
+  /// The Argon2id cost this engine derives with when not told otherwise.
+  Argon2Params get kdfParams => Argon2Params(
+    memory: _kdf.memory,
+    iterations: _kdf.iterations,
+    parallelism: _kdf.parallelism,
+  );
+
   /// Derives a 256-bit [SecretKey] in a background isolate to avoid
   /// blocking the UI thread during the expensive Argon2id computation.
+  ///
+  /// [params] overrides this engine's own cost, for a key that was first
+  /// derived under different parameters.
   ///
   /// KDF parameters are duplicated inline because [Isolate.run] closures
   /// cannot capture non-sendable instance fields.
   Future<SecretKey> deriveMasterKeyInBackground({
     required String masterPassword,
     required Uint8List salt,
+    Argon2Params? params,
   }) async {
+    final parallelism = params?.parallelism ?? _kdf.parallelism;
+    final memory = params?.memory ?? _kdf.memory;
+    final iterations = params?.iterations ?? _kdf.iterations;
+    final hashLength = _kdf.hashLength;
+
     // Avoid isolate spawning overhead in test environments with low KDF memory
-    if (_kdf.memory <= 4096) {
-      return deriveMasterKey(masterPassword: masterPassword, salt: salt);
+    if (memory <= 4096) {
+      if (params == null) {
+        return deriveMasterKey(masterPassword: masterPassword, salt: salt);
+      }
+      try {
+        return await Argon2id(
+          parallelism: parallelism,
+          memory: memory,
+          iterations: iterations,
+          hashLength: hashLength,
+        ).deriveKey(
+          secretKey: SecretKey(utf8.encode(masterPassword)),
+          nonce: salt,
+        );
+      } catch (e) {
+        throw CryptoException('Failed to derive master key using Argon2id', e);
+      }
     }
 
     try {
-      final parallelism = _kdf.parallelism;
-      final memory = _kdf.memory;
-      final iterations = _kdf.iterations;
-      final hashLength = _kdf.hashLength;
-
       final keyBytes = await Isolate.run(() async {
         final kdf = Argon2id(
           parallelism: parallelism,
@@ -213,6 +239,41 @@ class EncryptionEngine {
       throw CryptoException('Failed to decrypt payload using AES-256-GCM', e);
     }
   }
+}
+
+/// The cost parameters of an Argon2id derivation.
+class Argon2Params {
+  final int memory;
+  final int iterations;
+  final int parallelism;
+
+  const Argon2Params({
+    required this.memory,
+    required this.iterations,
+    required this.parallelism,
+  });
+
+  /// What [EncryptionEngine] derived every master password with before the
+  /// parameters were stored beside the salt. A vault without stored
+  /// parameters was set up under these, whatever the default is today.
+  static const legacy = Argon2Params(
+    memory: 65536,
+    iterations: 3,
+    parallelism: 1,
+  );
+
+  Map<String, Object> toJson() => {
+    'alg': 'argon2id',
+    'memory': memory,
+    'iterations': iterations,
+    'parallelism': parallelism,
+  };
+
+  factory Argon2Params.fromJson(Map<String, dynamic> json) => Argon2Params(
+    memory: json['memory'] as int,
+    iterations: json['iterations'] as int,
+    parallelism: json['parallelism'] as int,
+  );
 }
 
 /// [length] bytes from the platform's secure random source.

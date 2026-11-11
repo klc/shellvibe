@@ -46,7 +46,7 @@ final class CloudBackupNotifierProvider
 }
 
 String _$cloudBackupNotifierHash() =>
-    r'2fbdaddb41cb087408e8a3aa78502bb17722d740';
+    r'8ad05656ea59871d38361d1e17cd2a7b0ecd0f12';
 
 /// Drives the cloud backup surface.
 ///

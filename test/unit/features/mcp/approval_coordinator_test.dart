@@ -72,6 +72,33 @@ void main() {
       expect(result.denied.map((d) => d.hostId).toSet(), {'host-1', 'host-2'});
     });
 
+    test(
+      'a host-access request shown late gets its full time from then',
+      () async {
+        var done = false;
+        final future = coordinator
+            .requestHostAccess(
+              _hostAccessRequest(),
+              timeout: const Duration(milliseconds: 200),
+            )
+            .whenComplete(() => done = true);
+        final id = coordinator.currentHostAccess.single.id;
+
+        // It waited in line behind another prompt for most of its time.
+        await Future<void>.delayed(const Duration(milliseconds: 150));
+        final deadline = coordinator.restartHostAccessClock(id);
+        expect(deadline, isNotNull);
+        expect(coordinator.currentHostAccess.single.expiresAt, deadline);
+
+        await Future<void>.delayed(const Duration(milliseconds: 120));
+        expect(done, isFalse, reason: 'counted from when it was shown');
+
+        final result = await future;
+        expect(result.denied.map((d) => d.reason).toSet(), {'timeout'});
+        expect(coordinator.restartHostAccessClock(id), isNull);
+      },
+    );
+
     test('a timed-out request is dropped from the pending list', () async {
       await coordinator.requestCommandApproval(
         _commandRequest(),

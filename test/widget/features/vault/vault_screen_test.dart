@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -14,6 +16,7 @@ import 'package:shellvibe/features/vault/presentation/notifiers/vault_env_vars_n
 import 'package:shellvibe/features/vault/presentation/screens/vault_screen.dart';
 import 'package:shellvibe/shared/database/app_database.dart';
 import 'package:shellvibe/shared/providers/database_providers.dart';
+import 'package:shellvibe/shared/storage/secure_storage_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -214,7 +217,8 @@ void main() {
       tester,
     ) async {
       // Ciphertext this install's vault key cannot open — what a restored
-      // backup or a lost keychain entry leaves behind.
+      // backup leaves behind. (With no key at all the vault reads as lost.)
+      _seedOwnVaultKey();
       await db.identitiesDao.insertIdentity(
         IdentitiesCompanion.insert(
           id: 'broken-1',
@@ -429,6 +433,9 @@ void main() {
     testWidgets('Add environment variable dialog validates the name', (
       tester,
     ) async {
+      // This install has a key of its own; with none, the stored row would
+      // make the vault read as lost.
+      _seedOwnVaultKey();
       await db.vaultEnvVarsDao.insert(
         VaultEnvVarsCompanion.insert(
           id: 'env-existing',
@@ -550,3 +557,8 @@ void main() {
     });
   });
 }
+
+/// Gives this install a plaintext vault key of its own.
+void _seedOwnVaultKey() => FlutterSecureStorage.setMockInitialValues({
+  SecureStorageKeys.masterKey: base64.encode(List.filled(32, 7)),
+});

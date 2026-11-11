@@ -78,7 +78,11 @@ class ShellOutputFramer {
 
   /// Command stdout collected so far (or ever, once [isDone]), with the
   /// middle dropped and marked if it exceeded [capBytes].
-  String get stdout => _stdoutAcc.decode();
+  ///
+  /// Includes the bytes still held back as a possible marker start: when the
+  /// sentinel never comes (a timeout), they are the tail of the output, e.g.
+  /// the `Continue? [y/N] ` prompt the command is waiting on.
+  String get stdout => _stdoutAcc.decode(_pending);
 
   /// Command stderr collected so far, capped the same way as [stdout].
   String get stderr => _stderrAcc.decode();
@@ -219,9 +223,7 @@ class _CappedAccumulator {
 
   // Fed every byte, not only the kept ones, so neither a chunk boundary nor
   // the truncation cut can split a character and read as bad input.
-  final _validator = const Utf8Decoder().startChunkedConversion(
-    _DiscardSink(),
-  );
+  final _validator = const Utf8Decoder().startChunkedConversion(_DiscardSink());
   bool _malformed = false;
 
   bool get malformed => _malformed;
@@ -263,15 +265,21 @@ class _CappedAccumulator {
       ? _tail.sublist(_tail.length - _keepBytes)
       : _tail;
 
-  String decode() {
+  /// [trailing] is appended as if it had been added last, without being
+  /// stored.
+  String decode([List<int> trailing = const []]) {
     if (!truncated) {
-      return utf8.decode([..._head, ..._tail], allowMalformed: true);
+      return utf8.decode([
+        ..._head,
+        ..._tail,
+        ...trailing,
+      ], allowMalformed: true);
     }
     final tailKept = _tailKept;
     final droppedBytes = _originalBytes - _head.length - tailKept.length;
     return utf8.decode(_head, allowMalformed: true) +
         _formatDroppedMarker(droppedBytes) +
-        utf8.decode(tailKept, allowMalformed: true);
+        utf8.decode([...tailKept, ...trailing], allowMalformed: true);
   }
 }
 

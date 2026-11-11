@@ -188,6 +188,24 @@ void main() {
     );
   });
 
+  testWidgets('the startup runbook picker says a failing step does not stop '
+      'the rest', (tester) async {
+    await open(tester);
+    await tester.tap(find.byKey(const Key('template_pane_startup_p0')));
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('template_startup_runbook_note')),
+        matching: find.textContaining('does not stop'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('template_startup_runbook_rb')),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('editing a pane keeps the on-open settings', (tester) async {
     await (db.update(db.templates)).write(
       const TemplatesCompanion(

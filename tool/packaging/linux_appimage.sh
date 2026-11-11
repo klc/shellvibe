@@ -64,8 +64,13 @@ chmod +x "$appdir/AppRun"
 if ! command -v appimagetool >/dev/null 2>&1; then
   echo '==> Fetching appimagetool'
   tool_path="$(dirname "$appdir")/appimagetool"
+  # Pinned to a release and its checksum, like nfpm: `continuous` moves under
+  # us and would run whatever it points at today.
+  appimagetool_version='1.9.1'
+  appimagetool_sha256='ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0'
   curl -fsSL -o "$tool_path" \
-    'https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage'
+    "https://github.com/AppImage/appimagetool/releases/download/${appimagetool_version}/appimagetool-x86_64.AppImage"
+  echo "$appimagetool_sha256  $tool_path" | sha256sum -c -
   chmod +x "$tool_path"
   APPIMAGETOOL="$tool_path"
 else
