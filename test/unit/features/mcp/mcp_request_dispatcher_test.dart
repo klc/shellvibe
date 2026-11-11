@@ -173,4 +173,45 @@ void main() {
     expect(await scopeOfACall('client-2'), other);
     expect(ended, isNot(contains(other)));
   });
+
+  test(
+    'an unmodelled tool error never carries its text to the agent',
+    () async {
+      final leaky = McpRequestDispatcher(
+        registry: McpToolRegistry([_ThrowingTool()]),
+        lookupClient: (clientId) async =>
+            (name: 'Agent $clientId', workspaceId: 'default'),
+        onScopeEnded: (_) {},
+      );
+
+      final result = await leaky.handle(
+        'client-1',
+        JsonRpcRequest(
+          id: ++ids,
+          method: McpMethod.toolsCall,
+          params: const {'name': 'throw'},
+        ),
+      );
+
+      expect(result.toString(), contains('throw failed'));
+      expect(result.toString(), isNot(contains('db.internal.example')));
+    },
+  );
+}
+
+/// Fails the way the SSH layer does: with the target's address in the text.
+final class _ThrowingTool implements McpToolHandler {
+  @override
+  String get name => 'throw';
+
+  @override
+  McpToolDefinition get definition => const McpToolDefinition(
+    name: 'throw',
+    description: 'Always throws.',
+    inputSchema: {'type': 'object'},
+  );
+
+  @override
+  Future<Object?> execute(McpToolContext ctx, Map<String, Object?> args) =>
+      throw Exception('Failed to connect to db.internal.example:22');
 }

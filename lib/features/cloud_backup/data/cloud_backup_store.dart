@@ -146,18 +146,21 @@ final class CloudBackupStore {
   /// the other silently discards. Nothing fails, nothing is empty, and neither
   /// screen says a word.
   ///
-  /// Returns true when the stored key actually changed, which is the caller's
+  /// Returns true when it replaced a different key, which is the caller's
   /// signal that everything this device sent under the old key has to be
-  /// written again.
+  /// written again. A device that held none sent nothing -- there was no key
+  /// to seal with -- so taking the ground's is not a repair, and reporting it
+  /// as one made every newly joining device rewrite the ground.
   Future<bool> adoptGroundSyncKey(SecretKey? syncKey) async {
     if (syncKey == null) return false;
 
     final incoming = base64.encode(await syncKey.extractBytes());
-    if (await readSyncKey() == incoming) return false;
+    final stored = await readSyncKey();
+    if (stored == incoming) return false;
 
     await writeSyncKey(incoming);
 
-    return true;
+    return stored != null;
   }
 
   /// The key the next upload should seal in, minting one if it is time.

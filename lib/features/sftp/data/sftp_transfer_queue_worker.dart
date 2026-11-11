@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:uuid/uuid.dart';
 import '../domain/models/transfer_item.dart';
+import 'sftp_service.dart';
 
 /// Worker managing background SFTP file uploads and downloads queue.
 class SftpTransferQueueWorker {
@@ -32,6 +33,12 @@ class SftpTransferQueueWorker {
   /// transfer exactly once.
   final Map<String, bool> _restartRequested = {};
 
+  /// The client each running transfer uses; see [releaseClient].
+  final Map<String, SftpClient> _runningClients = {};
+
+  /// Clients the screen has let go of while transfers still ran on them.
+  final Set<SftpClient> _releasedClients = {};
+
   int _activeTransferCount = 0;
   final List<_PendingTransfer> _pendingTransfers = [];
 
@@ -53,6 +60,8 @@ class SftpTransferQueueWorker {
     required String remotePath,
     required String localPath,
     required int size,
+    String? sessionId,
+    String? hostLabel,
   }) {
     final fileName = remotePath.split('/').last;
     final id = const Uuid().v4();
@@ -65,6 +74,8 @@ class SftpTransferQueueWorker {
       totalBytes: size,
       type: TransferType.download,
       status: TransferStatus.pending,
+      sessionId: sessionId,
+      hostLabel: hostLabel,
     );
 
     _queue[id] = item;
@@ -78,6 +89,8 @@ class SftpTransferQueueWorker {
     required SftpClient client,
     required String localPath,
     required String remotePath,
+    String? sessionId,
+    String? hostLabel,
   }) {
     final file = File(localPath);
     final size = file.existsSync() ? file.lengthSync() : 0;
@@ -92,6 +105,8 @@ class SftpTransferQueueWorker {
       totalBytes: size,
       type: TransferType.upload,
       status: TransferStatus.pending,
+      sessionId: sessionId,
+      hostLabel: hostLabel,
     );
 
     _queue[id] = item;
@@ -173,6 +188,26 @@ class SftpTransferQueueWorker {
     );
     _notifyQueue();
     _scheduleTransfer(client, id);
+  }
+
+  /// Closes [client] once no transfer runs or waits on it. Closing it at once
+  /// would abort those transfers mid-write.
+  void releaseClient(SftpClient client) {
+    _releasedClients.add(client);
+    _closeIdleReleasedClients();
+  }
+
+  void _closeIdleReleasedClients() {
+    _releasedClients.removeWhere((client) {
+      final inUse =
+          _runningClients.values.any((c) => identical(c, client)) ||
+          _pendingTransfers.any((p) => identical(p.client, client));
+      if (inUse) return false;
+      try {
+        unawaited(client.close().catchError((Object _) {}));
+      } catch (_) {}
+      return true;
+    });
   }
 
   /// Clear completed or cancelled transfers from list
@@ -263,6 +298,7 @@ class SftpTransferQueueWorker {
       // `_runningIds` leak and the queue eventually deadlocks.
       stopwatch.stop();
       _runningIds.remove(targetId);
+      _runningClients.remove(targetId);
       _activeTransferCount--;
 
       if (_restartRequested[targetId] == true) {
@@ -284,6 +320,7 @@ class SftpTransferQueueWorker {
         _notifyQueue();
         _drainPending();
       }
+      _closeIdleReleasedClients();
     }
   }
 
@@ -295,6 +332,7 @@ class SftpTransferQueueWorker {
     if (_activeTransferCount < _maxConcurrentTransfers) {
       _activeTransferCount++;
       _runningIds.add(id);
+      _runningClients[id] = client;
       _processQueue(client, id);
     } else {
       _pendingTransfers.add(_PendingTransfer(client: client, id: id));
@@ -310,6 +348,7 @@ class SftpTransferQueueWorker {
       if (item != null && item.status == TransferStatus.pending) {
         _activeTransferCount++;
         _runningIds.add(pending.id);
+        _runningClients[pending.id] = pending.client;
         _processQueue(pending.client, pending.id);
       }
     }
@@ -425,18 +464,13 @@ class SftpTransferQueueWorker {
     }
 
     // Never truncate the user's existing destination while a transfer is in
-    // progress. The temporary file is in the same directory so the final
-    // rename remains atomic on servers implementing normal SFTP rename
-    // semantics.
-    final temporaryPath = '${item.destinationPath}.shellvibe-part-$id';
-    SftpFile? remoteFile;
-    remoteFile = await client.open(
-      temporaryPath,
-      mode:
-          SftpFileOpenMode.create |
-          SftpFileOpenMode.write |
-          SftpFileOpenMode.truncate,
+    // progress, and keep its link, mode and owner; see [openRemoteReplacement].
+    final replacement = await openRemoteReplacement(
+      client,
+      item.destinationPath,
+      tempSuffix: id,
     );
+    SftpFile? remoteFile = replacement.file;
 
     bool committed = false;
     try {
@@ -487,7 +521,7 @@ class SftpTransferQueueWorker {
       await remoteFile.close();
       remoteFile = null;
       if (_cancelFlags[id] != true && _pauseFlags[id] != true) {
-        await client.rename(temporaryPath, item.destinationPath);
+        await replacement.commit(client);
         committed = true;
       }
     } finally {
@@ -498,11 +532,7 @@ class SftpTransferQueueWorker {
       }
       // Only the temporary file belongs to this transfer. On failure or
       // cancellation, preserve any pre-existing destination file.
-      if (!committed) {
-        try {
-          await client.remove(temporaryPath);
-        } catch (_) {}
-      }
+      if (!committed) await replacement.discard(client);
     }
   }
 

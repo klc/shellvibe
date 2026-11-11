@@ -42,7 +42,10 @@ final class SyncOperationDto {
         encryptedPayload: json['encrypted_payload'] as String? ?? '',
       );
 
+  /// [id] goes along so a push retried after a lost reply can be recognised
+  /// as the same operations rather than stored -- and charged -- twice.
   Map<String, Object?> toJson() => {
+    'id': id,
     'device_id': deviceId,
     'logical_clock': logicalClock,
     'entity_type': entityType,

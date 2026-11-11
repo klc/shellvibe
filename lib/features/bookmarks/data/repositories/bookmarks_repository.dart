@@ -1,5 +1,4 @@
 import 'package:drift/drift.dart';
-import 'package:uuid/uuid.dart';
 
 import '../../../../shared/database/app_database.dart';
 import '../../../../shared/database/daos/bookmarks_dao.dart';
@@ -54,7 +53,10 @@ class BookmarksRepository {
     String? hostId,
     String? templateId,
   }) async {
-    final id = const Uuid().v4();
+    // Deterministic, like `hostGroupMemberId`: two devices starring the same
+    // host write the same row, so sync converges on one bookmark instead of
+    // two.
+    final id = hostId != null ? 'host:$hostId' : 'template:$templateId';
     final position = await bookmarksDao.nextPosition(workspaceId);
     final createdAt = DateTime.now();
     await bookmarksDao.insertBookmark(
