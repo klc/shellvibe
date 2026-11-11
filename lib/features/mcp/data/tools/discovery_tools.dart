@@ -92,6 +92,7 @@ class ListHostsTool with McpArgReaders implements McpToolHandler {
       final mode = (await grantRepository.effectiveMode(
         ctx.clientId,
         host.id,
+        connectionScopeId: ctx.connectionScopeId,
       ))?.atMost(maxMode);
       final groupNames = await _groupNames(hostsRepository, host.groupIds);
 
@@ -201,6 +202,7 @@ class DescribeHostTool with McpArgReaders implements McpToolHandler {
     final mode = (await grantRepository.effectiveMode(
       ctx.clientId,
       hostId,
+      connectionScopeId: ctx.connectionScopeId,
     ))?.atMost(maxMode);
 
     return {
@@ -302,6 +304,7 @@ class RequestHostAccessTool with McpArgReaders implements McpToolHandler {
     final live = {
       for (final g in await grantRepository.activeGrantsForClient(
         ctx.clientId,
+        connectionScopeId: ctx.connectionScopeId,
       ))
         g.hostId: g,
     };
@@ -390,10 +393,14 @@ class RequestHostAccessTool with McpArgReaders implements McpToolHandler {
         granted.add(grant);
       }
       for (final denial in result.denied) {
-        await grantRepository.denyWithCooldown(
-          clientId: ctx.clientId,
-          hostId: denial.hostId,
-        );
+        // Only the user saying no cools down. A prompt that timed out unseen
+        // in the queue, or was cancelled by a lock, is not an answer.
+        if (denial.reason == 'user_denied') {
+          await grantRepository.denyWithCooldown(
+            clientId: ctx.clientId,
+            hostId: denial.hostId,
+          );
+        }
         denied.add(denial);
       }
     }

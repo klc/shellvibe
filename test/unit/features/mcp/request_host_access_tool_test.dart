@@ -22,6 +22,10 @@ class _NoConnector implements McpHostConnector {
 
 /// Denies every candidate, like a Deny click or an unanswered prompt.
 class _DenyAll extends ApprovalCoordinator {
+  _DenyAll([this.reason = 'timeout']);
+
+  final String reason;
+
   @override
   Future<HostAccessResult> requestHostAccess(
     HostAccessRequest request, {
@@ -30,7 +34,7 @@ class _DenyAll extends ApprovalCoordinator {
     granted: const [],
     denied: [
       for (final c in request.candidates)
-        HostAccessDenial(hostId: c.hostId, reason: 'timeout'),
+        HostAccessDenial(hostId: c.hostId, reason: reason),
     ],
   );
 }
@@ -226,6 +230,30 @@ void main() {
     ]);
     expect(result['denied'], isEmpty);
   });
+
+  for (final (reason, cools) in [
+    ('user_denied', true),
+    ('timeout', false),
+    ('cancelled', false),
+  ]) {
+    test('a "$reason" denial ${cools ? 'starts' : 'does not start'} a '
+        'cooldown', () async {
+      final tool = RequestHostAccessTool(
+        hostsRepository: HostsRepository(hostsDao: db.hostsDao),
+        hostsDao: db.hostsDao,
+        grantRepository: grants,
+        approvalCoordinator: _DenyAll(reason),
+        auditRepository: audit,
+      );
+
+      await tool.execute(ctx, {
+        'hostIds': ['host-a'],
+        'reason': 'check',
+      });
+
+      expect(await grants.isInCooldown('client-1', 'host-a'), cools);
+    });
+  }
 
   test('nothing is granted above a host\'s max access', () async {
     await (db.update(db.hosts)..where((h) => h.id.equals('host-a'))).write(

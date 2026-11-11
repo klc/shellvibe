@@ -108,7 +108,11 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
         sessionPool.defaultCommandTimeout.inSeconds;
     final timeoutSeconds = rawTimeout.clamp(1, _maxTimeoutSeconds);
 
-    final session = sessionPool.requireOwned(ctx.clientId, sessionId);
+    final session = sessionPool.requireOwned(
+      ctx.clientId,
+      ctx.connectionScopeId,
+      sessionId,
+    );
 
     // Re-checked here rather than trusted from `open_session` time: a grant
     // can expire, be revoked, or enter cooldown while a session stays open
@@ -118,6 +122,7 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
     final granted = await grantRepository.effectiveMode(
       ctx.clientId,
       session.hostId,
+      connectionScopeId: ctx.connectionScopeId,
     );
     if (granted == null) {
       throw McpToolException(
@@ -146,9 +151,14 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
 
     final memberships = await hostsDao.getMembershipsForHost(session.hostId);
 
+    // Read once: the policy, the approval window, a remembered approval and
+    // the run itself all refer to this directory. The shell refuses to run
+    // the command if a parallel `cd` moved it in the meantime.
+    final cwd = session.shell.cwd;
+
     final commandContext = CommandContext(
       command: command,
-      cwd: session.shell.cwd,
+      cwd: cwd,
       mode: mode,
       hostId: session.hostId,
       clientId: ctx.clientId,
@@ -211,7 +221,7 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
           hostId: session.hostId,
           hostLabel: session.hostLabel,
           command: command,
-          cwd: session.shell.cwd,
+          cwd: cwd,
           category: decision.category,
           canRemember: policyEngine.canRemember(decision.category),
         );
@@ -238,7 +248,7 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
           await approvalRepository.remember(
             clientId: ctx.clientId,
             hostId: session.hostId,
-            cwd: session.shell.cwd,
+            cwd: cwd,
             command: command,
             scope: approval.scope,
             connectionScopeId: ctx.connectionScopeId,
@@ -248,6 +258,7 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
           ctx: ctx,
           session: session,
           command: command,
+          cwd: cwd,
           redactedCommand: redactedCommand,
           timeoutSeconds: timeoutSeconds,
           category: decision.category,
@@ -259,6 +270,7 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
           ctx: ctx,
           session: session,
           command: command,
+          cwd: cwd,
           redactedCommand: redactedCommand,
           timeoutSeconds: timeoutSeconds,
           category: decision.category,
@@ -278,6 +290,7 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
     required McpToolContext ctx,
     required McpSession session,
     required String command,
+    required String cwd,
     required String redactedCommand,
     required int timeoutSeconds,
     required RiskCategory category,
@@ -286,13 +299,12 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
     // Echoed before the command runs, not after it returns: the watching
     // user has to see a long-running command while it is still running, not
     // learn about it once it is already done.
-    _mirror(
-      session,
-    )?.writeCommand(session.tabId!, command: command, cwd: session.shell.cwd);
+    _mirror(session)?.writeCommand(session.tabId!, command: command, cwd: cwd);
     try {
       final raw = await session.shell.run(
         command,
         timeout: Duration(seconds: timeoutSeconds),
+        expectedCwd: cwd,
       );
       session.lastActivityAt = DateTime.now();
 

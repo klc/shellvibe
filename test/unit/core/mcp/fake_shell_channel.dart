@@ -53,12 +53,16 @@ class FakeShellChannel implements ShellChannel {
 
   int interruptCount = 0;
   bool _closed = false;
+  final _done = Completer<int?>();
+
+  @override
+  Future<int?> get done => _done.future;
 
   static final _noncePattern = RegExp(r'__TERLY_%s__%s\|%s\\n. "([0-9a-f]+)"');
 
   /// The command text inside an envelope, i.e. what the agent actually asked
   /// for. Used to assert that the session sends what the caller passed.
-  static final _commandPattern = RegExp(r'^\{ (.*)\n\} ;');
+  static final _commandPattern = RegExp(r'^\{ (.*)\n\} </dev/null ;');
 
   @override
   Stream<List<int>> get stdout => _stdout.stream;
@@ -146,11 +150,20 @@ class FakeShellChannel implements ShellChannel {
     _stdout.add(utf8.encode(line.substring(at)));
   }
 
-  @override
-  Future<void> close() async {
+  /// The exit status passed to [endRemotely], once the shell has ended.
+  int? exitStatus;
+
+  /// The remote shell exits by itself with [exitCode] (`exit`, `set -e`),
+  /// or the connection drops when [exitCode] is null.
+  Future<void> endRemotely(int? exitCode) async {
     if (_closed) return;
     _closed = true;
+    exitStatus = exitCode;
     await _stdout.close();
     await _stderr.close();
+    _done.complete(exitCode);
   }
+
+  @override
+  Future<void> close() => endRemotely(null);
 }

@@ -60,13 +60,20 @@ class McpRequestDispatcher {
   /// to "this session" can be dropped.
   final void Function(String connectionScopeId)? onScopeEnded;
 
-  /// Identifies each client's current MCP connection, so approvals scoped to
-  /// "this session" end with it.
+  /// Identifies each agent's current MCP connection, so approvals, grants
+  /// and shell sessions scoped to "this session" end with it and stay out of
+  /// every other agent's reach.
   ///
-  /// Per client: two agents connected at once are two sessions, and one of
-  /// them reconnecting must not end the other's. A client that reconnects
-  /// re-runs `initialize`, which is where its fresh scope is minted.
+  /// Keyed by client and bridge process (see [_key]): every agent window
+  /// presents the same client token, so the bridge's connection id is what
+  /// tells two of them apart, and one of them reconnecting must not end the
+  /// other's. A client that reconnects re-runs `initialize`, which is where
+  /// its fresh scope is minted.
   final Map<String, String> _connectionScopes = {};
+
+  /// `initialize.clientInfo.name` per connection, shown in approval windows
+  /// so the user can tell which agent is asking.
+  final Map<String, String> _agentNames = {};
 
   McpRequestDispatcher({
     required this.registry,
@@ -74,9 +81,17 @@ class McpRequestDispatcher {
     this.onScopeEnded,
   });
 
-  /// The scope of [clientId]'s current connection.
-  String connectionScopeFor(String clientId) =>
-      _connectionScopes.putIfAbsent(clientId, const Uuid().v4);
+  /// The scope of [clientId]'s current connection through [connectionId].
+  String connectionScopeFor(String clientId, [String? connectionId]) =>
+      _connectionScopes.putIfAbsent(
+        _key(clientId, connectionId),
+        const Uuid().v4,
+      );
+
+  /// A client without a connection id (an older bridge) keeps the old
+  /// behaviour: all of its connections share one scope.
+  static String _key(String clientId, String? connectionId) =>
+      connectionId == null ? clientId : '$clientId/$connectionId';
 
   /// Ends every client's current connection scope. Called when the server
   /// stops: no connection survives that, so nothing scoped to "this session"
@@ -84,12 +99,18 @@ class McpRequestDispatcher {
   void endAllScopes() {
     final ended = _connectionScopes.values.toList();
     _connectionScopes.clear();
+    _agentNames.clear();
     for (final scope in ended) {
       onScopeEnded?.call(scope);
     }
   }
 
-  Future<Object?> handle(String clientId, JsonRpcRequest request) async {
+  Future<Object?> handle(
+    String clientId,
+    JsonRpcRequest request, [
+    String? connectionId,
+  ]) async {
+    final key = _key(clientId, connectionId);
     switch (request.method) {
       case McpMethod.ping:
         return const <String, Object?>{};
@@ -97,9 +118,15 @@ class McpRequestDispatcher {
       case McpMethod.initialize:
         // A new handshake means a new connection, so anything the previous
         // one scoped to "this session" must not carry over to it.
-        final ended = _connectionScopes[clientId];
-        _connectionScopes[clientId] = const Uuid().v4();
+        final ended = _connectionScopes[key];
+        _connectionScopes[key] = const Uuid().v4();
         if (ended != null) onScopeEnded?.call(ended);
+        final agentName = _agentName(request.params['clientInfo']);
+        if (agentName == null) {
+          _agentNames.remove(key);
+        } else {
+          _agentNames[key] = agentName;
+        }
         return McpInitializeResult(
           serverInfo: _kServerInfo,
           instructions: _kInstructions,
@@ -111,7 +138,7 @@ class McpRequestDispatcher {
         };
 
       case McpMethod.toolsCall:
-        return (await _callTool(clientId, request)).toJson();
+        return (await _callTool(clientId, connectionId, request)).toJson();
 
       default:
         throw McpDispatchException(
@@ -123,6 +150,7 @@ class McpRequestDispatcher {
 
   Future<McpToolResult> _callTool(
     String clientId,
+    String? connectionId,
     JsonRpcRequest request,
   ) async {
     final name = request.params['name'];
@@ -162,9 +190,9 @@ class McpRequestDispatcher {
 
     final ctx = McpToolContext(
       clientId: clientId,
-      clientName: client.name,
+      clientName: _agentNames[_key(clientId, connectionId)] ?? client.name,
       workspaceId: client.workspaceId,
-      connectionScopeId: connectionScopeFor(clientId),
+      connectionScopeId: connectionScopeFor(clientId, connectionId),
     );
 
     try {
@@ -197,6 +225,18 @@ class McpRequestDispatcher {
       // an opaque hostId.
       return McpToolResult.error('$name failed: ${e.runtimeType}');
     }
+  }
+
+  /// The agent's self-reported name, made safe to show: printable, trimmed,
+  /// at most 64 characters. It is the agent's own claim, not a verified
+  /// identity.
+  static String? _agentName(Object? clientInfo) {
+    if (clientInfo is! Map) return null;
+    final raw = clientInfo['name'];
+    if (raw is! String) return null;
+    final name = raw.replaceAll(RegExp(r'[\x00-\x1F\x7F]'), '').trim();
+    if (name.isEmpty) return null;
+    return name.length > 64 ? name.substring(0, 64) : name;
   }
 
   static String _camel(String key) => key.replaceAllMapped(

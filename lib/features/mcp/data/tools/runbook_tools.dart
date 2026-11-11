@@ -678,7 +678,11 @@ class RunRunbookTool with McpArgReaders implements McpToolHandler {
           'No host with id "$id" is visible to this client.',
         );
       }
-      final granted = await grantRepository.effectiveMode(ctx.clientId, id);
+      final granted = await grantRepository.effectiveMode(
+        ctx.clientId,
+        id,
+        connectionScopeId: ctx.connectionScopeId,
+      );
       if (granted == null) {
         throw McpToolException(
           McpErrorCode.hostAccessRequired,

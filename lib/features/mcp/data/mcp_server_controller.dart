@@ -153,18 +153,22 @@ class McpServerController {
   /// `terminal_tabs_notifier.dart`) so two near-simultaneous callers — e.g.
   /// the app boot sequence and a user flipping the Settings toggle in the
   /// same instant — can never race each other into binding two ports.
-  Future<void> start() {
+  ///
+  /// [reinstate] lifts a "Deny and suspend client" on this workspace's
+  /// bridge identity; only the user turning AI access on passes it, so a
+  /// suspension outlives vault lock, workspace switches and app restarts.
+  Future<void> start({bool reinstate = false}) {
     final inFlight = _startFuture;
     if (inFlight != null) return inFlight;
 
-    final future = _start().whenComplete(() {
+    final future = _start(reinstate).whenComplete(() {
       _startFuture = null;
     });
     _startFuture = future;
     return future;
   }
 
-  Future<void> _start() async {
+  Future<void> _start(bool reinstate) async {
     if (isRunning) return;
 
     if (Platform.isIOS || Platform.isAndroid) {
@@ -191,7 +195,7 @@ class McpServerController {
     _transport = transport;
 
     try {
-      final rawToken = await _resolveActiveClient();
+      final rawToken = await _resolveActiveClient(reinstate: reinstate);
       await McpEndpointFile.write(port: boundPort, token: rawToken, pid: pid);
     } on Object {
       // Never leave a bound, discoverable-in-principle HTTP server running
@@ -222,9 +226,18 @@ class McpServerController {
 
     final transport = _transport;
     _transport = null;
-    await McpEndpointFile.delete();
-    if (transport != null) await transport.stop();
-    await onStopped?.call();
+    // Each step runs even if the one before it throws: a transport left
+    // listening would make the next start bind a second port, and skipping
+    // [onStopped] would leave agent sessions open past a vault lock.
+    try {
+      await McpEndpointFile.delete();
+    } finally {
+      try {
+        if (transport != null) await transport.stop();
+      } finally {
+        await onStopped?.call();
+      }
+    }
   }
 
   Future<String?> _authenticate(String bearerToken) async {
@@ -251,7 +264,8 @@ class McpServerController {
 
     // A row the user revoked ("Deny and suspend client") is a decision, not
     // drift: re-minting here would hand the suspended agent a fresh identity
-    // on its very next request. It stays suspended until the server restarts.
+    // on its very next request. It stays suspended until the user turns AI
+    // access on again (see [start]'s `reinstate`).
     if (await clients.isRevoked(bearerToken)) return null;
 
     final boundPort = _transport?.port;
@@ -276,50 +290,31 @@ class McpServerController {
   Future<Object?> _guardedOnRequest(
     String clientId,
     JsonRpcRequest request,
+    String? connectionId,
   ) async {
     if (!isVaultAvailable()) {
       throw const McpVaultUnavailableException();
     }
-    return onRequest(clientId, request);
+    return onRequest(clientId, request, connectionId);
   }
 
   /// Ensures the workspace's MCP client row exists and returns a **fresh**
   /// raw bearer token for it.
   ///
-  /// `McpClientRepository.createClient` (see its docstring) is the only
-  /// moment a raw token exists outside an agent's own config — the database
-  /// keeps [McpToken.hash] of it, never the token itself, so a row this
-  /// method didn't just create is not one it can hand a usable token back
-  /// for. Rather than treat that as a dead end, this always mints a fresh
-  /// client (revoking whatever stale row this controller left behind under
-  /// [systemClientName] last time) on every [start]. That is safe, not
-  /// wasteful, because nothing external is meant to depend on the token
-  /// surviving a restart: `mcp-endpoint.json` "is regenerated fresh every
-  /// time the app starts the MCP server" (see that file's own docstring),
-  /// and the `shellvibe-mcp` bridge reads it live on every launch rather
-  /// than caching a token in an agent's static config. A smaller validity
-  /// window on every boot is a feature here, not a limitation. Rows this
-  /// controller does not own — a name a future Settings screen lets the
-  /// user pick for their own registered agents — are never touched.
-  Future<String> _resolveActiveClient() async {
+  /// The database keeps [McpToken.hash] of a token, never the token itself,
+  /// so a token from an earlier run cannot be handed back; a new one is
+  /// issued on every [start] and written to `mcp-endpoint.json`, which the
+  /// `shellvibe-mcp` bridge reads live on every launch. The row behind it is
+  /// kept, not re-created: grants and "Always" approvals are keyed to it and
+  /// must survive a restart (see [McpClientRepository.issueSystemToken]).
+  /// Rows this controller does not own — any name other than
+  /// [systemClientName] — are never touched.
+  Future<String> _resolveActiveClient({bool reinstate = false}) async {
     final workspaceId = activeWorkspaceId();
-    // Every workspace, not just the active one: a system row left behind in
-    // the workspace the server last ran for would keep its token valid (and
-    // hidden from Settings) after the server moved to another workspace.
-    // Delete rather than revoke. A revoked row is kept around so a *user's*
-    // token fails cleanly and stays visible in Settings as something they
-    // once issued; neither applies to this one. It is minted fresh on every
-    // start, so revoking instead of deleting would grow an unbounded list of
-    // dead infrastructure rows — one per app launch — that the user never
-    // created and cannot act on. The audit log is unaffected: it copies
-    // client labels at write time and holds no foreign key into this table.
-    for (final client in await clients.listClientsNamed(systemClientName)) {
-      await clients.deleteClient(client.id);
-    }
-
-    final (_, rawToken) = await clients.createClient(
+    final rawToken = await clients.issueSystemToken(
       workspaceId: workspaceId,
       name: systemClientName,
+      reinstate: reinstate,
     );
     _workspaceId = workspaceId;
     return rawToken;

@@ -66,7 +66,11 @@ class OpenSessionTool with McpArgReaders implements McpToolHandler {
   Future<Object?> execute(McpToolContext ctx, Map<String, Object?> args) async {
     final hostId = requireString(args, 'hostId');
 
-    final mode = await grantRepository.effectiveMode(ctx.clientId, hostId);
+    final mode = await grantRepository.effectiveMode(
+      ctx.clientId,
+      hostId,
+      connectionScopeId: ctx.connectionScopeId,
+    );
     if (mode == null) {
       await _audit(ctx, hostId, null, AuditDecision.autoDenied);
       throw McpToolException(
@@ -95,6 +99,7 @@ class OpenSessionTool with McpArgReaders implements McpToolHandler {
     try {
       session = await sessionPool.open(
         clientId: ctx.clientId,
+        connectionScopeId: ctx.connectionScopeId,
         clientName: ctx.clientName,
         mode: mode.atMost(McpAccessMode.fromName(row.mcpDefaultMode)).name,
         host: host,
@@ -173,7 +178,10 @@ class ListSessionsTool implements McpToolHandler {
 
   @override
   Future<Object?> execute(McpToolContext ctx, Map<String, Object?> args) async {
-    final sessions = sessionPool.sessionsForClient(ctx.clientId);
+    final sessions = sessionPool.sessionsForClient(
+      ctx.clientId,
+      connectionScopeId: ctx.connectionScopeId,
+    );
     return sessions
         .map(
           (session) => {
@@ -222,7 +230,7 @@ class CloseSessionTool with McpArgReaders implements McpToolHandler {
   @override
   Future<Object?> execute(McpToolContext ctx, Map<String, Object?> args) async {
     final sessionId = requireString(args, 'sessionId');
-    sessionPool.requireOwned(ctx.clientId, sessionId);
+    sessionPool.requireOwned(ctx.clientId, ctx.connectionScopeId, sessionId);
     await sessionPool.close(sessionId);
     return {'ok': true};
   }
@@ -264,7 +272,11 @@ class InterruptTool with McpArgReaders implements McpToolHandler {
   @override
   Future<Object?> execute(McpToolContext ctx, Map<String, Object?> args) async {
     final sessionId = requireString(args, 'sessionId');
-    final session = sessionPool.requireOwned(ctx.clientId, sessionId);
+    final session = sessionPool.requireOwned(
+      ctx.clientId,
+      ctx.connectionScopeId,
+      sessionId,
+    );
     await session.shell.interrupt();
     session.lastActivityAt = DateTime.now();
     final surfaceId = session.tabId;

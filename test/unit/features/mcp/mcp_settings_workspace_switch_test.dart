@@ -1,3 +1,4 @@
+import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,7 +8,9 @@ import 'package:shellvibe/features/mcp/data/mcp_server_controller.dart';
 import 'package:shellvibe/features/mcp/data/mcp_session_pool.dart';
 import 'package:shellvibe/features/mcp/data/repositories/mcp_client_repository.dart';
 import 'package:shellvibe/features/mcp/presentation/notifiers/mcp_settings_notifier.dart';
+import 'package:shellvibe/features/workspaces/domain/models/workspace_model.dart';
 import 'package:shellvibe/features/workspaces/presentation/providers/workspace_provider.dart';
+import 'package:shellvibe/shared/database/app_database.dart';
 import 'package:shellvibe/shared/database/daos/mcp_dao.dart';
 import 'package:shellvibe/shared/providers/database_providers.dart';
 import 'package:shellvibe/shared/storage/secure_storage_service.dart';
@@ -25,8 +28,17 @@ void main() {
     );
     final pool = McpSessionPool(connector: _NoConnector());
     addTearDown(pool.dispose);
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
     container = ProviderContainer(
       overrides: [
+        appDatabaseProvider.overrideWithValue(db),
+        workspacesProvider.overrideWith(
+          (ref) async => [
+            for (final id in ['a', 'b'])
+              WorkspaceModel(id: id, name: id, createdAt: DateTime(2026)),
+          ],
+        ),
         secureStorageServiceProvider.overrideWithValue(_MemoryStorage(stored)),
         mcpServerControllerProvider.overrideWithValue(controller),
         mcpSessionPoolProvider.overrideWithValue(pool),
@@ -55,6 +67,22 @@ void main() {
     expect(controller.stops, 1);
   });
 
+  test('panic keeps AI access off in every workspace', () async {
+    final stored = {
+      'mcp_settings_a': '{"masterEnabled":true}',
+      'mcp_settings_b': '{"masterEnabled":true}',
+    };
+    await boot(stored);
+    expect(controller.isRunning, isTrue);
+
+    await container.read(mcpSettingsProvider.notifier).panic();
+    await settle();
+    await switchTo('b');
+
+    expect(controller.isRunning, isFalse);
+    expect(stored['mcp_settings_b'], contains('"masterEnabled":false'));
+  });
+
   test('stops the server when the new workspace has AI access off', () async {
     await boot({'mcp_settings_a': '{"masterEnabled":true}'});
     expect(controller.isRunning, isTrue);
@@ -81,7 +109,7 @@ class _FakeController extends McpServerController {
         transportFactory: ({required onRequest, required authenticate}) =>
             throw UnimplementedError(),
         clients: McpClientRepository(_NoDao()),
-        onRequest: (_, _) async => null,
+        onRequest: (_, _, _) async => null,
         isVaultAvailable: () => true,
         activeWorkspaceId: active,
       );
@@ -99,7 +127,8 @@ class _FakeController extends McpServerController {
   int? get port => isRunning ? 7433 : null;
 
   @override
-  Future<void> start() async => _bound = activeWorkspaceId();
+  Future<void> start({bool reinstate = false}) async =>
+      _bound = activeWorkspaceId();
 
   @override
   Future<void> stop() async {
