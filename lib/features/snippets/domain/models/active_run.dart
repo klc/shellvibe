@@ -72,6 +72,7 @@ class ActiveRun {
   final RunStrategy strategy;
 
   /// The `${INPUT:...}` values the run used, kept so a re-run repeats it.
+  /// Secret values are dropped once the run settles, so a re-run asks again.
   final Map<String, String> variableValues;
   final DateTime startedAt;
   final DateTime? finishedAt;
@@ -128,6 +129,7 @@ class ActiveRun {
     bool? cancelling,
     List<HostRunState>? hosts,
     DateTime? finishedAt,
+    Map<String, String>? variableValues,
   }) => ActiveRun(
     id: id,
     triggeredBy: triggeredBy,
@@ -136,7 +138,7 @@ class ActiveRun {
     cancelling: cancelling ?? this.cancelling,
     hosts: hosts ?? this.hosts,
     strategy: strategy,
-    variableValues: variableValues,
+    variableValues: variableValues ?? this.variableValues,
     startedAt: startedAt,
     finishedAt: finishedAt ?? this.finishedAt,
     fromHistory: fromHistory,

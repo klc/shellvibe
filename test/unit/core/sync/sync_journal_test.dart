@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/core/sync/sync_journal.dart';
@@ -130,17 +131,28 @@ void main() {
       expect((jsonDecode(pending.single.payload!) as Map)['label'], 'second');
     });
 
-    test('the ancestor is the state before the first change', () async {
-      // The second change's "before" is a state no other device ever saw, so
-      // it is useless as a common ancestor.
+    test('no copy of the row as it was is kept', () async {
+      // Nothing read it, and on a device whose outbox never drains it kept
+      // a deleted secret long after the trash had let it go.
+      await writeEnvVar('env-1');
+      await deleteEnvVar('env-1');
       await writeHost('h1', label: 'original');
-      await writeHost('h1', label: 'edited once');
-      await writeHost('h1', label: 'edited twice');
+      await writeHost('h1', label: 'edited');
 
-      final before =
-          jsonDecode((await journal.pending()).single.beforeImage!) as Map;
+      for (final operation in await journal.pending()) {
+        expect(operation.beforeImage, isNull);
+      }
+    });
 
-      expect(before['label'], 'original');
+    test('a copy an older build kept is cleared with the trash', () async {
+      await writeHost('h1');
+      await db
+          .update(db.pendingOperations)
+          .write(const PendingOperationsCompanion(beforeImage: Value('{}')));
+
+      await journal.purgeTrash();
+
+      expect((await journal.pending()).single.beforeImage, isNull);
     });
 
     test('a row created and then deleted leaves only the delete', () async {

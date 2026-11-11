@@ -80,7 +80,7 @@ void main() {
 
       final appDb = AppDatabase(NativeDatabase(dbFile));
       db = appDb;
-      expect(appDb.schemaVersion, 22);
+      expect(appDb.schemaVersion, 23);
 
       final host = (await appDb.select(appDb.hosts).get()).single;
       expect(host.startupSnippetId, isNull);

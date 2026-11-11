@@ -72,6 +72,32 @@ void main() {
       );
     });
 
+    test('belong to the connection that got them', () async {
+      await grantBoth();
+
+      expect(
+        await grants.effectiveMode(
+          'client-1',
+          'host-1',
+          connectionScopeId: 'scope-2',
+        ),
+        isNull,
+      );
+      expect(
+        await grants.effectiveMode(
+          'client-1',
+          'host-1',
+          connectionScopeId: 'scope-1',
+        ),
+        McpAccessMode.readonly,
+      );
+      final other = await grants.activeGrantsForClient(
+        'client-1',
+        connectionScopeId: 'scope-2',
+      );
+      expect(other.map((g) => g.hostId), ['host-2']);
+    });
+
     test('all end when the server starts again', () async {
       await grantBoth();
       await grants.revokeSessionScoped();
@@ -99,6 +125,71 @@ void main() {
         expect(await clients.isRevoked('not-a-token'), isFalse);
       },
     );
+
+    group('the system token issued on every server start', () {
+      const name = McpServerController.systemClientName;
+
+      test('keeps the row, so grants survive a restart', () async {
+        final first = await clients.issueSystemToken(
+          workspaceId: 'ws-a',
+          name: name,
+        );
+        final id = (await clients.authenticate(first))!.id;
+        await grants.grant(
+          clientId: id,
+          hostId: 'host-1',
+          mode: McpAccessMode.guarded,
+        );
+
+        final second = await clients.issueSystemToken(
+          workspaceId: 'ws-a',
+          name: name,
+        );
+
+        expect(second, isNot(first));
+        expect(await clients.authenticate(first), isNull);
+        final row = (await clients.authenticate(second))!;
+        expect(row.id, id);
+        expect(row.expiresAt, isNull, reason: 'rotated, never expired');
+        expect(await grants.effectiveMode(id, 'host-1'), McpAccessMode.guarded);
+      });
+
+      test('keeps a suspension until it is reinstated', () async {
+        final token = await clients.issueSystemToken(
+          workspaceId: 'ws-a',
+          name: name,
+        );
+        await clients.revokeClient((await clients.authenticate(token))!.id);
+
+        final restarted = await clients.issueSystemToken(
+          workspaceId: 'ws-a',
+          name: name,
+        );
+        expect(await clients.authenticate(restarted), isNull);
+        expect(await clients.isRevoked(restarted), isTrue);
+
+        final reinstated = await clients.issueSystemToken(
+          workspaceId: 'ws-a',
+          name: name,
+          reinstate: true,
+        );
+        expect(await clients.authenticate(reinstated), isNotNull);
+      });
+
+      test('kills the token of the workspace it no longer serves', () async {
+        final old = await clients.issueSystemToken(
+          workspaceId: 'ws-a',
+          name: name,
+        );
+        await clients.issueSystemToken(workspaceId: 'ws-b', name: name);
+
+        expect(await clients.authenticate(old), isNull);
+        expect(
+          (await clients.listClientsNamed(name)).map((c) => c.workspaceId),
+          unorderedEquals(['ws-a', 'ws-b']),
+        );
+      });
+    });
 
     test('system client rows are found in every workspace', () async {
       for (final ws in ['ws-a', 'ws-b']) {

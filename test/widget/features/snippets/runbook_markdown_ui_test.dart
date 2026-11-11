@@ -180,6 +180,27 @@ void main() {
       expect(find.byKey(const Key('runbook_import_error')), findsNothing);
     });
 
+    testWidgets('the steps are listed before anything is saved', (
+      tester,
+    ) async {
+      await seed();
+      await pump(tester, _FakeFiles());
+      await tester.tap(find.byKey(const Key('import_runbook_button')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('runbook_import_text')),
+        _markdown,
+      );
+      await tester.pump();
+
+      final preview = find.byKey(const Key('runbook_import_preview'));
+      expect(
+        find.descendant(of: preview, matching: find.textContaining('df -h')),
+        findsOneWidget,
+      );
+      expect(await db.select(db.runbooks).get(), hasLength(1));
+    });
+
     testWidgets('text with no steps is refused with a reason', (tester) async {
       await seed();
       await pump(tester, _FakeFiles());

@@ -53,11 +53,19 @@ class RunbooksDao extends DatabaseAccessor<AppDatabase>
   /// the database was going to remove them anyway, and doing it by hand meant
   /// the sync journal saw a bare delete it could not attribute. It records the
   /// cascade itself.
-  Future<int> deleteRunbook(String id) => db.recordDelete(
-    entityType: 'runbooks',
-    entityId: id,
-    write: () => (delete(runbooks)..where((tbl) => tbl.id.equals(id))).go(),
-  );
+  ///
+  /// Its local run history goes too: `runbook_runs.runbook_id` is no foreign
+  /// key, and the stored output would otherwise outlive the runbook with
+  /// nowhere in the app to delete it from.
+  Future<int> deleteRunbook(String id) async {
+    final deleted = await db.recordDelete(
+      entityType: 'runbooks',
+      entityId: id,
+      write: () => (delete(runbooks)..where((tbl) => tbl.id.equals(id))).go(),
+    );
+    await db.runHistoryDao.clear(runbookId: id);
+    return deleted;
+  }
 
   Future<void> replaceSteps(
     String runbookId,

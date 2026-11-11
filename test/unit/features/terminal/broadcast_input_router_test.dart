@@ -109,6 +109,22 @@ void main() {
       expect(c, ['cd /home/xyz\rpwd']);
     });
 
+    test('sendTextToPanes with textFor gives each pane its own text', () {
+      final a = <String>[];
+      final b = <String>[];
+      final tabs = [session('a', captured: a), session('b', captured: b)];
+
+      router.sendTextToPanes(
+        selectedIds: {'a', 'b'},
+        tabs: tabs,
+        text: 'echo X',
+        textFor: (tab) => 'echo ${tab.id}',
+      );
+
+      expect(a, ['echo a']);
+      expect(b, ['echo b']);
+    });
+
     test('sendTextToPanes with submit presses Enter after the paste', () {
       final a = <String>[];
       final b = <String>[];

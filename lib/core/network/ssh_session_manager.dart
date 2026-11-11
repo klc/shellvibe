@@ -457,6 +457,18 @@ class SSHSessionManager {
     );
   }
 
+  /// Runs [command] on a PTY-less exec channel and returns its session.
+  ///
+  /// For programmatic callers (the MCP and runbook shells) that need a known
+  /// program on the other end rather than the user's login shell.
+  Future<SSHSession> openExec(String command) async {
+    final activeClient = _client;
+    if (activeClient == null || !_isConnected || activeClient.isClosed) {
+      throw StateError('SSHClient is not connected. Call connect() first.');
+    }
+    return await activeClient.execute(command);
+  }
+
   /// Sends a keep-alive ping to the remote server.
   Future<void> ping() async {
     final activeClient = _client;

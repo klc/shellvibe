@@ -19,6 +19,7 @@ import 'package:shellvibe/features/templates/domain/models/template_pane_model.d
 import 'package:shellvibe/features/terminal/domain/models/terminal_tab_session.dart';
 import 'package:shellvibe/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import 'package:shellvibe/features/terminal/presentation/views/terminal_tab_view.dart';
+import 'package:shellvibe/features/terminal/presentation/widgets/pane_drop_target.dart';
 import 'package:shellvibe/features/terminal/presentation/widgets/resizable_split.dart';
 import 'package:shellvibe/shared/database/app_database.dart';
 import 'package:shellvibe/shared/providers/database_providers.dart';
@@ -292,6 +293,69 @@ void main() {
         'terminal_$tab2',
         reason: 'focus must follow the active tab switch',
       );
+    });
+
+    testWidgets('switching to a split tab focuses its active pane', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(2400, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final container = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          localPtyManagerProvider.overrideWithValue(_NoShellPtyManager()),
+        ],
+      );
+      final notifier = container.read(terminalTabsProvider.notifier);
+      notifier.openLocalTab(title: 'prod');
+      final root = container.read(terminalTabsProvider).activeTabId!;
+      notifier.splitTab(root, direction: Axis.horizontal);
+      final split = container.read(terminalTabsProvider).tabs.last.id;
+      notifier.openLocalTab(title: 'other');
+      final other = container.read(terminalTabsProvider).activeTabId!;
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: ShadTheme(
+            data: ShadThemeData(
+              colorScheme: const ShadSlateColorScheme.dark(),
+              brightness: Brightness.dark,
+            ),
+            child: const MaterialApp(home: TerminalTabView()),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'terminal_$other');
+
+      String? focused() => FocusManager.instance.primaryFocus?.debugLabel;
+
+      // Both panes of the split tab mount in the same frame; the keys have to
+      // land in the one the header calls ACTIVE, whichever of the two it is.
+      await tester.tap(find.byKey(Key('tab_header_$root')));
+      await tester.pump();
+      await tester.pump();
+      expect(container.read(terminalTabsProvider).activeTabId, root);
+      expect(focused(), 'terminal_$root');
+
+      // Swapping reshapes the tree and remounts both panes; focus stays put.
+      notifier.swapPanes(root, split);
+      await tester.pump();
+      await tester.pump();
+      expect(focused(), 'terminal_$root');
+
+      // Closing the focused pane hands focus to the pane that took its slot.
+      await notifier.closePane(root);
+      await tester.pump();
+      await tester.pump();
+      expect(container.read(terminalTabsProvider).activeTabId, split);
+      expect(focused(), 'terminal_$split');
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
+      await tester.pumpAndSettle();
     });
 
     testWidgets(
@@ -683,6 +747,34 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pumpAndSettle();
       expect(find.text('Paste and run?'), findsNothing);
+      expect(written.join(), contains('echo two'));
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('the phone bar Paste key asks before running multi-line text', (
+      tester,
+    ) async {
+      final (container, written) = await pumpPasteTab(
+        tester,
+        'echo one\necho two\n',
+      );
+
+      // A phone has no paste chord, and the keyboard's own paste is typed
+      // into the shell raw: this key is the paste that asks first.
+      await tester.tap(find.byKey(const Key('key_paste')));
+      await tester.pumpAndSettle();
+      expect(find.text('Paste and run?'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('unsafe_paste_cancel_button')));
+      await tester.pumpAndSettle();
+      expect(written, isEmpty);
+
+      await tester.tap(find.byKey(const Key('key_paste')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('unsafe_paste_confirm_button')));
+      await tester.pumpAndSettle();
       expect(written.join(), contains('echo two'));
 
       await tester.pumpWidget(const SizedBox.shrink());
@@ -1112,7 +1204,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 200));
 
       final handle = find.byWidgetPredicate(
-        (widget) => widget is Draggable<String> && widget.data == second,
+        (widget) =>
+            widget is Draggable<PaneDrag> && widget.data?.paneId == second,
       );
       expect(handle, findsOneWidget);
 
@@ -1176,7 +1269,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 200));
 
       final handle = find.byWidgetPredicate(
-        (widget) => widget is Draggable<String> && widget.data == second,
+        (widget) =>
+            widget is Draggable<PaneDrag> && widget.data?.paneId == second,
       );
       final targetRect = tester.getRect(find.byKey(ValueKey(first)));
 
@@ -1271,6 +1365,9 @@ void main() {
     testWidgets('an agent session is badged and takes no keyboard input', (
       tester,
     ) async {
+      tester.view.physicalSize = const Size(2400, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
       final container = ProviderContainer(
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
@@ -1310,6 +1407,27 @@ void main() {
         find.byType(TerminalView),
       );
       expect(terminalView.readOnly, isTrue);
+
+      // Nor is it split, or browsed over SFTP: its connection is the
+      // agent's, and a pane of the user's in it would die with the session.
+      expect(find.byKey(const Key('split_vertical_button')), findsNothing);
+      expect(find.byKey(const Key('open_sftp_button')), findsNothing);
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byType(TerminalView)),
+        kind: PointerDeviceKind.mouse,
+        buttons: kSecondaryMouseButton,
+      );
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('terminal_menu_close_tab')), findsOneWidget);
+      expect(find.byKey(const Key('terminal_menu_sftp')), findsNothing);
+      expect(
+        find.byKey(const Key('terminal_menu_split_vertical')),
+        findsNothing,
+      );
+      expect(find.byKey(const Key('terminal_menu_split_host')), findsNothing);
+      await tester.tapAt(Offset.zero);
+      await tester.pumpAndSettle();
 
       // Same as the Device Link case above: the keep-alive tab notifier owns
       // the session's terminal, so the container has to be disposed inside
@@ -1532,6 +1650,90 @@ void main() {
       expect(find.byKey(Key('tab_header_${ids[1]}')), findsNothing);
       expect(state.activeTabId, ids[1]);
       expect(find.byKey(const Key('tab_merge_highlight')), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a tab chip never lands on a pane, nor a pane header on a '
+        'tab', (tester) async {
+      tester.view.physicalSize = const Size(2400, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final container = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          localPtyManagerProvider.overrideWithValue(_NoShellPtyManager()),
+        ],
+      );
+      final notifier = container.read(terminalTabsProvider.notifier);
+      notifier.openLocalTab(title: 'other');
+      final other = container.read(terminalTabsProvider).activeTabId!;
+      notifier.openLocalTab(title: 'split');
+      final root = container.read(terminalTabsProvider).activeTabId!;
+      notifier.splitTab(root, direction: Axis.horizontal);
+      final pane = container.read(terminalTabsProvider).tabs.last.id;
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: ShadTheme(
+            data: ShadThemeData(
+              colorScheme: const ShadSlateColorScheme.dark(),
+              brightness: Brightness.dark,
+            ),
+            child: const MaterialApp(home: TerminalTabView()),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      Future<void> drag(Finder from, Offset to) async {
+        final start = tester.getCenter(from);
+        final gesture = await tester.startGesture(
+          start,
+          kind: PointerDeviceKind.mouse,
+        );
+        await tester.pump(const Duration(milliseconds: 50));
+        for (var step = 1; step <= 10; step++) {
+          await gesture.moveTo(Offset.lerp(start, to, step / 10)!);
+          await tester.pump(const Duration(milliseconds: 20));
+        }
+        await gesture.up();
+        await tester.pumpAndSettle();
+      }
+
+      String? parentOf(String id) => container
+          .read(terminalTabsProvider)
+          .tabs
+          .firstWhere((t) => t.id == id)
+          .splitParentId;
+
+      // (a) The active tab's chip onto its own second pane: not a swap.
+      await drag(
+        find.byKey(Key('tab_header_$root')),
+        tester.getCenter(find.byKey(ValueKey(pane))),
+      );
+      expect(parentOf(root), isNull);
+      expect(parentOf(pane), root);
+
+      // (b) The root pane's header onto the middle of another tab: not a
+      // merge of the whole tab into it.
+      await drag(
+        find.byKey(Key('pane_label_$root')),
+        tester.getCenter(find.byKey(Key('tab_header_$other'))),
+      );
+      expect(parentOf(root), isNull);
+      expect(parentOf(pane), root);
+      expect(
+        container
+            .read(terminalTabsProvider)
+            .tabs
+            .where((t) => t.splitParentId == other),
+        isEmpty,
+      );
 
       await tester.pumpWidget(const SizedBox.shrink());
       container.dispose();

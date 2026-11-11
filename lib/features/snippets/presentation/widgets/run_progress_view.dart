@@ -220,7 +220,8 @@ class RunView extends StatelessWidget {
   final VoidCallback? onRerunFailed;
   final VoidCallback? onRunAgain;
 
-  /// Continues an approval step for the whole run.
+  /// Continues an approval step (see [RunHandle.approve]: per wave when
+  /// rolling).
   final void Function(String stepId)? onApprove;
 
   /// Label for [onRunAgain]; history says which hosts it will use.
@@ -297,8 +298,8 @@ class RunView extends StatelessWidget {
                 ),
               ],
               // An approval step a host is waiting at: one Continue releases
-              // every host held there, and approves it for any that arrive
-              // later.
+              // every host held there, and in a parallel run approves it for
+              // any that arrive later; a rolling run asks again per host.
               for (final step in steps)
                 if (step.kind == StepKind.approval &&
                     run.hosts.any(

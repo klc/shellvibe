@@ -117,12 +117,12 @@ void main() {
 
       await tester.enterText(
         find.byKey(const Key('cloud_backup_passphrase_field')),
-        'short',
+        'elevenchars',
       );
       await tester.tap(find.byKey(const Key('cloud_backup_continue_button')));
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('at least 8 characters'), findsOneWidget);
+      expect(find.textContaining('at least 12 characters'), findsOneWidget);
       expect(find.byKey(const Key('cloud_backup_recovery_code')), findsNothing);
     });
 

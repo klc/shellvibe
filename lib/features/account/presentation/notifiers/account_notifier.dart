@@ -67,9 +67,11 @@ final class AccountState {
 /// the terminal all work without one.
 @Riverpod(keepAlive: true)
 class AccountNotifier extends _$AccountNotifier {
-  late final AccountSessionStore _store;
-  late final ApiClient _apiClient;
-  late final AccountApi _api;
+  // Not `final`: the notifier instance survives rebuilds, and [build] runs
+  // again on an invalidate, so it must be able to reassign these.
+  late AccountSessionStore _store;
+  late ApiClient _apiClient;
+  late AccountApi _api;
 
   /// Serializes sign-in, sign-out and deletion so two taps cannot interleave
   /// a token write with a token clear. Never completes with an error; see
@@ -140,20 +142,23 @@ class AccountNotifier extends _$AccountNotifier {
   /// asked to sign out, and a token this device can no longer reach is not a
   /// reason to keep acting signed in. The server-side token then expires on
   /// its own, or the user revokes the device from another one.
+  ///
+  /// [everywhere] is the exception. Its point is the other devices' tokens,
+  /// which only the server can revoke, so a failure there throws the
+  /// [ApiFailure] and leaves this device signed in: signing out locally would
+  /// read as success and leave no token to retry with.
   Future<void> signOut({bool everywhere = false}) async {
     final previous = await future;
 
     return _enqueue(() async {
+      if (everywhere) await _api.logoutAll();
+
       state = AsyncValue.data(
         AccountState.signedOut(lastEmail: previous.lastEmail),
       );
 
       try {
-        if (everywhere) {
-          await _api.logoutAll();
-        } else {
-          await _api.logout();
-        }
+        if (!everywhere) await _api.logout();
       } on ApiFailure catch (e) {
         if (kDebugMode) debugPrint('Sign-out call failed, ignoring: $e');
       } finally {
@@ -209,19 +214,35 @@ class AccountNotifier extends _$AccountNotifier {
     return next;
   }
 
-  /// Invoked by [ApiClient] when the server answers `401` to any call.
-  Future<void> _onServerRejectedToken() async {
-    // Only a stored session can expire. A 401 while already signed out
-    // (a sign-out whose token was revoked elsewhere) changes nothing.
-    if (state.value?.status == AccountStatus.signedOut) return;
+  /// Invoked by [ApiClient] when the server answers `401` to a call made
+  /// with [rejectedToken].
+  ///
+  /// Queued behind sign-in and sign-out like every other session change, and
+  /// only acted on while [rejectedToken] is still the stored one: the late
+  /// 401 of a request sent before a fresh sign-in must not delete the new
+  /// session. Not awaited, because the call that got the 401 may itself be
+  /// running in the queue (a deletion, a sign-out everywhere) and waiting on
+  /// it there would never finish.
+  Future<void> _onServerRejectedToken(String rejectedToken) async {
+    unawaited(
+      _enqueue(() async {
+        // Only a stored session can expire. A 401 once signed out (a
+        // sign-out whose token was revoked elsewhere) finds no token here.
+        if (await _store.readToken() != rejectedToken) return;
 
-    await _store.clearSession();
+        await _store.clearSession();
 
-    final lastEmail = await _store.readEmail();
+        final lastEmail = await _store.readEmail();
 
-    // `state` may still be loading if the very first call raced app start.
-    state = AsyncValue.data(
-      AccountState(status: AccountStatus.sessionExpired, lastEmail: lastEmail),
+        // `state` may still be loading if the very first call raced app
+        // start.
+        state = AsyncValue.data(
+          AccountState(
+            status: AccountStatus.sessionExpired,
+            lastEmail: lastEmail,
+          ),
+        );
+      }),
     );
   }
 }

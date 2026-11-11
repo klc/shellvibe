@@ -27,13 +27,16 @@ class SnippetsNotifier extends _$SnippetsNotifier {
 
   /// Runs [op], then reloads the list in place: an add, edit or delete must
   /// not blank the list to a spinner on the way through.
+  ///
+  /// A failed [op] throws to the caller, which has to say the save did not
+  /// happen, and leaves the list as it was.
   Future<void> _mutate(Future<void> Function() op) async {
-    state = await AsyncValue.guard(() async {
-      await op();
-      return ref
+    await op();
+    state = await AsyncValue.guard(
+      () => ref
           .read(snippetsRepositoryProvider)
-          .getSnippetsByWorkspace(ref.read(activeWorkspaceIdProvider));
-    });
+          .getSnippetsByWorkspace(ref.read(activeWorkspaceIdProvider)),
+    );
   }
 
   Future<void> addSnippet({

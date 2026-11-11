@@ -120,6 +120,27 @@ void main() {
       await bridge.dispose();
     });
 
+    test('terminal replies go to the PTY, not through onOutput', () async {
+      final terminal = Terminal();
+      final session = FakePtySession(exitCode: 0);
+      final bridge = TerminalLocalPtyBridge(
+        terminal: terminal,
+        session: session,
+        writerOverride: CoalescingTerminalWriter(
+          PacedTerminalWriter(terminal),
+          waitForFrame: () async {},
+        ),
+      );
+      // Broadcast wraps onOutput; a reply going through it would be typed
+      // into every other selected pane.
+      terminal.onOutput = (_) => fail('reply went through onOutput');
+
+      terminal.write('\x1b[c');
+
+      expect(utf8.decode(session.writes.single), startsWith('\x1b[?'));
+      await bridge.dispose();
+    });
+
     test('a batch is acknowledged once it reaches the paced writer', () async {
       // The credit window lives on the reading isolate: it stops
       // acknowledging the PTY while batches sit unreported, which fills the

@@ -60,6 +60,6 @@ Out of scope:
 
 ## Supported versions
 
-ShellVibe has not had a stable release yet. Until 1.0.0 ships, only the current
-`main` branch is supported, and fixes land there. Once 1.0.0 is out this table
-will name the versions that receive security fixes.
+Only the latest release is supported. Security fixes land on `main` and ship
+in the next release; older releases do not receive backports, so update to
+the newest version.

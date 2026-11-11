@@ -71,22 +71,35 @@ class VariableDeclaration {
     'required': required,
   };
 
+  /// Null when [json] is not a declaration: no name, or a field of the wrong
+  /// type. Never throws, since the JSON may come from an imported file.
   static VariableDeclaration? tryFromJson(Object? json) {
     if (json is! Map) return null;
     final name = json['name'];
     if (name is! String || name.isEmpty) return null;
-    final type = VariableType.parse(json['type'] as String?);
+    final rawType = json['type'];
+    final label = json['label'];
+    final description = json['description'];
+    final defaultValue = json['defaultValue'];
+    final options = json['options'];
+    final required = json['required'];
+    if (rawType is! String? ||
+        label is! String? ||
+        description is! String? ||
+        defaultValue is! String? ||
+        options is! List? ||
+        required is! bool?) {
+      return null;
+    }
+    final type = VariableType.parse(rawType);
     return VariableDeclaration(
       name: name,
       type: type,
-      label: json['label'] as String?,
-      description: json['description'] as String?,
-      defaultValue: type == VariableType.secret
-          ? null
-          : json['defaultValue'] as String?,
-      options:
-          (json['options'] as List?)?.whereType<String>().toList() ?? const [],
-      required: json['required'] as bool? ?? true,
+      label: label,
+      description: description,
+      defaultValue: type == VariableType.secret ? null : defaultValue,
+      options: options?.whereType<String>().toList() ?? const [],
+      required: required ?? true,
     );
   }
 

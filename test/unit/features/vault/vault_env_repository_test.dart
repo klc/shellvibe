@@ -47,6 +47,15 @@ class _RecordingKeyService implements VaultKeyService {
 
   @override
   SecureStorageService get secureStorageService => throw UnimplementedError();
+
+  @override
+  Future<bool> Function()? get hasEncryptedData => null;
+
+  @override
+  Future<bool> isKeyLost() async => false;
+
+  @override
+  Future<void> reset() => throw UnimplementedError();
 }
 
 /// A key service that always reports the vault as locked, for the
@@ -79,6 +88,15 @@ class _LockedKeyService implements VaultKeyService {
 
   @override
   SecureStorageService get secureStorageService => throw UnimplementedError();
+
+  @override
+  Future<bool> Function()? get hasEncryptedData => null;
+
+  @override
+  Future<bool> isKeyLost() async => false;
+
+  @override
+  Future<void> reset() => throw UnimplementedError();
 }
 
 void main() {

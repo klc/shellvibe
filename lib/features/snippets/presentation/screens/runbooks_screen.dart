@@ -257,17 +257,21 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
     if (result == null) return;
 
     final notifier = ref.read(runbooksProvider.notifier);
-    if (runbook == null) {
-      await notifier.addRunbook(
-        workspaceId: result.workspaceId,
-        title: result.title,
-        description: result.description,
-        steps: result.steps,
-        variables: result.variables,
-        tags: result.tags,
-      );
-    } else {
-      await notifier.updateRunbook(result);
+    try {
+      if (runbook == null) {
+        await notifier.addRunbook(
+          workspaceId: result.workspaceId,
+          title: result.title,
+          description: result.description,
+          steps: result.steps,
+          variables: result.variables,
+          tags: result.tags,
+        );
+      } else {
+        await notifier.updateRunbook(result);
+      }
+    } catch (e) {
+      _toastFailed('Could not save "${result.title}": $e');
     }
   }
 
@@ -284,7 +288,11 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
     if (_selectedRunbookId == runbook.id) {
       setState(() => _selectedRunbookId = null);
     }
-    await ref.read(runbooksProvider.notifier).deleteRunbook(runbook.id);
+    try {
+      await ref.read(runbooksProvider.notifier).deleteRunbook(runbook.id);
+    } catch (e) {
+      _toastFailed('Could not delete "${runbook.title}": $e');
+    }
   }
 
   /// Target first, then variables: choosing where is the bigger decision, and
@@ -338,9 +346,15 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
     // Saved once the run is certain to start, so backing out of the variables
     // dialog does not rewrite the runbook's defaults.
     if (selection.saveAsDefault) {
-      await ref.read(runbooksProvider.notifier).setDefaultHostIds(runbook.id, [
-        for (final host in hosts) host.id,
-      ]);
+      // Best effort: a failed save of the defaults must not stop the run.
+      try {
+        await ref.read(runbooksProvider.notifier).setDefaultHostIds(
+          runbook.id,
+          [for (final host in hosts) host.id],
+        );
+      } catch (e) {
+        _toastFailed('Could not save the default hosts: $e');
+      }
       if (!mounted) return;
     }
 
@@ -363,6 +377,13 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
       ),
     );
     await RunResultDialog.show(context);
+  }
+
+  void _toastFailed(String message) {
+    if (!mounted) return;
+    ShadToaster.maybeOf(
+      context,
+    )?.show(ShadToast.destructive(description: Text(message)));
   }
 
   void _toastBusy() => ShadToaster.of(

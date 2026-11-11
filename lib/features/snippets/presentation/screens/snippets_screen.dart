@@ -11,6 +11,7 @@ import '../../../settings/presentation/notifiers/settings_notifier.dart';
 import '../../../terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import '../../domain/models/runbook_model.dart';
 import '../../domain/models/snippet_model.dart';
+import '../../domain/models/variable_declaration.dart';
 import '../../domain/services/runbook_run_service.dart';
 import '../../domain/services/snippet_variable_parser.dart';
 import '../../../templates/presentation/template_launch.dart';
@@ -531,16 +532,20 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
     if (result == null) return;
 
     final notifier = ref.read(snippetsProvider.notifier);
-    if (snippet == null) {
-      await notifier.addSnippet(
-        workspaceId: result.workspaceId,
-        title: result.title,
-        code: result.code,
-        tags: result.tags,
-        variables: result.variables,
-      );
-    } else {
-      await notifier.updateSnippet(result);
+    try {
+      if (snippet == null) {
+        await notifier.addSnippet(
+          workspaceId: result.workspaceId,
+          title: result.title,
+          code: result.code,
+          tags: result.tags,
+          variables: result.variables,
+        );
+      } else {
+        await notifier.updateSnippet(result);
+      }
+    } catch (e) {
+      if (mounted) _toast('Could not save "${result.title}": $e');
     }
   }
 
@@ -553,16 +558,20 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
     if (!mounted) return;
     if (result == null) return;
 
-    await ref
-        .read(runbooksProvider.notifier)
-        .addRunbook(
-          workspaceId: result.workspaceId,
-          title: result.title,
-          description: result.description,
-          steps: result.steps,
-          variables: result.variables,
-          tags: result.tags,
-        );
+    try {
+      await ref
+          .read(runbooksProvider.notifier)
+          .addRunbook(
+            workspaceId: result.workspaceId,
+            title: result.title,
+            description: result.description,
+            steps: result.steps,
+            variables: result.variables,
+            tags: result.tags,
+          );
+    } catch (e) {
+      if (mounted) _toast('Could not save "${result.title}": $e');
+    }
   }
 
   Future<void> _deleteSnippet(SnippetModel snippet) async {
@@ -578,7 +587,11 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
     if (_selectedSnippetId == snippet.id) {
       setState(() => _selectedSnippetId = null);
     }
-    await ref.read(snippetsProvider.notifier).deleteSnippet(snippet.id);
+    try {
+      await ref.read(snippetsProvider.notifier).deleteSnippet(snippet.id);
+    } catch (e) {
+      if (mounted) _toast('Could not delete "${snippet.title}": $e');
+    }
   }
 
   /// Asks for the snippet's `${INPUT:…}` values, or returns an empty map when
@@ -618,7 +631,11 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
     final selection = await RunTargetSheet.show(
       context,
       subject: snippet.title,
-      allowTerminal: true,
+      // A secret typed into a pane stays on screen, in scrollback and in the
+      // remote shell history; only a background run masks it.
+      allowTerminal: !snippet.variables.any(
+        (v) => v.type == VariableType.secret,
+      ),
     );
     if (!mounted || selection == null || selection.targets.isEmpty) return;
     final values = await _promptValues(snippet);
@@ -647,20 +664,16 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
       return;
     }
 
-    final filled = fillPaneBuiltins(
-      ref.read(terminalTabsProvider),
-      SnippetVariableParser.substituteVariables(snippet.code, values),
-    );
-    final sent = sendToOpenTerminal(
+    final unresolved = sendToOpenTerminal(
       ref.read(terminalTabsProvider),
       ref.read(terminalTabsProvider.notifier),
       selection.targets.first,
-      filled.code,
+      SnippetVariableParser.substituteVariables(snippet.code, values),
     );
     _toast(
-      sent
+      unresolved != null
           ? 'Sent "${snippet.title}" to the terminal. Check the pane for the '
-                'result.${filled.unresolved ? ' It uses \${SV:...} and the '
+                'result.${unresolved ? ' It uses \${SV:...} and the '
                           'pane has no host, so those were left as written.' : ''}'
           : 'No open terminal pane could take "${snippet.title}".',
     );

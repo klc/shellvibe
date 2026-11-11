@@ -253,31 +253,44 @@ class TerminalTabSession {
   /// A Mosh session cannot be reattached — the client holds the OCB counter
   /// state and the server's replay filter rejects an old sequence — so a
   /// reconnect always starts a fresh one.
+  ///
+  /// Every field is detached before the first await. A call still closing
+  /// when a reconnect installs new transports (a drop's unawaited teardown,
+  /// then a quick Reconnect) closes only what it took, never the new ones.
   Future<void> closeSessions() async {
-    await sshClientChangesSub?.cancel();
+    final clientChangesCancelled = sshClientChangesSub?.cancel();
     sshClientChangesSub = null;
-    await moshLinkSub?.cancel();
+    final linkCancelled = moshLinkSub?.cancel();
     moshLinkSub = null;
     moshLinkState = null;
-    await sshBridge?.dispose(closeSession: true);
+    final ssh = sshBridge;
     sshBridge = null;
-    await moshBridge?.dispose(closeSession: true);
+    final mosh = moshBridge;
     moshBridge = null;
+    final moshManager = moshSessionManager;
+    moshSessionManager = null;
+    final pty = ptyBridge;
+    ptyBridge = null;
+    final sshManager = sshSessionManager;
+    sshSessionManager = null;
+    final jumps = jumpSessionManagers;
+    jumpSessionManagers = [];
+
+    await clientChangesCancelled;
+    await linkCancelled;
+    await ssh?.dispose(closeSession: true);
+    await mosh?.dispose(closeSession: true);
     // Closed before the SSH manager: the bootstrap client is the one below,
     // and nothing about the UDP session outlives it.
-    await moshSessionManager?.close();
-    moshSessionManager = null;
-    await ptyBridge?.dispose(killPty: true);
-    ptyBridge = null;
-    await sshSessionManager?.close();
-    sshSessionManager = null;
+    await moshManager?.close();
+    await pty?.dispose(killPty: true);
+    await sshManager?.close();
     // Closed innermost-first (reverse of connect order): the target's own
     // manager is already down above, so nothing downstream depends on these
     // anymore when they close.
-    for (final jumpManager in jumpSessionManagers.reversed) {
+    for (final jumpManager in jumps.reversed) {
       await jumpManager.close();
     }
-    jumpSessionManagers = [];
   }
 
   Future<void> dispose() async {

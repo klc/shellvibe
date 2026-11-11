@@ -280,6 +280,10 @@ class _IdentityFormDialogState extends ConsumerState<IdentityFormDialog> {
                     key: const Key('identity_privatekey_input'),
                     controller: _privateKeyController,
                     maxLines: 4,
+                    // A key, not prose: autocorrect would alter it, and
+                    // suggestions would teach it to the keyboard.
+                    autocorrect: false,
+                    enableSuggestions: false,
                     label: const Text('Private Key (PEM)'),
                     placeholder: const Text(
                       '-----BEGIN OPENSSH PRIVATE KEY-----...',

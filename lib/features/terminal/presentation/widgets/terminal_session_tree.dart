@@ -90,8 +90,8 @@ Widget buildTerminalSessionTree(
       // starting there is a text selection.
       body = Column(
         children: [
-          Draggable<String>(
-            data: paneSession.id,
+          Draggable<PaneDrag>(
+            data: PaneDrag(paneSession.id),
             dragAnchorStrategy: pointerDragAnchorStrategy,
             feedback: _paneDragFeedback(context, tokens, paneSession),
             childWhenDragging: Opacity(

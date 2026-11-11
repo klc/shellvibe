@@ -155,7 +155,7 @@ class _McpHostAccessDialogState extends State<McpHostAccessDialog> {
       // The coordinator's own timer is racing this one and will resolve the
       // same way; closing here just means the user is not left staring at a
       // prompt that has already failed closed underneath them.
-      _closeAsDenied(suspendClient: false);
+      _closeAsDenied(suspendClient: false, reason: 'timeout');
       return;
     }
     if (mounted) setState(() => _remaining = remaining);
@@ -168,12 +168,15 @@ class _McpHostAccessDialogState extends State<McpHostAccessDialog> {
         .toList(),
   );
 
-  void _closeAsDenied({required bool suspendClient}) {
+  void _closeAsDenied({
+    required bool suspendClient,
+    String reason = 'user_denied',
+  }) {
     if (_resolved || !mounted) return;
     _resolved = true;
     Navigator.of(context).pop(
       HostAccessDialogOutcome(
-        result: _allDenied('user_denied'),
+        result: _allDenied(reason),
         suspendClient: suspendClient,
       ),
     );

@@ -98,6 +98,7 @@ class StartupSnippetSender {
   /// way a multi-line snippet goes out. The pane's shell runs them, not the
   /// runbook engine: exit codes, expected output, retries and timeouts do not
   /// apply, so a step that must stop the rest says so itself (`cd x && ...`).
+  /// The template editor says so where a pane's startup runbook is picked.
   Future<StartupSnippetOutcome> _sendRunbook(
     TerminalTabSession tab,
     RunbookModel runbook,

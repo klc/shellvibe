@@ -130,7 +130,7 @@ class _QueueRow extends ConsumerWidget {
           SizedBox(
             width: 230,
             child: Text(
-              item.fileName,
+              item.label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: shellvibeMono(
@@ -187,7 +187,7 @@ class _QueueRow extends ConsumerWidget {
   static String _statusLabel(TransferItem item) => switch (item.status) {
     TransferStatus.inProgress => item.formattedSpeed,
     TransferStatus.pending => 'queued',
-    TransferStatus.paused => 'paused',
+    TransferStatus.paused => 'stopped',
     TransferStatus.completed => 'done',
     TransferStatus.failed => 'failed',
     TransferStatus.cancelled => 'cancelled',

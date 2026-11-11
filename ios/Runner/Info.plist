@@ -34,8 +34,6 @@
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>ShellVibe uses the camera to scan a Device Link pairing QR code.</string>
-	<key>NSFaceIDUsageDescription</key>
-	<string>ShellVibe uses Face ID to unlock your protected vault.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>ShellVibe uses your local network to discover and connect to your paired desktop terminal.</string>
 	<key>UIApplicationSceneManifest</key>

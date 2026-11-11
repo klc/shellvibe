@@ -114,12 +114,20 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
     // alone is not enough: the pane is often mounted while some other widget
     // (the tab bar, a dialog) holds focus, and a reused element never re-fires
     // autofocus when the active tab changes.
+    //
+    // Only the active pane asks: every pane of a split tab mounts in the same
+    // frame (a tab switch, a split, a merge or swap that reshapes the tree),
+    // and the last one to ask would win, leaving the keys in a pane other than
+    // the one ringed as ACTIVE.
     _terminalFocus = FocusNode();
     if (kDebugMode) {
       _terminalFocus.debugLabel = 'terminal_${widget.session.id}';
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _terminalFocus.requestFocus();
+      if (mounted &&
+          ref.read(terminalTabsProvider).activeTabId == widget.session.id) {
+        _terminalFocus.requestFocus();
+      }
     });
   }
 
@@ -677,6 +685,9 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
               terminal: session.terminal,
               outputChain: session.outputChain,
               onFlushInput: _flushTerminalInput,
+              onPaste: widget.readOnly
+                  ? null
+                  : () => unawaited(_pasteFromClipboard()),
             ),
         ],
       );
@@ -715,6 +726,9 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
               terminal: session.terminal,
               outputChain: session.outputChain,
               onFlushInput: _flushTerminalInput,
+              onPaste: widget.readOnly
+                  ? null
+                  : () => unawaited(_pasteFromClipboard()),
             ),
             SizedBox(height: keyboardInset),
           ],

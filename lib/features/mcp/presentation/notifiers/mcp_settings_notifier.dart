@@ -303,7 +303,8 @@ class McpSettingsNotifier extends _$McpSettingsNotifier {
     final controller = ref.read(mcpServerControllerProvider);
     try {
       if (enabled) {
-        await _start(controller, current);
+        // The user's own "on" is what lifts a suspended bridge identity.
+        await _start(controller, current, reinstate: true);
       } else {
         await controller.stop();
       }
@@ -331,9 +332,10 @@ class McpSettingsNotifier extends _$McpSettingsNotifier {
   /// who never changes the retention knob still gets the default window.
   Future<void> _start(
     McpServerController controller,
-    McpSettingsState settings,
-  ) async {
-    await controller.start();
+    McpSettingsState settings, {
+    bool reinstate = false,
+  }) async {
+    await controller.start(reinstate: reinstate);
     // Best-effort: the server is already up, a failed sweep must not make the
     // start look failed or skip persisting the switch.
     try {
@@ -435,6 +437,7 @@ class McpSettingsNotifier extends _$McpSettingsNotifier {
     await ref.read(mcpApprovalRepositoryProvider).revokeAll();
 
     final clientRepo = ref.read(mcpClientRepositoryProvider);
+    final store = _McpSettingsStore(ref.read(secureStorageServiceProvider));
     final workspaces = await ref.read(workspacesProvider.future);
     for (final WorkspaceModel workspace in workspaces) {
       final clients = await clientRepo.listClients(workspace.id);
@@ -442,6 +445,12 @@ class McpSettingsNotifier extends _$McpSettingsNotifier {
         if (client.revokedAt == null) {
           await clientRepo.revokeClient(client.id);
         }
+      }
+      // Every workspace's switch, not just this one: switching to another
+      // workspace with AI access on would otherwise start the server again.
+      final saved = await store.load(workspace.id);
+      if (saved.masterEnabled) {
+        await store.save(workspace.id, saved.copyWith(masterEnabled: false));
       }
     }
 

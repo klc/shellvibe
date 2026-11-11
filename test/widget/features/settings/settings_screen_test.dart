@@ -126,8 +126,8 @@ void main() {
 
       await tester.tap(find.byKey(const Key('settings_section_security')));
       await tester.pumpAndSettle();
-      expect(find.text('Security & Biometric Controls'), findsOneWidget);
-      expect(find.byKey(const Key('test_biometrics_button')), findsOneWidget);
+      expect(find.text('Security Controls'), findsOneWidget);
+      expect(find.byKey(const Key('test_biometrics_button')), findsNothing);
 
       // Backup holds the copies the user takes: to their account, and to a
       // file. The file path keeps working with no account at all.

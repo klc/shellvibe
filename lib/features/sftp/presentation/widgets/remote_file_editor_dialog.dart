@@ -289,6 +289,12 @@ class _RemoteFileEditorDialogState
                       controller: _textController,
                       maxLines: null,
                       expands: true,
+                      // Config files, not prose: iOS would turn `--flag` into
+                      // an em dash and straight quotes into curly ones.
+                      autocorrect: false,
+                      enableSuggestions: false,
+                      smartDashesType: SmartDashesType.disabled,
+                      smartQuotesType: SmartQuotesType.disabled,
                       onChanged: (_) {
                         if (!_isModified) {
                           setState(() => _isModified = true);
