@@ -114,6 +114,13 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
       sessionId,
     );
 
+    // The command text itself can contain a literal secret (`mysql
+    // -ppassword`, a curl with a bearer header, ...) — the audit log's
+    // `args` must be the redacted form exactly like the output is, per
+    // `McpAuditRepository`'s own contract that it performs no masking of
+    // its own.
+    final redactedCommand = redactor.redact(command).text;
+
     // Re-checked here rather than trusted from `open_session` time: a grant
     // can expire, be revoked, or enter cooldown while a session stays open
     // for the idle-timeout window (default 30 minutes), and `McpSession`
@@ -125,6 +132,14 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
       connectionScopeId: ctx.connectionScopeId,
     );
     if (granted == null) {
+      // Expired, revoked or in cooldown: refused without asking anyone.
+      await _audit(
+        ctx: ctx,
+        session: session,
+        redactedCommand: redactedCommand,
+        timeoutSeconds: timeoutSeconds,
+        decision: AuditDecision.autoDenied,
+      );
       throw McpToolException(
         McpErrorCode.hostAccessRequired,
         'Access to host "${session.hostId}" is no longer granted. Call '
@@ -134,6 +149,13 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
 
     final hostRow = await hostsDao.getHostById(session.hostId);
     if (hostRow != null && !hostRow.mcpVisible) {
+      await _audit(
+        ctx: ctx,
+        session: session,
+        redactedCommand: redactedCommand,
+        timeoutSeconds: timeoutSeconds,
+        decision: AuditDecision.autoDenied,
+      );
       throw McpToolException(
         McpErrorCode.hostNotVisible,
         'Host "${session.hostId}" has been hidden from agents.',
@@ -170,13 +192,6 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
       commandContext,
       workspaceId: ctx.workspaceId,
     );
-
-    // The command text itself can contain a literal secret (`mysql
-    // -ppassword`, a curl with a bearer header, ...) — the audit log's
-    // `args` must be the redacted form exactly like the output is, per
-    // `McpAuditRepository`'s own contract that it performs no masking of
-    // its own.
-    final redactedCommand = redactor.redact(command).text;
 
     switch (decision.action) {
       case PolicyAction.deny:

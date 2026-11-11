@@ -315,6 +315,40 @@ void main() {
     expect(await pairingStorage.getAll(), isEmpty);
   });
 
+  test(
+    'concurrent saves and removes keep every pairing in the index',
+    () async {
+      final storage = _MemorySecureStorage();
+      DeviceLinkPairingProfile profile(String id) => DeviceLinkPairingProfile(
+        id: id,
+        deviceId: 'phone-1',
+        name: id,
+        platform: 'desktop',
+        secret: 'secret',
+        host: 'shellvibe-desktop',
+        addresses: const ['192.168.1.10'],
+        mdns: 'shellvibe-desktop._shellvibe._tcp.local',
+        port: 47823,
+        spki: 'spki-$id',
+        sessionId: 'local-1',
+        pairedAt: DateTime.utc(2026, 8, 9),
+      );
+      await DeviceLinkPairingStorage(storage).save(profile('old'));
+
+      // Separate instances, as the screens and notifiers create them.
+      await Future.wait([
+        DeviceLinkPairingStorage(storage).save(profile('a')),
+        DeviceLinkPairingStorage(storage).save(profile('b')),
+        DeviceLinkPairingStorage(storage).remove('old'),
+      ]);
+
+      final ids = (await DeviceLinkPairingStorage(
+        storage,
+      ).getAll()).map((p) => p.id).toList();
+      expect(ids, ['a', 'b']);
+    },
+  );
+
   test('the client device id is created once and then reused', () async {
     final storage = _MemorySecureStorage();
     final pairingStorage = DeviceLinkPairingStorage(storage);

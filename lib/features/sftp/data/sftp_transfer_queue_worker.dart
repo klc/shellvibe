@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dartssh2/dartssh2.dart';
+import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 import '../domain/models/transfer_item.dart';
 import 'sftp_service.dart';
@@ -94,7 +95,8 @@ class SftpTransferQueueWorker {
   }) {
     final file = File(localPath);
     final size = file.existsSync() ? file.lengthSync() : 0;
-    final fileName = localPath.split(Platform.pathSeparator).last;
+    // Windows paths may use '/' as well as a backslash; p.basename takes both.
+    final fileName = p.basename(localPath);
     final id = const Uuid().v4();
 
     final item = TransferItem(
