@@ -115,7 +115,10 @@ EncryptionEngine encryptionEngine(Ref ref) {
 }
 
 /// Provider for [SecureStorageService].
-@riverpod
+///
+/// Kept alive: the service holds state (the macOS bundle cache and the queue
+/// that serializes writes to it), and a second instance would race the first.
+@Riverpod(keepAlive: true)
 SecureStorageService secureStorageService(Ref ref) {
   return SecureStorageService();
 }

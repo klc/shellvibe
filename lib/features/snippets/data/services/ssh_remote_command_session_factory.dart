@@ -45,10 +45,13 @@ class SshRemoteCommandSessionFactory implements RemoteCommandSessionFactory {
       throw RemoteCommandException(e.message);
     }
 
-    // Opens a fresh PTY-less shell over the still-authenticated client; used
-    // for the first channel and as `reopen`, mirroring `McpSessionPool.open`.
+    // Opens a fresh PTY-less `/bin/sh` over the still-authenticated client;
+    // used for the first channel and as `reopen`, mirroring
+    // `McpSessionPool.open`.
     Future<ShellChannel> openPtylessShell() async {
-      final session = await connection.target.openShell(requestPty: false);
+      final session = await connection.target.openExec(
+        PersistentShellSession.remoteCommand,
+      );
       return SshShellChannel(session);
     }
 
@@ -73,12 +76,36 @@ class _SshRemoteCommandSession implements RemoteCommandSession {
   final McpConnection _connection;
   bool _closed = false;
 
+  /// Set once a hung command forced a shell reset. Every later step on this
+  /// host then fails without running: its `cd`/exports are gone, and the
+  /// hung command may still be running detached, so a retry could start a
+  /// second copy of it.
+  bool _lostShell = false;
+
   _SshRemoteCommandSession(this._shell, this._connection);
 
   @override
   Future<(String, int)> run(String command, Duration timeout) async {
+    if (_lostShell) {
+      throw const RemoteCommandException(
+        'Not run: an earlier step hung and the shell on this host was reset, '
+        'so its `cd`/exports are gone.',
+      );
+    }
     final result = await _shell.run(command, timeout: timeout);
-    if (result.interrupted || result.sessionReset) {
+    // A command that ended the shell itself (`exit 0`, `set -e`) has a real
+    // exit status; an unknown one means the connection dropped or a signal
+    // killed the shell.
+    final shellEnded =
+        result.sessionReset && !result.interrupted && !result.timedOut;
+    if (shellEnded && result.exitCode < 0) {
+      throw const RemoteCommandException(
+        'The shell ended without an exit status: the connection dropped or '
+        'the shell was killed.',
+      );
+    }
+    if (!shellEnded && (result.interrupted || result.sessionReset)) {
+      if (result.sessionReset) _lostShell = true;
       throw TimeoutException(
         result.sessionReset
             ? 'Command hung; the shell was reset and earlier `cd`/exports '

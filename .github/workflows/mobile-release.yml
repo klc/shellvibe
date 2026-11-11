@@ -100,7 +100,7 @@ jobs:
           # Without it Gradle falls back to the debug key, which is fine for a
           # local `flutter run --release` and useless to Play.
           if [[ -z "$ANDROID_KEYSTORE_BASE64" ]]; then
-            echo 'ANDROID_KEYSTORE_BASE64 is not set; see docs/RELEASING.md.' >&2
+            echo 'ANDROID_KEYSTORE_BASE64 is not set; add it under Settings > Secrets and variables > Actions.' >&2
             exit 1
           fi
 
@@ -111,7 +111,7 @@ jobs:
           java-version: '17'
 
       - name: Set up Flutter
-        uses: subosito/flutter-action@v2
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           channel: stable
           flutter-version: 3.47.5
@@ -168,7 +168,7 @@ jobs:
 
       - name: Upload to Google Play
         if: inputs.upload
-        uses: r0adkll/upload-google-play@v1
+        uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
         with:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
           packageName: dev.shellvibe.app
@@ -202,14 +202,14 @@ jobs:
           missing=0
           for name in APPLE_API_KEY IOS_DISTRIBUTION_P12 IOS_PROVISIONING_PROFILE; do
             if [[ -z "${!name}" ]]; then
-              echo "$name is not set; see docs/RELEASING.md." >&2
+              echo "$name is not set; add it under Settings > Secrets and variables > Actions." >&2
               missing=1
             fi
           done
           exit "$missing"
 
       - name: Set up Flutter
-        uses: subosito/flutter-action@v2
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           channel: stable
           flutter-version: 3.47.5

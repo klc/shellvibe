@@ -72,6 +72,14 @@ void main() {
     });
   }
 
+  test('Android never wipes the store on a failed read', () {
+    // The plugin's default erases every value, the vault key included.
+    expect(
+      SecureStorageService.androidOptions.toMap()['resetOnError'],
+      'false',
+    );
+  });
+
   group('macOS single keychain item', () {
     const raw = FlutterSecureStorage();
 
@@ -171,6 +179,22 @@ void main() {
       for (var i = 0; i < 20; i++) {
         expect(await reopened.read(key: 'shellvibe_k$i'), '$i');
       }
+    });
+
+    test('a write keeps what another process wrote since', () async {
+      // Two app processes, each with its own cached copy of the bundle.
+      final first = bundled();
+      final second = bundled();
+      expect(await first.read(key: 'shellvibe_a'), isNull);
+      expect(await second.read(key: 'shellvibe_b'), isNull);
+
+      await first.write(key: 'shellvibe_a', value: '1');
+      await second.write(key: 'shellvibe_b', value: '2');
+      await second.delete(key: 'shellvibe_c');
+
+      final reopened = bundled();
+      expect(await reopened.read(key: 'shellvibe_a'), '1');
+      expect(await reopened.read(key: 'shellvibe_b'), '2');
     });
 
     test('is off by default under flutter test', () async {

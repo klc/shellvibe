@@ -264,7 +264,10 @@ class _McpApprovalHostState extends ConsumerState<McpApprovalHost> {
         final outcome = await McpHostAccessDialog.show(
           navigatorContext,
           request: nextHostAccess.request,
-          expiresAt: nextHostAccess.expiresAt,
+          // Counted from now, not from when the agent asked.
+          expiresAt:
+              coordinator.restartHostAccessClock(nextHostAccess.id) ??
+              nextHostAccess.expiresAt,
         );
         final result = outcome?.result ?? _allDenied(nextHostAccess.request);
         coordinator.resolveHostAccess(nextHostAccess.id, result);

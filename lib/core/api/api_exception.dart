@@ -119,11 +119,15 @@ final class ApiException extends ApiFailure {
   ///
   /// `SyncController::putVault` answers an over-quota backup with the same
   /// `rate_limited` code a throttled request gets, and the only thing telling
-  /// them apart is that the plan limit sends `details.max_size_bytes`. That is
-  /// a fragile seam and the server should grow its own code for it; until then
-  /// this getter is where the distinction lives, so no call site has to know.
+  /// them apart is that the plan limit sends `details.max_size_bytes` -- or,
+  /// for a push that would take the operation log past its ceiling,
+  /// `details.max_bytes`. That is a fragile seam and the server should grow
+  /// its own code for it; until then this getter is where the distinction
+  /// lives, so no call site has to know.
   bool get isPlanSizeLimit =>
-      code == ApiErrorCode.rateLimited && details.containsKey('max_size_bytes');
+      code == ApiErrorCode.rateLimited &&
+      (details.containsKey('max_size_bytes') ||
+          details.containsKey('max_bytes'));
 
   /// A genuine throttle: too many requests, retry later.
   bool get isThrottled => code == ApiErrorCode.rateLimited && !isPlanSizeLimit;

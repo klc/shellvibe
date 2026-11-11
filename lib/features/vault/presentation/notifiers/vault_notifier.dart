@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../shared/providers/database_providers.dart';
+import '../../../settings/presentation/notifiers/settings_notifier.dart';
 import '../../../../shared/storage/secure_storage_service.dart';
 import 'identities_notifier.dart';
 
@@ -49,11 +50,17 @@ class VaultState {
   /// available.
   final bool isLocking;
 
+  /// The vault key is gone while data encrypted under it remains (see
+  /// `VaultKeyLostException`). Always reported with [VaultStatus.locked], so
+  /// every gate stays shut; only a reset gets past it.
+  final bool keyLost;
+
   const VaultState({
     required this.status,
     this.failedAttempts = 0,
     this.lockoutUntil,
     this.isLocking = false,
+    this.keyLost = false,
   });
 
   /// Whether a Device Link capability may be admitted for this vault state.
@@ -82,6 +89,7 @@ class VaultState {
       failedAttempts: failedAttempts ?? this.failedAttempts,
       lockoutUntil: clearLockout ? null : (lockoutUntil ?? this.lockoutUntil),
       isLocking: isLocking ?? this.isLocking,
+      keyLost: keyLost,
     );
   }
 }
@@ -116,6 +124,9 @@ class VaultNotifier extends _$VaultNotifier {
   Future<VaultState> build() async {
     final keyService = ref.watch(vaultKeyServiceProvider);
     final storage = ref.watch(secureStorageServiceProvider);
+    if (await keyService.isKeyLost()) {
+      return const VaultState(status: VaultStatus.locked, keyLost: true);
+    }
     if (!await keyService.isMasterPasswordConfigured()) {
       return const VaultState(status: VaultStatus.unconfigured);
     }
@@ -143,6 +154,10 @@ class VaultNotifier extends _$VaultNotifier {
   /// Wraps the existing Data Encryption Key rather than replacing it, so
   /// identities saved before setup stay decryptable. The Argon2id derivation
   /// runs in a background isolate to avoid UI jank.
+  ///
+  /// Throws when the password could not be set. The vault is then exactly as
+  /// it was, so its state is left alone rather than turned into an error the
+  /// rest of the app would read as "vault unavailable".
   Future<void> setup(String masterPassword) async {
     if (_isLocking) {
       throw StateError('Vault is locking');
@@ -154,23 +169,41 @@ class VaultNotifier extends _$VaultNotifier {
     // and a loading state would trip the fail-closed Device Link gates.
     try {
       await keyService.configureMasterPassword(masterPassword);
-      if (!_isCurrentLifecycle(generation)) {
-        keyService.lock();
-        return;
-      }
-      await _clearBruteForceState();
-      if (!_isCurrentLifecycle(generation)) {
-        keyService.lock();
-        return;
-      }
-      state = const AsyncData(VaultState(status: VaultStatus.unlocked));
-    } catch (error, stackTrace) {
-      if (!_isCurrentLifecycle(generation)) {
-        keyService.lock();
-        return;
-      }
-      state = AsyncError(error, stackTrace);
+    } catch (_) {
+      if (!_isCurrentLifecycle(generation)) keyService.lock();
+      rethrow;
     }
+    if (!_isCurrentLifecycle(generation)) {
+      keyService.lock();
+      return;
+    }
+    await _clearBruteForceState();
+    if (!_isCurrentLifecycle(generation)) {
+      keyService.lock();
+      return;
+    }
+    state = const AsyncData(VaultState(status: VaultStatus.unlocked));
+  }
+
+  /// Forgets the vault key and discards every secret it encrypted: identity
+  /// passwords, keys and passphrases, and vault environment variables. Hosts
+  /// and everything else that is not encrypted stay. The vault is left
+  /// without a master password, under a new key made on first use.
+  ///
+  /// The way out of a forgotten master password or a lost key. There is no
+  /// undo. Not recorded for sync: other devices keep their own copies, under
+  /// their own keys.
+  Future<void> resetVault() async {
+    if (_isLocking) throw StateError('Vault is locking');
+    // An unlock still deriving must not publish `unlocked` over the reset.
+    _lifecycleGeneration++;
+    // The key first: if discarding the secrets then fails, the next launch
+    // finds them without a key, reports it lost again, and offers the reset
+    // again.
+    await ref.read(vaultKeyServiceProvider).reset();
+    await ref.read(appDatabaseProvider).discardVaultSecrets();
+    await _clearBruteForceState();
+    state = const AsyncData(VaultState(status: VaultStatus.unconfigured));
   }
 
   /// Removes master-password protection after verifying [currentPassword].
@@ -249,14 +282,26 @@ class VaultNotifier extends _$VaultNotifier {
         return false;
       }
 
+      // --- Brute-force protection ---
+      // Counted before the derivation, not after: an app killed mid-attempt
+      // must still have spent one. A success clears it again.
+      final attempts = (currentState?.failedAttempts ?? 0) + 1;
+      DateTime? lockoutUntil;
+
+      if (attempts >= _kMaxAttemptsBeforeLockout) {
+        // Exponential backoff: 30s, 60s, 120s, 240s… capped at 3600s (1h).
+        // The exponent is capped too: past 7 the shift only overflows.
+        final exponent = (attempts - _kMaxAttemptsBeforeLockout).clamp(0, 7);
+        final lockoutSeconds = (30 * (1 << exponent)).clamp(30, 3600);
+        lockoutUntil = DateTime.now().add(Duration(seconds: lockoutSeconds));
+      }
+      await _persistBruteForceState(attempts, lockoutUntil);
+
       if (await keyService.unlock(masterPassword)) {
+        // The right password, even if a lock below makes it moot.
+        await _clearBruteForceState();
         // Locked while the Argon2id derivation was running? The DEK is gone;
         // publishing `unlocked` here would desync UI from [VaultKeyService].
-        if (!_isCurrentLifecycle(generation)) {
-          keyService.lock();
-          return false;
-        }
-        await _clearBruteForceState();
         if (!_isCurrentLifecycle(generation)) {
           keyService.lock();
           return false;
@@ -268,17 +313,6 @@ class VaultNotifier extends _$VaultNotifier {
       if (!_isCurrentLifecycle(generation)) {
         keyService.lock();
         return false;
-      }
-
-      // --- Brute-force protection ---
-      final attempts = (currentState?.failedAttempts ?? 0) + 1;
-      DateTime? lockoutUntil;
-
-      if (attempts >= _kMaxAttemptsBeforeLockout) {
-        // Exponential backoff: 30s, 60s, 120s, 240s… capped at 3600s (1h)
-        final exponent = attempts - _kMaxAttemptsBeforeLockout;
-        final lockoutSeconds = (30 * (1 << exponent)).clamp(30, 3600);
-        lockoutUntil = DateTime.now().add(Duration(seconds: lockoutSeconds));
       }
 
       state = AsyncData(
@@ -293,11 +327,6 @@ class VaultNotifier extends _$VaultNotifier {
           lockoutUntil: lockoutUntil,
         ),
       );
-      await _persistBruteForceState(attempts, lockoutUntil);
-      if (!_isCurrentLifecycle(generation)) {
-        keyService.lock();
-        return false;
-      }
       return false;
     } catch (e, st) {
       if (!_isCurrentLifecycle(generation)) {
@@ -368,6 +397,7 @@ class VaultNotifier extends _$VaultNotifier {
           : VaultStatus.locked,
       failedAttempts: current?.failedAttempts ?? 0,
       lockoutUntil: current?.lockoutUntil,
+      keyLost: current?.keyLost ?? false,
       isLocking: true,
     );
     state = AsyncData(lockingState);
@@ -398,6 +428,8 @@ class VaultNotifier extends _$VaultNotifier {
       }
     }
     ref.read(vaultKeyServiceProvider).lock();
+    // A copied secret should not outlive the lock that guards it.
+    unawaited(ref.read(clipboardAutoClearServiceProvider).clearNow());
     state = AsyncData(
       VaultState(
         status: lockingState.status == VaultStatus.unconfigured
@@ -405,6 +437,7 @@ class VaultNotifier extends _$VaultNotifier {
             : VaultStatus.locked,
         failedAttempts: lockingState.failedAttempts,
         lockoutUntil: lockingState.lockoutUntil,
+        keyLost: lockingState.keyLost,
       ),
     );
   }

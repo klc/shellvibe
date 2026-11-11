@@ -102,6 +102,29 @@ void main() {
     expect(lines, containsAllInOrder(['first', 'second', 'third']));
   });
 
+  test('escape sequences in output are shown, not interpreted', () async {
+    final tabId = await openTab();
+
+    mirror.writeCommand(tabId, command: 'printf x\x1b[1A', cwd: '/');
+    // Clear scrollback, clear the screen and home the cursor: interpreted,
+    // this wipes the record of everything the agent did before it.
+    mirror.writeResult(
+      tabId,
+      stdout: '\x1b[3J\x1b[2J\x1b[Hhidden\rshown\r\n',
+      stderr: '',
+      exitCode: 0,
+      durationMs: 1,
+    );
+
+    final buffer = _bufferText(notifier.tabById(tabId)!.terminal);
+    expect(buffer, contains('closing this tab ends the session'));
+    expect(buffer, contains('printf x⟨U+001B⟩[1A'));
+    expect(
+      buffer,
+      contains('⟨U+001B⟩[3J⟨U+001B⟩[2J⟨U+001B⟩[Hhidden⟨U+000D⟩shown'),
+    );
+  });
+
   test('a refused command is shown too, with why', () async {
     final tabId = await openTab();
 

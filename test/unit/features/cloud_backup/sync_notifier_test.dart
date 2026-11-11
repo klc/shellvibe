@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -162,6 +163,45 @@ void main() {
       expect(current().blocker, isNull);
     });
 
+    test(
+      'a pass queued before a rebuild does not run on the old engine',
+      () async {
+        // A rebuild keeps the notifier and hands it a new `ref`, so the
+        // `ref.mounted` check let a queued pass through on the engine of the
+        // build before -- here one that had been switched off; on an account
+        // change, the old account's outbox.
+        final notifier = await started();
+        await joined(notifier);
+        final before = pushes().length;
+
+        final gate = Completer<void>();
+        server.hold = (r) =>
+            r.method == 'GET' && r.url.path.endsWith('/sync/operations')
+            ? gate.future
+            : null;
+        final running = notifier.syncNow();
+        await eventually(
+          () => server.requests.any(
+            (r) => r.method == 'GET' && r.url.path.endsWith('/sync/operations'),
+          ),
+        );
+
+        await addHost('h1');
+        final queued = notifier.syncNow();
+
+        await container.read(autoSyncEnabledProvider.notifier).set(false);
+        await container.read(syncProvider.future);
+        expect(current().blocker, SyncBlocker.disabled);
+
+        server.hold = null;
+        gate.complete();
+        await running;
+        await queued;
+
+        expect(pushes(), hasLength(before), reason: 'the old engine pushed');
+      },
+    );
+
     test('switching it off stops sending', () async {
       final notifier = await started();
       await joined(notifier);
@@ -264,6 +304,88 @@ void main() {
         () => current().error?.contains('could not be read') ?? false,
         reason: 'the first pass after the join reported a clean sync',
       );
+    });
+  });
+
+  group('falling behind', () {
+    test('an expired cursor joins again from the ground', () async {
+      // The log no longer reaches this device's cursor. Telling the user to
+      // restore a backup left the cursor where it was -- a done join returns
+      // at once -- so nothing on the screen led back to a working sync.
+      final notifier = await started();
+      await joined(notifier);
+
+      var expiries = 1;
+      server.intercept = (r) =>
+          r.method == 'GET' &&
+              r.url.path.endsWith('/sync/operations') &&
+              expiries-- > 0
+          ? FakeSyncServer.error(409, 'sync_cursor_expired', 'Pruned.')
+          : null;
+      int groundReads() => server.requests
+          .where(
+            (r) =>
+                r.method == 'GET' &&
+                r.url.path.contains('/sync/vault/revisions') &&
+                r.url.queryParameters['kind'] == 'sync',
+          )
+          .length;
+      final readsBefore = groundReads();
+
+      await notifier.syncNow();
+      await eventually(
+        () => groundReads() > readsBefore,
+        reason: 'the ground was not read again',
+      );
+      await eventually(() => current().lastSyncAt != null);
+      await notifier.syncNow();
+
+      expect(current().needsSnapshotRestore, isFalse);
+      expect(current().error, isNull);
+      expect(
+        await SyncJournal(db: db, deviceId: 'device-a').readJoinState(),
+        SyncJoinState.done,
+      );
+    });
+
+    test(
+      'a ground that expires the cursor again is not joined forever',
+      () async {
+        final notifier = await started();
+        await joined(notifier);
+
+        server.intercept = (r) =>
+            r.method == 'GET' && r.url.path.endsWith('/sync/operations')
+            ? FakeSyncServer.error(409, 'sync_cursor_expired', 'Pruned.')
+            : null;
+
+        await notifier.syncNow();
+        await eventually(
+          () => current().needsSnapshotRestore,
+          reason: 'the second expiry was not reported',
+        );
+      },
+    );
+  });
+
+  group('a device that syncs less', () {
+    test('does not rewrite the ground, even after adopting a key', () async {
+      // Its copy of the categories it leaves out is stale: it skipped their
+      // operations. The ground it wrote started every new device that way.
+      await BackupScopeStore(storage: SecureStorageService()).write(
+        BackupTarget.autoSync,
+        BackupScope.of(const [BackupCategory.hosts]),
+      );
+      await store().writeSyncKey(base64.encode(key(1)));
+      await seedGround(key(2));
+
+      final notifier = await started();
+      await joined(notifier);
+      await notifier.syncNow();
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+
+      expect(server.vaults['sync'], hasLength(1));
+      expect(server.vaults['sync']!.last['device_id'], 'other-device');
     });
   });
 

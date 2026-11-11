@@ -89,7 +89,7 @@ void main() {
         final appDb = AppDatabase(NativeDatabase(tempDbFile));
         db = appDb;
 
-        expect(appDb.schemaVersion, equals(22));
+        expect(appDb.schemaVersion, equals(23));
 
         // The v10 tables have to exist after a migration, not only after a
         // fresh create: a device that upgrades and then makes a change would
@@ -546,7 +546,7 @@ void main() {
       final appDb = AppDatabase(NativeDatabase(tempDbFile));
       db = appDb;
 
-      expect(appDb.schemaVersion, equals(22));
+      expect(appDb.schemaVersion, equals(23));
       expect(await appDb.vaultEnvVarsDao.getByWorkspace('default'), isEmpty);
 
       await appDb.vaultEnvVarsDao.insert(
@@ -609,7 +609,7 @@ void main() {
         final appDb = AppDatabase(NativeDatabase(tempDbFile));
         db = appDb;
 
-        expect(appDb.schemaVersion, equals(22));
+        expect(appDb.schemaVersion, equals(23));
 
         // The id is the deterministic one sync uses, so another device that
         // migrates the same data produces the same row.
@@ -686,5 +686,99 @@ void main() {
       final byId = {for (final r in rows) r.id: r.workspaceId};
       expect(byId, {'a-1': 'ws-1', 'a-2': null, 'a-3': null});
     });
+
+    test('upgrading to v23 keeps one grant per client and host', () async {
+      // Built at the current schema, then wound back to v22: no index, and
+      // the duplicate a racing upsert could leave.
+      final fresh = AppDatabase(NativeDatabase(tempDbFile));
+      await fresh.customStatement(
+        "INSERT INTO workspaces (id, name, created_at) VALUES ('ws-1', 'W', 0)",
+      );
+      await fresh.customStatement(
+        'INSERT INTO hosts (id, workspace_id, label, hostname, created_at) '
+        "VALUES ('h-1', 'ws-1', 'H', 'h', 0)",
+      );
+      await fresh.customStatement(
+        'INSERT INTO mcp_clients (id, workspace_id, name, token_hash, '
+        "created_at) VALUES ('c-1', 'ws-1', 'C', 'x', 0)",
+      );
+      await fresh.customStatement('DROP INDEX mcp_host_grants_client_host');
+      await fresh.customStatement(
+        'INSERT INTO mcp_host_grants (id, client_id, host_id, mode, '
+        "granted_at) VALUES ('g-old', 'c-1', 'h-1', 'readonly', 1), "
+        "('g-new', 'c-1', 'h-1', 'guarded', 2)",
+      );
+      await fresh.customStatement('PRAGMA user_version = 22;');
+      await fresh.close();
+
+      final appDb = AppDatabase(NativeDatabase(tempDbFile));
+      db = appDb;
+
+      final grant = await appDb.mcpDao.findGrant('c-1', 'h-1');
+      expect(grant!.id, 'g-new');
+      await expectLater(
+        appDb.customStatement(
+          'INSERT INTO mcp_host_grants (id, client_id, host_id, mode, '
+          "granted_at) VALUES ('g-dup', 'c-1', 'h-1', 'readonly', 3)",
+        ),
+        throwsA(isA<SqliteException>()),
+      );
+    });
+
+    test(
+      'an upgrade that fails part-way leaves the database as it was',
+      () async {
+        // v1, with a known_hosts table too broken for the v3 step to read: the
+        // v2 step adds `username`, then v3 throws.
+        final rawDb = sqlite3.open(tempDbFile.path);
+        rawDb.execute('''
+        CREATE TABLE "workspaces" (
+          "id" TEXT NOT NULL PRIMARY KEY,
+          "name" TEXT NOT NULL,
+          "color_code" TEXT NULL,
+          "created_at" INTEGER NOT NULL
+        );
+      ''');
+        rawDb.execute('''
+        CREATE TABLE "hosts" (
+          "id" TEXT NOT NULL PRIMARY KEY,
+          "workspace_id" TEXT NOT NULL,
+          "group_id" TEXT NULL,
+          "identity_id" TEXT NULL,
+          "label" TEXT NOT NULL,
+          "hostname" TEXT NOT NULL,
+          "port" INTEGER NOT NULL DEFAULT 22,
+          "protocol" TEXT NOT NULL DEFAULT 'ssh',
+          "color_tag" TEXT NULL,
+          "jump_host_id" TEXT NULL,
+          "created_at" INTEGER NOT NULL
+        );
+      ''');
+        rawDb.execute('CREATE TABLE "known_hosts" ("id" TEXT NOT NULL);');
+        rawDb.execute("INSERT INTO known_hosts (id) VALUES ('kh-1');");
+        rawDb.execute('PRAGMA user_version = 1;');
+        rawDb.close();
+
+        final appDb = AppDatabase(NativeDatabase(tempDbFile));
+        await expectLater(
+          appDb.customSelect('SELECT 1').get(),
+          throwsA(anything),
+        );
+        await appDb.close();
+
+        final after = sqlite3.open(tempDbFile.path);
+        addTearDown(after.close);
+        expect(after.userVersion, 1);
+        final columns = after
+            .select('PRAGMA table_info("hosts")')
+            .map((r) => r['name'])
+            .toList();
+        expect(
+          columns,
+          isNot(contains('username')),
+          reason: 'a half-run upgrade would fail on it again, for good',
+        );
+      },
+    );
   });
 }

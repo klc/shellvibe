@@ -10,6 +10,7 @@ import 'package:shellvibe/core/sync/backup_scope.dart';
 import 'package:shellvibe/core/sync/sync_aliases.dart';
 import 'package:shellvibe/core/sync/sync_engine.dart';
 import 'package:shellvibe/core/sync/sync_journal.dart';
+import 'package:shellvibe/core/sync/sync_row_writer.dart';
 import 'package:shellvibe/features/cloud_backup/data/sync_operations_api.dart';
 import 'package:shellvibe/features/vault/data/vault_key_service.dart';
 import 'package:shellvibe/shared/database/app_database.dart';
@@ -704,6 +705,274 @@ void main() {
       expect(stored.entityId, isNot(contains('production')));
       expect(stored.encryptedPayload, isNot(contains('production')));
       expect(stored.entityType.length, 32);
+    });
+  });
+
+  group('what the log cannot be trusted with', () {
+    /// An operation sealed under the account's key, as a device would send
+    /// it, but with contents no build of this app writes.
+    Future<SyncOperationDto> sealed({
+      required String type,
+      required String id,
+      required int clock,
+      Map<String, Object?>? row,
+      String from = 'device-x',
+    }) async {
+      final aliases = SyncAliases(syncKey: syncKey);
+
+      return SyncOperationDto(
+        id: 'raw-$type-$id-$clock',
+        deviceId: from,
+        logicalClock: clock,
+        entityType: await aliases.forType(type),
+        entityId: await aliases.forEntity(entityType: type, entityId: id),
+        operation: 'upsert',
+        encryptedPayload: await EncryptionEngine().encrypt(
+          plaintext: jsonEncode({
+            't': type,
+            'i': id,
+            'o': 'upsert',
+            'd': from,
+            'c': clock,
+            'r': row,
+          }),
+          secretKey: syncKey,
+        ),
+      );
+    }
+
+    test('a clock the server wrote alone moves neither clock nor cursor '
+        'out of reach', () async {
+      // Anyone holding the account's token can push, sync key or not. An
+      // operation nobody can open used to drag the Lamport clock to its
+      // value -- every later edit overflowing -- and, paged by clock, the
+      // cursor past everything any device will ever send.
+      final a = await device('device-a');
+      final b = await device('device-b');
+      log.answersByClock = true;
+
+      await a.writeHost('h1');
+      await a.engine.push();
+      log.operations.add(
+        const SyncOperationDto(
+          id: 'forged',
+          deviceId: 'device-x',
+          logicalClock: 1 << 62,
+          entityType: 'x',
+          entityId: 'y',
+          operation: 'upsert',
+          encryptedPayload: 'not sealed under any key',
+        ),
+      );
+
+      await b.engine.pull();
+      final state = await b.journal.readState();
+      expect(state.lastSeenClock, lessThan(1 << 20));
+      expect(state.pulledThroughClock, lessThan(1 << 20));
+
+      // And the log is still followed past it.
+      await a.engine.syncOnce();
+      await a.writeHost('h2');
+      await a.engine.push();
+      await b.engine.pull();
+      expect(await b.host('h2'), isNotNull);
+    });
+
+    test(
+      'a table this build does not know is not counted as unreadable',
+      () async {
+        // The count exists to say the key does not match the account. An
+        // operation from a newer build is readable; reporting it that way sent
+        // the user after a key problem they did not have.
+        final b = await device('device-b');
+        log.operations.add(
+          await sealed(
+            type: 'future_table',
+            id: 'f1',
+            clock: 5,
+            row: {'id': 'f1'},
+          ),
+        );
+
+        final result = await b.engine.pull();
+
+        expect(result.unreadable, 0);
+        expect(result.skipped, 1);
+      },
+    );
+
+    test('a row missing a required field is skipped, not fatal', () async {
+      // It threw inside the apply transaction, rolled the page back and
+      // failed the same way on every pull after it.
+      final a = await device('device-a');
+      final b = await device('device-b');
+
+      log.operations.add(
+        await sealed(
+          type: 'hosts',
+          id: 'bad',
+          clock: 5,
+          row: {'id': 'bad', 'workspaceId': 'default'},
+        ),
+      );
+      await a.writeHost('h1');
+      await a.engine.push();
+
+      await b.engine.pull();
+
+      expect(await b.host('bad'), isNull);
+      expect(await b.host('h1'), isNotNull, reason: 'the log moved on');
+    });
+
+    test('a child sent ahead of its parent is written once the parent '
+        'arrives on a later page', () async {
+      // Renamed before it was sent, the workspace is coalesced to a clock
+      // above the host created in it. With a page boundary between them the
+      // host was skipped for good: the cursor had already moved past it.
+      final a = await device('device-a');
+      final b = await device('device-b');
+
+      await a.db.workspacesDao.insertWorkspace(
+        WorkspacesCompanion.insert(
+          id: 'w2',
+          name: 'Two',
+          createdAt: DateTime.now(),
+        ),
+      );
+      await a.db.hostsDao.insertHost(
+        HostsCompanion.insert(
+          id: 'h1',
+          workspaceId: 'w2',
+          label: 'h1',
+          hostname: 'h1.example.com',
+          createdAt: DateTime.now(),
+        ),
+      );
+      await a.db.workspacesDao.updateWorkspaceName('w2', 'Renamed');
+      await a.engine.push();
+
+      log.pageCap = 1;
+      await b.engine.pull();
+
+      expect(await b.host('h1'), isNotNull);
+      final version = await b.journal.versionFor(
+        entityType: 'hosts',
+        entityId: 'h1',
+      );
+      expect(version?.deviceId, 'device-a');
+    });
+
+    test(
+      'a seeded join reaches every row on a server that pages by clock',
+      () async {
+        // One clock for the whole seed, and a server that cannot end a page
+        // inside a clock: the other devices received the first hundred rows
+        // and never the rest.
+        final a = await device('device-a');
+        final b = await device('device-b');
+        log.answersByClock = true;
+
+        for (var i = 0; i < 150; i++) {
+          await a.db
+              .into(a.db.hosts)
+              .insert(
+                HostsCompanion.insert(
+                  id: 'h$i',
+                  workspaceId: 'default',
+                  label: 'h$i',
+                  hostname: 'h$i.example.com',
+                  createdAt: DateTime.now(),
+                ),
+              );
+        }
+        await a.journal.seedUnversioned();
+        await a.engine.push();
+
+        await b.engine.pull();
+
+        expect(await b.db.select(b.db.hosts).get(), hasLength(150));
+      },
+    );
+  });
+
+  group('rows from another build', () {
+    test('a column the sender does not know is left as it is', () async {
+      // A phone one release behind renames a runbook. Its row has no
+      // `variables`, `tags` or `defaultHostIds`, and writing it as null wiped
+      // them on the desktop.
+      final b = await device('device-b');
+
+      final full = {
+        'id': 'r1',
+        'workspaceId': 'default',
+        'title': 'Deploy',
+        'description': null,
+        'createdAt': DateTime(2026).toIso8601String(),
+        'defaultHostIds': '["h1"]',
+        'variables': '[{"name":"TOKEN","secret":true}]',
+        'tags': '["prod"]',
+      };
+      await SyncRowWriter.write(b.db, 'runbooks', full);
+
+      await SyncRowWriter.write(b.db, 'runbooks', {
+        for (final MapEntry(:key, :value) in full.entries)
+          if (!const {'defaultHostIds', 'variables', 'tags'}.contains(key))
+            key: value,
+        'title': 'Deploy v2',
+      });
+
+      final runbook = await (b.db.select(
+        b.db.runbooks,
+      )..where((r) => r.id.equals('r1'))).getSingle();
+      expect(runbook.title, 'Deploy v2');
+      expect(runbook.defaultHostIds, '["h1"]');
+      expect(runbook.variables, '[{"name":"TOKEN","secret":true}]');
+      expect(runbook.tags, '["prod"]');
+    });
+
+    test('a column sent as null is still cleared', () async {
+      final b = await device('device-b');
+      final row = {
+        'id': 's1',
+        'workspaceId': 'default',
+        'title': 'ls',
+        'code': 'ls',
+        'tags': null,
+        'variables': '[{"name":"X"}]',
+      };
+      await SyncRowWriter.write(b.db, 'snippets', row);
+      await SyncRowWriter.write(b.db, 'snippets', {...row, 'variables': null});
+
+      final snippet = await (b.db.select(
+        b.db.snippets,
+      )..where((s) => s.id.equals('s1'))).getSingle();
+      expect(snippet.variables, isNull);
+    });
+
+    test('a host edited where identities are off keeps its identity '
+        'everywhere else', () async {
+      // The device that does not sync identities holds the host without
+      // one. Its next edit of the host sent that null, and every other
+      // device lost the identity the host logs in with.
+      final a = await device('device-a');
+      final b = await device(
+        'device-b',
+        scope: BackupScope.of(const [BackupCategory.hosts]),
+      );
+
+      await a.writeIdentity('i1');
+      await a.writeHost('h1', identityId: 'i1');
+      await a.engine.syncOnce();
+      await b.engine.syncOnce();
+      expect((await b.host('h1'))!.identityId, isNull);
+
+      await b.writeHost('h1', label: 'renamed on b');
+      await b.engine.syncOnce();
+      await a.engine.syncOnce();
+
+      final onA = await a.host('h1');
+      expect(onA!.label, 'renamed on b');
+      expect(onA.identityId, 'i1');
     });
   });
 }

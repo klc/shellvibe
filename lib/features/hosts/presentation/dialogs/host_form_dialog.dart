@@ -312,6 +312,16 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
     }
   }
 
+  /// The workspace's name for the subtitle, its id until the list has loaded.
+  String _workspaceName(String id) =>
+      ref
+          .watch(workspacesProvider)
+          .value
+          ?.where((w) => w.id == id)
+          .firstOrNull
+          ?.name ??
+      id;
+
   /// The address this form resolves to, including the bastion it rides
   /// through. Rendered under the routing section so the route is stated rather
   /// than inferred from three separate fields.
@@ -375,7 +385,7 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
       description: Padding(
         padding: const EdgeInsets.only(left: 54),
         child: Text(
-          'workspace: ${widget.workspaceId ?? 'default'}',
+          'workspace: ${_workspaceName(widget.workspaceId ?? 'default')}',
           style: shellvibeMono(context, size: 11, color: tokens.textSubtle),
         ),
       ),
@@ -411,7 +421,9 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
           ShellVibeButton(
             buttonKey: const Key('host_save_button'),
             label: isEditing ? 'Update host' : 'Save and connect',
-            onPressed: _save,
+            // Not while a trial dial is running: its host key prompt and result
+            // belong to this form.
+            onPressed: _testing ? null : _save,
           ),
       ],
       child: SizedBox(
@@ -475,8 +487,11 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                           'e.g. 192.168.1.10 or root@192.168.1.10',
                         ),
                         leading: const Icon(LucideIcons.globe, size: 16),
+                        // A Local Shell dials nothing.
                         validator: (v) =>
-                            v.trim().isEmpty ? 'Hostname is required' : null,
+                            v.trim().isEmpty && _protocol != 'local'
+                            ? 'Hostname is required'
+                            : null,
                       ),
                     ),
                     const SizedBox(width: 12),

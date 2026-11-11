@@ -45,9 +45,11 @@ class HostLauncher {
   }
 
   /// [openSession] plus the move to the terminal, which is what a plain
-  /// "connect" means everywhere it is offered.
+  /// "connect" means everywhere it is offered. A cancelled prompt or
+  /// unreadable credentials open no session, so there is nothing to move to.
   Future<void> connect(HostModel host) async {
-    await openSession(host);
+    final tabId = await openSession(host);
+    if (tabId == null) return;
     if (context.mounted) {
       GoRouter.maybeOf(context)?.go('/terminal');
     }

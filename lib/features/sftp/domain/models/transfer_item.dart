@@ -14,6 +14,13 @@ class TransferItem {
   final int speedBytesPerSec;
   final String? error;
 
+  /// Terminal tab whose connection the transfer belongs to. Retry and resume
+  /// only run over that same connection, never whichever one is open now.
+  final String? sessionId;
+
+  /// The server's name, shown on the row.
+  final String? hostLabel;
+
   const TransferItem({
     required this.id,
     required this.fileName,
@@ -25,7 +32,12 @@ class TransferItem {
     required this.type,
     this.speedBytesPerSec = 0,
     this.error,
+    this.sessionId,
+    this.hostLabel,
   });
+
+  /// The row title: which server, which file.
+  String get label => hostLabel == null ? fileName : '$hostLabel: $fileName';
 
   double get progress => totalBytes > 0 ? (transferredBytes / totalBytes).clamp(0.0, 1.0) : 0.0;
 
@@ -60,6 +72,8 @@ class TransferItem {
       type: type ?? this.type,
       speedBytesPerSec: speedBytesPerSec ?? this.speedBytesPerSec,
       error: clearError ? null : (error ?? this.error),
+      sessionId: sessionId,
+      hostLabel: hostLabel,
     );
   }
 }
