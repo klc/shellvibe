@@ -103,7 +103,7 @@ final class ClipboardAutoClearServiceProvider
 }
 
 String _$clipboardAutoClearServiceHash() =>
-    r'5aa799948e4ea7cbd9c358a395de8ea57566ff2d';
+    r'80fff33648eaeb77458ea99cb061596cc55be2d9';
 
 @ProviderFor(SettingsNotifier)
 final settingsProvider = SettingsNotifierProvider._();

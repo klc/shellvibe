@@ -21,7 +21,7 @@ ClipboardAutoClearService clipboardAutoClearService(Ref ref) {
   final service = ClipboardAutoClearService();
   // Never leave a pending timer that keeps clearing the clipboard after the
   // provider (and the widget that registered onCleared) is gone.
-  ref.onDispose(service.cancelTimer);
+  ref.onDispose(service.dispose);
   return service;
 }
 

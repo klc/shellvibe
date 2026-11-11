@@ -354,8 +354,12 @@ class _ShellVibeAppState extends ConsumerState<ShellVibeApp>
   /// Windows and Linux quit through the tray host, which asks the same way.
   @override
   Future<AppExitResponse> didRequestAppExit() async {
-    if (isMobilePlatform || await confirmQuit(ref)) return AppExitResponse.exit;
-    return AppExitResponse.cancel;
+    if (!isMobilePlatform && !await confirmQuit(ref)) {
+      return AppExitResponse.cancel;
+    }
+    // The auto-clear timer dies with the process; a copied secret must not.
+    await ref.read(clipboardAutoClearServiceProvider).clearNow();
+    return AppExitResponse.exit;
   }
 
   @override

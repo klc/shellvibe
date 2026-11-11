@@ -391,6 +391,17 @@ void main() {
         () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
             .setMockMethodCallHandler(SystemChannels.platform, null),
       );
+      // Tests run as Android, where secrets go through the runner's channel.
+      const sensitiveClipboard = MethodChannel('dev.shellvibe.app/clipboard');
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(sensitiveClipboard, (call) async {
+            clipboard = call.arguments as String?;
+            return null;
+          });
+      addTearDown(
+        () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(sensitiveClipboard, null),
+      );
 
       await tester.pumpWidget(createWidgetUnderTest());
       await tester.pump();

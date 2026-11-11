@@ -1,5 +1,8 @@
 package dev.shellvibe.app
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.os.PersistableBundle
 import android.view.WindowManager
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -25,6 +28,31 @@ class MainActivity : FlutterFragmentActivity() {
                 window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
             }
             result.success(null)
+        }
+        // Secrets copied with the "sensitive" mark: Android 13+ masks them in
+        // the copy preview and keyboards' clipboard suggestions. Dart falls
+        // back to a plain copy if this fails.
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "dev.shellvibe.app/clipboard",
+        ).setMethodCallHandler { call, result ->
+            val text = call.arguments as? String
+            if (call.method != "copySensitive" || text == null) {
+                result.notImplemented()
+                return@setMethodCallHandler
+            }
+            try {
+                val clip = ClipData.newPlainText("", text)
+                clip.description.extras = PersistableBundle().apply {
+                    // The extra's key; ClipDescription.EXTRA_IS_SENSITIVE
+                    // names it from API 33 on, older versions ignore it.
+                    putBoolean("android.content.extra.IS_SENSITIVE", true)
+                }
+                getSystemService(ClipboardManager::class.java).setPrimaryClip(clip)
+                result.success(null)
+            } catch (e: Exception) {
+                result.error("copy_failed", e.message, null)
+            }
         }
     }
 }
