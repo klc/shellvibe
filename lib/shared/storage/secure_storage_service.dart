@@ -13,6 +13,10 @@ abstract class SecureStorageKeys {
 
   /// DEK wrapped with the master-password-derived KEK.
   static const String wrappedDek = 'shellvibe_wrapped_dek';
+
+  /// Argon2id cost the KEK was derived with, as JSON. Absent on a vault set
+  /// up before it was stored, which means `Argon2Params.legacy`.
+  static const String masterKdf = 'shellvibe_master_kdf';
   static const String vaultFailedAttempts = 'shellvibe_vault_failed_attempts';
   static const String vaultLockoutUntil = 'shellvibe_vault_lockout_until';
   static const String tokenPrefix = 'shellvibe_token_';
@@ -43,6 +47,10 @@ abstract class SecureStorageKeys {
   /// Cached account email, so the sign-in form can prefill after a token is
   /// revoked. Not a credential.
   static const String accountEmail = 'shellvibe_account_email';
+
+  /// The signed-in user's display name, so a relaunch shows it without
+  /// asking the server.
+  static const String accountName = 'shellvibe_account_name';
 }
 
 /// Secure Storage Service leveraging hardware-backed secure storage
@@ -109,6 +117,11 @@ class SecureStorageService {
   );
 
   static const androidOptions = AndroidOptions(
+    // The plugin's default wipes every stored value when one read fails to
+    // decrypt. That takes the vault key with it, and the vault would then
+    // start over under a new one while the database still holds secrets
+    // only the old key opens. A failed read must surface as an error.
+    resetOnError: false,
     migrateOnAlgorithmChange: true,
     migrateWithBackup: true,
   );
@@ -196,15 +209,23 @@ class SecureStorageService {
     return result;
   }
 
-  Future<Map<String, String>> _loadBundle() async {
+  /// [fresh] skips the cache. A write starts from what the keychain holds
+  /// now: another process (a debug and a release build side by side, or
+  /// `open -n`) may have changed the bundle since this one read it, and
+  /// writing back a stale map would drop that change.
+  Future<Map<String, String>> _loadBundle({bool fresh = false}) async {
     final cached = _bundle;
-    if (cached != null) return cached;
+    if (cached != null && !fresh) return cached;
     final raw = await _storage.read(key: bundleKey);
     final decoded = raw == null
         ? <String, String>{}
         : (jsonDecode(raw) as Map<String, dynamic>).cast<String, String>();
     return _bundle = decoded;
   }
+
+  /// Makes the next read go to the keychain again rather than to what this
+  /// process read before, for a caller retrying a read that came back empty.
+  void forgetCache() => _bundle = null;
 
   Future<Map<String, String>> _saveBundle(Map<String, String> next) async {
     await _storage.write(key: bundleKey, value: jsonEncode(next));
@@ -219,8 +240,9 @@ class SecureStorageService {
   Future<Map<String, String>> _settle(
     String key, {
     required bool keepValue,
+    bool fresh = false,
   }) async {
-    var bundle = await _loadBundle();
+    var bundle = await _loadBundle(fresh: fresh);
     if (_settled.contains(key)) return bundle;
     if (keepValue && !bundle.containsKey(key)) {
       final legacy = await _storage.read(key: key);
@@ -239,14 +261,14 @@ class SecureStorageService {
 
   Future<void> _storeWrite(String key, String value) => _bundled
       ? _locked(() async {
-          final bundle = await _settle(key, keepValue: false);
+          final bundle = await _settle(key, keepValue: false, fresh: true);
           if (bundle[key] != value) await _saveBundle({...bundle, key: value});
         })
       : _storage.write(key: key, value: value);
 
   Future<void> _storeDelete(String key) => _bundled
       ? _locked(() async {
-          final bundle = await _settle(key, keepValue: false);
+          final bundle = await _settle(key, keepValue: false, fresh: true);
           if (bundle.containsKey(key)) {
             await _saveBundle(Map.of(bundle)..remove(key));
           }

@@ -13,7 +13,7 @@ void main() {
 
   ApiClient client({
     String? token = 'test-token',
-    Future<void> Function()? onUnauthenticated,
+    Future<void> Function(String)? onUnauthenticated,
   }) => ApiClient(
     transport: transport,
     tokenProvider: () async => token,
@@ -124,7 +124,7 @@ void main() {
       var sessionDropped = false;
 
       await expectLater(
-        client(onUnauthenticated: () async => sessionDropped = true).get('/me'),
+        client(onUnauthenticated: (_) async => sessionDropped = true).get('/me'),
         throwsA(
           isA<ApiException>()
               .having((e) => e.code, 'code', ApiErrorCode.unauthenticated)
@@ -142,7 +142,7 @@ void main() {
       var sessionDropped = false;
 
       await expectLater(
-        client(onUnauthenticated: () async => sessionDropped = true).post(
+        client(onUnauthenticated: (_) async => sessionDropped = true).post(
           '/auth/login',
           body: const {'email': 'a@b.c', 'password': 'x'},
           authenticated: false,
@@ -334,7 +334,7 @@ void main() {
       var sessionDropped = false;
 
       await expectLater(
-        client(onUnauthenticated: () async => sessionDropped = true).get('/me'),
+        client(onUnauthenticated: (_) async => sessionDropped = true).get('/me'),
         throwsA(isA<ApiException>()),
       );
 
