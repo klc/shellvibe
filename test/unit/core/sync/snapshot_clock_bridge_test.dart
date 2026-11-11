@@ -426,31 +426,36 @@ void main() {
       expect((await to.readState()).pulledThroughSeq, 50);
     });
 
-    test('a snapshot without one makes the device work it out again', () async {
-      // Written by a build that predates positions. When this restore is the
-      // way out of an expired cursor, keeping the position would keep the
-      // thing that expired; the clock cursor is what the server can start
-      // positions from.
-      await addHost(source, 'h1');
-      final to = await journalOf(target, 'target-device');
-      await to.acknowledgePullSeq(50, maxClock: 60);
+    test(
+      'a snapshot without one, ahead of the device, makes it work it out again',
+      () async {
+        // Written by a build that predates positions. When this restore is
+        // the way out of an expired cursor, keeping the position would keep
+        // the thing that expired; the clock cursor the snapshot just moved is
+        // what the server can start positions from.
+        await addHost(source, 'h1');
+        final to = await journalOf(target, 'target-device');
+        await to.acknowledgePullSeq(50, maxClock: 30);
 
-      await sync.importEncryptedBackup(
-        backupPackageJson: await exportAt(42),
-        db: target,
-        masterPassword: passphrase,
-      );
+        await sync.importEncryptedBackup(
+          backupPackageJson: await exportAt(42),
+          db: target,
+          masterPassword: passphrase,
+        );
 
-      expect((await to.readState()).pulledThroughSeq, isNull);
-    });
+        final state = await to.readState();
+        expect(state.pulledThroughClock, 42);
+        expect(state.pulledThroughSeq, isNull);
+      },
+    );
 
     test(
-      'an older snapshot does not rewind the clock it falls back to',
+      'a snapshot without one, behind the device, keeps its position',
       () async {
-        // A device that pages by position still has to keep its clock cursor
-        // current. Left at its pre-upgrade value, any older snapshot looks
-        // newer than it, and forgetting the position then falls back to a
-        // clock this device has long since pulled past.
+        // Every snapshot lacks a position while the server has none to give.
+        // One at or behind this device's clock says nothing about where it
+        // stands, and forgetting the position sent the next pull back to
+        // paging by clock -- the mode that loses operations sent late.
         await addHost(source, 'h1');
         final to = await journalOf(target, 'target-device');
         await to.acknowledgePull(10);
@@ -464,7 +469,7 @@ void main() {
 
         final state = await to.readState();
         expect(state.pulledThroughClock, 60);
-        expect(state.pulledThroughSeq, isNull);
+        expect(state.pulledThroughSeq, 50);
       },
     );
 

@@ -347,8 +347,11 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
   void _generateRecoveryCode() {
     final passphrase = _passphraseController.text;
 
-    if (passphrase.length < 8) {
-      setState(() => _setupError = 'Use at least 8 characters.');
+    // Only at setup. The passphrase is all that stands between the server's
+    // copy and an offline guess, so it is held to more than a login password
+    // -- but one already in use keeps working.
+    if (passphrase.length < 12) {
+      setState(() => _setupError = 'Use at least 12 characters.');
 
       return;
     }
