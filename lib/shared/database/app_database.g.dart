@@ -15815,10 +15815,11 @@ class $$WorkspacesTableTableManager
                   getPrefetchedDataCallback: (items) async {
                     return [
                       if (identitiesRefs)
-                        await $_getPrefetchedData<
+                        await $_getPrefetchedDataByColumns<
                           Workspace,
                           $WorkspacesTable,
-                          Identity
+                          Identity,
+                          $IdentitiesTable
                         >(
                           currentTable: table,
                           referencedTable: $$WorkspacesTableReferences
@@ -15829,17 +15830,16 @@ class $$WorkspacesTableTableManager
                                 table,
                                 p0,
                               ).identitiesRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.workspaceId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'workspace_id',
                           typedResults: items,
                         ),
                       if (hostGroupsRefs)
-                        await $_getPrefetchedData<
+                        await $_getPrefetchedDataByColumns<
                           Workspace,
                           $WorkspacesTable,
-                          HostGroup
+                          HostGroup,
+                          $HostGroupsTable
                         >(
                           currentTable: table,
                           referencedTable: $$WorkspacesTableReferences
@@ -15850,17 +15850,16 @@ class $$WorkspacesTableTableManager
                                 table,
                                 p0,
                               ).hostGroupsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.workspaceId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'workspace_id',
                           typedResults: items,
                         ),
                       if (snippetsRefs)
-                        await $_getPrefetchedData<
+                        await $_getPrefetchedDataByColumns<
                           Workspace,
                           $WorkspacesTable,
-                          Snippet
+                          Snippet,
+                          $SnippetsTable
                         >(
                           currentTable: table,
                           referencedTable: $$WorkspacesTableReferences
@@ -15871,17 +15870,16 @@ class $$WorkspacesTableTableManager
                                 table,
                                 p0,
                               ).snippetsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.workspaceId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'workspace_id',
                           typedResults: items,
                         ),
                       if (hostsRefs)
-                        await $_getPrefetchedData<
+                        await $_getPrefetchedDataByColumns<
                           Workspace,
                           $WorkspacesTable,
-                          Host
+                          Host,
+                          $HostsTable
                         >(
                           currentTable: table,
                           referencedTable: $$WorkspacesTableReferences
@@ -15892,17 +15890,16 @@ class $$WorkspacesTableTableManager
                                 table,
                                 p0,
                               ).hostsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.workspaceId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'workspace_id',
                           typedResults: items,
                         ),
                       if (runbooksRefs)
-                        await $_getPrefetchedData<
+                        await $_getPrefetchedDataByColumns<
                           Workspace,
                           $WorkspacesTable,
-                          Runbook
+                          Runbook,
+                          $RunbooksTable
                         >(
                           currentTable: table,
                           referencedTable: $$WorkspacesTableReferences
@@ -15913,17 +15910,16 @@ class $$WorkspacesTableTableManager
                                 table,
                                 p0,
                               ).runbooksRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.workspaceId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'workspace_id',
                           typedResults: items,
                         ),
                       if (templatesRefs)
-                        await $_getPrefetchedData<
+                        await $_getPrefetchedDataByColumns<
                           Workspace,
                           $WorkspacesTable,
-                          Template
+                          Template,
+                          $TemplatesTable
                         >(
                           currentTable: table,
                           referencedTable: $$WorkspacesTableReferences
@@ -15934,17 +15930,16 @@ class $$WorkspacesTableTableManager
                                 table,
                                 p0,
                               ).templatesRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.workspaceId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'workspace_id',
                           typedResults: items,
                         ),
                       if (mcpClientsRefs)
-                        await $_getPrefetchedData<
+                        await $_getPrefetchedDataByColumns<
                           Workspace,
                           $WorkspacesTable,
-                          McpClient
+                          McpClient,
+                          $McpClientsTable
                         >(
                           currentTable: table,
                           referencedTable: $$WorkspacesTableReferences
@@ -15955,17 +15950,16 @@ class $$WorkspacesTableTableManager
                                 table,
                                 p0,
                               ).mcpClientsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.workspaceId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'workspace_id',
                           typedResults: items,
                         ),
                       if (mcpPolicyRulesRefs)
-                        await $_getPrefetchedData<
+                        await $_getPrefetchedDataByColumns<
                           Workspace,
                           $WorkspacesTable,
-                          McpPolicyRule
+                          McpPolicyRule,
+                          $McpPolicyRulesTable
                         >(
                           currentTable: table,
                           referencedTable: $$WorkspacesTableReferences
@@ -15976,17 +15970,16 @@ class $$WorkspacesTableTableManager
                                 table,
                                 p0,
                               ).mcpPolicyRulesRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.workspaceId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'workspace_id',
                           typedResults: items,
                         ),
                       if (bookmarksRefs)
-                        await $_getPrefetchedData<
+                        await $_getPrefetchedDataByColumns<
                           Workspace,
                           $WorkspacesTable,
-                          Bookmark
+                          Bookmark,
+                          $BookmarksTable
                         >(
                           currentTable: table,
                           referencedTable: $$WorkspacesTableReferences
@@ -15997,17 +15990,16 @@ class $$WorkspacesTableTableManager
                                 table,
                                 p0,
                               ).bookmarksRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.workspaceId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'workspace_id',
                           typedResults: items,
                         ),
                       if (vaultEnvVarsRefs)
-                        await $_getPrefetchedData<
+                        await $_getPrefetchedDataByColumns<
                           Workspace,
                           $WorkspacesTable,
-                          VaultEnvVar
+                          VaultEnvVar,
+                          $VaultEnvVarsTable
                         >(
                           currentTable: table,
                           referencedTable: $$WorkspacesTableReferences
@@ -16018,17 +16010,16 @@ class $$WorkspacesTableTableManager
                                 table,
                                 p0,
                               ).vaultEnvVarsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.workspaceId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'workspace_id',
                           typedResults: items,
                         ),
                       if (runbookRunsRefs)
-                        await $_getPrefetchedData<
+                        await $_getPrefetchedDataByColumns<
                           Workspace,
                           $WorkspacesTable,
-                          RunbookRun
+                          RunbookRun,
+                          $RunbookRunsTable
                         >(
                           currentTable: table,
                           referencedTable: $$WorkspacesTableReferences
@@ -16039,10 +16030,8 @@ class $$WorkspacesTableTableManager
                                 table,
                                 p0,
                               ).runbookRunsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.workspaceId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'workspace_id',
                           typedResults: items,
                         ),
                     ];
@@ -16527,14 +16516,19 @@ class $$IdentitiesTableTableManager
               getPrefetchedDataCallback: (items) async {
                 return [
                   if (hostsRefs)
-                    await $_getPrefetchedData<Identity, $IdentitiesTable, Host>(
+                    await $_getPrefetchedDataByColumns<
+                      Identity,
+                      $IdentitiesTable,
+                      Host,
+                      $HostsTable
+                    >(
                       currentTable: table,
                       referencedTable: $$IdentitiesTableReferences
                           ._hostsRefsTable(db),
                       managerFromTypedResult: (p0) =>
                           $$IdentitiesTableReferences(db, table, p0).hostsRefs,
-                      referencedItemsForCurrentItem: (item, referencedItems) =>
-                          referencedItems.where((e) => e.identityId == item.id),
+                      currentColumn: 'id',
+                      referencedColumn: 'identity_id',
                       typedResults: items,
                     ),
                 ];
@@ -17097,10 +17091,11 @@ class $$HostGroupsTableTableManager
                   getPrefetchedDataCallback: (items) async {
                     return [
                       if (hostsRefs)
-                        await $_getPrefetchedData<
+                        await $_getPrefetchedDataByColumns<
                           HostGroup,
                           $HostGroupsTable,
-                          Host
+                          Host,
+                          $HostsTable
                         >(
                           currentTable: table,
                           referencedTable: $$HostGroupsTableReferences
@@ -17111,17 +17106,16 @@ class $$HostGroupsTableTableManager
                                 table,
                                 p0,
                               ).hostsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.groupId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'group_id',
                           typedResults: items,
                         ),
                       if (hostGroupMembersRefs)
-                        await $_getPrefetchedData<
+                        await $_getPrefetchedDataByColumns<
                           HostGroup,
                           $HostGroupsTable,
-                          HostGroupMember
+                          HostGroupMember,
+                          $HostGroupMembersTable
                         >(
                           currentTable: table,
                           referencedTable: $$HostGroupsTableReferences
@@ -17132,10 +17126,8 @@ class $$HostGroupsTableTableManager
                                 table,
                                 p0,
                               ).hostGroupMembersRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.groupId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'group_id',
                           typedResults: items,
                         ),
                     ];
@@ -17700,10 +17692,11 @@ class $$SnippetsTableTableManager
                   getPrefetchedDataCallback: (items) async {
                     return [
                       if (hostsRefs)
-                        await $_getPrefetchedData<
+                        await $_getPrefetchedDataByColumns<
                           Snippet,
                           $SnippetsTable,
-                          Host
+                          Host,
+                          $HostsTable
                         >(
                           currentTable: table,
                           referencedTable: $$SnippetsTableReferences
@@ -17714,17 +17707,16 @@ class $$SnippetsTableTableManager
                                 table,
                                 p0,
                               ).hostsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.startupSnippetId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'startup_snippet_id',
                           typedResults: items,
                         ),
                       if (runbookStepsRefs)
-                        await $_getPrefetchedData<
+                        await $_getPrefetchedDataByColumns<
                           Snippet,
                           $SnippetsTable,
-                          RunbookStep
+                          RunbookStep,
+                          $RunbookStepsTable
                         >(
                           currentTable: table,
                           referencedTable: $$SnippetsTableReferences
@@ -17735,17 +17727,16 @@ class $$SnippetsTableTableManager
                                 table,
                                 p0,
                               ).runbookStepsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.snippetId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'snippet_id',
                           typedResults: items,
                         ),
                       if (templatePanesRefs)
-                        await $_getPrefetchedData<
+                        await $_getPrefetchedDataByColumns<
                           Snippet,
                           $SnippetsTable,
-                          TemplatePane
+                          TemplatePane,
+                          $TemplatePanesTable
                         >(
                           currentTable: table,
                           referencedTable: $$SnippetsTableReferences
@@ -17756,10 +17747,8 @@ class $$SnippetsTableTableManager
                                 table,
                                 p0,
                               ).templatePanesRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.startupSnippetId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'startup_snippet_id',
                           typedResults: items,
                         ),
                     ];
@@ -19059,10 +19048,11 @@ class $$HostsTableTableManager
                   getPrefetchedDataCallback: (items) async {
                     return [
                       if (hostGroupMembersRefs)
-                        await $_getPrefetchedData<
+                        await $_getPrefetchedDataByColumns<
                           Host,
                           $HostsTable,
-                          HostGroupMember
+                          HostGroupMember,
+                          $HostGroupMembersTable
                         >(
                           currentTable: table,
                           referencedTable: $$HostsTableReferences
@@ -19073,17 +19063,16 @@ class $$HostsTableTableManager
                                 table,
                                 p0,
                               ).hostGroupMembersRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.hostId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'host_id',
                           typedResults: items,
                         ),
                       if (portForwardRulesRefs)
-                        await $_getPrefetchedData<
+                        await $_getPrefetchedDataByColumns<
                           Host,
                           $HostsTable,
-                          PortForwardRule
+                          PortForwardRule,
+                          $PortForwardRulesTable
                         >(
                           currentTable: table,
                           referencedTable: $$HostsTableReferences
@@ -19094,17 +19083,16 @@ class $$HostsTableTableManager
                                 table,
                                 p0,
                               ).portForwardRulesRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.hostId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'host_id',
                           typedResults: items,
                         ),
                       if (mcpHostGrantsRefs)
-                        await $_getPrefetchedData<
+                        await $_getPrefetchedDataByColumns<
                           Host,
                           $HostsTable,
-                          McpHostGrant
+                          McpHostGrant,
+                          $McpHostGrantsTable
                         >(
                           currentTable: table,
                           referencedTable: $$HostsTableReferences
@@ -19115,17 +19103,16 @@ class $$HostsTableTableManager
                                 table,
                                 p0,
                               ).mcpHostGrantsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.hostId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'host_id',
                           typedResults: items,
                         ),
                       if (mcpApprovalsRefs)
-                        await $_getPrefetchedData<
+                        await $_getPrefetchedDataByColumns<
                           Host,
                           $HostsTable,
-                          McpApproval
+                          McpApproval,
+                          $McpApprovalsTable
                         >(
                           currentTable: table,
                           referencedTable: $$HostsTableReferences
@@ -19136,14 +19123,17 @@ class $$HostsTableTableManager
                                 table,
                                 p0,
                               ).mcpApprovalsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.hostId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'host_id',
                           typedResults: items,
                         ),
                       if (bookmarksRefs)
-                        await $_getPrefetchedData<Host, $HostsTable, Bookmark>(
+                        await $_getPrefetchedDataByColumns<
+                          Host,
+                          $HostsTable,
+                          Bookmark,
+                          $BookmarksTable
+                        >(
                           currentTable: table,
                           referencedTable: $$HostsTableReferences
                               ._bookmarksRefsTable(db),
@@ -19153,10 +19143,8 @@ class $$HostsTableTableManager
                                 table,
                                 p0,
                               ).bookmarksRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.hostId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'host_id',
                           typedResults: items,
                         ),
                     ];
@@ -20741,10 +20729,11 @@ class $$RunbooksTableTableManager
                   getPrefetchedDataCallback: (items) async {
                     return [
                       if (runbookStepsRefs)
-                        await $_getPrefetchedData<
+                        await $_getPrefetchedDataByColumns<
                           Runbook,
                           $RunbooksTable,
-                          RunbookStep
+                          RunbookStep,
+                          $RunbookStepsTable
                         >(
                           currentTable: table,
                           referencedTable: $$RunbooksTableReferences
@@ -20755,17 +20744,16 @@ class $$RunbooksTableTableManager
                                 table,
                                 p0,
                               ).runbookStepsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.runbookId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'runbook_id',
                           typedResults: items,
                         ),
                       if (templatesRefs)
-                        await $_getPrefetchedData<
+                        await $_getPrefetchedDataByColumns<
                           Runbook,
                           $RunbooksTable,
-                          Template
+                          Template,
+                          $TemplatesTable
                         >(
                           currentTable: table,
                           referencedTable: $$RunbooksTableReferences
@@ -20776,17 +20764,16 @@ class $$RunbooksTableTableManager
                                 table,
                                 p0,
                               ).templatesRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.onOpenRunbookId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'on_open_runbook_id',
                           typedResults: items,
                         ),
                       if (templatePanesRefs)
-                        await $_getPrefetchedData<
+                        await $_getPrefetchedDataByColumns<
                           Runbook,
                           $RunbooksTable,
-                          TemplatePane
+                          TemplatePane,
+                          $TemplatePanesTable
                         >(
                           currentTable: table,
                           referencedTable: $$RunbooksTableReferences
@@ -20797,10 +20784,8 @@ class $$RunbooksTableTableManager
                                 table,
                                 p0,
                               ).templatePanesRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.startupRunbookId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'startup_runbook_id',
                           typedResults: items,
                         ),
                     ];
@@ -21949,10 +21934,11 @@ class $$TemplatesTableTableManager
                   getPrefetchedDataCallback: (items) async {
                     return [
                       if (templatePanesRefs)
-                        await $_getPrefetchedData<
+                        await $_getPrefetchedDataByColumns<
                           Template,
                           $TemplatesTable,
-                          TemplatePane
+                          TemplatePane,
+                          $TemplatePanesTable
                         >(
                           currentTable: table,
                           referencedTable: $$TemplatesTableReferences
@@ -21963,17 +21949,16 @@ class $$TemplatesTableTableManager
                                 table,
                                 p0,
                               ).templatePanesRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.templateId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'template_id',
                           typedResults: items,
                         ),
                       if (bookmarksRefs)
-                        await $_getPrefetchedData<
+                        await $_getPrefetchedDataByColumns<
                           Template,
                           $TemplatesTable,
-                          Bookmark
+                          Bookmark,
+                          $BookmarksTable
                         >(
                           currentTable: table,
                           referencedTable: $$TemplatesTableReferences
@@ -21984,10 +21969,8 @@ class $$TemplatesTableTableManager
                                 table,
                                 p0,
                               ).bookmarksRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.templateId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'template_id',
                           typedResults: items,
                         ),
                     ];
@@ -23407,10 +23390,11 @@ class $$McpClientsTableTableManager
                   getPrefetchedDataCallback: (items) async {
                     return [
                       if (mcpHostGrantsRefs)
-                        await $_getPrefetchedData<
+                        await $_getPrefetchedDataByColumns<
                           McpClient,
                           $McpClientsTable,
-                          McpHostGrant
+                          McpHostGrant,
+                          $McpHostGrantsTable
                         >(
                           currentTable: table,
                           referencedTable: $$McpClientsTableReferences
@@ -23421,17 +23405,16 @@ class $$McpClientsTableTableManager
                                 table,
                                 p0,
                               ).mcpHostGrantsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.clientId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'client_id',
                           typedResults: items,
                         ),
                       if (mcpApprovalsRefs)
-                        await $_getPrefetchedData<
+                        await $_getPrefetchedDataByColumns<
                           McpClient,
                           $McpClientsTable,
-                          McpApproval
+                          McpApproval,
+                          $McpApprovalsTable
                         >(
                           currentTable: table,
                           referencedTable: $$McpClientsTableReferences
@@ -23442,10 +23425,8 @@ class $$McpClientsTableTableManager
                                 table,
                                 p0,
                               ).mcpApprovalsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.clientId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'client_id',
                           typedResults: items,
                         ),
                     ];
@@ -27539,10 +27520,11 @@ class $$RunbookRunsTableTableManager
                   getPrefetchedDataCallback: (items) async {
                     return [
                       if (runbookRunHostsRefs)
-                        await $_getPrefetchedData<
+                        await $_getPrefetchedDataByColumns<
                           RunbookRun,
                           $RunbookRunsTable,
-                          RunbookRunHost
+                          RunbookRunHost,
+                          $RunbookRunHostsTable
                         >(
                           currentTable: table,
                           referencedTable: $$RunbookRunsTableReferences
@@ -27553,10 +27535,8 @@ class $$RunbookRunsTableTableManager
                                 table,
                                 p0,
                               ).runbookRunHostsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.runId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'run_id',
                           typedResults: items,
                         ),
                     ];
@@ -27998,10 +27978,11 @@ class $$RunbookRunHostsTableTableManager
                   getPrefetchedDataCallback: (items) async {
                     return [
                       if (runbookRunStepsRefs)
-                        await $_getPrefetchedData<
+                        await $_getPrefetchedDataByColumns<
                           RunbookRunHost,
                           $RunbookRunHostsTable,
-                          RunbookRunStep
+                          RunbookRunStep,
+                          $RunbookRunStepsTable
                         >(
                           currentTable: table,
                           referencedTable: $$RunbookRunHostsTableReferences
@@ -28012,10 +27993,8 @@ class $$RunbookRunHostsTableTableManager
                                 table,
                                 p0,
                               ).runbookRunStepsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.runHostId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'run_host_id',
                           typedResults: items,
                         ),
                     ];
