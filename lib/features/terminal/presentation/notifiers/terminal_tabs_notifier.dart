@@ -729,6 +729,46 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     }
   }
 
+  /// Moves the tab rooted at [tabId] into the tab rooted at [targetId] as its
+  /// right half, and focuses it. See [TerminalPaneLayout.mergeTab].
+  ///
+  /// AI tabs are refused either way: one takes no typing, and sharing a tab
+  /// with it would put it where the user's keystrokes go. The moved tab's
+  /// broadcast selection is dropped, so it cannot silently join the target's.
+  void mergeTab(String tabId, String targetId) {
+    final tab = tabById(tabId);
+    final target = tabById(targetId);
+    if (tab == null || target == null || tab.isMcp || target.isMcp) return;
+    final moving = state.tabs
+        .where((t) => rootOfPane(state.tabs, t).id == tabId)
+        .map((t) => t.id)
+        .toSet();
+
+    final result = _paneLayout.mergeTab(state.tabs, tabId, targetId);
+    if (result == null) return;
+
+    final active = state.activeTabId;
+    state = state.copyWith(
+      tabs: result,
+      activeTabId: active != null && moving.contains(active) ? active : tabId,
+      selectedPaneIds: state.selectedPaneIds.difference(moving),
+    );
+    _syncBroadcast();
+  }
+
+  /// Takes [paneId] out of its tab into a tab of its own, and focuses it. See
+  /// [TerminalPaneLayout.detachPane].
+  void moveToNewTab(String paneId) {
+    final result = _paneLayout.detachPane(state.tabs, paneId);
+    if (result == null) return;
+    state = state.copyWith(
+      tabs: result,
+      activeTabId: paneId,
+      selectedPaneIds: state.selectedPaneIds.difference({paneId}),
+    );
+    _syncBroadcast();
+  }
+
   void setSplitRatio(String tabId, double ratio) {
     final index = state.tabs.indexWhere((t) => t.id == tabId);
     if (index == -1) return;

@@ -723,6 +723,111 @@ void main() {
       expect(_bufferText(moved.terminal), contains('alive'));
     });
 
+    test('mergeTab makes a tab, splits and all, the right half of another', () {
+      final notifier = container.read(terminalTabsProvider.notifier);
+
+      notifier.openLocalTab(title: 'Target');
+      final target = container.read(terminalTabsProvider).activeTabId!;
+      notifier.splitTab(target, direction: Axis.vertical);
+      final targetPane = container.read(terminalTabsProvider).tabs.last.id;
+      notifier.openLocalTab(title: 'Moving');
+      final moving = container.read(terminalTabsProvider).activeTabId!;
+      notifier.splitTab(moving, direction: Axis.vertical);
+      final movingPane = container.read(terminalTabsProvider).tabs.last.id;
+      notifier.setActiveTab(target);
+
+      notifier.mergeTab(moving, target);
+
+      final state = container.read(terminalTabsProvider);
+      final merged = state.tabs.firstWhere((t) => t.id == moving);
+      expect(merged.splitParentId, target);
+      expect(merged.splitDirection, Axis.horizontal);
+      expect(merged.splitRatio, 0.5);
+      // Its own split comes with it.
+      expect(
+        state.tabs.firstWhere((t) => t.id == movingPane).splitParentId,
+        moving,
+      );
+      // Oldest child of the target, so it cuts the whole tab in half rather
+      // than the pane the target already had split off.
+      expect(
+        state.tabs.where((t) => t.splitParentId == target).map((t) => t.id),
+        [moving, targetPane],
+      );
+      expect(
+        state.tabs.where((t) => t.splitParentId == null).map((t) => t.id),
+        [target],
+      );
+      expect(state.activeTabId, moving);
+      merged.terminal.write('alive');
+      expect(_bufferText(merged.terminal), contains('alive'));
+    });
+
+    test('mergeTab drops the moved tab from broadcast and refuses AI tabs', () {
+      final notifier = container.read(terminalTabsProvider.notifier);
+
+      notifier.openLocalTab(title: 'Target');
+      final target = container.read(terminalTabsProvider).activeTabId!;
+      notifier.openLocalTab(title: 'Moving');
+      final moving = container.read(terminalTabsProvider).activeTabId!;
+      notifier.splitTab(moving, direction: Axis.horizontal);
+      final movingPane = container.read(terminalTabsProvider).tabs.last.id;
+      notifier.togglePaneSelection(moving);
+      notifier.togglePaneSelection(movingPane);
+      final ai = notifier.openMcpTab(
+        mcpSessionId: 'mcp-1',
+        title: 'agent',
+        onClose: () {},
+      );
+
+      notifier.mergeTab(ai, target);
+      notifier.mergeTab(target, ai);
+      notifier.mergeTab(movingPane, target);
+      notifier.mergeTab(target, target);
+      final untouched = container.read(terminalTabsProvider);
+      expect(
+        untouched.tabs.where((t) => t.splitParentId == null).map((t) => t.id),
+        [target, moving, ai],
+      );
+
+      notifier.mergeTab(moving, target);
+      expect(container.read(terminalTabsProvider).selectedPaneIds, isEmpty);
+    });
+
+    test('moveToNewTab takes a pane out into a tab of its own', () {
+      final notifier = container.read(terminalTabsProvider.notifier);
+
+      notifier.openLocalTab(title: 'A');
+      final root = container.read(terminalTabsProvider).activeTabId!;
+      notifier.splitTab(root, direction: Axis.horizontal);
+      final middle = container.read(terminalTabsProvider).tabs.last.id;
+      notifier.splitTab(middle, direction: Axis.vertical);
+      final leaf = container.read(terminalTabsProvider).tabs.last.id;
+
+      notifier.moveToNewTab(middle);
+
+      var state = container.read(terminalTabsProvider);
+      final moved = state.tabs.firstWhere((t) => t.id == middle);
+      expect(moved.splitParentId, isNull);
+      expect(state.tabs.last.id, middle);
+      expect(state.activeTabId, middle);
+      // Its child stays behind, promoted into the slot it left.
+      expect(state.tabs.firstWhere((t) => t.id == leaf).splitParentId, root);
+
+      // A lone pane is already a tab: nothing to do.
+      notifier.moveToNewTab(middle);
+      expect(container.read(terminalTabsProvider).tabs, state.tabs);
+
+      // A root with splits hands the tab to its heir.
+      notifier.moveToNewTab(root);
+      state = container.read(terminalTabsProvider);
+      expect(state.tabs.firstWhere((t) => t.id == leaf).splitParentId, isNull);
+      expect(
+        state.tabs.where((t) => t.splitParentId == null).map((t) => t.id),
+        [leaf, middle, root],
+      );
+    });
+
     test('movePaneTo refuses panes of different tabs and unknown ids', () {
       final notifier = container.read(terminalTabsProvider.notifier);
 

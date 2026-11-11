@@ -284,6 +284,58 @@ class TerminalPaneLayout {
     return result;
   }
 
+  /// Moves the tab rooted at [tabId], with every pane in it, into the tab
+  /// rooted at [targetId] as that tab's right half. Returns the updated list,
+  /// or null when either id is not a root tab or the two are the same.
+  ///
+  /// The merged tab's own splits come along untouched: only its root is
+  /// re-pointed, and its children keep hanging off it. It goes in front of
+  /// the target's existing children because the layout fold cuts the oldest
+  /// child off the whole rectangle first, so this halves the entire tab
+  /// rather than one of its panes.
+  List<TerminalTabSession>? mergeTab(
+    List<TerminalTabSession> tabs,
+    String tabId,
+    String targetId,
+  ) {
+    if (tabId == targetId) return null;
+    final tab = findInList(tabs, tabId);
+    final target = findInList(tabs, targetId);
+    if (tab == null || target == null) return null;
+    if (tab.splitParentId != null || target.splitParentId != null) return null;
+
+    tab.splitParentId = targetId;
+    tab.splitDirection = Axis.horizontal;
+    tab.splitRatio = 0.5;
+
+    final result = [...tabs]..remove(tab);
+    final firstChild = result.indexWhere((t) => t.splitParentId == targetId);
+    result.insert(firstChild == -1 ? result.length : firstChild, tab);
+    return result;
+  }
+
+  /// Takes [paneId] out of its tab and makes it a tab of its own, last in the
+  /// strip. Its children are promoted into the slot it leaves, as on close.
+  /// Returns the updated list, or null when [paneId] is missing or already a
+  /// tab with nothing split off it.
+  List<TerminalTabSession>? detachPane(
+    List<TerminalTabSession> tabs,
+    String paneId,
+  ) {
+    final pane = findInList(tabs, paneId);
+    if (pane == null) return null;
+    final children = tabs.where((t) => t.splitParentId == paneId).toList();
+    if (pane.splitParentId == null && children.isEmpty) return null;
+
+    final result = children.isEmpty
+        ? ([...tabs]..remove(pane))
+        : promoteHeir(tabs, pane, children);
+    pane.splitParentId = null;
+    pane.splitDirection = null;
+    pane.splitRatio = 0.5;
+    return result..add(pane);
+  }
+
   /// The pane of [paneId]'s tab that sits against it on the [direction] side,
   /// or null when [paneId] is at that edge of the tab or missing.
   ///
