@@ -69,13 +69,10 @@ jobs:
     needs: metadata
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
-    # A step's `if:` can read the `env` context but not `secrets`, so anything a
-    # step has to be conditional on is lifted here first. Absent secrets come
-    # through as empty strings, which is what the unsigned path tests for.
-    env:
-      APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
-      APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
-      WINDOWS_CERT_BASE64: ${{ secrets.WINDOWS_CERT_BASE64 }}
+    # Signing secrets go only to the steps that use them, never job-wide, so
+    # the Linux leg never sees them. A step's `if:` cannot read `secrets`, so
+    # each of those steps tests its secret itself: absent secrets come through
+    # as empty strings, which is what the unsigned path tests for.
     strategy:
       fail-fast: false
       matrix:
@@ -137,7 +134,7 @@ jobs:
           echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
 
       - name: Set up Flutter
-        uses: subosito/flutter-action@v2
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           channel: stable
           flutter-version: 3.47.5
@@ -161,12 +158,17 @@ jobs:
           tool/packaging/linux_packages.sh "$SHELLVIBE_VERSION"
 
       - name: Import the Developer ID certificate
-        if: matrix.target == 'macos' && env.APPLE_CERTIFICATE_P12 != ''
+        if: matrix.target == 'macos'
         shell: bash
         env:
+          APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
         run: |
           set -euo pipefail
+          if [[ -z "$APPLE_CERTIFICATE_P12" ]]; then
+            echo 'No APPLE_CERTIFICATE_P12; building unsigned.'
+            exit 0
+          fi
           # An ephemeral keychain, not the login one: the runner is shared
           # infrastructure and the certificate must not outlive the job.
           keychain="$RUNNER_TEMP/signing.keychain-db"
@@ -187,10 +189,16 @@ jobs:
           security list-keychain -d user -s "$keychain" $(security list-keychain -d user | tr -d '"')
 
       - name: Write the notarization key
-        if: matrix.target == 'macos' && env.APPLE_API_KEY != ''
+        if: matrix.target == 'macos'
         shell: bash
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
         run: |
           set -euo pipefail
+          if [[ -z "$APPLE_API_KEY" ]]; then
+            echo 'No APPLE_API_KEY; skipping notarization.'
+            exit 0
+          fi
           echo "$APPLE_API_KEY" | base64 --decode > "$RUNNER_TEMP/notary.p8"
           chmod 600 "$RUNNER_TEMP/notary.p8"
 
@@ -231,6 +239,7 @@ jobs:
         shell: pwsh
         env:
           SHELLVIBE_VERSION: ${{ needs.metadata.outputs.version }}
+          WINDOWS_CERT_BASE64: ${{ secrets.WINDOWS_CERT_BASE64 }}
           WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
           WINDOWS_TIMESTAMP_URL: ${{ secrets.WINDOWS_TIMESTAMP_URL }}
         run: |
@@ -245,11 +254,13 @@ jobs:
             $env:WINDOWS_CERT_PATH = $pfx
           }
           New-Item -ItemType Directory -Force -Path dist | Out-Null
-          # The portable zip stays: an installer is not always wanted, and a
-          # zip is what a scripted or locked-down install reaches for.
-          Compress-Archive -Path 'build/windows/x64/runner/Release/*' -DestinationPath "dist/ShellVibe-$env:SHELLVIBE_VERSION-windows-x64-portable.zip"
           tool/packaging/windows_package.ps1 -Version $env:SHELLVIBE_VERSION
           if ($env:WINDOWS_CERT_PATH) { Remove-Item -Force $env:WINDOWS_CERT_PATH }
+          # The portable zip stays: an installer is not always wanted, and a
+          # zip is what a scripted or locked-down install reaches for. After
+          # the packager, which signs the executables in place, so the zip
+          # carries the signed ones.
+          Compress-Archive -Path 'build/windows/x64/runner/Release/*' -DestinationPath "dist/ShellVibe-$env:SHELLVIBE_VERSION-windows-x64-portable.zip"
 
       - name: Package for the Microsoft Store
         if: matrix.target == 'windows'
@@ -329,7 +340,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Set up Flutter
-        uses: subosito/flutter-action@v2
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           channel: stable
           flutter-version: 3.47.5

@@ -65,6 +65,10 @@ class SshConfigImportResult {
   final int jumpHostsAdded;
   final List<SshConfigWarning> warnings;
 
+  /// Tunnel rules an overwrite deleted. A forward started from one may still
+  /// be running; the caller stops it, since this service has no tunnel engine.
+  final List<String> removedTunnelRuleIds;
+
   const SshConfigImportResult({
     required this.hostsAdded,
     required this.hostsUpdated,
@@ -73,6 +77,7 @@ class SshConfigImportResult {
     required this.tunnelsAdded,
     required this.jumpHostsAdded,
     required this.warnings,
+    this.removedTunnelRuleIds = const [],
   });
 }
 
@@ -122,10 +127,20 @@ class SshConfigImportService {
     return env['HOME'] ?? env['USERPROFILE'] ?? '/';
   }
 
+  /// Ceiling for any file the import reads: ssh configs and private keys are
+  /// a few KB, and the read runs synchronously on the UI isolate.
+  static const int maxReadBytes = 1024 * 1024;
+
   static String? _fsRead(String path) {
     try {
+      // Regular files only: `/dev/zero` or a FIFO "exists" too, and reading
+      // one would never end or never return.
+      if (FileSystemEntity.typeSync(path) != FileSystemEntityType.file) {
+        return null;
+      }
       final file = File(path);
-      return file.existsSync() ? file.readAsStringSync() : null;
+      if (file.lengthSync() > maxReadBytes) return null;
+      return file.readAsStringSync();
     } catch (_) {
       return null;
     }
@@ -221,6 +236,7 @@ class SshConfigImportService {
       var hostsUpdated = 0;
       var hostsSkipped = 0;
       var identitiesAdded = 0;
+      final removedTunnelRuleIds = <String>[];
 
       for (final draft in drafts) {
         // Conflict policy by label. `skip` bails out before any identity
@@ -261,6 +277,20 @@ class SshConfigImportService {
                     message:
                         'IdentityFile is a public key, not a private key: '
                         '$keyPath (host ${draft.alias})',
+                  ),
+                );
+              }
+              continue;
+            }
+            // Anything else that is not a PEM/OpenSSH private key (a typo'd
+            // `IdentityFile /etc/passwd`) must not land in the vault and sync.
+            if (!keyContent.contains('PRIVATE KEY-----')) {
+              if (reportedIdentityIssuePaths.add(keyPath)) {
+                warnings.add(
+                  SshConfigWarning(
+                    message:
+                        'IdentityFile is not a private key: $keyPath '
+                        '(host ${draft.alias})',
                   ),
                 );
               }
@@ -357,6 +387,7 @@ class SshConfigImportService {
               )..where((t) => t.hostId.equals(target.id))).get();
               for (final rule in oldRules) {
                 await db.tunnelsDao.deleteRule(rule.id);
+                removedTunnelRuleIds.add(rule.id);
               }
             }
             hostIdByAlias[draft.alias] = target.id;
@@ -399,54 +430,141 @@ class SshConfigImportService {
       final existingByLowerHostname = {
         for (final h in existingHosts) h.hostname.toLowerCase(): h.id,
       };
+      // An overwritten Mosh or Local Shell host cannot ride a jump host: Mosh's
+      // UDP does not travel through an SSH channel (the host form drops the
+      // jump for the same reason).
+      final nonSshIds = {
+        for (final h in existingHosts)
+          if (h.protocol != 'ssh') h.id,
+      };
+      // Jump hosts this run created: the only hosts whose own route the run
+      // may set when it builds a multi-hop chain. An existing or imported host
+      // keeps the route it has; a chain that disagrees with it is reported.
+      final createdJumpIds = <String>{};
+      final routedCreatedIds = <String>{};
+      final chainChecks =
+          <
+            ({String alias, String hopId, String hop, String viaId, String via})
+          >[];
       var jumpHostsAdded = 0;
 
-      for (final draft in drafts) {
-        final jump = draft.jumpHost;
-        final hostId = hostIdByAlias[draft.alias];
-        if (jump == null || hostId == null) continue;
+      Future<String?> resolveJump(SshJumpHostDraft jump, String alias) async {
         final key = jump.host.toLowerCase();
-        final targetId =
+        final known =
             jumpTargetIds[key] ??
             hostIdByLowerLabel[key] ??
             existingByLowerLabel[key] ??
-            existingByLowerHostname[key] ??
-            (options.createMissingJumpHosts
-                ? await _insertHost(
-                    options.workspaceId,
-                    label: jump.host,
-                    draft: ResolvedSshConfig(
-                      alias: jump.host,
-                      hostname: jump.host,
-                      username: jump.username,
-                      port: jump.port ?? 22,
-                    ),
-                    identityId: null,
-                    groupId: options.groupId,
-                  )
-                : null);
-        if (targetId == null) {
+            existingByLowerHostname[key];
+        if (known != null) {
+          jumpTargetIds[key] = known;
+          return known;
+        }
+        if (!options.createMissingJumpHosts) {
           warnings.add(
             SshConfigWarning(
               message:
                   'ProxyJump target "${jump.host}" does not match any '
                   'imported or existing host; jump link skipped '
-                  '(host ${draft.alias}).',
+                  '(host $alias).',
+            ),
+          );
+          return null;
+        }
+        final id = await _insertHost(
+          options.workspaceId,
+          label: jump.host,
+          draft: ResolvedSshConfig(
+            alias: jump.host,
+            hostname: jump.host,
+            username: jump.username,
+            port: jump.port ?? 22,
+          ),
+          identityId: null,
+          groupId: options.groupId,
+        );
+        jumpTargetIds[key] = id;
+        createdJumpIds.add(id);
+        jumpHostsAdded++;
+        warnings.add(
+          SshConfigWarning(
+            message:
+                'Created jump host "${jump.host}" with no credentials; give it '
+                'an identity before connecting through it (host $alias).',
+          ),
+        );
+        return id;
+      }
+
+      for (final draft in drafts) {
+        final jump = draft.jumpHost;
+        final hostId = hostIdByAlias[draft.alias];
+        if (jump == null || hostId == null) continue;
+        if (nonSshIds.contains(hostId)) {
+          warnings.add(
+            SshConfigWarning(
+              message:
+                  'Host ${draft.alias} is not an SSH host; its ProxyJump was '
+                  'not applied.',
             ),
           );
           continue;
         }
-        if (!jumpTargetIds.containsKey(key)) {
-          jumpTargetIds[key] = targetId;
-          if (hostIdByLowerLabel[key] == null &&
-              existingByLowerLabel[key] == null &&
-              existingByLowerHostname[key] == null) {
-            jumpHostsAdded++;
-          }
+        final targetId = await resolveJump(jump, draft.alias);
+        if (targetId == null) continue;
+        if (targetId == hostId) {
+          warnings.add(
+            SshConfigWarning(
+              message:
+                  'ProxyJump of host ${draft.alias} points at the host itself; '
+                  'jump link skipped.',
+            ),
+          );
+          continue;
         }
         await db.hostsDao.updateHostById(
           hostId,
           HostsCompanion(jumpHostId: Value(targetId)),
+        );
+
+        // `ProxyJump a,b`: the host goes through b, and b through a.
+        var hop = jump;
+        var hopId = targetId;
+        while (hop.via != null) {
+          final via = hop.via!;
+          final viaId = await resolveJump(via, draft.alias);
+          if (viaId == null) break;
+          if (createdJumpIds.contains(hopId) &&
+              viaId != hopId &&
+              routedCreatedIds.add(hopId)) {
+            await db.hostsDao.updateHostById(
+              hopId,
+              HostsCompanion(jumpHostId: Value(viaId)),
+            );
+          } else {
+            chainChecks.add((
+              alias: draft.alias,
+              hopId: hopId,
+              hop: hop.host,
+              viaId: viaId,
+              via: via.host,
+            ));
+          }
+          hop = via;
+          hopId = viaId;
+        }
+      }
+      // Checked after every direct link is written, so an imported hop whose
+      // own ProxyJump sets the matching route counts no matter the order.
+      for (final check in chainChecks) {
+        final hop = await db.hostsDao.getHostById(check.hopId);
+        if (hop?.jumpHostId == check.viaId) continue;
+        warnings.add(
+          SshConfigWarning(
+            message:
+                'ProxyJump chain of host ${check.alias}: "${check.hop}" does '
+                'not connect through "${check.via}" in ShellVibe, so that hop '
+                'is dialed directly. Set its jump host to match the config.',
+          ),
         );
       }
 
@@ -481,6 +599,7 @@ class SshConfigImportService {
         tunnelsAdded: tunnelsAdded,
         jumpHostsAdded: jumpHostsAdded,
         warnings: warnings,
+        removedTunnelRuleIds: removedTunnelRuleIds,
       );
     });
   }

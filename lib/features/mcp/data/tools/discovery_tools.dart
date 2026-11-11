@@ -6,6 +6,8 @@ import '../../../hosts/data/repositories/hosts_repository.dart';
 import '../../domain/models/mcp_enums.dart';
 import '../../domain/models/mcp_models.dart';
 import '../../domain/services/approval_coordinator.dart';
+import '../../domain/services/output_redactor.dart';
+import '../repositories/mcp_audit_repository.dart';
 import '../repositories/mcp_grant_repository.dart';
 import 'mcp_tool_handler.dart';
 
@@ -226,12 +228,14 @@ class RequestHostAccessTool with McpArgReaders implements McpToolHandler {
   final HostsDao hostsDao;
   final McpGrantRepository grantRepository;
   final ApprovalCoordinator approvalCoordinator;
+  final McpAuditRepository auditRepository;
 
   const RequestHostAccessTool({
     required this.hostsRepository,
     required this.hostsDao,
     required this.grantRepository,
     required this.approvalCoordinator,
+    required this.auditRepository,
   });
 
   @override
@@ -293,6 +297,7 @@ class RequestHostAccessTool with McpArgReaders implements McpToolHandler {
     final granted = <HostAccessGrant>[];
     final denied = <HostAccessDenial>[];
     final candidates = <HostAccessCandidate>[];
+    final labels = <String, String>{};
 
     final live = {
       for (final g in await grantRepository.activeGrantsForClient(
@@ -316,6 +321,7 @@ class RequestHostAccessTool with McpArgReaders implements McpToolHandler {
         denied.add(HostAccessDenial(hostId: hostId, reason: 'not_visible'));
         continue;
       }
+      labels[hostId] = host.label;
 
       final held = live[hostId];
       if (held != null) {
@@ -392,8 +398,53 @@ class RequestHostAccessTool with McpArgReaders implements McpToolHandler {
       }
     }
 
+    // One row per host, so the log shows what was asked for and how each
+    // host was answered. Only candidates went through the window; the rest
+    // were answered without a human (an existing grant, cooldown, hidden).
+    final prompted = {for (final c in candidates) c.hostId};
+    final redactedReason = const OutputRedactor().redact(reason).text;
+    for (final grant in granted) {
+      await _audit(
+        ctx,
+        grant.hostId,
+        labels[grant.hostId],
+        prompted.contains(grant.hostId)
+            ? AuditDecision.confirmed
+            : AuditDecision.allowed,
+        {'reason': redactedReason, 'mode': grant.mode.name},
+      );
+    }
+    for (final denial in denied) {
+      await _audit(
+        ctx,
+        denial.hostId,
+        labels[denial.hostId],
+        prompted.contains(denial.hostId)
+            ? AuditDecision.denied
+            : AuditDecision.autoDenied,
+        {'reason': redactedReason, 'denial': denial.reason},
+      );
+    }
+
     return HostAccessResult(granted: granted, denied: denied).toJson();
   }
+
+  Future<void> _audit(
+    McpToolContext ctx,
+    String hostId,
+    String? hostLabel,
+    AuditDecision decision,
+    Map<String, Object?> args,
+  ) => auditRepository.record(
+    clientId: ctx.clientId,
+    clientName: ctx.clientName,
+    workspaceId: ctx.workspaceId,
+    hostId: hostId,
+    hostLabel: hostLabel,
+    tool: name,
+    args: args,
+    decision: decision,
+  );
 
   /// An unknown name is reported rather than read as `readonly` (what
   /// [McpAccessMode.fromName] falls back to), which would hide the agent's
