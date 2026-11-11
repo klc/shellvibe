@@ -603,6 +603,24 @@ final class SyncJournal {
     );
   }
 
+  /// Sends the next pull back to the start of the log.
+  ///
+  /// For a build that syncs a table the build before it did not: that one
+  /// stepped over the table's operations and moved its cursors past them.
+  /// Replaying is safe -- everything else loses to the version rows it already
+  /// wrote -- and a log pruned past the start answers with an expired cursor,
+  /// which joins again from the ground.
+  Future<void> rewindPull() async {
+    await readState();
+
+    await (db.update(db.syncState)..where((t) => t.id.equals(1))).write(
+      const SyncStateCompanion(
+        pulledThroughClock: Value(0),
+        pulledThroughSeq: Value(null),
+      ),
+    );
+  }
+
   Future<int> _nextClock() async {
     final state = await readState();
     final next = state.lastSeenClock + 1;

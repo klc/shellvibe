@@ -1,0 +1,8 @@
+{
+    "status": 202,
+    "body": {
+        "data": {
+            "email_verified": false
+        }
+    }
+}

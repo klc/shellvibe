@@ -343,7 +343,8 @@ final class SyncEngine {
 
       // A table a newer build syncs and this one does not know. Readable, so
       // not counted with the operations a wrong key produces -- that count
-      // tells the user their key does not match the account.
+      // tells the user their key does not match the account. The build that
+      // knows the table pulls the log again from the start (SyncNotifier).
       if (!SyncRowCodec.syncableTypes.contains(incoming.entityType)) {
         skipped++;
         continue;
