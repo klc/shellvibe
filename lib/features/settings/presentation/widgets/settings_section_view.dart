@@ -434,6 +434,21 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
                   ),
                 ),
                 const Divider(),
+
+                Material(
+                  color: Colors.transparent,
+                  child: SwitchListTile(
+                    key: const Key('settings_confirm_paste_switch'),
+                    title: const Text('Confirm Multi-Line Paste'),
+                    subtitle: const Text(
+                      'Ask before pasting text that would run commands '
+                      'on its own',
+                    ),
+                    value: settings.confirmMultiLinePaste,
+                    onChanged: (val) => notifier.setConfirmMultiLinePaste(val),
+                  ),
+                ),
+                const Divider(),
                 ListTile(
                   title: const Text('Font Size'),
                   subtitle: Slider(

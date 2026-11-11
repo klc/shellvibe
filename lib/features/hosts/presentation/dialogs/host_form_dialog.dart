@@ -1,15 +1,19 @@
+import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:shellvibe/app/theme/shellvibe_tokens.dart';
 import 'package:shellvibe/app/widgets/shellvibe_ui.dart';
+import 'package:shellvibe/core/network/ssh_session_manager.dart';
 import 'package:shellvibe/core/utils/platform_capabilities.dart';
 import 'package:shellvibe/features/vault/presentation/notifiers/identities_notifier.dart';
 
+import '../../../../shared/providers/database_providers.dart';
 import '../../../mcp/domain/models/mcp_enums.dart';
 import '../../../workspaces/presentation/providers/workspace_provider.dart';
 import '../../../snippets/presentation/notifiers/snippets_notifier.dart';
 import '../../domain/models/host_model.dart';
+import '../../domain/services/host_launcher.dart';
 import '../../domain/services/ssh_connect_planner.dart';
 import '../notifiers/host_groups_notifier.dart';
 import '../notifiers/hosts_notifier.dart';
@@ -55,6 +59,10 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
   late bool _mcpVisible;
   late McpAccessMode _mcpMaxMode;
   bool _isLoading = false;
+  bool _testing = false;
+
+  /// What the last Try connection said, or null before one has run.
+  ({bool ok, String message})? _testResult;
 
   @override
   void initState() {
@@ -226,6 +234,84 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
     }
   }
 
+  /// Dials the host as the form stands, unsaved, with the same jump chain,
+  /// credential prompt and host key check a real connect goes through, then
+  /// hangs up. Only the SSH login is tried: a Mosh host's UDP side is not.
+  Future<void> _tryConnection() async {
+    _parseHostnameInput();
+    if (!_formKey.currentState!.validate()) return;
+    final host = HostModel(
+      id: widget.isEditing ? widget.initialHost!.id : 'try-connection',
+      workspaceId: widget.workspaceId ?? ref.read(activeWorkspaceIdProvider),
+      identityId: _selectedIdentityId,
+      label: _labelController.text.trim(),
+      hostname: _hostnameController.text.trim(),
+      username: _usernameController.text.trim().isEmpty
+          ? null
+          : _usernameController.text.trim(),
+      port: int.tryParse(_portController.text.trim()) ?? 22,
+      protocol: _protocol,
+      jumpHostId: _selectedJumpHostId,
+      createdAt: DateTime.now(),
+    );
+    final launcher = HostLauncher(context: context, ref: ref);
+    final resolved = await launcher.resolveIdentity(host);
+    if (!resolved.ok || !mounted) return;
+
+    setState(() {
+      _testing = true;
+      _testResult = null;
+    });
+    final managers = <SSHSessionManager>[];
+    SSHSessionManager newManager() {
+      final manager = SSHSessionManager(
+        knownHostsDao: ref.read(knownHostsDaoProvider),
+      );
+      managers.add(manager);
+      return manager;
+    }
+
+    try {
+      final planner = SshConnectPlanner(ref.read(hostsRepositoryProvider));
+      final vault = ref.read(vaultRepositoryProvider);
+      SSHClient? via;
+      final chain = host.jumpHostId == null
+          ? const <HostModel>[]
+          : await planner.resolveJumpChain(host);
+      for (final jump in chain) {
+        final jumpIdentity = jump.identityId == null
+            ? null
+            : await vault.getIdentityById(jump.identityId!);
+        via = await newManager().connect(
+          planner.buildConnectConfig(
+            jump,
+            jumpIdentity,
+            onHostKeyPrompt: launcher.promptHostKey,
+          ),
+          viaClient: via,
+        );
+      }
+      final config = planner.buildConnectConfig(
+        host,
+        resolved.identity,
+        onHostKeyPrompt: launcher.promptHostKey,
+      );
+      await newManager().connect(config, viaClient: via);
+      _testResult = (
+        ok: true,
+        message:
+            'Connected as ${config.username}@${config.hostname}:${config.port}',
+      );
+    } catch (e) {
+      _testResult = (ok: false, message: '$e');
+    } finally {
+      for (final manager in managers.reversed) {
+        await manager.close();
+      }
+      if (mounted) setState(() => _testing = false);
+    }
+  }
+
   /// The address this form resolves to, including the bastion it rides
   /// through. Rendered under the routing section so the route is stated rather
   /// than inferred from three separate fields.
@@ -302,6 +388,13 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
           label: 'Cancel',
           onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
         ),
+        if (_protocol != 'local')
+          ShellVibeButton.secondary(
+            buttonKey: const Key('host_try_connection_button'),
+            label: 'Try connection',
+            busy: _testing,
+            onPressed: _isLoading ? null : _tryConnection,
+          ),
         if (_isLoading)
           const SizedBox(
             width: 38,
@@ -818,6 +911,34 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                     'before changes asks you first. Full access runs changes '
                     'without asking; reading secrets and unreadable scripts '
                     'still ask.',
+                  ),
+                ],
+                if (_testResult case final result?) ...[
+                  const SizedBox(height: 16),
+                  Row(
+                    key: const Key('host_try_connection_result'),
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        result.ok
+                            ? LucideIcons.circleCheck
+                            : LucideIcons.circleAlert,
+                        size: 15,
+                        color: result.ok ? tokens.success : tokens.danger,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: SelectableText(
+                          result.message,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: result.ok
+                                    ? tokens.success
+                                    : tokens.danger,
+                              ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ],

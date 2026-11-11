@@ -37,6 +37,19 @@ void main() {
       expect(off.copyWith(fontSize: 16).desktopNotifications, isFalse);
     });
 
+    test('confirmMultiLinePaste round-trips and defaults on when absent', () {
+      expect(const AppSettingsModel().confirmMultiLinePaste, isTrue);
+      final off = const AppSettingsModel().copyWith(
+        confirmMultiLinePaste: false,
+      );
+      expect(
+        AppSettingsModel.fromJson(off.toJson()).confirmMultiLinePaste,
+        isFalse,
+      );
+      final legacy = off.toJson()..remove('confirmMultiLinePaste');
+      expect(AppSettingsModel.fromJson(legacy).confirmMultiLinePaste, isTrue);
+    });
+
     test('toJson and fromJson serialization cycle', () {
       const settings = AppSettingsModel(
         themeMode: ThemeMode.light,

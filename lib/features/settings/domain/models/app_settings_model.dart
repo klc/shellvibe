@@ -88,6 +88,10 @@ class AppSettingsModel {
   /// host reaches the notification centre.
   final bool desktopNotifications;
 
+  /// Asks "Paste and run?" before pasting text that would run on its own
+  /// (see `Terminal.isPasteSafe`). Off, such text is pasted straight away.
+  final bool confirmMultiLinePaste;
+
   const AppSettingsModel({
     this.themeMode = ThemeMode.system,
     this.palette = AppPalette.oled,
@@ -105,6 +109,7 @@ class AppSettingsModel {
     this.activeWorkspaceId = 'default',
     this.keepRunningInTray = true,
     this.desktopNotifications = true,
+    this.confirmMultiLinePaste = true,
   });
 
   /// The brightness the app is drawn in, for callers with no theme to read it
@@ -172,6 +177,7 @@ class AppSettingsModel {
     String? activeWorkspaceId,
     bool? keepRunningInTray,
     bool? desktopNotifications,
+    bool? confirmMultiLinePaste,
   }) {
     return AppSettingsModel(
       themeMode: themeMode ?? this.themeMode,
@@ -192,6 +198,8 @@ class AppSettingsModel {
       activeWorkspaceId: activeWorkspaceId ?? this.activeWorkspaceId,
       keepRunningInTray: keepRunningInTray ?? this.keepRunningInTray,
       desktopNotifications: desktopNotifications ?? this.desktopNotifications,
+      confirmMultiLinePaste:
+          confirmMultiLinePaste ?? this.confirmMultiLinePaste,
     );
   }
 
@@ -212,6 +220,7 @@ class AppSettingsModel {
     'activeWorkspaceId': activeWorkspaceId,
     'keepRunningInTray': keepRunningInTray,
     'desktopNotifications': desktopNotifications,
+    'confirmMultiLinePaste': confirmMultiLinePaste,
   };
 
   factory AppSettingsModel.fromJson(Map<String, dynamic> json) {
@@ -251,6 +260,7 @@ class AppSettingsModel {
       activeWorkspaceId: (json['activeWorkspaceId'] as String?) ?? 'default',
       keepRunningInTray: (json['keepRunningInTray'] as bool?) ?? true,
       desktopNotifications: (json['desktopNotifications'] as bool?) ?? true,
+      confirmMultiLinePaste: (json['confirmMultiLinePaste'] as bool?) ?? true,
     );
   }
 }

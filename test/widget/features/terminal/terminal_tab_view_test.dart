@@ -1,6 +1,7 @@
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -11,6 +12,7 @@ import 'package:shellvibe/core/utils/platform_capabilities.dart';
 import 'package:shellvibe/features/bookmarks/presentation/notifiers/bookmarks_notifier.dart';
 import 'package:shellvibe/features/hosts/domain/models/host_model.dart';
 import 'package:shellvibe/features/hosts/presentation/notifiers/hosts_notifier.dart';
+import 'package:shellvibe/features/settings/presentation/notifiers/settings_notifier.dart';
 import 'package:shellvibe/features/templates/data/repositories/templates_repository.dart';
 import 'package:shellvibe/features/templates/domain/models/template_model.dart';
 import 'package:shellvibe/features/templates/domain/models/template_pane_model.dart';
@@ -604,6 +606,162 @@ void main() {
       await tester.tap(find.byKey(const Key('unsafe_paste_cancel_button')));
       await tester.pumpAndSettle();
       expect(written, isEmpty);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
+      await tester.pumpAndSettle();
+    });
+
+    Future<(ProviderContainer, List<String>)> pumpPasteTab(
+      WidgetTester tester,
+      String clipboard,
+    ) async {
+      tester.view.physicalSize = const Size(2400, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      FlutterSecureStorage.setMockInitialValues({});
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.getData') return {'text': clipboard};
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+
+      final container = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          localPtyManagerProvider.overrideWithValue(_NoShellPtyManager()),
+        ],
+      );
+      container.read(terminalTabsProvider.notifier).openLocalTab(title: 'A');
+      final written = <String>[];
+      container.read(terminalTabsProvider).tabs.single.terminal.onOutput =
+          written.add;
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: ShadTheme(
+            data: ShadThemeData(
+              colorScheme: const ShadSlateColorScheme.dark(),
+              brightness: Brightness.dark,
+            ),
+            child: const MaterialApp(home: TerminalTabView()),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      return (container, written);
+    }
+
+    Future<void> pressPasteChord(WidgetTester tester) async {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('Enter confirms the multi-line paste dialog', (tester) async {
+      final (container, written) = await pumpPasteTab(
+        tester,
+        'echo one\necho two\n',
+      );
+
+      await pressPasteChord(tester);
+      expect(find.text('Paste and run?'), findsOneWidget);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(find.text('Paste and run?'), findsNothing);
+      expect(written.join(), contains('echo two'));
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('with the confirm setting off, multi-line text pastes '
+        'without asking', (tester) async {
+      final (container, written) = await pumpPasteTab(
+        tester,
+        'echo one\necho two\n',
+      );
+      await container.read(settingsProvider.future);
+      await container
+          .read(settingsProvider.notifier)
+          .setConfirmMultiLinePaste(false);
+
+      await pressPasteChord(tester);
+      expect(find.text('Paste and run?'), findsNothing);
+      expect(written.join(), contains('echo two'));
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a quick drag-select focuses the pane it selects in', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(2400, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final container = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          localPtyManagerProvider.overrideWithValue(_NoShellPtyManager()),
+        ],
+      );
+      final notifier = container.read(terminalTabsProvider.notifier);
+      notifier.openLocalTab(title: 'A');
+      final first = container.read(terminalTabsProvider).activeTabId!;
+      notifier.splitTab(first, direction: Axis.horizontal);
+      final second = container.read(terminalTabsProvider).tabs.last.id;
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: ShadTheme(
+            data: ShadThemeData(
+              colorScheme: const ShadSlateColorScheme.dark(),
+              brightness: Brightness.dark,
+            ),
+            child: const MaterialApp(home: TerminalTabView()),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      await tester.tap(find.byKey(ValueKey(first)));
+      await tester.pumpAndSettle();
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'terminal_$first');
+
+      // Moving before the press timeout makes it a drag, so the tap that used
+      // to hand the pane focus never fires and Cmd+C copied from the other
+      // pane's empty selection.
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byKey(ValueKey(second))),
+        kind: PointerDeviceKind.mouse,
+      );
+      await gesture.moveBy(const Offset(40, 0));
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'terminal_$second',
+      );
 
       await tester.pumpWidget(const SizedBox.shrink());
       container.dispose();
