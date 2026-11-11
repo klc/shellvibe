@@ -150,6 +150,112 @@ void main() {
   );
 
   testWidgets(
+    'a first pairing whose picker is dismissed is kept, without a session',
+    (tester) async {
+      // The bug this pins: with no earlier profile to hand the new secret to,
+      // the phone dropped it, and the desktop was left listing a paired
+      // device that could never connect.
+      // The flow talks to a real loopback desktop, not the test binding's
+      // canned HTTP client.
+      HttpOverrides.global = null;
+      // Desktop layout skips the camera view; the flow is driven directly.
+      debugPlatformCapabilitiesOverride = TargetPlatform.macOS;
+      final storage = _MemorySecureStorage();
+      final pairingStorage = DeviceLinkPairingStorage(storage);
+      late AppDatabase db;
+      late DeviceLinkPairingRepository repository;
+      late DeviceLinkServer server;
+      late DeviceLinkQrPayload payload;
+      await tester.runAsync(() async {
+        db = AppDatabase(NativeDatabase.memory());
+        repository = DeviceLinkPairingRepository(
+          dao: db.pairedDevicesDao,
+          encryption: EncryptionEngine(
+            kdf: Argon2id(
+              parallelism: 1,
+              memory: 1024,
+              iterations: 1,
+              hashLength: 32,
+            ),
+          ),
+          isVaultLocked: () => false,
+          runWhileVaultUnlocked: <T>(operation) => operation(),
+        );
+        server = DeviceLinkServer(
+          identity: DeviceLinkIdentity.generate(),
+          hostName: 'test-host',
+          appVersion: 'test',
+          // No live session: dismissing the picker is the only way out.
+          sessionsProvider: () async => const [],
+          pairedDeviceAuthenticator: repository.authenticate,
+          pairedDevicePersister: (record) => repository.savePairedDevice(
+            id: record.id,
+            name: record.name,
+            platform: record.platform,
+            secret: record.secret,
+            publicKey: record.publicKey,
+            pairedAt: record.pairedAt,
+          ),
+        );
+        await server.start();
+        payload = await server.createPairingPayload(
+          addresses: const ['127.0.0.1'],
+          mdnsName: '127.0.0.1',
+        );
+      });
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            secureStorageServiceProvider.overrideWithValue(storage),
+            deviceLinkProvider.overrideWith(_IdleDeviceLinkNotifier.new),
+          ],
+          child: const MaterialApp(home: DeviceLinkPairingFlowScreen()),
+        ),
+      );
+      final scanner = tester.widget<DeviceLinkScanPairScreen>(
+        find.byType(DeviceLinkScanPairScreen),
+      );
+      late Future<void> pairing;
+      await tester.runAsync(() async {
+        pairing = Future.sync(() => scanner.onPayload(payload));
+      });
+      final picker = find.byType(DeviceLinkSessionPickerSheet);
+      for (var i = 0; i < 250 && picker.evaluate().isEmpty; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+        await tester.pump();
+      }
+      expect(find.text('No live terminal sessions found.'), findsOneWidget);
+
+      Navigator.of(tester.element(picker)).pop();
+
+      DeviceLinkPairingProfile? saved;
+      var authorised = false;
+      await tester.runAsync(() async {
+        await pairing;
+        saved = await pairingStorage.getById(payload.spki);
+        if (saved != null) {
+          authorised = await repository.authenticate(
+            saved!.deviceId,
+            saved!.secret,
+          );
+        }
+        await server.close();
+        await db.close();
+      });
+
+      expect(saved, isNotNull);
+      expect(saved!.sessionId, isNull);
+      expect(saved!.name, 'test-host');
+      // No session was chosen, so nothing should attach behind the user's back.
+      expect(saved!.autoReconnect, isFalse);
+      expect(authorised, isTrue);
+    },
+  );
+
+  testWidgets(
     'a rescan abandoned after an earlier hand-off still closes its connection',
     (tester) async {
       HttpOverrides.global = null;

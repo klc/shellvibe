@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/core/crypto/encryption_engine.dart';
 
@@ -154,6 +155,71 @@ void main() {
         ),
         throwsA(isA<CryptoException>()),
       );
+    });
+  });
+
+  group('pairing secret records', () {
+    final engine = EncryptionEngine();
+    const secret = 'b64url-256-bit-random-secret';
+
+    test('a new record is a plain SHA-256 that verifies', () async {
+      // The bug this pins: every check ran a 64 MiB Argon2id derivation for a
+      // secret too random to brute-force, an allocation any peer naming a
+      // paired device id could trigger.
+      final record = await engine.hashSecret(secret);
+
+      expect(record, startsWith('${EncryptionEngine.sha256HashPrefix}:'));
+      expect(
+        await engine.verifySecret(secret: secret, encodedHash: record),
+        isTrue,
+      );
+      expect(
+        await engine.verifySecret(secret: '${secret}x', encodedHash: record),
+        isFalse,
+      );
+    });
+
+    test(
+      'a record stored as Argon2id before the switch still verifies',
+      () async {
+        final legacyEngine = EncryptionEngine(
+          kdf: Argon2id(
+            parallelism: 1,
+            memory: 1024,
+            iterations: 1,
+            hashLength: 32,
+          ),
+        );
+        final salt = legacyEngine.generateSalt();
+        final key = await legacyEngine.deriveMasterKey(
+          masterPassword: secret,
+          salt: salt,
+        );
+        final record = [
+          EncryptionEngine.argon2idHashPrefix,
+          base64UrlNoPad(salt),
+          base64UrlNoPad(await key.extractBytes()),
+        ].join(':');
+
+        expect(
+          await legacyEngine.verifySecret(secret: secret, encodedHash: record),
+          isTrue,
+        );
+        expect(
+          await legacyEngine.verifySecret(secret: 'wrong', encodedHash: record),
+          isFalse,
+        );
+      },
+    );
+
+    test('a malformed record never verifies', () async {
+      for (final record in ['', 'sha256-v1', 'sha256-v1:!!!', 'md5:abc']) {
+        expect(
+          await engine.verifySecret(secret: secret, encodedHash: record),
+          isFalse,
+          reason: record,
+        );
+      }
     });
   });
 }

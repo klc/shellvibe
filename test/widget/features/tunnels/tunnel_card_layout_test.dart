@@ -86,4 +86,25 @@ void main() {
     expect(find.text('prod-db-01'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('a remote forward card shows the route the right way round', (
+    tester,
+  ) async {
+    // The bug this pins: a -R rule was drawn as a local one, with the local
+    // target's port on the remote end and the remote port nowhere.
+    await db.tunnelsDao.insertRule(
+      PortForwardRulesCompanion.insert(
+        id: 'r2',
+        hostId: 'h1',
+        type: 'remote',
+        localPort: 3000,
+        remoteHost: const Value('192.168.1.5'),
+        remotePort: const Value(8080),
+      ),
+    );
+    await pumpAt(tester, const Size(1280, 900));
+    expect(find.text('remote:8080'), findsOneWidget);
+    expect(find.text('192.168.1.5:3000'), findsOneWidget);
+    expect(find.text('192.168.1.5:8080'), findsNothing);
+  });
 }

@@ -45,7 +45,7 @@ class CoalescingTerminalWriter {
     this.maxWriteChars = 256 * 1024,
     this.onHandOff,
     Future<void> Function()? waitForFrame,
-  }) : _waitForFrame = waitForFrame ?? _endOfFrame {
+  }) : _waitForFrame = waitForFrame ?? nextFrameOrTimeout {
     if (maxWriteChars <= 0) {
       throw ArgumentError.value(
         maxWriteChars,
@@ -148,6 +148,21 @@ class CoalescingTerminalWriter {
   }
 }
 
+/// Longest a writer waits for a frame before handing over without one.
+const _frameTimeout = Duration(milliseconds: 50);
+
+/// Resolves at the end of the next frame, or after [_frameTimeout] if no frame
+/// comes first. Both write stages wait on this.
+///
 /// Waiting on the end of a frame also schedules one when none is pending, so
 /// a burst that arrives while the app is idle still reaches the terminal.
-Future<void> _endOfFrame() => SchedulerBinding.instance.endOfFrame;
+///
+/// The timeout is what keeps output moving while the window is hidden,
+/// minimised or behind a locked screen: the engine produces no frames then,
+/// and a writer waiting on the frame alone would hold every batch — and with
+/// it the local PTY's read acknowledgement, which stalls the process writing
+/// into it — until the window came back.
+Future<void> nextFrameOrTimeout() => Future.any([
+  SchedulerBinding.instance.endOfFrame,
+  Future<void>.delayed(_frameTimeout),
+]);

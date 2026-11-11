@@ -47,7 +47,9 @@ class TerminalMoshBridge {
   /// jump ahead of output still queued here.
   late final CoalescingTerminalWriter _writer =
       writerOverride ??
-      CoalescingTerminalWriter(PacedTerminalWriter(terminal));
+      CoalescingTerminalWriter(
+        PacedTerminalWriter(terminal, waitForFrame: nextFrameOrTimeout),
+      );
 
   /// Replaces the write stack so a test can drive it without a frame pipeline.
   ///

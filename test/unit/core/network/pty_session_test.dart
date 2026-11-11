@@ -113,4 +113,46 @@ void main() {
     timeout: const Timeout(Duration(seconds: 20)),
     skip: Platform.isWindows,
   );
+
+  test(
+    'a disposed session gives its native file descriptors back',
+    () async {
+      // The bug this pins: dispose killed the process and exited the reader
+      // isolate without destroying the PTY handle, and the plugin closes the
+      // master fd and its wake pipe only in destroy. Every closed tab leaked
+      // three descriptors until the app hit its open-file limit.
+      Future<int> openFds() async {
+        if (Platform.isLinux) {
+          return Directory('/proc/self/fd').listSync().length;
+        }
+        // macOS's /dev/fd cannot be listed from Dart.
+        final lsof = await Process.run('lsof', ['-p', '$pid']);
+        return (lsof.stdout as String).trim().split('\n').length;
+      }
+
+      final before = await openFds();
+      const sessions = 5;
+      for (var i = 0; i < sessions; i++) {
+        final session = await PtyIsolateSession.start(
+          PtySessionConfig(
+            executable: '/bin/sh',
+            arguments: const ['-c', 'sleep 30'],
+            workingDirectory: null,
+            environment: Platform.environment,
+            rows: 24,
+            columns: 80,
+          ),
+        );
+        // Listened to as the bridge does; dispose waits for the output to
+        // be done.
+        final output = session.output.listen((_) => session.acknowledge());
+        await session.dispose();
+        await output.cancel();
+      }
+
+      expect(await openFds() - before, lessThan(sessions));
+    },
+    timeout: const Timeout(Duration(seconds: 20)),
+    skip: Platform.isWindows,
+  );
 }

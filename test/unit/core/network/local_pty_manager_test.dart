@@ -8,6 +8,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/core/network/coalescing_terminal_writer.dart';
 import 'package:shellvibe/core/network/local_pty_manager.dart';
@@ -278,5 +279,62 @@ void main() {
 
       await bridge.dispose();
     });
+    for (final hiddenState in [
+      AppLifecycleState.hidden,
+      AppLifecycleState.paused,
+    ]) {
+      test('output keeps flowing and is acknowledged while '
+          '${hiddenState.name} draws no frames', () async {
+        // The bug this pins: both write stages waited on the end of the next
+        // frame, and a hidden, minimised or screen-locked window draws none.
+        // Nothing reached the terminal and the read acknowledgement never
+        // went out, so the reader stopped after a few batches and the shell
+        // blocked in write() until the window came back. The bridge's own
+        // write stack is used here, not an injected one.
+        final binding = TestWidgetsFlutterBinding.ensureInitialized();
+        binding
+          ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
+          ..handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+        if (hiddenState == AppLifecycleState.paused) {
+          binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+        }
+        addTearDown(() {
+          if (hiddenState == AppLifecycleState.paused) {
+            binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+          }
+          binding
+            ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
+            ..handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+        });
+        expect(binding.framesEnabled, isFalse);
+
+        final terminal = Terminal();
+        final session = FakePtySession(exitCode: 0);
+        final bridge = TerminalLocalPtyBridge(
+          terminal: terminal,
+          session: session,
+        );
+
+        // Small enough to wait for a frame in the coalescer.
+        session.emitOutput(utf8.encode('hello'));
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        expect(session.ackCount, equals(1));
+        expect(renderBuffer(terminal), contains('hello'));
+
+        // Large enough to be handed over at once and paced, so the paced
+        // writer has to wait between chunks as well.
+        session
+          ..emitOutput(List<int>.filled(300 * 1024, 0x61))
+          ..emitOutput([
+            ...List<int>.filled(300 * 1024, 0x62),
+            ...'END'.codeUnits,
+          ]);
+        await Future<void>.delayed(const Duration(seconds: 1));
+        expect(session.ackCount, equals(3));
+        expect(renderBuffer(terminal), contains('END'));
+
+        await bridge.dispose();
+      });
+    }
   });
 }

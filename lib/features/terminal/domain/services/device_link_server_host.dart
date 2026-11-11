@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 import 'package:nsd/nsd.dart' as nsd;
@@ -255,7 +256,9 @@ class DeviceLinkServerHost {
       }
     }
 
-    final identity = DeviceLinkIdentity.generate();
+    // RSA-2048 generation runs in pure Dart for up to seconds; on the UI
+    // isolate that is a frozen window the first time Device Link starts.
+    final identity = await Isolate.run(DeviceLinkIdentity.generate);
     await storage.saveToken(
       SecureStorageKeys.deviceLinkServerIdentity,
       jsonEncode({
