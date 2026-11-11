@@ -72,6 +72,8 @@ if (-not $signtool) {
 # The application first: an installer that carries an unsigned binary is signed
 # packaging around unsigned software, and SmartScreen judges what gets executed.
 Invoke-Sign (Join-Path $build 'shellvibe.exe')
+# The MCP bridge too: AI clients launch it directly, not through the app.
+Invoke-Sign (Join-Path $build 'shellvibe-mcp.exe')
 
 Write-Host '==> Building installer'
 & $iscc `
