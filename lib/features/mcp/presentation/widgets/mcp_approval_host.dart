@@ -9,6 +9,7 @@ import 'package:window_manager/window_manager.dart';
 import '../../../../app/router/app_router.dart';
 import '../../data/mcp_providers.dart';
 import '../../data/repositories/mcp_repository_providers.dart';
+import '../../domain/models/mcp_enums.dart';
 import '../../domain/models/mcp_models.dart';
 import '../../domain/services/approval_coordinator.dart';
 import '../../domain/services/mcp_service_providers.dart';
@@ -272,7 +273,8 @@ class _McpApprovalHostState extends ConsumerState<McpApprovalHost> {
         final result = outcome?.result ?? _allDenied(nextHostAccess.request);
         coordinator.resolveHostAccess(nextHostAccess.id, result);
         final suspend = outcome?.suspendClient ?? false;
-        final clientId = nextHostAccess.request.clientId;
+        final request = nextHostAccess.request;
+        final clientId = request.clientId;
         // Its other prompts go too, before the latch below frees the slot to
         // show the next one of them.
         if (suspend) coordinator.cancelForClient(clientId);
@@ -287,6 +289,16 @@ class _McpApprovalHostState extends ConsumerState<McpApprovalHost> {
           await ref
               .read(mcpGrantRepositoryProvider)
               .revokeAllForClient(clientId);
+          await ref
+              .read(mcpAuditRepositoryProvider)
+              .record(
+                clientId: clientId,
+                clientName: request.clientName,
+                workspaceId: request.workspaceId,
+                tool: 'suspend_client',
+                args: const {},
+                decision: AuditDecision.denied,
+              );
         }
       }
     } finally {

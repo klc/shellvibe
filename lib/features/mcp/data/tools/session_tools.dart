@@ -201,8 +201,12 @@ class ListSessionsTool implements McpToolHandler {
 /// the per-client session cap.
 class CloseSessionTool with McpArgReaders implements McpToolHandler {
   final McpSessionPool sessionPool;
+  final McpAuditRepository auditRepository;
 
-  const CloseSessionTool({required this.sessionPool});
+  const CloseSessionTool({
+    required this.sessionPool,
+    required this.auditRepository,
+  });
 
   @override
   String get name => 'close_session';
@@ -230,8 +234,13 @@ class CloseSessionTool with McpArgReaders implements McpToolHandler {
   @override
   Future<Object?> execute(McpToolContext ctx, Map<String, Object?> args) async {
     final sessionId = requireString(args, 'sessionId');
-    sessionPool.requireOwned(ctx.clientId, ctx.connectionScopeId, sessionId);
+    final session = sessionPool.requireOwned(
+      ctx.clientId,
+      ctx.connectionScopeId,
+      sessionId,
+    );
     await sessionPool.close(sessionId);
+    await _auditSessionCall(auditRepository, ctx, name, session);
     return {'ok': true};
   }
 }
@@ -240,8 +249,12 @@ class CloseSessionTool with McpArgReaders implements McpToolHandler {
 /// `run_command` call to time out on its own.
 class InterruptTool with McpArgReaders implements McpToolHandler {
   final McpSessionPool sessionPool;
+  final McpAuditRepository auditRepository;
 
-  const InterruptTool({required this.sessionPool});
+  const InterruptTool({
+    required this.sessionPool,
+    required this.auditRepository,
+  });
 
   @override
   String get name => 'interrupt';
@@ -279,6 +292,7 @@ class InterruptTool with McpArgReaders implements McpToolHandler {
     );
     await session.shell.interrupt();
     session.lastActivityAt = DateTime.now();
+    await _auditSessionCall(auditRepository, ctx, name, session);
     final surfaceId = session.tabId;
     if (surfaceId != null) {
       sessionPool.mirror.writeNotice(
@@ -292,3 +306,22 @@ class InterruptTool with McpArgReaders implements McpToolHandler {
     return {'ok': true, 'sessionReset': true, 'cwd': session.shell.cwd};
   }
 }
+
+/// One `allowed` row for a call that acts on a session the agent already
+/// owns (`close_session`, `interrupt`): nothing is asked, but the log must
+/// still show that it happened and where.
+Future<void> _auditSessionCall(
+  McpAuditRepository auditRepository,
+  McpToolContext ctx,
+  String tool,
+  McpSession session,
+) => auditRepository.record(
+  clientId: ctx.clientId,
+  clientName: ctx.clientName,
+  workspaceId: ctx.workspaceId,
+  hostId: session.hostId,
+  hostLabel: session.hostLabel,
+  tool: tool,
+  args: {'sessionId': session.sessionId},
+  decision: AuditDecision.allowed,
+);
