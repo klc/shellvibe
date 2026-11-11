@@ -12,6 +12,7 @@ import '../../../../core/api/api_exception.dart';
 import '../../../../core/sync/backup_scope_store.dart';
 import '../../../../core/sync/sync_engine.dart';
 import '../../../../core/sync/sync_journal.dart';
+import '../../../../core/sync/sync_row_codec.dart';
 import '../../../../shared/database/app_database.dart';
 import '../../../../shared/providers/database_providers.dart';
 import '../../../account/presentation/notifiers/account_notifier.dart';
@@ -328,6 +329,9 @@ class SyncNotifier extends _$SyncNotifier {
       engine: _engine!,
     );
 
+    // Ahead of the join and every pass, which queue behind it.
+    unawaited(_serial(() => _replayForNewTables(store, db.syncJournal!)));
+
     _start(db);
 
     // A pass the vault held back runs again the moment it is unlocked. The
@@ -453,6 +457,34 @@ class SyncNotifier extends _$SyncNotifier {
     });
 
     ref.invalidateSelf();
+  }
+
+  /// Pulls the log again from the start when this build syncs a table the
+  /// build before it did not.
+  ///
+  /// That build stepped over the table's operations and moved its cursor past
+  /// them, so they would never arrive otherwise. Nothing on the first start of
+  /// a build that keeps the record: the one before left none, and this one
+  /// syncs no table it did not.
+  ///
+  /// ponytail: a device that jumps from a build without the record straight
+  /// to one with a new table is not replayed; seed a missing record with the
+  /// old table list if that matters.
+  Future<void> _replayForNewTables(
+    CloudBackupStore store,
+    SyncJournal journal,
+  ) async {
+    try {
+      final known = await store.readSyncedTypes();
+      if (known != null && !known.containsAll(SyncRowCodec.syncableTypes)) {
+        await journal.rewindPull();
+      }
+      // After the rewind: cut short in between, the next start rewinds again.
+      await store.writeSyncedTypes(SyncRowCodec.syncableTypes);
+    } on Object catch (e) {
+      // Tried again on the next start, which reads the same record.
+      if (kDebugMode) debugPrint('[Sync] table check skipped: $e');
+    }
   }
 
   /// Runs the join once per build.
