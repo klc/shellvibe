@@ -243,6 +243,7 @@ void main() {
         hostsDao: db.hostsDao,
         grantRepository: grants,
         approvalCoordinator: _DenyAll(reason),
+        auditRepository: audit,
       );
 
       await tool.execute(ctx, {
