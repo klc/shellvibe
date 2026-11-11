@@ -23,6 +23,7 @@ HostAccessRequest _hostAccessRequest() {
   return const HostAccessRequest(
     clientId: 'client-1',
     clientName: 'Claude Desktop',
+    workspaceId: 'default',
     reason: 'Investigating a disk-full alert',
     candidates: [
       HostAccessCandidate(

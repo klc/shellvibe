@@ -11,6 +11,7 @@ import '../../../workspaces/domain/models/workspace_model.dart';
 import '../../data/mcp_providers.dart';
 import '../../data/mcp_server_controller.dart';
 import '../../data/repositories/mcp_repository_providers.dart';
+import '../../domain/models/mcp_enums.dart';
 
 part 'mcp_settings_notifier.g.dart';
 
@@ -437,6 +438,7 @@ class McpSettingsNotifier extends _$McpSettingsNotifier {
     await ref.read(mcpApprovalRepositoryProvider).revokeAll();
 
     final clientRepo = ref.read(mcpClientRepositoryProvider);
+    final audit = ref.read(mcpAuditRepositoryProvider);
     final store = _McpSettingsStore(ref.read(secureStorageServiceProvider));
     final workspaces = await ref.read(workspacesProvider.future);
     for (final WorkspaceModel workspace in workspaces) {
@@ -444,6 +446,17 @@ class McpSettingsNotifier extends _$McpSettingsNotifier {
       for (final client in clients) {
         if (client.revokedAt == null) {
           await clientRepo.revokeClient(client.id);
+          // A failed audit write must not stop the rest of the panic.
+          try {
+            await audit.record(
+              clientId: client.id,
+              clientName: client.name,
+              workspaceId: workspace.id,
+              tool: 'panic',
+              args: const {},
+              decision: AuditDecision.denied,
+            );
+          } catch (_) {}
         }
       }
       // Every workspace's switch, not just this one: switching to another

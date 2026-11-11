@@ -110,8 +110,11 @@ McpToolRegistry mcpToolRegistry(Ref ref) {
       auditRepository: auditRepository,
     ),
     ListSessionsTool(sessionPool: sessionPool),
-    CloseSessionTool(sessionPool: sessionPool),
-    InterruptTool(sessionPool: sessionPool),
+    CloseSessionTool(
+      sessionPool: sessionPool,
+      auditRepository: auditRepository,
+    ),
+    InterruptTool(sessionPool: sessionPool, auditRepository: auditRepository),
     RunCommandTool(
       sessionPool: sessionPool,
       hostsDao: hostsDao,
