@@ -464,35 +464,42 @@ void main() {
         }
       });
 
-      test(
-        'an approved step is pre-approved for hosts that reach it later',
-        () async {
-          final factory = FakeFactory();
-          final events = <RunEvent>[];
-          final run = RunbookRunService(sessionFactory: factory).start(
-            mixed(),
-            [host('h1'), host('h2')],
-            strategy: const RunStrategy.rolling(),
-            onEvent: events.add,
-          );
-          await settle();
-          // Rolling: only the first host has got that far.
-          expect(factory.sessions.keys, ['h1']);
-          run.approve('s1');
-          final results = await run.result.timeout(const Duration(seconds: 2));
+      test('a rolling run asks at the gate again for every wave, and '
+          'stopping at wave 2 leaves the rest unstarted', () async {
+        final factory = FakeFactory();
+        final events = <RunEvent>[];
+        final run = RunbookRunService(sessionFactory: factory).start(
+          mixed(),
+          [host('h1'), host('h2'), host('h3')],
+          strategy: const RunStrategy.rolling(),
+          onEvent: events.add,
+        );
+        List<String> waitingHosts() => [
+          for (final e in events.whereType<StepStatusEvent>())
+            if (e.status == RunStepStatus.waiting) e.hostId,
+        ];
 
-          expect(
-            results.map((r) => r.status),
-            everyElement(RunHostStatus.succeeded),
-          );
-          final waitingHosts = events
-              .whereType<StepStatusEvent>()
-              .where((e) => e.status == RunStepStatus.waiting)
-              .map((e) => e.hostId);
-          // The second host never waits: the step was already approved.
-          expect(waitingHosts.toSet(), {'h1'});
-        },
-      );
+        await settle();
+        // Rolling: only the first host has got that far.
+        expect(factory.sessions.keys, ['h1']);
+        expect(waitingHosts(), ['h1']);
+        run.approve('s1');
+        await settle();
+
+        // Wave 2 stops at the gate too, rather than riding h1's Continue.
+        expect(factory.sessions['h1']!.ran, ['before', 'after']);
+        expect(factory.sessions['h2']!.ran, ['before']);
+        expect(waitingHosts(), ['h1', 'h2']);
+
+        await run.cancel();
+        final results = await run.result.timeout(const Duration(seconds: 2));
+        expect(results.map((r) => r.status), [
+          RunHostStatus.succeeded,
+          RunHostStatus.cancelled,
+          RunHostStatus.cancelled,
+        ]);
+        expect(factory.sessions.keys, ['h1', 'h2']);
+      });
 
       test('stopping while waiting cancels without hanging', () async {
         final factory = FakeFactory();

@@ -317,7 +317,12 @@ class RunbookExecutor {
       if (step.expectedOutputPattern != null &&
           step.expectedOutputPattern!.isNotEmpty) {
         try {
-          patternMatches = RegExp(step.expectedOutputPattern!).hasMatch(output);
+          // Multi-line: `^`/`$` anchor to a line, as people read output; the
+          // output always ends in a newline, which `$` alone never matches.
+          patternMatches = RegExp(
+            step.expectedOutputPattern!,
+            multiLine: true,
+          ).hasMatch(output);
         } catch (e) {
           patternMatches = false;
           patternError =

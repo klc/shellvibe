@@ -645,6 +645,32 @@ class _RunbookEditorDialogState extends ConsumerState<RunbookEditorDialog> {
                 },
               ),
             ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: ShadInputFormField(
+                key: ValueKey('step_timeout_${step.id}'),
+                initialValue: step.timeoutSeconds.toString(),
+                keyboardType: TextInputType.number,
+                label: const Text('Timeout (s)'),
+                validator: (val) {
+                  final n = int.tryParse(val.trim());
+                  if (n == null ||
+                      n < 1 ||
+                      n > RunbookStepModel.maxTimeoutSeconds) {
+                    return '1 to ${RunbookStepModel.maxTimeoutSeconds}';
+                  }
+                  return null;
+                },
+                onChanged: (val) {
+                  final n = int.tryParse(val.trim());
+                  if (n != null &&
+                      n >= 1 &&
+                      n <= RunbookStepModel.maxTimeoutSeconds) {
+                    _update(idx, (s) => s.copyWith(timeoutSeconds: n));
+                  }
+                },
+              ),
+            ),
           ],
         ),
       ],

@@ -374,7 +374,8 @@ class RunRunbookTool with McpArgReaders implements McpToolHandler {
         'visible to you and already granted (request_host_access first, or '
         'you get HOST_ACCESS_REQUIRED), and not read only: a host whose '
         'maxMode or grant is readonly refuses with POLICY_DENIED. Pass only '
-        'non-secret variables; a '
+        'non-secret variables, as plain values (letters, digits, spaces and '
+        r'_-.,:/@%+=~^; no shell syntax); a '
         'secret variable is typed by the user in the approval window, and '
         'passing one is rejected. Required variables that are missing are '
         'reported before the user is asked anything. One run at a time: '
@@ -628,6 +629,11 @@ class RunRunbookTool with McpArgReaders implements McpToolHandler {
     };
   }
 
+  static final _agentSafe = RegExp(
+    r'^[\p{L}\p{N} _\-.,:/@%+=~^]*$',
+    unicode: true,
+  );
+
   McpToolException _busy() => McpToolException(
     McpErrorCode.runbookBusy,
     'A runbook run is already in progress, and only one runs at a time. '
@@ -768,6 +774,20 @@ class RunRunbookTool with McpArgReaders implements McpToolHandler {
           McpErrorCode.invalidVariables,
           'Variable "${d.name}" must be one of ${d.options.join(', ')}, got '
           '"$value".',
+        );
+      }
+      // The approval window shows the template and the values apart, so a
+      // value must not be able to change the command's shape: no newline,
+      // separator, substitution, redirection, quote or comment. An enum value
+      // is one of the user's own options, and a default is the user's own.
+      if (d.type != VariableType.enumeration &&
+          given.containsKey(d.name) &&
+          !_agentSafe.hasMatch(value)) {
+        throw McpToolException(
+          McpErrorCode.invalidVariables,
+          'Variable "${d.name}" may only hold letters, digits, spaces and '
+          r'_ - . , : / @ % + = ~ ^. Shell syntax ($, ;, |, &, quotes, '
+          'newlines, ...) is not accepted from an agent.',
         );
       }
       values[d.name] = value;

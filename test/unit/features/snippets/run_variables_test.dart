@@ -24,6 +24,15 @@ void main() {
       expect(out, r'web:2222 ${SV:NOPE} ${HOST}');
     });
 
+    test('a value the shell would read is single-quoted', () {
+      final out = SnippetVariableParser.substituteBuiltins(
+        r'echo ${SV:HOST_LABEL} ${SV:USER}@${SV:HOST}',
+        {'HOST_LABEL': "Ali's \$(id) box", 'USER': '', 'HOST': 'web-1.lan'},
+      );
+      // A plain value, empty included, goes in as it was.
+      expect(out, r"echo 'Ali'\''s $(id) box' @web-1.lan");
+    });
+
     test('a host supplies its own details', () {
       final host = HostModel(
         id: 'h',
