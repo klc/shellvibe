@@ -3,11 +3,14 @@ import '../models/ssh_config_models.dart';
 /// Tokenizer for the OpenSSH `ssh_config(5)` file format.
 ///
 /// Implements the syntax rules from the man page:
-/// * `#` starts a comment outside double quotes (both full-line and trailing)
-/// * a line ending in `\` continues onto the next line
+/// * `#` starts a comment outside quotes (both full-line and trailing)
 /// * the keyword is separated from its values by whitespace or a single `=`
-/// * double quotes group arguments containing spaces; `\` escapes the next
-///   character (inside and outside quotes)
+/// * double or single quotes group arguments containing spaces
+/// * `\` escapes only what OpenSSH's argument splitter escapes: `\\`, `\"`,
+///   `\'` and, outside quotes, `\ `. Any other backslash is literal, so a
+///   Windows path such as `C:\Users\me\.ssh\id_ed25519` survives intact.
+///
+/// There is no line continuation: a trailing `\` is part of the value.
 ///
 /// Keywords are lowercased; arguments keep their case.
 class SshConfigParser {
@@ -18,47 +21,42 @@ class SshConfigParser {
     final warnings = <SshConfigWarning>[];
     final lines = content.split('\n');
 
-    var i = 0;
-    while (i < lines.length) {
-      final startLine = i + 1;
-      var raw = lines[i];
-      // Continuation: join the next line while the trimmed line ends with `\`.
-      while (_endsWithContinuation(raw) && i + 1 < lines.length) {
-        raw = _stripContinuation(raw) + lines[i + 1];
-        i++;
-      }
-      i++;
-
-      final directive = _parseLine(raw, source, startLine, warnings);
+    for (var i = 0; i < lines.length; i++) {
+      final directive = _parseLine(lines[i], source, i + 1, warnings);
       if (directive != null) directives.add(directive);
     }
 
     return SshConfigDocument(directives: directives, warnings: warnings);
   }
 
-  bool _endsWithContinuation(String raw) {
-    return raw.trimRight().endsWith('\\');
-  }
-
-  String _stripContinuation(String raw) {
-    var s = raw.trimRight();
-    return s.substring(0, s.length - 1);
+  /// True when `line[i]` is a backslash that escapes the character after it.
+  static bool _isEscape(String line, int i, {required bool inQuote}) {
+    if (line[i] != '\\' || i + 1 >= line.length) return false;
+    final next = line[i + 1];
+    return next == '\\' ||
+        next == '"' ||
+        next == "'" ||
+        (!inQuote && next == ' ');
   }
 
   /// Cuts `#` comments (outside quotes) and returns the trimmed remainder.
   String _stripComment(String raw) {
-    var inQuote = false;
+    String? quote;
     for (var i = 0; i < raw.length; i++) {
       final c = raw[i];
-      if (c == '\\') {
+      if (_isEscape(raw, i, inQuote: quote != null)) {
         i++; // escaped char: skip both
         continue;
       }
-      if (c == '"') {
-        inQuote = !inQuote;
+      if (quote == null && (c == '"' || c == "'")) {
+        quote = c;
         continue;
       }
-      if (c == '#' && !inQuote) {
+      if (c == quote) {
+        quote = null;
+        continue;
+      }
+      if (c == '#' && quote == null) {
         return raw.substring(0, i).trim();
       }
     }
@@ -134,7 +132,7 @@ class SshConfigParser {
   ) {
     final tokens = <String>[];
     final buffer = StringBuffer();
-    var inQuote = false;
+    String? quote;
     var hasContent = false;
 
     void flush() {
@@ -146,19 +144,24 @@ class SshConfigParser {
 
     for (var i = 0; i < line.length; i++) {
       final c = line[i];
-      if (c == '\\' && i + 1 < line.length) {
+      if (_isEscape(line, i, inQuote: quote != null)) {
         buffer.write(line[i + 1]);
         hasContent = true;
         i++;
         continue;
       }
-      if (c == '"') {
-        inQuote = !inQuote;
+      if (quote == null && (c == '"' || c == "'")) {
+        quote = c;
+        hasContent = true;
+        continue;
+      }
+      if (c == quote) {
+        quote = null;
         hasContent = true;
         continue;
       }
       if (c == ' ' || c == '\t') {
-        if (inQuote) {
+        if (quote != null) {
           buffer.write(c);
         } else {
           flush();
@@ -169,12 +172,12 @@ class SshConfigParser {
       hasContent = true;
     }
 
-    if (inQuote) {
+    if (quote != null) {
       warnings.add(
         SshConfigWarning(
           source: source,
           line: lineNo,
-          message: 'Unterminated double quote; treated as end of line.',
+          message: 'Unterminated quote; treated as end of line.',
           severity: SshConfigWarningSeverity.info,
         ),
       );

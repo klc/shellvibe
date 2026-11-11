@@ -538,6 +538,41 @@ void main() {
       await engine.dispose();
     });
 
+    testWidgets('Deleting a jump host warns about the hosts behind it', (
+      tester,
+    ) async {
+      await seedHost('bastion', 'bastion', 'bastion.corp');
+      await db.hostsDao.insertHost(
+        HostsCompanion.insert(
+          id: 'web',
+          workspaceId: 'default',
+          label: 'web',
+          hostname: '10.0.0.5',
+          jumpHostId: const Value('bastion'),
+          createdAt: DateTime.now(),
+        ),
+      );
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const Key('host_actions_bastion')),
+          matching: find.byIcon(LucideIcons.ellipsis),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete host'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('1 host connects through it as a jump host'),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('Selecting a host on a phone width does not overflow the row', (
       tester,
     ) async {

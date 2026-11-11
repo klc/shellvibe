@@ -6,6 +6,7 @@ import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/widgets/adaptive_modal.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../../../shared/database/models/workspace_usage.dart';
+import '../../../tunnels/presentation/providers/tunnels_providers.dart';
 import '../providers/workspace_provider.dart';
 import '../../domain/models/workspace_model.dart';
 import '../dialogs/workspace_form_dialog.dart';
@@ -59,8 +60,25 @@ class WorkspaceManagerScreen extends ConsumerWidget {
     if (confirmed != true || !context.mounted) return;
 
     try {
+      // Read before the delete: the active id is derived from the workspace
+      // list, and once the list no longer has this workspace it may already
+      // read something else, leaving the saved selection pointing at nothing.
+      final wasActive = ref.read(activeWorkspaceIdProvider) == workspace.id;
+      // The rules cascade away with the workspace's hosts; forwards running
+      // on them would be left with nothing to stop them from.
+      final rules = await ref
+          .read(tunnelRepositoryProvider)
+          .getRulesByWorkspace(workspace.id);
+      // The keep-alive engine and pool rather than the auto-disposed tunnels
+      // notifier, which nothing on this screen keeps alive across the awaits.
+      final engine = ref.read(tunnelEngineProvider);
+      final pool = ref.read(tunnelSshPoolProvider);
+      for (final rule in rules) {
+        await engine.stopTunnel(rule.id);
+        await pool.release(rule.id);
+      }
       await ref.read(workspaceManagerProvider.notifier).delete(workspace.id);
-      if (ref.read(activeWorkspaceIdProvider) == workspace.id) {
+      if (wasActive) {
         await ref.read(activeWorkspaceIdProvider.notifier).select('default');
       }
       if (context.mounted) {

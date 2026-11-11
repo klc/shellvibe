@@ -133,14 +133,37 @@ void main() {
           reason: 'web1 is not vetoed, so the first stanza applies');
     });
 
-    test('only-negated Host pattern applies to everything else', () async {
+    test('only-negated Host pattern matches nothing (OpenSSH)', () async {
+      // ssh_config(5): a negated match never produces a positive result by
+      // itself, so `Host !web` applies to no host at all.
       final res = await Harness().resolve(
-        'Host !web\n  User others\n'
+        'Host !web\n  User leaked\n  Port 2200\n'
         'Host web\n  User me\n'
         'Host db\n  User dbu\n',
       );
       expect(res.hosts.firstWhere((h) => h.alias == 'web').username, 'me');
-      expect(res.hosts.firstWhere((h) => h.alias == 'db').username, 'others');
+      final db = res.hosts.firstWhere((h) => h.alias == 'db');
+      expect(db.username, 'dbu');
+      expect(db.port, 22);
+    });
+
+    test('Match host with only negated patterns matches nothing', () async {
+      final res = await Harness().resolve(
+        'Host web\n  HostName web.example.com\n'
+        'Match host !bastion\n  User leaked\n',
+      );
+      expect(res.hosts.single.username, isNull);
+    });
+
+    test('Match criteria keywords are case-insensitive', () async {
+      final res = await Harness().resolve(
+        'Host web\n  HostName web.example.com\n'
+        'Match Host web.example.com\n  User matched\n'
+        'Match All\n  Port 2222\n',
+      );
+      expect(res.hosts.single.username, 'matched');
+      expect(res.hosts.single.port, 2222);
+      expect(res.warnings, isEmpty);
     });
 
     test('Match all applies unconditionally', () async {
@@ -219,15 +242,45 @@ void main() {
           isEmpty);
     });
 
-    test('ProxyJump parses user, host and port; multi-hop keeps first', () async {
+    test('ProxyJump parses user, host and port; multi-hop keeps the order',
+        () async {
+      // OpenSSH dials `a,b` in order: a, then b through a, then the target
+      // through b. The hop next to the target is b.
       final res = await Harness().resolve(
         'Host web\n  ProxyJump user@bastion:2222,jump2\n',
       );
       final jump = res.hosts.single.jumpHost!;
-      expect(jump.username, 'user');
-      expect(jump.host, 'bastion');
-      expect(jump.port, 2222);
+      expect(jump.host, 'jump2');
+      expect(jump.port, isNull);
+      final first = jump.via!;
+      expect(first.username, 'user');
+      expect(first.host, 'bastion');
+      expect(first.port, 2222);
+      expect(first.via, isNull);
       expect(res.hosts.single.warnings, isEmpty);
+    });
+
+    test('ProxyJump with an out-of-range port is rejected', () async {
+      final res = await Harness().resolve('Host web\n  ProxyJump b:99999\n');
+      expect(res.hosts.single.jumpHost, isNull);
+      expect(
+        res.warnings.any((w) => w.message.contains('Unparsable ProxyJump')),
+        isTrue,
+      );
+    });
+
+    test('ProxyCommand ssh -W skips option values and keeps -p', () async {
+      final res = await Harness().resolve(
+        'Host web\n  ProxyCommand ssh -i ~/.ssh/key -W %h:%p bastion -p 2222\n'
+        'Host db\n  ProxyCommand ssh -l ops -o StrictHostKeyChecking=no '
+        '-W %h:%p jump.corp\n',
+      );
+      final web = res.hosts.firstWhere((h) => h.alias == 'web').jumpHost!;
+      expect(web.host, 'bastion');
+      expect(web.port, 2222);
+      final db = res.hosts.firstWhere((h) => h.alias == 'db').jumpHost!;
+      expect(db.host, 'jump.corp');
+      expect(db.username, 'ops');
     });
 
     test('ProxyJump none disables jump and wins first-obtained', () async {
@@ -279,8 +332,36 @@ void main() {
       expect(forwards[2].bindAddress, '::1');
       expect(forwards[2].remoteHost, '::1');
       expect(forwards[3].type, 'remote');
+      expect(forwards[3].remotePort, 3306);
+      expect(forwards[3].remoteHost, 'db');
+      expect(forwards[3].localPort, 3306);
       expect(forwards[4].type, 'dynamic');
       expect(forwards[4].remoteHost, isNull);
+    });
+
+    test('RemoteForward listens on the server port, not the destination',
+        () async {
+      // `RemoteForward 5432 localhost:15432`: the server listens on 5432 and
+      // each connection is carried to localhost:15432 on this side.
+      final res = await Harness().resolve(
+        'Host web\n  RemoteForward 5432 localhost:15432\n',
+      );
+      final forward = res.hosts.single.forwards.single;
+      expect(forward.type, 'remote');
+      expect(forward.remotePort, 5432);
+      expect(forward.remoteHost, 'localhost');
+      expect(forward.localPort, 15432);
+    });
+
+    test('IdentityFile tokens expand to the final hostname, port and user',
+        () async {
+      final res = await Harness().resolve(
+        'Host web\n  IdentityFile ~/.ssh/keys/%h-%r-%p\n'
+        '  HostName 10.0.0.1\n  User deploy\n  Port 2200\n',
+      );
+      expect(res.hosts.single.identityFiles, [
+        '/home/user/.ssh/keys/10.0.0.1-deploy-2200',
+      ]);
     });
 
     test('unmappable forwards are skipped with warnings', () async {

@@ -35,15 +35,32 @@ void main() {
       expect(doc.warnings, isEmpty);
     });
 
-    test('escaped hash is not a comment', () {
-      final doc = parser.parse(r'HostName foo\#bar');
-      expect(doc.directives.single.args, ['foo#bar']);
+    test('backslashes outside the OpenSSH escape set stay literal', () {
+      final doc = parser.parse(r'IdentityFile C:\Users\me\.ssh\id_ed25519');
+      expect(doc.directives.single.args, [r'C:\Users\me\.ssh\id_ed25519']);
     });
 
-    test('joins backslash-continuation lines', () {
-      final doc = parser.parse('ProxyCommand ssh -W %h:%p \\\n  bastion\n');
-      expect(doc.directives.single.keyword, 'proxycommand');
-      expect(doc.directives.single.args, ['ssh', '-W', '%h:%p', 'bastion']);
+    test('escapes backslash, quotes and an unquoted space', () {
+      final doc = parser.parse(
+        r'IdentityFile C:\\keys\ dir\"a\'
+        "'b",
+      );
+      expect(doc.directives.single.args, [r'C:\keys dir"a' "'b"]);
+    });
+
+    test('single quotes group arguments like double quotes', () {
+      final doc = parser.parse(
+        "IdentityFile 'C:\\Program Files\\key' # comment\n",
+      );
+      expect(doc.directives.single.args, [r'C:\Program Files\key']);
+    });
+
+    test('a trailing backslash does not continue the line', () {
+      // ssh_config has no line continuation.
+      final doc = parser.parse('ProxyCommand ssh -W %h:%p \\\nUser root\n');
+      expect(doc.directives, hasLength(2));
+      expect(doc.directives[0].args, ['ssh', '-W', '%h:%p', r'\']);
+      expect(doc.directives[1].keyword, 'user');
     });
 
     test('supports = separator in its three forms', () {
