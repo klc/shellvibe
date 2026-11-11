@@ -49,6 +49,7 @@ void main() {
   Future<_Device> device(
     String id, {
     Future<SecretKey> Function()? vaultKey,
+    BackupScope scope = BackupScope.full,
   }) async {
     final db = AppDatabase(NativeDatabase.memory());
     final journal = SyncJournal(db: db, deviceId: id);
@@ -87,6 +88,7 @@ void main() {
       api: log,
       syncKey: SecretKey(syncKey),
       vaultKey: vaultKey,
+      scope: scope,
     );
 
     return _Device(
@@ -285,6 +287,27 @@ void main() {
 
       expect(await tablet.hostCount(), 62);
     });
+  });
+
+  test('a device that syncs less never rewrites the ground', () async {
+    // It skips the operations of the categories it left out, so its copy of
+    // them goes stale. A ground written from it started every new device
+    // with rows long deleted and without the ones added since.
+    final phone = await device('phone');
+    await phone.addHosts(2, prefix: 'phone');
+    await phone.joinSync(syncKey, passphrase);
+
+    final desktop = await device(
+      'desktop',
+      scope: BackupScope.of(const [BackupCategory.hosts]),
+    );
+    await desktop.addHosts(3);
+    final result = await desktop.joinSync(syncKey, passphrase);
+
+    expect(result.succeeded, isTrue);
+    expect(result.seeded, greaterThan(0));
+    expect(vault.stored, hasLength(1), reason: 'the ground was rewritten');
+    expect(await desktop.journal.readJoinState(), SyncJoinState.done);
   });
 
   group('an interrupted join', () {

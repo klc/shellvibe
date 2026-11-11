@@ -192,9 +192,10 @@ class McpRequestDispatcher {
       // whether to retry, pick another host, or ask the user to fix
       // something.
       //
-      // These messages name the failing subsystem and the record involved,
-      // never a secret's value.
-      return McpToolResult.error('$name failed: $e');
+      // Only the error's type goes back, never its text: connection errors
+      // carry `user@hostname:port`, and the agent is only ever meant to see
+      // an opaque hostId.
+      return McpToolResult.error('$name failed: ${e.runtimeType}');
     }
   }
 

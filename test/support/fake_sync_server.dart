@@ -35,6 +35,11 @@ final class FakeSyncServer implements ApiTransport {
   /// quota.
   ApiRawResponse? Function(ApiRawRequest request)? intercept;
 
+  /// Holds a request until the future it returns completes, when non-null.
+  ///
+  /// How a test keeps a pass in flight while something else happens.
+  Future<void>? Function(ApiRawRequest request)? hold;
+
   /// Requests that reached a given method and path (without the version
   /// prefix), e.g. `('PUT', '/sync/vault')`.
   List<ApiRawRequest> sent(String method, String path) => requests
@@ -68,6 +73,7 @@ final class FakeSyncServer implements ApiTransport {
   @override
   Future<ApiRawResponse> send(ApiRawRequest request) async {
     requests.add(request);
+    await hold?.call(request);
 
     if (offline) {
       throw const ApiTransportException('offline');

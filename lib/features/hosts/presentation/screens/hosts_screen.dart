@@ -62,6 +62,13 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Tags belong to a workspace: a tag filter carried over from the last one
+    // would show the new workspace as empty.
+    ref.listen(activeWorkspaceIdProvider, (previous, next) {
+      if (previous != next && _selectedGroupId != null) {
+        setState(() => _selectedGroupId = null);
+      }
+    });
     final hostsAsync = ref.watch(hostsProvider);
     final groupsAsync = ref.watch(hostGroupsProvider);
 
@@ -479,9 +486,8 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
       groups: groups,
       connected: connected,
       isFavorite: isFavorite,
-      onToggleFavorite: () => unawaited(
-        ref.read(bookmarksProvider.notifier).toggleHost(host.id),
-      ),
+      onToggleFavorite: () =>
+          unawaited(ref.read(bookmarksProvider.notifier).toggleHost(host.id)),
       onConnect: () => run(() => _onConnectHost(host)),
       onOpenSftp: () => run(() => _onOpenSftp(host)),
       onEdit: () => run(() => _openHostForm(context, initialHost: host)),
@@ -600,6 +606,18 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
       ref.invalidate(hostsProvider);
       ref.invalidate(hostGroupsProvider);
       ref.invalidate(identitiesProvider);
+      // An overwrite deletes the host's old forwarding rules; a forward still
+      // running from one would otherwise be left with nothing to stop it.
+      // The keep-alive engine and pool, not the auto-disposed tunnels
+      // notifier, which nothing here keeps alive across the awaits.
+      final engine = ref.read(tunnelEngineProvider);
+      final pool = ref.read(tunnelSshPoolProvider);
+      for (final ruleId in result.removedTunnelRuleIds) {
+        await engine.stopTunnel(ruleId);
+        await pool.release(ruleId);
+      }
+      ref.invalidate(tunnelsProvider);
+      if (!context.mounted) return;
       _showImportSummary(context, result);
     }
   }
@@ -623,10 +641,25 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
         '${result.warnings.length} '
             'note${result.warnings.length == 1 ? '' : 's'}',
     ].join(' · ');
+    // Notes from the config itself were listed in the preview; the ones the
+    // import run found (unreadable keys, skipped jump links) carry no source
+    // location and would otherwise only ever be a count.
+    final importNotes = result.warnings
+        .where((w) => w.source == null)
+        .map((w) => w.message)
+        .toList();
+    const shownNotes = 3;
     ShadToaster.of(context).show(
       ShadToast(
         title: const Text('Import Complete'),
-        description: Text(description),
+        description: Text(
+          [
+            description,
+            ...importNotes.take(shownNotes).map((note) => '• $note'),
+            if (importNotes.length > shownNotes)
+              '+${importNotes.length - shownNotes} more',
+          ].join('\n'),
+        ),
       ),
     );
   }
@@ -966,11 +999,24 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
   }
 
   Future<void> _deleteHost(BuildContext context, HostModel host) async {
+    // Deleting a jump host nulls the link on every host behind it, which then
+    // dials its address directly — possibly a different machine of the same
+    // private address on the local network. Say so before it happens.
+    final dependents = (ref.read(hostsProvider).value ?? const <HostModel>[])
+        .where((h) => h.jumpHostId == host.id)
+        .length;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => ShadDialog.alert(
         title: const Text('Delete Host'),
-        description: Text('Are you sure you want to delete "${host.label}"?'),
+        description: Text(
+          dependents == 0
+              ? 'Are you sure you want to delete "${host.label}"?'
+              : 'Are you sure you want to delete "${host.label}"? '
+                    '$dependents ${dependents == 1 ? 'host connects' : 'hosts connect'} '
+                    'through it as a jump host and will connect directly '
+                    'once it is gone.',
+        ),
         actions: adaptiveDialogActions(context, [
           ShellVibeButton.secondary(
             label: 'Cancel',
@@ -992,9 +1038,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
     try {
       // The rules cascade away with the host; the forwards riding on them
       // would not, and would be left running with nothing to stop them from.
-      final rules = await ref
-          .read(tunnelsDaoProvider)
-          .getRulesForHost(host.id);
+      final rules = await ref.read(tunnelsDaoProvider).getRulesForHost(host.id);
       for (final rule in rules) {
         await ref.read(tunnelsProvider.notifier).stopRule(rule.id);
       }

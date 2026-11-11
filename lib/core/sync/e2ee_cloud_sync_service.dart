@@ -9,6 +9,7 @@ import '../../shared/database/tables.dart' show hostGroupMemberId;
 import '../crypto/encryption_engine.dart';
 import 'backup_envelope.dart';
 import 'backup_scope.dart';
+import 'sync_journal.dart';
 import 'sync_row_codec.dart';
 import 'sync_row_writer.dart';
 
@@ -386,6 +387,14 @@ class E2EECloudSyncService {
   /// [BackupScope.syncGround]: the envelope does not say which vault it came
   /// from, so a full backup served in its place must not bring host-key trust
   /// or settings with it.
+  ///
+  /// [recordAsChange] is for a restore the user asked for. On a device that
+  /// has joined automatic sync, every row it changed goes into the outbox as
+  /// an ordinary edit, so the other devices get the restored rows too.
+  /// Written straight to the database, they stayed on this device only, and a
+  /// row the restore overwrote kept the version of what it replaced -- the
+  /// same version holding different contents on different devices. A ground
+  /// leaves it off: joining sends this device's own rows on its own terms.
   Future<BackupImportResult> importEncryptedBackup({
     required String backupPackageJson,
     required AppDatabase db,
@@ -393,6 +402,7 @@ class E2EECloudSyncService {
     BackupUnlockMethod unlockWith = BackupUnlockMethod.passphrase,
     String snapshotDeviceId = '',
     BackupScope allowed = BackupScope.full,
+    bool recordAsChange = false,
   }) async {
     final opened = await _envelope.open(
       envelopeJson: backupPackageJson,
@@ -429,6 +439,26 @@ class E2EECloudSyncService {
       Future<Set<String>> idsOf(String table) async {
         final rows = await db.customSelect('SELECT id FROM $table').get();
         return rows.map((r) => r.read<String>('id')).toSet();
+      }
+
+      final journal = db.syncJournal;
+      final syncClock = data['sync_clock'] as int?;
+
+      // Every syncable row as it stands now, to tell afterwards which ones
+      // the restore changed. Only those go out: one that came back as it was
+      // is not news, and resending it would overrule a newer edit elsewhere.
+      final record =
+          recordAsChange &&
+          journal != null &&
+          await journal.readJoinState() == SyncJoinState.done;
+      final before = <String, String>{};
+      if (record) {
+        for (final type in SyncRowCodec.syncableTypes) {
+          for (final id in await idsOf(type)) {
+            final row = await SyncRowCodec.read(db, type, id);
+            if (row != null) before['$type/$id'] = jsonEncode(row);
+          }
+        }
       }
 
       // 1. Workspaces
@@ -589,7 +619,11 @@ class E2EECloudSyncService {
                   // point at a row that does not exist yet. Cleared here so a
                   // host the backup shows without one does not keep the local
                   // one on an existing row.
-                  startupSnippetId: const Value(null),
+                  startupSnippetId: _ifSent(
+                    item,
+                    'startupSnippetId',
+                    () => null,
+                  ),
                   environment: Value(item['environment'] as String? ?? 'dev'),
                   mcpVisible: Value(item['mcpVisible'] as bool? ?? true),
                   mcpDefaultMode: Value(
@@ -731,7 +765,11 @@ class E2EECloudSyncService {
                   title: item['title'] as String,
                   code: item['code'] as String,
                   tags: Value(item['tags'] as String?),
-                  variables: Value(item['variables'] as String?),
+                  variables: _ifSent(
+                    item,
+                    'variables',
+                    () => item['variables'] as String?,
+                  ),
                 ),
               );
         }
@@ -770,9 +808,17 @@ class E2EECloudSyncService {
                   title: item['title'] as String,
                   description: Value(item['description'] as String?),
                   createdAt: DateTime.parse(item['createdAt'] as String),
-                  defaultHostIds: Value(item['defaultHostIds'] as String?),
-                  variables: Value(item['variables'] as String?),
-                  tags: Value(item['tags'] as String?),
+                  defaultHostIds: _ifSent(
+                    item,
+                    'defaultHostIds',
+                    () => item['defaultHostIds'] as String?,
+                  ),
+                  variables: _ifSent(
+                    item,
+                    'variables',
+                    () => item['variables'] as String?,
+                  ),
+                  tags: _ifSent(item, 'tags', () => item['tags'] as String?),
                 ),
               );
         }
@@ -801,11 +847,25 @@ class E2EECloudSyncService {
                     item['expectedOutputPattern'] as String?,
                   ),
                   timeoutSeconds: Value(item['timeoutSeconds'] as int? ?? 30),
-                  onFailure: Value(item['onFailure'] as String? ?? 'stop'),
-                  retries: Value(item['retries'] as int? ?? 0),
-                  kind: Value(item['kind'] as String? ?? 'command'),
-                  snippetId: Value(
-                    snippetIds.contains(item['snippetId'])
+                  onFailure: _ifSent(
+                    item,
+                    'onFailure',
+                    () => item['onFailure'] as String? ?? 'stop',
+                  ),
+                  retries: _ifSent(
+                    item,
+                    'retries',
+                    () => item['retries'] as int? ?? 0,
+                  ),
+                  kind: _ifSent(
+                    item,
+                    'kind',
+                    () => item['kind'] as String? ?? 'command',
+                  ),
+                  snippetId: _ifSent(
+                    item,
+                    'snippetId',
+                    () => snippetIds.contains(item['snippetId'])
                         ? item['snippetId'] as String?
                         : null,
                   ),
@@ -813,6 +873,16 @@ class E2EECloudSyncService {
               );
         }
       }
+
+      await _dropUnlistedChildren(
+        db,
+        data,
+        parents: 'runbooks',
+        children: 'runbook_steps',
+        column: 'runbook_id',
+        syncClock: syncClock,
+        record: record,
+      );
 
       // 10. Templates
       if (data['templates'] is List) {
@@ -831,12 +901,18 @@ class E2EECloudSyncService {
                   description: Value(item['description'] as String?),
                   activePaneId: Value(item['activePaneId'] as String?),
                   createdAt: DateTime.parse(item['createdAt'] as String),
-                  onOpenRunbookId: Value(
-                    runbookIds.contains(item['onOpenRunbookId'])
+                  onOpenRunbookId: _ifSent(
+                    item,
+                    'onOpenRunbookId',
+                    () => runbookIds.contains(item['onOpenRunbookId'])
                         ? item['onOpenRunbookId'] as String?
                         : null,
                   ),
-                  onOpenConfirm: Value(item['onOpenConfirm'] as bool? ?? true),
+                  onOpenConfirm: _ifSent(
+                    item,
+                    'onOpenConfirm',
+                    () => item['onOpenConfirm'] as bool? ?? true,
+                  ),
                 ),
               );
         }
@@ -870,13 +946,17 @@ class E2EECloudSyncService {
                   sessionType: item['sessionType'] as String,
                   hostId: Value(item['hostId'] as String?),
                   title: Value(item['title'] as String?),
-                  startupSnippetId: Value(
-                    snippetIds.contains(item['startupSnippetId'])
+                  startupSnippetId: _ifSent(
+                    item,
+                    'startupSnippetId',
+                    () => snippetIds.contains(item['startupSnippetId'])
                         ? item['startupSnippetId'] as String?
                         : null,
                   ),
-                  startupRunbookId: Value(
-                    runbookIds.contains(item['startupRunbookId'])
+                  startupRunbookId: _ifSent(
+                    item,
+                    'startupRunbookId',
+                    () => runbookIds.contains(item['startupRunbookId'])
                         ? item['startupRunbookId'] as String?
                         : null,
                   ),
@@ -884,6 +964,16 @@ class E2EECloudSyncService {
               );
         }
       }
+
+      await _dropUnlistedChildren(
+        db,
+        data,
+        parents: 'templates',
+        children: 'template_panes',
+        column: 'template_id',
+        syncClock: syncClock,
+        record: record,
+      );
 
       // 12. Bookmarks
       //
@@ -955,9 +1045,6 @@ class E2EECloudSyncService {
       // Each row at the version the snapshot recorded for it. A snapshot from
       // a build that did not record them, or a row that never had one, stands
       // at the snapshot clock.
-      final journal = db.syncJournal;
-      final syncClock = data['sync_clock'] as int?;
-
       if (journal != null && syncClock != null) {
         final versions = _readRowVersions(data['sync_versions']);
         for (final type in SyncRowCodec.syncableTypes) {
@@ -1015,15 +1102,34 @@ class E2EECloudSyncService {
         // rewind the cursor past operations this device has already applied
         // and would then be offered again.
         final state = await journal.readState();
-        if (syncClock > state.pulledThroughClock) {
-          await journal.acknowledgePull(syncClock);
-        }
+        final advanced = syncClock > state.pulledThroughClock;
+        if (advanced) await journal.acknowledgePull(syncClock);
 
         // A snapshot that does not carry a position forgets this device's,
-        // and the next pull works one out from the clock above. Keeping it
-        // would be worse when this restore is the way out of an expired
-        // cursor: the position is the thing that expired.
-        await journal.restorePullSeq((data['sync_seq'] as num?)?.toInt());
+        // and the next pull works one out from the clock above -- but only
+        // when that clock moved. Then the position is behind the snapshot,
+        // and when this restore is the way out of an expired cursor it is
+        // the very thing that expired. A snapshot at or behind this device's
+        // clock says nothing about its position, and forgetting it sent the
+        // next pull back to paging by clock.
+        final seq = (data['sync_seq'] as num?)?.toInt();
+        if (seq != null || advanced) await journal.restorePullSeq(seq);
+      }
+
+      // 15. What the restore changed, as this device's own edits.
+      if (record) {
+        for (final type in SyncRowCodec.syncableTypes) {
+          for (final id in await idsOf(type)) {
+            final row = await SyncRowCodec.read(db, type, id);
+            if (row == null || before['$type/$id'] == jsonEncode(row)) continue;
+
+            await journal.upsert(
+              entityType: type,
+              entityId: id,
+              write: () async {},
+            );
+          }
+        }
       }
     });
 
@@ -1060,6 +1166,82 @@ class E2EECloudSyncService {
       syncKey: opened.syncKey,
       syncClock: data['sync_clock'] as int?,
     );
+  }
+
+  /// Deletes the [children] of every [parents] row in the backup that the
+  /// backup does not list.
+  ///
+  /// A runbook is its steps and a template its panes, and an edit replaces
+  /// them under new ids. Upserted over what this device had, a restored
+  /// runbook ran its old steps and its new ones side by side. Only when the
+  /// backup carries both lists: one without the children says nothing about
+  /// them.
+  ///
+  /// A child this device changed later stays: one still waiting to be sent,
+  /// or one standing at a clock past the snapshot's. With [record] the delete
+  /// is journalled like any other.
+  Future<void> _dropUnlistedChildren(
+    AppDatabase db,
+    Map<String, dynamic> data, {
+    required String parents,
+    required String children,
+    required String column,
+    required int? syncClock,
+    required bool record,
+  }) async {
+    final parentItems = data[parents];
+    final childItems = data[children];
+    if (parentItems is! List || childItems is! List) return;
+
+    final listed = {
+      for (final item in childItems)
+        if (item is Map) item['id'],
+    };
+    final journal = db.syncJournal;
+
+    for (final parent in parentItems) {
+      final parentId = parent is Map ? parent['id'] : null;
+      if (parentId is! String) continue;
+
+      final rows = await db
+          .customSelect(
+            'SELECT id FROM $children WHERE $column = ?',
+            variables: [Variable.withString(parentId)],
+          )
+          .get();
+
+      for (final id in rows.map((r) => r.read<String>('id'))) {
+        if (listed.contains(id)) continue;
+
+        if (journal != null) {
+          final pending = await journal.pendingFor(
+            entityType: children,
+            entityId: id,
+          );
+          if (pending != null) continue;
+
+          final version = await journal.versionFor(
+            entityType: children,
+            entityId: id,
+          );
+          if (syncClock != null &&
+              version != null &&
+              version.logicalClock > syncClock) {
+            continue;
+          }
+        }
+
+        if (record) {
+          await journal!.delete(
+            entityType: children,
+            entityId: id,
+            write: () => SyncRowWriter.deleteRow(db, children, id),
+          );
+        } else {
+          await SyncRowWriter.deleteRow(db, children, id);
+        }
+      }
+    }
   }
 
   /// Nulls out [column] where it points at a row of [table] that does not
@@ -1156,6 +1338,16 @@ class E2EECloudSyncService {
       jsonDecode(payload) as Map<String, Object?>,
     );
   }
+
+  /// [value] when [item] carries [key], or left as this device has it.
+  ///
+  /// A key missing from a backup is a column the exporting build did not
+  /// have, not one it cleared: the codec writes every column, nulls included.
+  /// Overwriting with null or the default instead wiped the newer columns of
+  /// every row an older backup was restored over. The same rule as
+  /// `SyncRowWriter.write`.
+  static Value<T> _ifSent<T>(Object? item, String key, T Function() value) =>
+      item is Map && item.containsKey(key) ? Value(value()) : Value<T>.absent();
 
   /// Maps auth types this build no longer supports onto `'password'`.
   ///

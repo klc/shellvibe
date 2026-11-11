@@ -146,6 +146,13 @@ class SyncNotifier extends _$SyncNotifier {
   /// rather than only when it looks stale -- that rewrite is the only path
   /// those rows have left.
   bool _reKeyed = false;
+
+  /// This build already answered an expired cursor by joining again.
+  ///
+  /// Once: a ground older than the log's retention expires the cursor again
+  /// straight after, and answering that with another join downloads it
+  /// forever.
+  bool _rejoinedAfterExpiry = false;
   SyncSnapshotService? _ground;
   String? _deviceId;
   String? _passphrase;
@@ -158,9 +165,9 @@ class SyncNotifier extends _$SyncNotifier {
   /// One pass at a time. Two overlapping passes would push the same
   /// operations twice and race each other's cursor writes.
   ///
-  /// Static, not a field: a rebuild is a new instance, and the pass or join
-  /// the old one started is still running when the new one begins. A chain
-  /// each instance held for itself is exactly the overlap this forbids.
+  /// Static, not a field: the pass or join an earlier build started is still
+  /// running when the next build begins, and nothing about the chain should
+  /// depend on which instance holds it.
   static Future<void> _inFlight = Future<void>.value();
 
   /// Queues [work] behind whatever is running, on any instance.
@@ -463,9 +470,13 @@ class SyncNotifier extends _$SyncNotifier {
 
     try {
       final result = await _serial(() async {
-        // Queued behind another pass; this instance may have been rebuilt
-        // away (and `_stop()` run) by the time its turn comes.
-        if (!ref.mounted) return const SyncJoinResult();
+        // Queued behind another pass; the provider may have rebuilt by the
+        // time its turn comes. `ref.mounted` does not say so -- a rebuild
+        // keeps this instance and hands it a new `ref` -- but `_stop()` has
+        // run, and the join it captured is no longer this build's.
+        if (!ref.mounted || !identical(join, _join)) {
+          return const SyncJoinResult();
+        }
 
         return join.join(
           secret: _passphrase!,
@@ -474,7 +485,7 @@ class SyncNotifier extends _$SyncNotifier {
           syncKey: _syncKey!,
         );
       });
-      if (!ref.mounted) return;
+      if (!ref.mounted || !identical(join, _join)) return;
 
       // Before the verdict: a join the vault stopped after the merge has
       // still written the ground's rows.
@@ -568,6 +579,12 @@ class SyncNotifier extends _$SyncNotifier {
     final ground = _ground;
     if (ground == null) return;
 
+    // A device that has narrowed what it syncs skipped the operations of the
+    // categories it left out, so its copy of them is stale. A ground written
+    // from it would start every new device with rows long deleted and
+    // without the ones added since; another device keeps the ground fresh.
+    if (!(_engine?.scope.coversSyncGround ?? false)) return;
+
     try {
       if (force) {
         await ground.write(
@@ -608,9 +625,11 @@ class SyncNotifier extends _$SyncNotifier {
     if (_join != null && !_joinStarted) return _startJoinOnce();
 
     return _serial(() async {
-      // Queued behind another pass; this instance may have been rebuilt away
-      // (and `_stop()` run) by the time its turn comes.
-      if (!ref.mounted) return;
+      // Queued behind another pass; the provider may have rebuilt by the
+      // time its turn comes. A rebuild keeps this instance, so `ref.mounted`
+      // is true again -- but `_stop()` has run, and the engine captured here
+      // belongs to the build before: possibly another account's outbox.
+      if (!ref.mounted || !identical(engine, _engine)) return;
 
       _publish((s) => s.copyWith(running: true, clearError: true));
       _heldByVault = false;
@@ -650,7 +669,19 @@ class SyncNotifier extends _$SyncNotifier {
         );
       } on SyncCursorExpired {
         // Not a retry. The operations this device never saw are gone, and the
-        // only way forward is the snapshot the server still holds.
+        // only way forward is the snapshot the server still holds -- which is
+        // what joining starts from. The join merges it in, sends what this
+        // device has that it lacks, and moves the cursor to its clock.
+        if (!_rejoinedAfterExpiry) {
+          _rejoinedAfterExpiry = true;
+          await engine.journal.writeJoinState(SyncJoinState.none);
+          _joinStarted = false;
+          _publish((s) => s.copyWith(running: false));
+          // Not awaited: the join queues behind this pass.
+          unawaited(_startJoinOnce());
+
+          return;
+        }
         _publish(
           (s) => s.copyWith(
             running: false,
@@ -774,11 +805,11 @@ class SyncNotifier extends _$SyncNotifier {
     _joinStarted = false;
     _heldByVault = false;
     _reKeyed = false;
+    _rejoinedAfterExpiry = false;
   }
 
-  /// Drops the update when this instance has been rebuilt away: the pass that
-  /// made it still finishes, but the state it would land on belongs to the
-  /// instance that replaced this one.
+  /// Drops the update once the provider is disposed: the pass that made it
+  /// still finishes, but there is no state left to land on.
   void _publish(SyncState Function(SyncState state) update) {
     if (!ref.mounted) return;
     final current = state.value;

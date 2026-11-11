@@ -306,7 +306,9 @@ class _SshConfigImportDialogState extends ConsumerState<SshConfigImportDialog> {
                           title: 'Import private keys into the vault',
                           subtitle: vaultLocked
                               ? 'Vault is locked — unlock it to enable.'
-                              : null,
+                              : 'Stored encrypted in the vault. With sync on, '
+                                    'they leave this device, end-to-end '
+                                    'encrypted, for your other devices.',
                           value: _importKeys && !vaultLocked,
                           onChanged: vaultLocked
                               ? null

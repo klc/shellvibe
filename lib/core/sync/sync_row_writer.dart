@@ -65,6 +65,14 @@ final class SyncRowWriter {
     String? str(String key) => row[key] as String?;
     DateTime date(String key) => DateTime.parse(row[key] as String);
 
+    // A key missing from the row is a column the sending build did not have,
+    // not one it cleared: the codec writes every column, nulls included.
+    // Absent, an existing row keeps what it holds and a new one takes the
+    // table's default. Writing null or the default instead let a device one
+    // release behind wipe the newer columns on every edit it made.
+    Value<T> ifSent<T>(String key, T Function() value) =>
+        row.containsKey(key) ? Value(value()) : Value<T>.absent();
+
     switch (entityType) {
       case 'workspaces':
         await db
@@ -159,11 +167,14 @@ final class SyncRowWriter {
         if (identityId != null && !keepIdentity) cleared.add('identity');
 
         // Snippets sort ahead of hosts, so a reference that is missing here
-        // really is missing. Absent from an older client's row: no startup
-        // snippet.
+        // really is missing.
         final startupId = str('startupSnippetId');
         final keepStartup = await exists(db.snippets, startupId);
         if (startupId != null && !keepStartup) cleared.add('startup snippet');
+
+        // Read before the insert, like every other field: a value of the wrong
+        // type has to fail before anything is written, not after the host.
+        final legacyGroupId = str('groupId');
 
         await db
             .into(db.hosts)
@@ -171,7 +182,12 @@ final class SyncRowWriter {
               HostsCompanion.insert(
                 id: id(),
                 workspaceId: row['workspaceId'] as String,
-                identityId: Value(keepIdentity ? identityId : null),
+                // Absent when the sender does not sync identities and so
+                // cannot know the host's: see `SyncEngine._seal`.
+                identityId: ifSent(
+                  'identityId',
+                  () => keepIdentity ? identityId : null,
+                ),
                 label: row['label'] as String,
                 hostname: row['hostname'] as String,
                 // Absent in rows written before these columns existed; the
@@ -183,7 +199,10 @@ final class SyncRowWriter {
                 moshPortRange: Value(str('moshPortRange')),
                 colorTag: Value(str('colorTag')),
                 jumpHostId: Value(str('jumpHostId')),
-                startupSnippetId: Value(keepStartup ? startupId : null),
+                startupSnippetId: ifSent(
+                  'startupSnippetId',
+                  () => keepStartup ? startupId : null,
+                ),
                 environment: Value(str('environment') ?? 'dev'),
                 mcpVisible: Value(row['mcpVisible'] as bool? ?? true),
                 mcpDefaultMode: Value(str('mcpDefaultMode') ?? 'readonly'),
@@ -196,7 +215,6 @@ final class SyncRowWriter {
         // carries its one tag there, though: turn it into the membership row
         // with the deterministic id, insert-or-ignore so a membership that
         // already arrived is not clobbered.
-        final legacyGroupId = str('groupId');
         if (legacyGroupId != null &&
             await exists(db.hostGroups, legacyGroupId)) {
           final hostId = id();
@@ -273,8 +291,7 @@ final class SyncRowWriter {
                 title: row['title'] as String,
                 code: row['code'] as String,
                 tags: Value(str('tags')),
-                // Absent from an older client's row: plain required text.
-                variables: Value(str('variables')),
+                variables: ifSent('variables', () => str('variables')),
               ),
             );
 
@@ -294,10 +311,12 @@ final class SyncRowWriter {
                 title: row['title'] as String,
                 description: Value(str('description')),
                 createdAt: date('createdAt'),
-                // Absent from an older client's row: no default targets.
-                defaultHostIds: Value(str('defaultHostIds')),
-                variables: Value(str('variables')),
-                tags: Value(str('tags')),
+                defaultHostIds: ifSent(
+                  'defaultHostIds',
+                  () => str('defaultHostIds'),
+                ),
+                variables: ifSent('variables', () => str('variables')),
+                tags: ifSent('tags', () => str('tags')),
               ),
             );
 
@@ -324,12 +343,16 @@ final class SyncRowWriter {
                 expectedExitCode: Value(row['expectedExitCode'] as int? ?? 0),
                 expectedOutputPattern: Value(str('expectedOutputPattern')),
                 timeoutSeconds: Value(row['timeoutSeconds'] as int? ?? 30),
-                // Absent from an older client's row: the old behaviour.
-                onFailure: Value(str('onFailure') ?? 'stop'),
-                retries: Value(row['retries'] as int? ?? 0),
-                // Absent from an older client's row: an ordinary command.
-                kind: Value(str('kind') ?? 'command'),
-                snippetId: Value(keepStepSnippet ? stepSnippetId : null),
+                onFailure: ifSent(
+                  'onFailure',
+                  () => str('onFailure') ?? 'stop',
+                ),
+                retries: ifSent('retries', () => row['retries'] as int? ?? 0),
+                kind: ifSent('kind', () => str('kind') ?? 'command'),
+                snippetId: ifSent(
+                  'snippetId',
+                  () => keepStepSnippet ? stepSnippetId : null,
+                ),
               ),
             );
 
@@ -357,10 +380,14 @@ final class SyncRowWriter {
                 description: Value(str('description')),
                 activePaneId: Value(str('activePaneId')),
                 createdAt: date('createdAt'),
-                // Absent from an older client's row: no on-open runbook, and
-                // the safe default of asking first.
-                onOpenRunbookId: Value(keepOnOpen ? onOpenId : null),
-                onOpenConfirm: Value(row['onOpenConfirm'] as bool? ?? true),
+                onOpenRunbookId: ifSent(
+                  'onOpenRunbookId',
+                  () => keepOnOpen ? onOpenId : null,
+                ),
+                onOpenConfirm: ifSent(
+                  'onOpenConfirm',
+                  () => row['onOpenConfirm'] as bool? ?? true,
+                ),
               ),
             );
 
@@ -397,8 +424,14 @@ final class SyncRowWriter {
                 sessionType: row['sessionType'] as String,
                 hostId: Value(str('hostId')),
                 title: Value(str('title')),
-                startupSnippetId: Value(keepPaneSnippet ? paneSnippetId : null),
-                startupRunbookId: Value(keepPaneRunbook ? paneRunbookId : null),
+                startupSnippetId: ifSent(
+                  'startupSnippetId',
+                  () => keepPaneSnippet ? paneSnippetId : null,
+                ),
+                startupRunbookId: ifSent(
+                  'startupRunbookId',
+                  () => keepPaneRunbook ? paneRunbookId : null,
+                ),
               ),
             );
 
