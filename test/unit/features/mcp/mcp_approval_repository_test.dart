@@ -73,6 +73,12 @@ void main() {
         repo.normalizeCommand('rm -rf ./x'),
         isNot(repo.normalizeCommand('rm -rf ./y')),
       );
+      // A newline separates commands; collapsing it would let an approval
+      // for one line cover two.
+      expect(
+        repo.normalizeCommand('echo ok\nrm -rf x'),
+        isNot(repo.normalizeCommand('echo ok rm -rf x')),
+      );
     });
   });
 

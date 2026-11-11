@@ -4,6 +4,7 @@ import '../../../hosts/data/repositories/hosts_repository.dart';
 import '../../domain/models/mcp_enums.dart';
 import '../../domain/models/mcp_models.dart';
 import '../mcp_session_pool.dart';
+import '../repositories/mcp_audit_repository.dart';
 import '../repositories/mcp_grant_repository.dart';
 import 'mcp_tool_handler.dart';
 
@@ -21,12 +22,14 @@ class OpenSessionTool with McpArgReaders implements McpToolHandler {
   final HostsRepository hostsRepository;
   final HostsDao hostsDao;
   final McpGrantRepository grantRepository;
+  final McpAuditRepository auditRepository;
 
   const OpenSessionTool({
     required this.sessionPool,
     required this.hostsRepository,
     required this.hostsDao,
     required this.grantRepository,
+    required this.auditRepository,
   });
 
   @override
@@ -65,6 +68,7 @@ class OpenSessionTool with McpArgReaders implements McpToolHandler {
 
     final mode = await grantRepository.effectiveMode(ctx.clientId, hostId);
     if (mode == null) {
+      await _audit(ctx, hostId, null, AuditDecision.autoDenied);
       throw McpToolException(
         McpErrorCode.hostAccessRequired,
         'No access grant for host "$hostId". Call request_host_access for '
@@ -80,17 +84,31 @@ class OpenSessionTool with McpArgReaders implements McpToolHandler {
         host.workspaceId != ctx.workspaceId ||
         row == null ||
         !row.mcpVisible) {
+      await _audit(ctx, hostId, null, AuditDecision.autoDenied);
       throw McpToolException(
         McpErrorCode.hostNotVisible,
         'No host with id "$hostId" is visible to this client.',
       );
     }
 
-    final session = await sessionPool.open(
-      clientId: ctx.clientId,
-      clientName: ctx.clientName,
-      mode: mode.atMost(McpAccessMode.fromName(row.mcpDefaultMode)).name,
-      host: host,
+    final McpSession session;
+    try {
+      session = await sessionPool.open(
+        clientId: ctx.clientId,
+        clientName: ctx.clientName,
+        mode: mode.atMost(McpAccessMode.fromName(row.mcpDefaultMode)).name,
+        host: host,
+      );
+    } catch (_) {
+      await _audit(ctx, hostId, host.label, AuditDecision.error);
+      rethrow;
+    }
+    await _audit(
+      ctx,
+      hostId,
+      host.label,
+      AuditDecision.allowed,
+      sessionId: session.sessionId,
     );
 
     // `uname -a` / `echo $0` are run unquoted-literal on purpose (not passed
@@ -111,6 +129,23 @@ class OpenSessionTool with McpArgReaders implements McpToolHandler {
       'tabId': session.tabId,
     };
   }
+
+  Future<void> _audit(
+    McpToolContext ctx,
+    String hostId,
+    String? hostLabel,
+    AuditDecision decision, {
+    String? sessionId,
+  }) => auditRepository.record(
+    clientId: ctx.clientId,
+    clientName: ctx.clientName,
+    workspaceId: ctx.workspaceId,
+    hostId: hostId,
+    hostLabel: hostLabel,
+    tool: name,
+    args: {'sessionId': ?sessionId},
+    decision: decision,
+  );
 }
 
 /// `list_sessions` — every session this client currently holds, across every

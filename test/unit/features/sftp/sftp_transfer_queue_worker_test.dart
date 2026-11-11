@@ -51,6 +51,71 @@ class _FakeSftpClient implements SftpClient {
     return file;
   }
 
+  bool closed = false;
+
+  @override
+  Future<void> close() async => closed = true;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _DoneWriter with DoneFuture implements SftpFileWriter {
+  _DoneWriter(this.done);
+
+  @override
+  final Future<void> done;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+/// Takes an upload whole and logs the calls that put it in place.
+class _UploadClient implements SftpClient {
+  final log = <String>[];
+  final files = <String, SftpFileAttrs>{};
+
+  @override
+  Future<SftpFileAttrs> stat(String path, {bool followLink = true}) async =>
+      files[path] ?? (throw Exception('No such file'));
+
+  @override
+  Future<SftpFile> open(
+    String path, {
+    SftpFileOpenMode mode = SftpFileOpenMode.read,
+  }) async {
+    log.add('open $path');
+    return _UploadFile();
+  }
+
+  @override
+  Future<void> setStat(String path, SftpFileAttrs attrs) async =>
+      log.add('setStat $path ${attrs.mode?.value.toRadixString(8)}');
+
+  @override
+  Future<void> rename(String oldPath, String newPath) async =>
+      log.add('rename $oldPath $newPath');
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _UploadFile implements SftpFile {
+  @override
+  bool isClosed = false;
+
+  @override
+  SftpFileWriter write(
+    Stream<Uint8List> stream, {
+    int offset = 0,
+    void Function(int total)? onProgress,
+    int chunkSize = defaultChunkSize,
+    int maxPendingRequests = defaultMaxPendingRequests,
+  }) => _DoneWriter(stream.drain<void>());
+
+  @override
+  Future<void> close() async => isClosed = true;
+
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
@@ -309,6 +374,54 @@ void main() {
     worker.clearFinished();
 
     expect(worker.queueList.map((i) => i.id), [running]);
+  });
+
+  test('a released client stays open until its transfer is done', () async {
+    // Leaving the screen or opening another host's files used to close the
+    // client at once, aborting what was still running on it.
+    final id = download('file.bin');
+    await _eventually(() => client.opened['/remote/file.bin'] != null);
+
+    worker.releaseClient(client);
+    await pumpEventQueue();
+    expect(client.closed, isFalse);
+
+    final remote = client.opened['/remote/file.bin']!.single;
+    remote.send([1, 2, 3, 4, 5, 6]);
+    await remote.bytes.close();
+    await _eventually(() => item(id).status == TransferStatus.completed);
+    expect(client.closed, isTrue);
+  });
+
+  test('a released client with nothing running is closed at once', () async {
+    worker.releaseClient(client);
+    expect(client.closed, isTrue);
+  });
+
+  test('an upload keeps the mode of the file it replaces', () async {
+    final uploads = _UploadClient();
+    uploads.files['/srv/.env'] = SftpFileAttrs(
+      mode: const SftpFileMode.value(0x8180),
+    );
+    final local = File('${dir.path}/.env')..writeAsStringSync('KEY=1');
+
+    final id = worker.enqueueUpload(
+      client: uploads,
+      localPath: local.path,
+      remotePath: '/srv/.env',
+      sessionId: 'tab-1',
+      hostLabel: 'prod',
+    );
+    await _eventually(() => item(id).status == TransferStatus.completed);
+
+    expect(item(id).sessionId, 'tab-1');
+    expect(item(id).label, 'prod: .env');
+    final temp = '/srv/.env.shellvibe-part-$id';
+    expect(uploads.log, [
+      'open $temp',
+      'setStat $temp 600',
+      'rename $temp /srv/.env',
+    ]);
   });
 
   group('TransferItem', () {

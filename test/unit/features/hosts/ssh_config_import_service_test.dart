@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:cryptography/cryptography.dart';
 import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
@@ -575,6 +577,199 @@ void main() {
       expect(
         result.warnings.any((w) => w.message.contains('passphrase-protected')),
         isTrue,
+      );
+    });
+
+    test('multi-hop ProxyJump builds the chain in OpenSSH order', () async {
+      // `a,b`: web goes through b, and b through a.
+      final result = await service.importConfig(
+        path: 'config',
+        content: 'Host web\n  ProxyJump ops@a.corp,b.corp:2222\n',
+        options: options(keys: false),
+      );
+
+      expect(result.jumpHostsAdded, 2);
+      final rows = await hosts();
+      final a = rows.firstWhere((h) => h.label == 'a.corp');
+      final b = rows.firstWhere((h) => h.label == 'b.corp');
+      final web = rows.firstWhere((h) => h.label == 'web');
+      expect(web.jumpHostId, b.id);
+      expect(b.jumpHostId, a.id);
+      expect(b.port, 2222);
+      expect(a.jumpHostId, isNull);
+      expect(a.username, 'ops');
+      // Created hops have no credentials, and the user is told so.
+      expect(
+        result.warnings.where((w) => w.message.contains('no credentials')),
+        hasLength(2),
+      );
+    });
+
+    test('a chain through an existing host does not reroute it', () async {
+      await db.hostsDao.insertHost(
+        HostsCompanion.insert(
+          id: 'b',
+          workspaceId: _kWorkspaceId,
+          label: 'b',
+          hostname: 'b.corp',
+          createdAt: DateTime.now(),
+        ),
+      );
+      final result = await service.importConfig(
+        path: 'config',
+        content: 'Host web\n  ProxyJump a,b\n',
+        options: options(keys: false),
+      );
+
+      final rows = await hosts();
+      expect(rows.firstWhere((h) => h.label == 'web').jumpHostId, 'b');
+      expect(rows.firstWhere((h) => h.id == 'b').jumpHostId, isNull);
+      expect(
+        result.warnings.any(
+          (w) => w.message.contains('"b" does not connect through "a"'),
+        ),
+        isTrue,
+      );
+    });
+
+    test('a chain hop with its own ProxyJump in the config is not reported',
+        () async {
+      final result = await service.importConfig(
+        path: 'config',
+        content: 'Host web\n  ProxyJump a,b\n'
+            'Host b\n  ProxyJump a\n'
+            'Host a\n',
+        options: options(keys: false),
+      );
+
+      final rows = await hosts();
+      final a = rows.firstWhere((h) => h.label == 'a');
+      final b = rows.firstWhere((h) => h.label == 'b');
+      expect(rows.firstWhere((h) => h.label == 'web').jumpHostId, b.id);
+      expect(b.jumpHostId, a.id);
+      expect(
+        result.warnings.any((w) => w.message.contains('ProxyJump chain')),
+        isFalse,
+      );
+    });
+
+    test('a ProxyJump to the host itself is skipped', () async {
+      final result = await service.importConfig(
+        path: 'config',
+        content: 'Host web\n  ProxyJump web\n',
+        options: options(keys: false),
+      );
+
+      expect((await hosts()).single.jumpHostId, isNull);
+      expect(
+        result.warnings.any((w) => w.message.contains('points at the host')),
+        isTrue,
+      );
+    });
+
+    test('overwrite never gives a Mosh host a jump host', () async {
+      await db.hostsDao.insertHost(
+        HostsCompanion.insert(
+          id: 'm',
+          workspaceId: _kWorkspaceId,
+          label: 'web',
+          hostname: 'web.corp',
+          protocol: const Value('mosh'),
+          createdAt: DateTime.now(),
+        ),
+      );
+      final result = await service.importConfig(
+        path: 'config',
+        content: 'Host web\n  ProxyJump bastion\nHost bastion\n',
+        options: options(conflict: SshConfigConflictPolicy.overwrite,
+            keys: false),
+      );
+
+      expect(
+        (await hosts()).firstWhere((h) => h.id == 'm').jumpHostId,
+        isNull,
+      );
+      expect(
+        result.warnings.any((w) => w.message.contains('not an SSH host')),
+        isTrue,
+      );
+    });
+
+    test('overwrite reports the tunnel rules it deleted', () async {
+      await db.hostsDao.insertHost(
+        HostsCompanion.insert(
+          id: 'existing',
+          workspaceId: _kWorkspaceId,
+          label: 'web',
+          hostname: 'old.example.com',
+          createdAt: DateTime.now(),
+        ),
+      );
+      await db.tunnelsDao.insertRule(
+        PortForwardRulesCompanion.insert(
+          id: 'rule1',
+          hostId: 'existing',
+          type: 'local',
+          localPort: 1111,
+        ),
+      );
+      final result = await service.importConfig(
+        path: 'config',
+        content: 'Host web\n  LocalForward 8080 localhost:80\n',
+        options: options(conflict: SshConfigConflictPolicy.overwrite,
+            keys: false),
+      );
+
+      expect(result.removedTunnelRuleIds, ['rule1']);
+    });
+
+    test('an IdentityFile that is not a private key is not imported',
+        () async {
+      fs['/etc/passwd'] = 'root:x:0:0:root:/root:/bin/sh\n';
+      final result = await service.importConfig(
+        path: 'config',
+        content: 'Host web\n  IdentityFile /etc/passwd\n',
+        options: options(),
+      );
+
+      expect(result.identitiesAdded, 0);
+      expect(await identities(), isEmpty);
+      expect((await hosts()).single.identityId, isNull);
+      expect(
+        result.warnings.any((w) => w.message.contains('not a private key')),
+        isTrue,
+      );
+    });
+
+    test('the default reader refuses non-regular and oversized files',
+        () async {
+      final dir = Directory.systemTemp.createTempSync('ssh-import-');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final big = File('${dir.path}/big')
+        ..writeAsStringSync(
+          '-----BEGIN OPENSSH PRIVATE KEY-----\n'
+          '${'A' * (SshConfigImportService.maxReadBytes + 1)}\n'
+          '-----END OPENSSH PRIVATE KEY-----\n',
+        );
+      final real = SshConfigImportService(
+        db: db,
+        vaultKeyService: _FakeVaultKeyService(),
+        encryptionEngine: EncryptionEngine(),
+        homePath: dir.path,
+        environment: const {},
+      );
+
+      final result = await real.importConfig(
+        path: 'config',
+        content: 'Host web\n  IdentityFile ${dir.path}\n'
+            '  IdentityFile ${big.path}\n',
+        options: options(),
+      );
+
+      expect(result.identitiesAdded, 0);
+      expect(
+        result.warnings.where((w) => w.message.contains('not readable')),
+        hasLength(2),
       );
     });
   });
