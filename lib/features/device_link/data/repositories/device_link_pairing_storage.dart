@@ -102,8 +102,7 @@ final class DeviceLinkPairingStorage {
       _profileKey(profile.id),
       jsonEncode(profile.toJson()),
     );
-    final ids = (await _readIndex()).toSet()..add(profile.id);
-    await _writeIndex(ids.toList()..sort());
+    await _updateIndex((ids) => ({...ids, profile.id}.toList()..sort()));
   }
 
   /// Drops pairings with the same desktop that were made under a different
@@ -125,9 +124,19 @@ final class DeviceLinkPairingStorage {
 
   Future<void> remove(String id) async {
     await storage.deleteToken(_profileKey(id));
-    final ids = await _readIndex();
-    ids.remove(id);
-    await _writeIndex(ids);
+    await _updateIndex((ids) => ids..remove(id));
+  }
+
+  /// Every instance shares one index key, so its read-modify-write runs one
+  /// at a time across all of them; concurrent edits would drop entries.
+  static Future<void> _indexQueue = Future.value();
+
+  Future<void> _updateIndex(List<String> Function(List<String>) change) {
+    final next = _indexQueue.then(
+      (_) async => _writeIndex(change(await _readIndex())),
+    );
+    _indexQueue = next.catchError((_) {});
+    return next;
   }
 
   Future<List<String>> _readIndex() async {
