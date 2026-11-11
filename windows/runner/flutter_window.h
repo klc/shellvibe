@@ -44,6 +44,11 @@ class FlutterWindow : public Win32Window {
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
       launch_at_login_channel_;
 
+  // `dev.shellvibe.app/clipboard`: copies a secret with the marks that keep it
+  // out of clipboard history.
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
+      clipboard_channel_;
+
   // Queues |task| to run on this window's thread, the platform thread.
   void PostToPlatformThread(std::function<void()> task);
 };

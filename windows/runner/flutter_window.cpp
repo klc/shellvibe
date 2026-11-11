@@ -1,6 +1,10 @@
 #include "flutter_window.h"
 
+#include <flutter/standard_method_codec.h>
+
+#include <cstring>
 #include <optional>
+#include <string>
 
 #include "flutter/generated_plugin_registrant.h"
 #include "package_integration.h"
@@ -13,6 +17,55 @@ constexpr UINT kRunOnPlatformThread = WM_APP + 0x51;
 // Shows the window if the Dart side has not, a while after the first frame.
 constexpr UINT_PTR kShowFallbackTimer = 1;
 constexpr UINT kShowFallbackDelayMs = 3000;
+
+// Hands |size| bytes to the open clipboard as |format|.
+bool SetClipboardBytes(UINT format, const void* data, size_t size) {
+  HGLOBAL memory = ::GlobalAlloc(GMEM_MOVEABLE, size);
+  if (!memory) return false;
+  void* target = ::GlobalLock(memory);
+  if (!target) {
+    ::GlobalFree(memory);
+    return false;
+  }
+  std::memcpy(target, data, size);
+  ::GlobalUnlock(memory);
+  if (!::SetClipboardData(format, memory)) {
+    ::GlobalFree(memory);
+    return false;
+  }
+  return true;
+}
+
+// Puts |utf8| on the clipboard marked to stay out of clipboard history, cloud
+// clipboard sync and clipboard monitors. On failure the clipboard is left
+// empty, never holding the text without the marks.
+bool CopySensitiveText(HWND owner, const std::string& utf8) {
+  int length = ::MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
+                                     utf8.data(), static_cast<int>(utf8.size()),
+                                     nullptr, 0);
+  if (length <= 0 && !utf8.empty()) return false;
+  std::wstring text(length, L'\0');
+  ::MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, utf8.data(),
+                        static_cast<int>(utf8.size()), text.data(), length);
+  if (!::OpenClipboard(owner)) return false;
+  ::EmptyClipboard();
+  const DWORD zero = 0;
+  bool ok =
+      SetClipboardBytes(::RegisterClipboardFormatW(
+                            L"ExcludeClipboardContentFromMonitorProcessing"),
+                        &zero, sizeof(zero)) &&
+      SetClipboardBytes(
+          ::RegisterClipboardFormatW(L"CanIncludeInClipboardHistory"), &zero,
+          sizeof(zero)) &&
+      SetClipboardBytes(
+          ::RegisterClipboardFormatW(L"CanUploadToCloudClipboard"), &zero,
+          sizeof(zero)) &&
+      SetClipboardBytes(CF_UNICODETEXT, text.c_str(),
+                        (text.size() + 1) * sizeof(wchar_t));
+  if (!ok) ::EmptyClipboard();
+  ::CloseClipboard();
+  return ok;
+}
 
 }  // namespace
 
@@ -44,6 +97,26 @@ bool FlutterWindow::OnCreate() {
           PostToPlatformThread(std::move(task));
         });
   }
+  // The Dart side's ClipboardAutoClearService copies secrets through here, and
+  // falls back to a plain copy on an error.
+  clipboard_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(),
+          "dev.shellvibe.app/clipboard",
+          &flutter::StandardMethodCodec::GetInstance());
+  clipboard_channel_->SetMethodCallHandler(
+      [this](const flutter::MethodCall<flutter::EncodableValue>& call,
+             std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
+                 result) {
+        const auto* text = std::get_if<std::string>(call.arguments());
+        if (call.method_name() != "copySensitive" || text == nullptr) {
+          result->NotImplemented();
+        } else if (CopySensitiveText(GetHandle(), *text)) {
+          result->Success();
+        } else {
+          result->Error("copy_failed", "The clipboard could not be set.");
+        }
+      });
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   // The Dart side shows the window, maximised, through window_manager
@@ -70,6 +143,7 @@ bool FlutterWindow::OnCreate() {
 
 void FlutterWindow::OnDestroy() {
   launch_at_login_channel_ = nullptr;
+  clipboard_channel_ = nullptr;
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }

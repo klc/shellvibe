@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
@@ -7,6 +6,7 @@ import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../../../core/sync/backup_envelope.dart';
 import '../../../../core/sync/backup_scope_store.dart';
+import '../../../settings/presentation/copy_secret_with_auto_clear.dart';
 import '../../../settings/presentation/widgets/backup_scope_picker.dart';
 import '../../data/cloud_backup_api.dart';
 import '../../domain/backup_frequency.dart';
@@ -320,7 +320,12 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
           buttonKey: const Key('cloud_backup_copy_code_button'),
           label: 'Copy Code',
           icon: LucideIcons.copy,
-          onPressed: () => Clipboard.setData(ClipboardData(text: code)),
+          onPressed: () => copySecretWithAutoClear(
+            ref,
+            context,
+            code,
+            toast: 'Recovery code copied',
+          ),
         ),
         const SizedBox(height: 12),
         ShadInput(

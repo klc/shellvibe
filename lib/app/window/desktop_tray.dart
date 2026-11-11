@@ -322,6 +322,8 @@ class _DesktopTrayHostState extends ConsumerState<DesktopTrayHost>
 
   Future<void> _quit() async {
     if (!await confirmQuit(ref)) return;
+    // The auto-clear timer dies with the process; a copied secret must not.
+    await ref.read(clipboardAutoClearServiceProvider).clearNow();
     try {
       await trayManager.destroy();
       _trayShown = false;
