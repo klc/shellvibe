@@ -311,6 +311,9 @@ final class CloudBackupService {
       // The device that wrote the revision, so the rows it restores break
       // clock ties the same way the operation that produced them would have.
       snapshotDeviceId: stored.deviceId,
+      // The user chose this revision, so on a device that syncs it is a
+      // change like any other.
+      recordAsChange: true,
     );
   }
 

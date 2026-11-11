@@ -71,10 +71,9 @@ final class SyncJournal {
 
   /// Runs [write] and records an `upsert` for the row it touched.
   ///
-  /// The write is wrapped rather than followed, for two reasons. The row as it
-  /// was before the change can only be read before the write happens, and
-  /// nothing outside this method needs to remember to record afterwards -- a
-  /// write that forgets is a change that silently never syncs.
+  /// The write is wrapped rather than followed, so nothing outside this method
+  /// needs to remember to record afterwards -- a write that forgets is a
+  /// change that silently never syncs.
   ///
   /// The operation carries the whole row, not a field diff: conflicts are
   /// resolved at entity level, so the winning operation has to reconstruct the
@@ -85,8 +84,6 @@ final class SyncJournal {
     required String entityId,
     required Future<T> Function() write,
   }) => db.transaction(() async {
-    final before = await SyncRowCodec.read(db, entityType, entityId);
-
     final result = await write();
 
     final payload = await SyncRowCodec.read(db, entityType, entityId);
@@ -99,7 +96,6 @@ final class SyncJournal {
       entityId: entityId,
       operation: 'upsert',
       payload: jsonEncode(payload),
-      before: before == null ? null : jsonEncode(before),
     );
 
     // An id that is written again is no longer deleted. Leaving the tombstone
@@ -168,7 +164,6 @@ final class SyncJournal {
         entityId: target.id,
         operation: 'upsert',
         payload: jsonEncode(payload),
-        before: null,
       );
     }
 
@@ -187,7 +182,6 @@ final class SyncJournal {
       entityId: entityId,
       operation: 'delete',
       payload: null,
-      before: body,
       clock: clock,
     );
 
@@ -309,10 +303,24 @@ final class SyncJournal {
     // `<=`, not `<`: timestamps are stored to the second, so a row deleted in
     // the same second as the cutoff would otherwise never expire under a zero
     // retention. At the end of its window is expired.
-    return (db.update(db.syncTombstones)..where(
-          (t) => t.body.isNotNull() & t.deletedAt.isSmallerOrEqualValue(cutoff),
-        ))
-        .write(const SyncTombstonesCompanion(body: Value(null)));
+    final purged =
+        (db.update(db.syncTombstones)..where(
+              (t) =>
+                  t.body.isNotNull() &
+                  t.deletedAt.isSmallerOrEqualValue(cutoff),
+            ))
+            .write(const SyncTombstonesCompanion(body: Value(null)));
+
+    // Bodies older builds kept in the outbox, which nothing reads; see
+    // [_write]. Their copy of a deleted row would otherwise outlive the trash
+    // for as long as the operation waits to be sent. Queued together with the
+    // purge rather than after it: the caller does not wait for either.
+    final cleared =
+        (db.update(db.pendingOperations)
+              ..where((t) => t.beforeImage.isNotNull()))
+            .write(const PendingOperationsCompanion(beforeImage: Value(null)));
+
+    return (await Future.wait([purged, cleared])).first;
   }
 
   /// Puts a deleted row back.
@@ -409,10 +417,12 @@ final class SyncJournal {
   /// the ground just wrote. Sending those back would spend the write budget
   /// re-uploading what was just downloaded.
   ///
-  /// One clock for the batch. They are all the same thing -- what this device
-  /// held at the moment it joined -- and it sits one above the ground's clock,
-  /// so a row the ground did not carry wins over anything the ground said at
-  /// the time it was taken.
+  /// A clock per row, each above the ground's, so a row the ground did not
+  /// carry wins over anything the ground said at the time it was taken. Not
+  /// one clock for the batch: a server that pages by clock cannot split a
+  /// page inside one, so of a hundred-and-fifty rows sharing a clock the
+  /// other devices received the first hundred and never the rest. Rows go in
+  /// dependency order, so a parent's clock is below its children's.
   ///
   /// Call inside the transaction that applies the ground. Queued separately,
   /// a crash in between leaves a device that believes it has joined and has
@@ -424,7 +434,6 @@ final class SyncJournal {
   /// already read. The versions are still needed -- a row standing at no clock
   /// loses to any operation that mentions it, however old.
   Future<int> seedUnversioned({bool queue = true}) async {
-    final clock = await _nextClock();
     var seeded = 0;
 
     for (final entityType in SyncRowCodec.syncableTypes) {
@@ -448,16 +457,12 @@ final class SyncJournal {
             entityId: entityId,
             operation: 'upsert',
             payload: jsonEncode(payload),
-            // No ancestor. This row predates sync on this device, so there is
-            // no state any other device ever saw it in.
-            before: null,
-            clock: clock,
           );
         } else {
           await setVersion(
             entityType: entityType,
             entityId: entityId,
-            logicalClock: clock,
+            logicalClock: await _nextClock(),
             deviceId: deviceId,
           );
         }
@@ -614,14 +619,17 @@ final class SyncJournal {
   /// Replacing rather than appending is the coalescing rule: with entity level
   /// last-writer-wins the intermediate states mean nothing to any receiver, so
   /// sending them would spend a 30-per-minute write budget on states nobody
-  /// applies. The `before_image` of the first operation is carried forward --
-  /// it is the common ancestor, and the second change is not.
+  /// applies.
+  ///
+  /// `before_image` is no longer written. Nothing ever read it, and on a
+  /// device whose outbox does not drain -- sync switched off -- it kept the
+  /// body of a deleted identity, secrets included, long after the trash had
+  /// let it go.
   Future<void> _write({
     required String entityType,
     required String entityId,
     required String operation,
     required String? payload,
-    required String? before,
     int? clock,
   }) async {
     final existing =
@@ -630,11 +638,6 @@ final class SyncJournal {
                   t.entityType.equals(entityType) & t.entityId.equals(entityId),
             ))
             .getSingleOrNull();
-
-    // The ancestor of a coalesced operation is the state before the *first*
-    // change, not before the last one. The second change's "before" is a state
-    // no other device ever saw.
-    final beforeImage = existing?.beforeImage ?? before;
 
     if (existing != null) {
       await (db.delete(
@@ -653,7 +656,6 @@ final class SyncJournal {
             entityId: entityId,
             operation: operation,
             payload: Value(payload),
-            beforeImage: Value(beforeImage),
             logicalClock: assigned,
             createdAt: DateTime.now(),
           ),

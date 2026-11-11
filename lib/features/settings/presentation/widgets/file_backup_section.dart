@@ -179,6 +179,9 @@ class _FileBackupSectionState extends ConsumerState<FileBackupSection> {
         backupPackageJson: backupJson,
         db: db,
         masterPassword: password,
+        // A file restored on a device that syncs is a change like any other;
+        // without this it never left this device.
+        recordAsChange: true,
       );
 
       // Settings live in secure storage, so the sync service hands them back

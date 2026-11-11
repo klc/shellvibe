@@ -252,7 +252,12 @@ final class SyncJoinService {
     // A conflict here means another device refreshed it first, which is the
     // same outcome. Never forced: overwriting a ground another device just
     // wrote is the one move that can lose data.
-    if (seeded > 0) {
+    //
+    // Not from a device that has narrowed what it syncs. It skipped the
+    // operations of the categories it left out, so its copy of them is stale
+    // -- deleted rows still there, new ones missing -- and a ground written
+    // from it starts every new device that way.
+    if (seeded > 0 && engine.scope.coversSyncGround) {
       await ground.write(
         db: db,
         passphrase: secret,
