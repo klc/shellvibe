@@ -327,6 +327,82 @@ void main() {
     expect(result.category, isNot(RiskCategory.readonlySafe));
   });
 
+  // readonlySafe is auto-allowed in every access mode, so each of these
+  // would run with no approval if it slipped through.
+  test('bypass corpus is never readonlySafe', () {
+    for (final command in <String>[
+      // A read-only word hidden in a comment or an argument.
+      'echo ssh-ed25519 AAAA | tee -a ~/.ssh/authorized_keys # git log',
+      'python3 /tmp/p.py # docker ps',
+      'mv /etc/nginx/nginx.conf /tmp/x # systemctl status',
+      'kubectl apply -f x.yaml # get',
+      'git commit -am "fix log"',
+      'git branch -D diff-test',
+      'docker exec db-logs mysql -e "UPDATE users SET admin=1"',
+      'git diff --output=/etc/cron.d/x',
+      'ls # anything',
+      // sed in place with bundled flags, or running/writing from a script.
+      'sed -Ei s/a/b/ /etc/hosts',
+      'sed -ni.bak p /etc/hosts',
+      "sed -n '1e id' f",
+      "sed 's/a/b/e' f",
+      "sed 's/a/b/gw /tmp/out' f",
+      "sed -n 'w /tmp/out' f",
+      'sed -f script.sed f',
+      // find actions that run a program or write a file.
+      'find . -exec touch {} +',
+      r'find . -ok rm {} \;',
+      r'find . -execdir cp {} /tmp \;',
+      'find / -fprint /etc/cron.d/x',
+      'find . -fprintf /tmp/x %p',
+      // Readers of credential files, by name, by glob, or under ~/.ssh.
+      'tac .env',
+      'nl ~/.aws/credentials',
+      'sort /etc/shadow',
+      'sed -n p .env',
+      'cat .e*',
+      'cat /etc/sha*',
+      'cat .{env,bak}',
+      'head ~/.ss?/id_*',
+      'cat ~/.ssh/config',
+      'cd ~/.ssh && cat id_ed25519',
+    ]) {
+      expect(
+        classifier.classify(command).category,
+        isNot(RiskCategory.readonlySafe),
+        reason: command,
+      );
+    }
+  });
+
+  test('plain read-only commands stay readonlySafe', () {
+    for (final command in <String>[
+      'git log',
+      'git status',
+      'git diff HEAD~1',
+      'docker ps',
+      'docker logs web',
+      'docker compose ps',
+      'systemctl status nginx',
+      'kubectl get pods',
+      'kubectl describe pod web',
+      "sed -n '/error/p' /var/log/syslog",
+      'find /var/log -name "*.gz" -print',
+      "grep -v '^#' /etc/nginx/nginx.conf",
+      'grep -v ^# /etc/fstab',
+      'echo a#b',
+      "git log --format='%h #%s'",
+      'cat /var/log/*.log',
+      'ls -la ~/.ssh',
+    ]) {
+      expect(
+        classifier.classify(command).category,
+        RiskCategory.readonlySafe,
+        reason: command,
+      );
+    }
+  });
+
   test('secretRead commands are classified correctly', () {
     expect(
       classifier.classify('cat /etc/shadow').category,
