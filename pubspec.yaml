@@ -73,7 +73,9 @@ dependencies:
   dartssh2: ^4.0.1
   # Queues input natively instead of blocking in write(): flutter_pty 0.4.2's
   # blocking write deadlocked the ackRead reader on a large paste. 2.x drops
-  # ackRead, so moving to it is its own migration.
+  # ackRead, so moving to it is its own migration. 3.0.0 also fails the iOS
+  # build: its build hook compiles pty_unix_spawn.c, which includes
+  # <libproc.h>, a header the iOS SDK does not ship.
   flutter_pty2: ^1.0.2
   # Mosh UDP transport. Pinned to our fork by commit, not to the pub.dev
   # release: the package is at 0.0.x, so protocol fixes have to be able to land
@@ -98,6 +100,9 @@ dependencies:
   basic_utils: ^5.8.2
 
   # Desktop & Window Management
+  # Held at 0.5.x: window_manager 0.6 and tray_manager 0.7+ move onto
+  # nativeapi's FFI core, leaving 0.5's API as a deprecated bridge and no
+  # method channels for the tests to fake. Upgrading is its own migration.
   window_manager: ^0.5.2
   tray_manager: ^0.5.3
   # 0.8.1 takes drops from sandboxed (Flatpak/Snap) sources on Linux. It needs
@@ -113,13 +118,13 @@ dependencies:
   # runs from its MSIX (lib/core/utils/windows_package_identity.dart).
   ffi: ^2.2.0
   uuid: ^4.6.0
-  shadcn_ui: ^0.57.1
+  shadcn_ui: ^0.59.0
   lucide_icons_flutter: ^3.1.15
   file_selector: ^1.1.0
   quick_actions: ^1.1.1
   # OS notifications on macOS, Windows and Linux, the same API the mobile
   # builds can take up later.
-  flutter_local_notifications: ^22.3.1
+  flutter_local_notifications: ^23.0.1
   flutter_foreground_task: ^11.0.3
 
 dev_dependencies:
