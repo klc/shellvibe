@@ -20,7 +20,8 @@ enum McpAccessMode {
   /// Risky commands are surfaced to the user for approval before they run.
   guarded,
 
-  /// Risky commands run without asking.
+  /// Risky commands run without asking, except deleting files, running as
+  /// another user, reading secrets and unreadable scripts, which still ask.
   autonomous;
 
   static McpAccessMode fromName(String value) => switch (value) {

@@ -924,8 +924,8 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                   const _FieldNote(
                     'Read only runs only commands that change nothing. Ask '
                     'before changes asks you first. Full access runs changes '
-                    'without asking; reading secrets and unreadable scripts '
-                    'still ask.',
+                    'without asking; deleting files, sudo, reading secrets '
+                    'and unreadable scripts still ask.',
                   ),
                 ],
                 if (_testResult case final result?) ...[

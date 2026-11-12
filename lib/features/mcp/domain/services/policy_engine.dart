@@ -200,19 +200,19 @@ class PolicyEngine {
 
   /// The (category × mode) part of the decision matrix.
   ///
-  /// `unclassified` and every category that is not
-  /// [RiskCategory.readonlySafe], [RiskCategory.opaqueExec],
-  /// [RiskCategory.secretRead] or [RiskCategory.interactive] (i.e.
-  /// `destructiveFs`, `privilege`, `serviceControl`, `package`,
-  /// `identityPerm`, `networkFw`, `database`, `vcs`, `container`) share one
-  /// deny/confirm/allow shape across readonly/guarded/autonomous — the plan's
-  /// table collapses all of these into a single "yıkıcı kategoriler"
-  /// (destructive categories) row. `readonlySafe` always allows.
+  /// `unclassified` and the remaining risky categories (`serviceControl`,
+  /// `package`, `identityPerm`, `networkFw`, `database`, `vcs`, `container`)
+  /// share one deny/confirm/allow shape across readonly/guarded/autonomous —
+  /// the plan's table collapses all of these into a single "yıkıcı
+  /// kategoriler" (destructive categories) row. `readonlySafe` always allows.
   /// `opaqueExec` never reaches `allow` from this matrix (deny/deny/confirm).
   /// `secretRead` never does either (deny/confirm/confirm): output masking
   /// only catches the secret shapes it knows, so reading a credential file is
-  /// always a human's call. `interactive` is handled in step 2 and never
-  /// reaches this switch; the case exists only to keep it exhaustive.
+  /// always a human's call. `destructiveFs` and `privilege` are
+  /// deny/confirm/confirm as well: deleting files and running as root stay a
+  /// human's call even in autonomous mode. Unlike `secretRead` they can still
+  /// be remembered ([canRemember]). `interactive` is handled in step 2 and
+  /// never reaches this switch; the case exists only to keep it exhaustive.
   PolicyAction _matrixAction(RiskCategory category, McpAccessMode mode) {
     switch (category) {
       case RiskCategory.readonlySafe:
@@ -224,6 +224,8 @@ class PolicyEngine {
           McpAccessMode.autonomous => PolicyAction.confirm,
         };
       case RiskCategory.secretRead:
+      case RiskCategory.destructiveFs:
+      case RiskCategory.privilege:
         return switch (mode) {
           McpAccessMode.readonly => PolicyAction.deny,
           McpAccessMode.guarded => PolicyAction.confirm,
@@ -232,8 +234,6 @@ class PolicyEngine {
       case RiskCategory.interactive:
         return PolicyAction.rejectInteractive;
       case RiskCategory.unclassified:
-      case RiskCategory.destructiveFs:
-      case RiskCategory.privilege:
       case RiskCategory.serviceControl:
       case RiskCategory.package:
       case RiskCategory.identityPerm:
