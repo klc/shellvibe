@@ -85,7 +85,7 @@ class _AboutSettingsSectionState extends ConsumerState<AboutSettingsSection> {
             children: [
               ListTile(
                 key: const Key('about_build_identity'),
-                leading: Icon(LucideIcons.info, color: tokens.brand),
+                leading: Icon(LucideIcons.info, color: tokens.textMuted),
                 title: Text(AppConstants.appName),
                 subtitle: Text(
                   '${AppConstants.appVersion} · ${currentPlatformLabel()}',
@@ -117,7 +117,7 @@ class _AboutSettingsSectionState extends ConsumerState<AboutSettingsSection> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 ListTile(
-                  leading: Icon(LucideIcons.download, color: tokens.brand),
+                  leading: Icon(LucideIcons.download, color: tokens.textMuted),
                   title: const Text('Updates'),
                   subtitle: Text(
                     'Checked only when you ask. Nothing is sent about this '
@@ -147,7 +147,7 @@ class _AboutSettingsSectionState extends ConsumerState<AboutSettingsSection> {
             children: [
               ListTile(
                 key: const Key('about_open_licenses'),
-                leading: Icon(LucideIcons.scale, color: tokens.brand),
+                leading: Icon(LucideIcons.scale, color: tokens.textMuted),
                 title: const Text('Open source licenses'),
                 subtitle: Text(
                   'Notices for the packages this build was compiled with.',
@@ -171,7 +171,7 @@ class _AboutSettingsSectionState extends ConsumerState<AboutSettingsSection> {
               const Divider(),
               ListTile(
                 key: const Key('about_report_problem'),
-                leading: Icon(LucideIcons.bug, color: tokens.brand),
+                leading: Icon(LucideIcons.bug, color: tokens.textMuted),
                 title: const Text('Report a problem'),
                 subtitle: Text(
                   'Opens a GitHub issue with the build and the recent error '
@@ -187,7 +187,7 @@ class _AboutSettingsSectionState extends ConsumerState<AboutSettingsSection> {
               const Divider(),
               ListTile(
                 key: const Key('about_security_contact'),
-                leading: Icon(LucideIcons.shieldAlert, color: tokens.brand),
+                leading: Icon(LucideIcons.shieldAlert, color: tokens.textMuted),
                 title: const Text('Report a security issue'),
                 subtitle: Text(
                   'Found something that puts a user\'s servers at risk? '
@@ -222,7 +222,7 @@ class _AboutSettingsSectionState extends ConsumerState<AboutSettingsSection> {
     return switch (result) {
       UpdateAvailable(:final version, :final url) => ListTile(
         key: const Key('about_update_available'),
-        leading: Icon(LucideIcons.circleArrowUp, color: tokens.brand),
+        leading: Icon(LucideIcons.circleArrowUp, color: tokens.textMuted),
         title: Text('Version $version is available'),
         subtitle: Text(
           'You are running ${AppConstants.appVersion}.',

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
+import '../../../../app/theme/app_theme.dart';
 import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/widgets/adaptive_modal.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
@@ -138,6 +139,7 @@ class _VaultMasterPasswordSectionState
 
     final confirmed = await showShadDialog<bool>(
       context: context,
+      barrierColor: AppTheme.scrimOf(context),
       builder: (dialogContext) => ShadDialog.alert(
         title: const Text('Remove master password?'),
         description: const Text(

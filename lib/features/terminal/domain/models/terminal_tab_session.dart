@@ -156,6 +156,53 @@ class TerminalTabSession {
   /// that never came up (that case carries [errorMessage] instead).
   TerminalDisconnectCause? disconnectCause;
 
+  /// What the program in this pane last called its window (OSC 0/2): a shell
+  /// reporting `user@host: ~/src`, an editor reporting the file it has open.
+  /// Null until something reports one.
+  String? reportedTitle;
+
+  /// The directory the shell last reported (OSC 7), as a path; a local
+  /// shell's home is written `~`. Null until the shell reports one.
+  String? workingDirectory;
+
+  /// The name the tab strip and pane header show: what the program reports,
+  /// else the directory it is in, else the name the tab was opened with.
+  /// [title] itself is never replaced, since templates and saved layouts
+  /// store it.
+  String get displayTitle {
+    final reported = reportedTitle?.trim();
+    if (reported != null && reported.isNotEmpty) return reported;
+    final dir = workingDirectory;
+    if (dir != null && dir.isNotEmpty) return directoryLabel(dir);
+    return title;
+  }
+
+  /// The short form of a directory for a tab: its last segment, or `~` / `/`.
+  static String directoryLabel(String path) {
+    if (path == '~' || path == '/') return path;
+    final segments = path.split('/').where((s) => s.isNotEmpty);
+    return segments.isEmpty ? path : segments.last;
+  }
+
+  /// The path an OSC 7 report points at (`file://host/Users/me/src` →
+  /// `/Users/me/src`), with [home] shortened to `~`. Null when it is not a
+  /// path at all.
+  static String? reportedPath(String uri, {String? home}) {
+    final parsed = Uri.tryParse(uri);
+    var path = parsed != null && parsed.hasScheme
+        ? Uri.decodeComponent(parsed.path)
+        : uri;
+    if (path.isEmpty) return null;
+    if (path.length > 1 && path.endsWith('/')) {
+      path = path.substring(0, path.length - 1);
+    }
+    if (home != null && home.isNotEmpty) {
+      if (path == home) return '~';
+      if (path.startsWith('$home/')) return '~${path.substring(home.length)}';
+    }
+    return path;
+  }
+
   /// Parent pane in the split tree, null for a tab root. Not final: closing a
   /// pane promotes its children in place — they keep their live terminal,
   /// bridges and subscriptions and only change position in the tree.

@@ -53,12 +53,7 @@ class HostListHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final style = TextStyle(
-      fontSize: 10,
-      fontWeight: FontWeight.w600,
-      letterSpacing: 1.4,
-      color: tokens.textSubtle,
-    );
+    final style = TextStyle(fontSize: 12, color: tokens.textMuted);
     // No rule under the header: the rows below are pills with their own
     // spacing, so a line here would only cut the panel in half.
     // The list below pads 10px, each row another 10 (14 when compact), so the
@@ -69,24 +64,24 @@ class HostListHeader extends StatelessWidget {
         children: [
           SizedBox(width: compact ? 15 : 24),
           // A phone row stacks its name over its address, so there is no
-          // second column for an ADDRESS label to head.
+          // second column for an Address label to head.
           Expanded(
             flex: kHostColumnFlex[0],
-            child: Text('NAME', style: style, maxLines: 1),
+            child: Text('Name', style: style, maxLines: 1),
           ),
           if (!compact)
             Expanded(
               flex: kHostColumnFlex[1],
-              child: Text('ADDRESS', style: style, maxLines: 1),
+              child: Text('Address', style: style, maxLines: 1),
             ),
           if (!compact) ...[
             Expanded(
               flex: kHostColumnFlex[2],
-              child: Text('TAG', style: style, maxLines: 1),
+              child: Text('Tag', style: style, maxLines: 1),
             ),
             Expanded(
               flex: kHostColumnFlex[3],
-              child: Text('STATUS', style: style, maxLines: 1),
+              child: Text('Status', style: style, maxLines: 1),
             ),
           ],
           SizedBox(width: hostActionsWidth(tokens, compact: compact)),
@@ -127,13 +122,11 @@ class HostFilterChip extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
-            color: selected
-                ? tokens.brand.withValues(alpha: 0.14)
-                : Colors.transparent,
+            color: selected ? tokens.selectedFill : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: selected
-                  ? tokens.brand.withValues(alpha: 0.26)
+                  ? Colors.transparent
                   : tokens.textPrimary.withValues(alpha: 0.07),
             ),
           ),
@@ -142,7 +135,7 @@ class HostFilterChip extends StatelessWidget {
             style: TextStyle(
               fontSize: 13,
               fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-              color: selected ? tokens.brandSoft : tokens.textMuted,
+              color: selected ? tokens.textPrimary : tokens.textMuted,
             ),
           ),
         ),

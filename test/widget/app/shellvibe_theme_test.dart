@@ -4,10 +4,12 @@ import 'package:shellvibe/app/theme/app_palette_definitions.dart';
 import 'package:shellvibe/app/theme/app_theme.dart';
 import 'package:shellvibe/app/theme/shellvibe_tokens.dart';
 import 'package:shellvibe/features/settings/domain/models/app_settings_model.dart';
+import 'package:shellvibe/features/terminal/domain/models/terminal_palette_data.dart';
+import 'package:shellvibe/features/terminal/domain/models/terminal_palette.dart';
 
 void main() {
   test('Nocturne dark theme exposes the ShellVibe token contract', () {
-    // Graphite explicitly: the app ships on OLED now, and this test is the
+    // ShellVibe Amber explicitly — it is also the default the app ships on —
     // contract for the graphite tokens, not for whichever palette is default.
     final theme = AppTheme.buildTheme(
       const AppSettingsModel(
@@ -18,41 +20,35 @@ void main() {
     final tokens = theme.extension<ShellVibeTokens>();
 
     expect(tokens, isNotNull);
-    expect(tokens!.canvas, const Color(0xFF0A0B11));
-    expect(tokens.surface, const Color(0xFF141726));
-    expect(tokens.surfaceLow, const Color(0xFF0F111C));
-    expect(tokens.terminalBg, const Color(0xFF101218));
-    expect(tokens.brand, const Color(0xFF8B93FF));
-    expect(tokens.brandInk, const Color(0xFF0B0D16));
+    expect(tokens!.canvas, const Color(0xFF141414));
+    expect(tokens.surface, const Color(0xFF141414));
+    expect(tokens.surfaceLow, const Color(0xFF101010));
+    expect(tokens.terminalBg, const Color(0xFF101010));
+    expect(tokens.brand, const Color(0xFFE5A23C));
+    expect(tokens.brandInk, const Color(0xFF17130A));
     expect(theme.scaffoldBackgroundColor, tokens.canvas);
   });
 
-  test('The app ships on OLED: true black canvas, no grey lift', () {
+  test('The app ships on ShellVibe Amber, terminal matched to it', () {
+    const defaults = AppSettingsModel();
     final theme = AppTheme.buildTheme(
       const AppSettingsModel(themeMode: ThemeMode.dark),
     );
     final tokens = theme.extension<ShellVibeTokens>();
 
-    expect(const AppSettingsModel().palette, AppPalette.oled);
-    expect(tokens!.canvas, const Color(0xFF000000));
-    expect(tokens.surfaceLow, const Color(0xFF000000));
+    expect(defaults.palette, AppPalette.dark);
+    expect(AppPalette.dark.label, 'ShellVibe Amber');
+    expect(tokens!.canvas, const Color(0xFF141414));
+    expect(tokens.brand, const Color(0xFFE5A23C));
     expect(theme.scaffoldBackgroundColor, tokens.canvas);
-  });
-
-  test('Nocturne panels keep a pixel-anchored gradient falloff', () {
-    final tokens = ShellVibeTokens.dark;
-
-    // A 400px panel reaches surfaceLow halfway down; an 800px one a quarter
-    // of the way — the same 200px falloff either way.
+    // "Match App Theme" lands on the scheme of the same name in the dark.
     expect(
-      (tokens.panelGradient(gradientExtent: 200, height: 400) as LinearGradient)
-          .stops,
-      [0, 0.5],
+      defaults.resolvedTerminalPalette(Brightness.dark),
+      TerminalPalette.nocturne,
     );
     expect(
-      (tokens.panelGradient(gradientExtent: 200, height: 800) as LinearGradient)
-          .stops,
-      [0, 0.25],
+      TerminalPaletteData.of(TerminalPalette.nocturne).label,
+      'ShellVibe Amber',
     );
   });
 
@@ -110,7 +106,7 @@ void main() {
     final tokens = theme.extension<ShellVibeTokens>();
 
     expect(tokens, ShellVibeTokens.light);
-    expect(theme.scaffoldBackgroundColor, const Color(0xFFF2F4F8));
+    expect(theme.scaffoldBackgroundColor, const Color(0xFFFFFFFF));
   });
 
   test('Every palette keeps its terminal chrome light in daylight', () {

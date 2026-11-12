@@ -8,8 +8,8 @@ import 'window_caption_strip.dart';
 /// rather than living inside it.
 ///
 /// [AppNavigationShell] owes the window two things before it may draw: the
-/// caption strip the window controls live in, and the panel gap that keeps the
-/// slabs off the window edge. A route outside the shell — file transfer, the
+/// caption strip the window controls live in, and the panel gap around its
+/// panels (zero today: they sit flush). A route outside the shell — file transfer, the
 /// Device Link flow — has neither, so its own header starts at the very top
 /// left of the window and the window controls either land on top of it or are
 /// missing altogether. This wrapper hands such a route the same chrome the shell draws, so the

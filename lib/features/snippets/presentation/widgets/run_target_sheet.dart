@@ -492,20 +492,16 @@ class _GroupChip extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
           decoration: BoxDecoration(
-            color: selected
-                ? tokens.brand.withValues(alpha: 0.12)
-                : Colors.transparent,
+            color: selected ? tokens.selectedFill : Colors.transparent,
             borderRadius: BorderRadius.circular(tokens.radiusPill),
             border: Border.all(
-              color: selected
-                  ? tokens.brand.withValues(alpha: 0.34)
-                  : tokens.border,
+              color: selected ? Colors.transparent : tokens.border,
             ),
           ),
           child: Text(
             label,
             style: Theme.of(context).textTheme.labelMedium?.copyWith(
-              color: selected ? tokens.brand : tokens.textMuted,
+              color: selected ? tokens.textPrimary : tokens.textMuted,
             ),
           ),
         ),

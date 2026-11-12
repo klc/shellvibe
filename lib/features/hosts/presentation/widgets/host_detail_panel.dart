@@ -179,7 +179,7 @@ class _HostStatePill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = ShellVibeTokens.resolve(context);
-    final color = connected ? tokens.brand : tokens.textMuted;
+    final color = connected ? tokens.success : tokens.textMuted;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       decoration: BoxDecoration(
@@ -200,7 +200,7 @@ class _HostStatePill extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: connected ? tokens.brandSoft : tokens.textMuted,
+              color: connected ? tokens.success : tokens.textMuted,
             ),
           ),
         ],

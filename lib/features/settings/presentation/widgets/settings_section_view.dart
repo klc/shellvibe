@@ -636,7 +636,7 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
       padding: const EdgeInsets.only(bottom: 8, left: 2),
       child: Row(
         children: [
-          Icon(icon, size: 16, color: tokens.brand),
+          Icon(icon, size: 16, color: tokens.textMuted),
           const SizedBox(width: 8),
           Text(
             title,
@@ -652,11 +652,11 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
   }
 }
 
-/// OLED leads because it is the default the app ships with; the list under
-/// it stays alphabetical.
+/// ShellVibe Amber leads because it is the default the app ships with, its
+/// true-black sibling next; the list under them stays alphabetical.
 const _kPaletteOrder = [
-  AppPalette.oled,
   AppPalette.dark,
+  AppPalette.oled,
   AppPalette.teal,
   AppPalette.catppuccin,
   AppPalette.dracula,
@@ -810,7 +810,7 @@ class _TerminalThemePreview extends StatelessWidget {
       // the corner arcs and breaks the outline there.
       foregroundDecoration: BoxDecoration(
         borderRadius: BorderRadius.circular(tokens.radiusLarge),
-        border: Border.all(color: tokens.brand.withValues(alpha: 0.24)),
+        border: Border.all(color: tokens.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
+import 'package:shellvibe/app/widgets/shellvibe_ui.dart';
 import 'package:shellvibe/core/utils/platform_capabilities.dart';
 import 'package:shellvibe/features/settings/presentation/screens/settings_screen.dart';
 import 'package:shellvibe/shared/database/app_database.dart';
@@ -162,7 +163,12 @@ void main() {
 
       // Every section is one row of the index, under its group heading.
       for (final group in SettingsSectionGroup.values) {
-        expect(find.text(group.label.toUpperCase()), findsOneWidget);
+        // A group can share its name with one of its sections ("Security"),
+        // so the heading is found by its widget, not by its text alone.
+        expect(
+          find.widgetWithText(ShellVibeSectionLabel, group.label),
+          findsOneWidget,
+        );
       }
       for (final section in SettingsSection.values) {
         await tester.scrollUntilVisible(

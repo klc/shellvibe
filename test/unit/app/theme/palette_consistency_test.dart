@@ -18,7 +18,7 @@ void expectOverlaysFollowTokens(
   expect(shad.input, equals(tokens.border));
   expect(shad.accentForeground, equals(tokens.textPrimary));
   expect(theme.popupMenuTheme.color, equals(tokens.surfaceRaised));
-  expect(theme.focusColor, equals(tokens.brand.withValues(alpha: 0.12)));
+  expect(theme.focusColor, equals(tokens.selectedFill));
   expect(theme.hoverColor, equals(tokens.textPrimary.withValues(alpha: 0.05)));
 
   // Roles Material widgets read when used with theme defaults.
@@ -34,7 +34,7 @@ void expectOverlaysFollowTokens(
   final selectedLabel = theme.navigationBarTheme.labelTextStyle!.resolve({
     WidgetState.selected,
   });
-  expect(selectedLabel!.color, equals(tokens.brandBright));
+  expect(selectedLabel!.color, equals(tokens.textPrimary));
 }
 
 void main() {

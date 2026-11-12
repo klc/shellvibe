@@ -76,7 +76,6 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
               Expanded(
                 child: showContextColumn
                     ? ShellVibePanel(
-                        gradientExtent: 160,
                         child: _buildWorkArea(
                           context,
                           identitiesAsync,
@@ -311,7 +310,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
                   description:
                       'Create an encrypted password or private-key identity and reuse it across hosts.',
                   actions: [
-                    ShellVibeButton(
+                    ShellVibeButton.secondary(
                       icon: LucideIcons.plus,
                       label: 'Add identity',
                       onPressed: () => _openIdentityForm(context),
@@ -556,7 +555,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
                       'Variables stored here are encrypted and added to '
                       'every new local shell.',
                   actions: [
-                    ShellVibeButton(
+                    ShellVibeButton.secondary(
                       icon: LucideIcons.plus,
                       label: 'Add variable',
                       onPressed: () => _openEnvVarForm(context),
@@ -725,13 +724,11 @@ class _VaultViewChip extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
-            color: selected
-                ? tokens.brand.withValues(alpha: 0.14)
-                : Colors.transparent,
+            color: selected ? tokens.selectedFill : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: selected
-                  ? tokens.brand.withValues(alpha: 0.26)
+                  ? Colors.transparent
                   : tokens.textPrimary.withValues(alpha: 0.07),
             ),
           ),
@@ -740,7 +737,7 @@ class _VaultViewChip extends StatelessWidget {
             style: TextStyle(
               fontSize: 13,
               fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-              color: selected ? tokens.brandSoft : tokens.textMuted,
+              color: selected ? tokens.textPrimary : tokens.textMuted,
             ),
           ),
         ),

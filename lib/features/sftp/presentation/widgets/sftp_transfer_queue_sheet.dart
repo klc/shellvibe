@@ -40,7 +40,7 @@ class SftpTransferQueueSheet extends ConsumerWidget {
             // decide whether the label survives.
             child: Row(
               children: [
-                Icon(LucideIcons.arrowRightLeft, color: tokens.brand),
+                Icon(LucideIcons.arrowRightLeft, color: tokens.textMuted),
                 const SizedBox(width: 8),
                 const Expanded(
                   child: Text(

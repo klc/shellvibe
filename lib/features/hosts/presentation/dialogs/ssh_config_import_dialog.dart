@@ -379,7 +379,6 @@ class _HostChecklist extends StatelessWidget {
         Text(
           '${selected.length} of ${hosts.length} hosts selected',
           style: theme.textTheme.labelMedium?.copyWith(
-            color: theme.colorScheme.primary,
             fontWeight: FontWeight.w600,
           ),
         ),

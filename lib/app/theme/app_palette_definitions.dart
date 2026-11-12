@@ -7,7 +7,7 @@ import 'shellvibe_tokens.dart';
 ///
 /// Every [AppPalette] defines:
 /// - [darkTokens]: Full [ShellVibeTokens] contract with matching surfaces, brand,
-///   gradients, text, and semantic accents.
+///   text, and semantic accents.
 /// - [lightTokens]: Corresponding daylight [ShellVibeTokens] contract.
 /// - [darkSecondary] & [lightSecondary]: Accent colors used for secondary highlights.
 class AppPaletteDefinition {
@@ -64,7 +64,7 @@ class AppPaletteDefinition {
   }
 
   static final Map<AppPalette, AppPaletteDefinition> _registry = {
-    // 1. ShellVibe Graphite (Default Nocturne)
+    // 1. ShellVibe Amber: graphite ground, amber accent (the Nocturne tokens)
     AppPalette.dark: const AppPaletteDefinition(
       darkTokens: ShellVibeTokens.dark,
       lightTokens: ShellVibeTokens.light,
@@ -76,7 +76,6 @@ class AppPaletteDefinition {
     AppPalette.oled: AppPaletteDefinition(
       darkTokens: ShellVibeTokens.dark.copyWith(
         canvas: const Color(0xFF000000),
-        canvasGlow: const Color(0xFF0D1611),
         surface: const Color(0xFF080A0D),
         surfaceLow: const Color(0xFF000000),
         terminalBg: const Color(0xFF000000),
@@ -87,8 +86,6 @@ class AppPaletteDefinition {
         brandBright: const Color(0xFF69F0AE),
         brandSoft: const Color(0xFFB9F6CA),
         brandInk: const Color(0xFF000000),
-        brandGradientTop: const Color(0xFF33FF99),
-        brandGradientBottom: const Color(0xFF00B359),
         info: const Color(0xFF18FFFF),
         border: const Color(0xFF1F1F1F),
         // Neutral greys with the surfaces' faint cool cast. The text ramp used
@@ -116,8 +113,6 @@ class AppPaletteDefinition {
         brand: const Color(0xFF007A3F),
         brandBright: const Color(0xFF006434),
         brandSoft: const Color(0xFF00B359),
-        brandGradientTop: const Color(0xFF00A355),
-        brandGradientBottom: const Color(0xFF006434),
         info: const Color(0xFF00838F),
       ),
       darkSecondary: const Color(0xFF18FFFF),
@@ -139,7 +134,6 @@ class AppPaletteDefinition {
     AppPalette.teal: AppPaletteDefinition(
       darkTokens: ShellVibeTokens.dark.copyWith(
         canvas: const Color(0xFF0E1216),
-        canvasGlow: const Color(0xFF161D22),
         surface: const Color(0xFF151A1F),
         surfaceLow: const Color(0xFF0A0E11),
         surfaceRaised: const Color(0xFF1C2329),
@@ -155,8 +149,6 @@ class AppPaletteDefinition {
         brandBright: const Color(0xFF5AD3CB),
         brandSoft: const Color(0xFFA7E8E3),
         brandInk: const Color(0xFF04100F),
-        brandGradientTop: const Color(0xFF3FC4BB),
-        brandGradientBottom: const Color(0xFF1C8F89),
         info: const Color(0xFF6FB2E8),
         success: const Color(0xFF5FC39B),
         warning: const Color(0xFFDBB56B),
@@ -178,8 +170,6 @@ class AppPaletteDefinition {
         brand: const Color(0xFF0B6E6E),
         brandBright: const Color(0xFF075757),
         brandSoft: const Color(0xFF0E8A8A),
-        brandGradientTop: const Color(0xFF0E8A8A),
-        brandGradientBottom: const Color(0xFF085C5C),
         info: const Color(0xFF1D6FD0),
         success: const Color(0xFF11705A),
         warning: const Color(0xFFA65A07),
@@ -194,7 +184,6 @@ class AppPaletteDefinition {
     AppPalette.catppuccin: AppPaletteDefinition(
       darkTokens: ShellVibeTokens.dark.copyWith(
         canvas: const Color(0xFF1E1E2E),
-        canvasGlow: const Color(0xFF313244),
         surface: const Color(0xFF181825),
         surfaceLow: const Color(0xFF11111B),
         terminalBg: const Color(0xFF11111B),
@@ -205,8 +194,6 @@ class AppPaletteDefinition {
         brandBright: const Color(0xFFB4BEFE),
         brandSoft: const Color(0xFFCBA6F7),
         brandInk: const Color(0xFF11111B),
-        brandGradientTop: const Color(0xFFB4BEFE),
-        brandGradientBottom: const Color(0xFF74C7EC),
         textPrimary: const Color(0xFFCDD6F4),
         textSecondary: const Color(0xFFBAC2DE),
         textMuted: const Color(0xFFA6ADC8),
@@ -219,7 +206,6 @@ class AppPaletteDefinition {
       ),
       lightTokens: ShellVibeTokens.light.copyWith(
         canvas: const Color(0xFFEFF1F5),
-        canvasGlow: const Color(0xFFFFFFFF),
         surface: const Color(0xFFE6E9EF),
         surfaceLow: const Color(0xFFDCE0E8),
         surfaceRaised: const Color(0xFFFFFFFF),
@@ -230,8 +216,6 @@ class AppPaletteDefinition {
         brandBright: const Color(0xFF04A5E5),
         brandSoft: const Color(0xFF7287FD),
         brandInk: const Color(0xFFFFFFFF),
-        brandGradientTop: const Color(0xFF7287FD),
-        brandGradientBottom: const Color(0xFF1E66F5),
         textPrimary: const Color(0xFF4C4F69),
         textSecondary: const Color(0xFF5C5F77),
         textMuted: const Color(0xFF63667B),
@@ -250,7 +234,6 @@ class AppPaletteDefinition {
     AppPalette.nord: AppPaletteDefinition(
       darkTokens: ShellVibeTokens.dark.copyWith(
         canvas: const Color(0xFF2E3440),
-        canvasGlow: const Color(0xFF434C5E),
         surface: const Color(0xFF3B4252),
         surfaceLow: const Color(0xFF242933),
         terminalBg: const Color(0xFF242933),
@@ -261,8 +244,6 @@ class AppPaletteDefinition {
         brandBright: const Color(0xFF8FBCBB),
         brandSoft: const Color(0xFF81A1C1),
         brandInk: const Color(0xFF2E3440),
-        brandGradientTop: const Color(0xFF8FBCBB),
-        brandGradientBottom: const Color(0xFF81A1C1),
         textPrimary: const Color(0xFFECEFF4),
         textSecondary: const Color(0xFFE5E9F0),
         // Snow Storm's darkest step (#D8DEE9) sat a hair below the primary
@@ -277,7 +258,6 @@ class AppPaletteDefinition {
       ),
       lightTokens: ShellVibeTokens.light.copyWith(
         canvas: const Color(0xFFECEFF4),
-        canvasGlow: const Color(0xFFFFFFFF),
         surface: const Color(0xFFE5E9F0),
         surfaceLow: const Color(0xFFD8DEE9),
         surfaceRaised: const Color(0xFFFFFFFF),
@@ -288,8 +268,6 @@ class AppPaletteDefinition {
         brandBright: const Color(0xFF81A1C1),
         brandSoft: const Color(0xFF88C0D0),
         brandInk: const Color(0xFFFFFFFF),
-        brandGradientTop: const Color(0xFF6E93B6),
-        brandGradientBottom: const Color(0xFF4C566A),
         textPrimary: const Color(0xFF2E3440),
         textSecondary: const Color(0xFF3B4252),
         // Polar Night's lightest step was nearly the primary text; this keeps
@@ -310,7 +288,6 @@ class AppPaletteDefinition {
     AppPalette.dracula: AppPaletteDefinition(
       darkTokens: ShellVibeTokens.dark.copyWith(
         canvas: const Color(0xFF282A36),
-        canvasGlow: const Color(0xFF44475A),
         surface: const Color(0xFF343746),
         surfaceLow: const Color(0xFF21222C),
         terminalBg: const Color(0xFF21222C),
@@ -321,8 +298,6 @@ class AppPaletteDefinition {
         brandBright: const Color(0xFFCAA9FA),
         brandSoft: const Color(0xFFFF79C6),
         brandInk: const Color(0xFF282A36),
-        brandGradientTop: const Color(0xFFCAA9FA),
-        brandGradientBottom: const Color(0xFF9A6BD8),
         textPrimary: const Color(0xFFF8F8F2),
         textSecondary: const Color(0xFFE2E2DC),
         // Lifted from #A3A3A3, which fell to 3.6:1 on Current Line (#44475A),
@@ -337,7 +312,6 @@ class AppPaletteDefinition {
       ),
       lightTokens: ShellVibeTokens.light.copyWith(
         canvas: const Color(0xFFF8F8F2),
-        canvasGlow: const Color(0xFFFFFFFF),
         surface: const Color(0xFFFFFFFF),
         surfaceLow: const Color(0xFFEAEAEA),
         surfaceRaised: const Color(0xFFF1F1EB),
@@ -348,8 +322,6 @@ class AppPaletteDefinition {
         brandBright: const Color(0xFF6236B8),
         brandSoft: const Color(0xFFBD93F9),
         brandInk: const Color(0xFFFFFFFF),
-        brandGradientTop: const Color(0xFF9A6BD8),
-        brandGradientBottom: const Color(0xFF6236B8),
         textPrimary: const Color(0xFF282A36),
         textSecondary: const Color(0xFF44475A),
         // Dracula's comment hue, one step deeper: #6272A4 fell to 4.2:1 on
@@ -370,7 +342,6 @@ class AppPaletteDefinition {
     AppPalette.solarizedDark: AppPaletteDefinition(
       darkTokens: ShellVibeTokens.dark.copyWith(
         canvas: const Color(0xFF002B36),
-        canvasGlow: const Color(0xFF073642),
         surface: const Color(0xFF073642),
         surfaceLow: const Color(0xFF001F27),
         terminalBg: const Color(0xFF001F27),
@@ -385,8 +356,6 @@ class AppPaletteDefinition {
         brandBright: const Color(0xFF38BFB5),
         brandSoft: const Color(0xFF268BD2),
         brandInk: const Color(0xFF002B36),
-        brandGradientTop: const Color(0xFF38BFB5),
-        brandGradientBottom: const Color(0xFF20857D),
         textPrimary: const Color(0xFF93A1A1),
         textSecondary: const Color(0xFF93A1A1),
         textMuted: const Color(0xFF8B9FA6),
@@ -399,7 +368,6 @@ class AppPaletteDefinition {
       ),
       lightTokens: ShellVibeTokens.light.copyWith(
         canvas: const Color(0xFFFDF6E3),
-        canvasGlow: const Color(0xFFFDF6E3),
         surface: const Color(0xFFEEE8D5),
         surfaceLow: const Color(0xFFE4DCBA),
         // base3, Solarized's lightest step — white is not in the palette and
@@ -412,8 +380,6 @@ class AppPaletteDefinition {
         brandBright: const Color(0xFF1A6094),
         brandSoft: const Color(0xFF2AA198),
         brandInk: const Color(0xFFFFFFFF),
-        brandGradientTop: const Color(0xFF2F8ACF),
-        brandGradientBottom: const Color(0xFF175C8C),
         textPrimary: const Color(0xFF073642),
         textSecondary: const Color(0xFF4E6268),
         textMuted: const Color(0xFF51666C),
@@ -432,7 +398,6 @@ class AppPaletteDefinition {
     AppPalette.tokyoNight: AppPaletteDefinition(
       darkTokens: ShellVibeTokens.dark.copyWith(
         canvas: const Color(0xFF1A1B26),
-        canvasGlow: const Color(0xFF24283B),
         surface: const Color(0xFF24283B),
         surfaceLow: const Color(0xFF16161E),
         terminalBg: const Color(0xFF16161E),
@@ -445,8 +410,6 @@ class AppPaletteDefinition {
         brandBright: const Color(0xFF8DAEF8),
         brandSoft: const Color(0xFFBB9AF7),
         brandInk: const Color(0xFF1A1B26),
-        brandGradientTop: const Color(0xFF8DAEF8),
-        brandGradientBottom: const Color(0xFF6289EE),
         textPrimary: const Color(0xFFC0CAF5),
         textSecondary: const Color(0xFFA9B1D6),
         textMuted: const Color(0xFF9AA5CE),
@@ -459,7 +422,6 @@ class AppPaletteDefinition {
       ),
       lightTokens: ShellVibeTokens.light.copyWith(
         canvas: const Color(0xFFE1E2E7),
-        canvasGlow: const Color(0xFFFFFFFF),
         surface: const Color(0xFFD5D6DB),
         surfaceLow: const Color(0xFFCBCCD1),
         surfaceRaised: const Color(0xFFFFFFFF),
@@ -470,8 +432,6 @@ class AppPaletteDefinition {
         brandBright: const Color(0xFF263E66),
         brandSoft: const Color(0xFF7AA2F7),
         brandInk: const Color(0xFFFFFFFF),
-        brandGradientTop: const Color(0xFF496EA8),
-        brandGradientBottom: const Color(0xFF263E66),
         textPrimary: const Color(0xFF343B58),
         textSecondary: const Color(0xFF4C505E),
         textMuted: const Color(0xFF52586C),
@@ -490,7 +450,6 @@ class AppPaletteDefinition {
     AppPalette.gruvbox: AppPaletteDefinition(
       darkTokens: ShellVibeTokens.dark.copyWith(
         canvas: const Color(0xFF282828),
-        canvasGlow: const Color(0xFF3C3836),
         surface: const Color(0xFF3C3836),
         surfaceLow: const Color(0xFF1D2021),
         terminalBg: const Color(0xFF1D2021),
@@ -503,8 +462,6 @@ class AppPaletteDefinition {
         brandBright: const Color(0xFFFFA347),
         brandSoft: const Color(0xFFFABD2F),
         brandInk: const Color(0xFF282828),
-        brandGradientTop: const Color(0xFFFFA347),
-        brandGradientBottom: const Color(0xFFD65D0E),
         textPrimary: const Color(0xFFEBDBB2),
         textSecondary: const Color(0xFFD5C4A1),
         textMuted: const Color(0xFFBDAE93),
@@ -517,7 +474,6 @@ class AppPaletteDefinition {
       ),
       lightTokens: ShellVibeTokens.light.copyWith(
         canvas: const Color(0xFFFBF1C7),
-        canvasGlow: const Color(0xFFF9F5D7),
         surface: const Color(0xFFEBDBB2),
         surfaceLow: const Color(0xFFD5C4A1),
         // Gruvbox's own lightest ground (bg0_h), not white: overlays, the
@@ -531,8 +487,6 @@ class AppPaletteDefinition {
         brandBright: const Color(0xFF9D0006),
         brandSoft: const Color(0xFFFE8019),
         brandInk: const Color(0xFFFFFFFF),
-        brandGradientTop: const Color(0xFFD65D0E),
-        brandGradientBottom: const Color(0xFF9D0006),
         textPrimary: const Color(0xFF3C3836),
         textSecondary: const Color(0xFF504945),
         textMuted: const Color(0xFF665C54),
@@ -551,7 +505,6 @@ class AppPaletteDefinition {
     AppPalette.oneDark: AppPaletteDefinition(
       darkTokens: ShellVibeTokens.dark.copyWith(
         canvas: const Color(0xFF21252B),
-        canvasGlow: const Color(0xFF282C34),
         surface: const Color(0xFF282C34),
         surfaceLow: const Color(0xFF1B1D23),
         terminalBg: const Color(0xFF1B1D23),
@@ -564,8 +517,6 @@ class AppPaletteDefinition {
         brandBright: const Color(0xFF78C0FF),
         brandSoft: const Color(0xFFC678DD),
         brandInk: const Color(0xFF21252B),
-        brandGradientTop: const Color(0xFF78C0FF),
-        brandGradientBottom: const Color(0xFF4894DF),
         textPrimary: const Color(0xFFABB2BF),
         textSecondary: const Color(0xFF9DA5B4),
         textMuted: const Color(0xFF9199A9),
@@ -578,7 +529,6 @@ class AppPaletteDefinition {
       ),
       lightTokens: ShellVibeTokens.light.copyWith(
         canvas: const Color(0xFFFAFAFA),
-        canvasGlow: const Color(0xFFFFFFFF),
         surface: const Color(0xFFF0F0F0),
         surfaceLow: const Color(0xFFE5E5E6),
         surfaceRaised: const Color(0xFFFFFFFF),
@@ -589,8 +539,6 @@ class AppPaletteDefinition {
         brandBright: const Color(0xFF2960D9),
         brandSoft: const Color(0xFF61AFEF),
         brandInk: const Color(0xFFFFFFFF),
-        brandGradientTop: const Color(0xFF5C8DF5),
-        brandGradientBottom: const Color(0xFF2960D9),
         textPrimary: const Color(0xFF383A42),
         textSecondary: const Color(0xFF4F525E),
         textMuted: const Color(0xFF696C77),

@@ -38,11 +38,9 @@ class AutomationListHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = ShellVibeTokens.resolve(context);
-    final style = Theme.of(context).textTheme.labelSmall?.copyWith(
-      fontSize: 10,
-      letterSpacing: 0.8,
-      color: tokens.textMuted,
-    );
+    final style = Theme.of(
+      context,
+    ).textTheme.bodySmall?.copyWith(color: tokens.textMuted);
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
       decoration: BoxDecoration(
@@ -124,16 +122,8 @@ class AutomationRow extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(16, 0, 8, 0),
           constraints: const BoxConstraints(minHeight: 42),
           decoration: BoxDecoration(
-            color: selected
-                ? tokens.textPrimary.withValues(alpha: 0.06)
-                : Colors.transparent,
-            border: Border(
-              bottom: BorderSide(color: tokens.border),
-              left: BorderSide(
-                color: selected ? tokens.brand : Colors.transparent,
-                width: 2,
-              ),
-            ),
+            color: selected ? tokens.selectedFill : Colors.transparent,
+            border: Border(bottom: BorderSide(color: tokens.border)),
           ),
           child: Row(
             children: [

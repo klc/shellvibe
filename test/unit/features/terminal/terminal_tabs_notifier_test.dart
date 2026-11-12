@@ -223,6 +223,42 @@ void main() {
       expect(state.activeTab!.title, equals('Test Shell'));
     });
 
+    test('a tab takes the title and directory its program reports', () async {
+      final notifier = container.read(terminalTabsProvider.notifier);
+      notifier.openLocalTab(title: 'Local Shell');
+      final tab = container.read(terminalTabsProvider).activeTab!;
+
+      tab.terminal.write('\x1b]7;file://box/srv/app\x07');
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      var shown = container.read(terminalTabsProvider).activeTab!;
+      expect(shown.workingDirectory, '/srv/app');
+      expect(shown.displayTitle, 'app');
+
+      tab.terminal.write('\x1b]2;htop\x07');
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      shown = container.read(terminalTabsProvider).activeTab!;
+      expect(shown.displayTitle, 'htop');
+      // The name it was opened with is kept for templates and layouts.
+      expect(shown.title, 'Local Shell');
+    });
+
+    test("an agent's tab keeps the name the agent gave it", () async {
+      final notifier = container.read(terminalTabsProvider.notifier);
+      final id = notifier.openMcpTab(
+        mcpSessionId: 'mcp-1',
+        title: 'claude · deploy check',
+        onClose: () {},
+      );
+      final tab = container
+          .read(terminalTabsProvider)
+          .tabs
+          .firstWhere((t) => t.id == id);
+
+      tab.terminal.write('\x1b]2;user@box: ~\x07');
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(tab.displayTitle, 'claude · deploy check');
+    });
+
     test('setActiveTab switches active tab', () {
       final notifier = container.read(terminalTabsProvider.notifier);
 

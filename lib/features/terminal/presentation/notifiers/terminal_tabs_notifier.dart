@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
@@ -159,6 +160,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     });
     ref.onDispose(() {
       _notifierDisposed = true;
+      _titleRefresh?.cancel();
       unawaited(_connectivitySub?.cancel() ?? Future.value());
       _connectivitySub = null;
       // Reading `state` is forbidden during life-cycles; drop interceptors
@@ -256,7 +258,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
           )
           ..startupSnippetOverrideId = startupSnippetId
           ..startupRunbookId = startupRunbookId;
-    _ownedTabs.add(newTab);
+    _adopt(newTab);
 
     final updatedTabs = [...state.tabs, newTab];
     state = state.copyWith(tabs: updatedTabs, activeTabId: tabId);
@@ -286,7 +288,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       terminal: _newTerminal(),
       isConnecting: true,
     );
-    _ownedTabs.add(newTab);
+    _adopt(newTab);
 
     final updatedTabs = [...state.tabs, newTab];
     state = state.copyWith(tabs: updatedTabs, activeTabId: tabId);
@@ -355,6 +357,45 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     return {...resolved.vars, ...builtins};
   }
 
+  /// Takes ownership of [tab] and follows what its program says about itself
+  /// — its window title (OSC 0/2) and directory (OSC 7) — so the strip and
+  /// the pane header can name what is running instead of how the tab began.
+  ///
+  /// An agent's tab keeps the name the agent gave it: the shell underneath
+  /// would otherwise rename it to a prompt the user never typed into.
+  void _adopt(TerminalTabSession tab) {
+    _ownedTabs.add(tab);
+    if (tab.isMcp) return;
+    final home = tab.sessionType == TerminalSessionType.local
+        ? Platform.environment['HOME']
+        : null;
+    tab.terminal.onTitleChange = (title) {
+      if (tab.reportedTitle == title) return;
+      tab.reportedTitle = title;
+      _scheduleTitleRefresh();
+    };
+    tab.terminal.onCurrentDirectoryChange = (uri) {
+      final path = TerminalTabSession.reportedPath(uri, home: home);
+      if (path == null || tab.workingDirectory == path) return;
+      tab.workingDirectory = path;
+      _scheduleTitleRefresh();
+    };
+  }
+
+  Timer? _titleRefresh;
+
+  /// A program can retitle itself many times a second (progress in the
+  /// title), so the strip is rebuilt for the latest name at most every 150ms
+  /// rather than once per report.
+  void _scheduleTitleRefresh() {
+    if (_titleRefresh != null || _notifierDisposed) return;
+    _titleRefresh = Timer(const Duration(milliseconds: 150), () {
+      _titleRefresh = null;
+      if (_notifierDisposed) return;
+      state = state.copyWith(tabs: [...state.tabs]);
+    });
+  }
+
   /// Starts the shell behind [tab] and wires it up once it exists.
   Future<void> _attachLocalShell(TerminalTabSession tab) async {
     final terminal = tab.terminal;
@@ -421,7 +462,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
       terminal: _newTerminal(),
       isConnected: true,
     );
-    _ownedTabs.add(tab);
+    _adopt(tab);
     _tabCloseCallbacks[tabId] = onClose;
     // Deliberately does not steal focus by activating itself: an agent
     // opening a session while the user is typing in another tab must not
@@ -638,7 +679,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
     if (state.tabs.any((candidate) => candidate.id == tab.id)) {
       throw StateError('A terminal tab with id ${tab.id} already exists');
     }
-    _ownedTabs.add(tab);
+    _adopt(tab);
     if (onClose != null) _tabCloseCallbacks[tab.id] = onClose;
     state = state.copyWith(tabs: [...state.tabs, tab], activeTabId: tab.id);
   }
@@ -947,7 +988,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
           )
           ..startupSnippetOverrideId = startupSnippetId
           ..startupRunbookId = startupRunbookId;
-    _ownedTabs.add(splitTab);
+    _adopt(splitTab);
     state = state.copyWith(
       tabs: [...state.tabs, splitTab],
       activeTabId: splitId,

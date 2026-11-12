@@ -114,7 +114,7 @@ void main() {
       await settle(tester);
 
       // ShellVibeSectionLabel upper-cases its label.
-      expect(find.text('TEMPLATES'), findsOneWidget);
+      expect(find.text('Templates'), findsOneWidget);
       expect(find.text('Morning check'), findsOneWidget);
       expect(find.byKey(const Key('run_template_tpl_1')), findsOneWidget);
       expect(find.byKey(const Key('template_menu_tpl_1')), findsOneWidget);
@@ -128,7 +128,7 @@ void main() {
       await tester.pumpWidget(harness());
       await settle(tester);
 
-      expect(find.text('TEMPLATES'), findsNothing);
+      expect(find.text('Templates'), findsNothing);
     });
 
     testWidgets('tapping a template opens its layout', (tester) async {
@@ -238,7 +238,7 @@ void main() {
       await settle(tester);
 
       expect(find.byKey(const Key('run_template_tpl_1')), findsNothing);
-      expect(find.text('TEMPLATES'), findsNothing);
+      expect(find.text('Templates'), findsNothing);
     });
   });
 }

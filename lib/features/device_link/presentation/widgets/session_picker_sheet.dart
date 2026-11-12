@@ -95,12 +95,12 @@ final class DeviceLinkSessionPickerSheet extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(horizontal: 14),
                           decoration: BoxDecoration(
                             color: selected
-                                ? tokens.brand.withValues(alpha: 0.12)
+                                ? tokens.selectedFill
                                 : Colors.transparent,
                             borderRadius: BorderRadius.circular(11),
                             border: Border.all(
                               color: selected
-                                  ? tokens.brand.withValues(alpha: 0.24)
+                                  ? Colors.transparent
                                   : tokens.border,
                             ),
                           ),
@@ -151,7 +151,7 @@ final class DeviceLinkSessionPickerSheet extends StatelessWidget {
                                 Icon(
                                   LucideIcons.check,
                                   size: 16,
-                                  color: tokens.brand,
+                                  color: tokens.textPrimary,
                                 ),
                               ],
                             ],

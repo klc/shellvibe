@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../../core/utils/platform_capabilities.dart';
-import '../theme/app_theme.dart';
 import '../theme/shellvibe_tokens.dart';
 
 /// The height a control may not go below on the platform in use.
@@ -56,11 +55,7 @@ bool usesRailLayout(BuildContext context) {
   return size.width >= tokens.breakpointRailTouch;
 }
 
-/// The night ground every Nocturne screen floats on.
-///
-/// Modules paint this once at their root; the slabs above it are separated by
-/// [ShellVibeTokens.panelGap] whitespace, which is what makes the glow readable
-/// between them.
+/// The ground every Nocturne screen sits on.
 class ShellVibeCanvas extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;
@@ -74,41 +69,36 @@ class ShellVibeCanvas extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = ShellVibeTokens.resolve(context);
-    return DecoratedBox(
-      decoration: BoxDecoration(gradient: tokens.canvasGradient),
+    return ColoredBox(
+      color: tokens.canvas,
       child: Padding(padding: padding, child: child),
     );
   }
 }
 
-/// A floating slab: top-lit hairline, downward gradient, drop shadow.
+/// A shell panel: one flat fill, square, flush against its neighbours.
 ///
-/// [gradientExtent] is the distance from the panel's top at which the gradient
-/// reaches [ShellVibeTokens.surfaceLow] — anchored in pixels, not in a fraction of
-/// the height, so a short panel and a tall one share the same falloff.
+/// Panels draw no outline of their own. A panel that sits beside another one
+/// names the shared edge in [border], so the two meet on a single hairline
+/// rather than a doubled one.
 class ShellVibePanel extends StatelessWidget {
   final Widget child;
-  final double gradientExtent;
   final EdgeInsetsGeometry? padding;
   final EdgeInsetsGeometry? margin;
   final double? width;
-
-  /// Overrides the hairline — used to mark a focused or errored panel.
-  final Color? borderColor;
-
+  final Border? border;
   final BorderRadius? borderRadius;
 
-  /// Panels clip by default so inner strips can bleed to the rounded edge.
+  /// Panels clip by default so inner strips can bleed to the edge.
   final bool clip;
 
   const ShellVibePanel({
     super.key,
     required this.child,
-    this.gradientExtent = 200,
     this.padding,
     this.margin,
     this.width,
-    this.borderColor,
+    this.border,
     this.borderRadius,
     this.clip = true,
   });
@@ -116,45 +106,47 @@ class ShellVibePanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = ShellVibeTokens.resolve(context);
-    final radius = borderRadius ?? BorderRadius.circular(tokens.radiusLarge);
     return Container(
       width: width,
       margin: margin,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          return Container(
-            padding: padding,
-            clipBehavior: clip ? Clip.antiAlias : Clip.none,
-            decoration: BoxDecoration(
-              gradient: tokens.panelGradient(
-                gradientExtent: gradientExtent,
-                height: constraints.maxHeight.isFinite
-                    ? constraints.maxHeight
-                    : null,
-              ),
-              borderRadius: radius,
-              border: Border.all(color: borderColor ?? tokens.border),
-              boxShadow: tokens.shadowPanel,
-            ),
-            child: child,
-          );
-        },
+      padding: padding,
+      clipBehavior: clip ? Clip.hardEdge : Clip.none,
+      decoration: BoxDecoration(
+        color: tokens.surface,
+        borderRadius: borderRadius,
+        border: border,
       ),
+      child: child,
     );
   }
 }
 
-/// A slab one step above a panel — command palette, dialogs, sheets.
+/// A hairline on one side of a panel, in the shared border colour.
+Border shellvibeEdge(
+  BuildContext context, {
+  bool left = false,
+  bool top = false,
+  bool right = false,
+  bool bottom = false,
+}) {
+  final side = BorderSide(color: ShellVibeTokens.resolve(context).border);
+  return Border(
+    left: left ? side : BorderSide.none,
+    top: top ? side : BorderSide.none,
+    right: right ? side : BorderSide.none,
+    bottom: bottom ? side : BorderSide.none,
+  );
+}
+
+/// A surface above the shell — command palette, dialogs, sheets.
 class ShellVibeOverlaySurface extends StatelessWidget {
   final Widget child;
-  final double gradientExtent;
   final EdgeInsetsGeometry? padding;
   final BorderRadius? borderRadius;
 
   const ShellVibeOverlaySurface({
     super.key,
     required this.child,
-    this.gradientExtent = 200,
     this.padding,
     this.borderRadius,
   });
@@ -162,35 +154,22 @@ class ShellVibeOverlaySurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = ShellVibeTokens.resolve(context);
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final shape =
-            borderRadius ?? BorderRadius.circular(tokens.radiusOverlay);
-        return Container(
-          padding: padding,
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            gradient: tokens.panelGradient(
-              gradientExtent: gradientExtent,
-              height: constraints.maxHeight.isFinite
-                  ? constraints.maxHeight
-                  : null,
-              top: tokens.surfaceRaised,
-            ),
-            borderRadius: shape,
-            boxShadow: tokens.shadowOverlay,
-          ),
-          // Drawn over the child: a clipped child covers a background border
-          // along the corner arcs and breaks the outline there.
-          foregroundDecoration: BoxDecoration(
-            borderRadius: shape,
-            border: Border.all(
-              color: tokens.textPrimary.withValues(alpha: 0.09),
-            ),
-          ),
-          child: child,
-        );
-      },
+    final shape = borderRadius ?? BorderRadius.circular(tokens.radiusOverlay);
+    return Container(
+      padding: padding,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: tokens.surfaceRaised,
+        borderRadius: shape,
+        boxShadow: tokens.shadowOverlay,
+      ),
+      // Drawn over the child: a clipped child covers a background border
+      // along the corner arcs and breaks the outline there.
+      foregroundDecoration: BoxDecoration(
+        borderRadius: shape,
+        border: Border.all(color: tokens.border),
+      ),
+      child: child,
     );
   }
 }
@@ -218,11 +197,12 @@ TextStyle shellvibeMono(
   );
 }
 
-/// The 3×20 light bar that marks a live row.
+/// The 3×20 bar that marks a live row.
 ///
 /// It replaces the status dot in list rows: a bar reads at a glance down a
 /// column of nine hosts where a dot does not. Dots stay where space is tight —
-/// tabs, tunnels, the status bar.
+/// tabs, tunnels, the status bar. Live is a state, not the brand, so it takes
+/// [ShellVibeTokens.success]; an idle row keeps the slot empty.
 class ShellVibeRowIndicator extends StatelessWidget {
   final bool live;
   final double height;
@@ -240,16 +220,8 @@ class ShellVibeRowIndicator extends StatelessWidget {
       width: 3,
       height: height,
       decoration: BoxDecoration(
-        color: live ? tokens.brand : tokens.textPrimary.withValues(alpha: 0.09),
+        color: live ? tokens.success : Colors.transparent,
         borderRadius: BorderRadius.circular(2),
-        boxShadow: live
-            ? [
-                BoxShadow(
-                  color: tokens.brand.withValues(alpha: 0.7),
-                  blurRadius: 12,
-                ),
-              ]
-            : null,
       ),
     );
   }
@@ -261,16 +233,18 @@ class ShellVibeRowIndicator extends StatelessWidget {
 /// icon size and every colour follow from it, so two buttons doing the same
 /// job cannot drift apart by being written in two places.
 enum ShellVibeButtonVariant {
-  /// The one action a panel wants you to take: the raised brand gradient with
-  /// its own glow. Exactly one of these belongs on a panel — it is how
+  /// The one action a panel wants you to take: a flat brand fill. Exactly one
+  /// of these belongs on a panel — it is how
   /// Nocturne marks where a screen is pointing.
   primary,
 
   /// Every other action that still has to be found: a hairline ring, no fill.
   secondary,
 
-  /// An action that destroys something. Filled rather than ringed, so it
-  /// cannot be mistaken at a glance for the secondary standing next to it.
+  /// An action that destroys something. Ringed and lettered in the danger
+  /// colour: the colour, not a filled block, is what keeps it from being
+  /// mistaken for the secondary beside it, and it does not outshout the
+  /// one primary action on the panel.
   danger,
 
   /// An action already explained by what it sits beside — a row's own menu, a
@@ -405,6 +379,17 @@ class ShellVibeButton extends StatelessWidget {
               ),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
               decoration: _decoration(tokens, radius),
+              // The danger ring is painted over the button rather than laid
+              // out with it: a Container pads its child by its border, and
+              // this button keeps the size it had when it was filled.
+              foregroundDecoration: variant == ShellVibeButtonVariant.danger
+                  ? BoxDecoration(
+                      borderRadius: radius,
+                      border: Border.all(
+                        color: tokens.danger.withValues(alpha: 0.5),
+                      ),
+                    )
+                  : null,
               child: Row(
                 mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -454,7 +439,7 @@ class ShellVibeButton extends StatelessWidget {
       case ShellVibeButtonVariant.primary:
         return tokens.brandInk;
       case ShellVibeButtonVariant.danger:
-        return AppTheme.legibleInk(tokens.danger, tokens);
+        return tokens.danger;
       case ShellVibeButtonVariant.secondary:
       case ShellVibeButtonVariant.quiet:
         return tokens.textSecondary;
@@ -464,17 +449,13 @@ class ShellVibeButton extends StatelessWidget {
   BoxDecoration _decoration(ShellVibeTokens tokens, BorderRadius radius) {
     switch (variant) {
       case ShellVibeButtonVariant.primary:
-        return BoxDecoration(
-          gradient: tokens.brandGradient,
-          borderRadius: radius,
-          boxShadow: tokens.shadowBrand,
-        );
+        return BoxDecoration(color: tokens.brand, borderRadius: radius);
       case ShellVibeButtonVariant.danger:
-        return BoxDecoration(color: tokens.danger, borderRadius: radius);
+        return BoxDecoration(borderRadius: radius);
       case ShellVibeButtonVariant.secondary:
         return BoxDecoration(
           borderRadius: radius,
-          border: Border.all(color: tokens.textPrimary.withValues(alpha: 0.07)),
+          border: Border.all(color: tokens.border),
         );
       case ShellVibeButtonVariant.quiet:
         return BoxDecoration(borderRadius: radius);
@@ -707,16 +688,7 @@ class ShellVibePageHeader extends StatelessWidget {
   }) {
     return Row(
       children: [
-        Container(
-          width: 36,
-          height: 36,
-          decoration: BoxDecoration(
-            color: tokens.brand.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(tokens.radiusMedium),
-            border: Border.all(color: tokens.brand.withValues(alpha: 0.26)),
-          ),
-          child: Icon(icon, size: 18, color: tokens.brand),
-        ),
+        Icon(icon, size: 20, color: tokens.textMuted),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
@@ -888,40 +860,24 @@ class ShellVibeEmptyState extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 76,
-                height: 76,
-                decoration: BoxDecoration(
-                  color: tokens.brand.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(
-                    color: tokens.brand.withValues(alpha: 0.24),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: tokens.brand.withValues(alpha: 0.12),
-                      blurRadius: 60,
-                    ),
-                  ],
-                ),
-                child: Icon(icon, size: 32, color: tokens.brand),
-              ),
-              const SizedBox(height: 24),
+              Icon(icon, size: 24, color: tokens.textMuted),
+              const SizedBox(height: 14),
               Text(
                 title,
                 textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontSize: 22,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
                   color: tokens.textPrimary,
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               Text(
                 description,
                 textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: tokens.textMuted,
-                  height: 1.55,
+                  height: 1.5,
                 ),
               ),
               if (actions.isNotEmpty) ...[
@@ -1018,7 +974,7 @@ class ShellVibeStatusDot extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = ShellVibeTokens.resolve(context);
     final color = switch (state) {
-      ShellVibeDotState.online => tokens.brand,
+      ShellVibeDotState.online => tokens.success,
       ShellVibeDotState.error => tokens.danger,
       ShellVibeDotState.idle => tokens.textPrimary.withValues(alpha: 0.16),
       ShellVibeDotState.offline => Colors.transparent,
@@ -1032,17 +988,12 @@ class ShellVibeStatusDot extends StatelessWidget {
         border: state == ShellVibeDotState.offline
             ? Border.all(color: tokens.textMuted)
             : null,
-        boxShadow: switch (state) {
-          ShellVibeDotState.online => tokens.glow(tokens.brand),
-          ShellVibeDotState.error => tokens.glow(tokens.danger, alpha: 0.8),
-          _ => null,
-        },
       ),
     );
   }
 }
 
-/// Monospace uppercase group heading used by context columns and settings.
+/// Group heading used by context columns and settings.
 class ShellVibeSectionLabel extends StatelessWidget {
   final String label;
   final EdgeInsetsGeometry padding;
@@ -1059,12 +1010,11 @@ class ShellVibeSectionLabel extends StatelessWidget {
     return Padding(
       padding: padding,
       child: Text(
-        label.toUpperCase(),
+        label,
         style: TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 1.4,
-          color: tokens.textSubtle,
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          color: tokens.textMuted,
         ),
       ),
     );
@@ -1091,9 +1041,10 @@ class ShellVibeFormSectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final tokens = ShellVibeTokens.resolve(context);
     return Row(
       children: [
-        Icon(icon, size: 15, color: theme.colorScheme.primary),
+        Icon(icon, size: 15, color: tokens.textMuted),
         const SizedBox(width: 8),
         Flexible(
           child: Text(
@@ -1101,18 +1052,13 @@ class ShellVibeFormSectionHeader extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: theme.textTheme.labelLarge?.copyWith(
-              color: theme.colorScheme.primary,
+              color: tokens.textSecondary,
               fontWeight: FontWeight.w600,
             ),
           ),
         ),
         const SizedBox(width: 12),
-        Expanded(
-          child: Divider(
-            height: 1,
-            color: ShellVibeTokens.resolve(context).border,
-          ),
-        ),
+        Expanded(child: Divider(height: 1, color: tokens.border)),
         if (trailing != null) ...[const SizedBox(width: 12), trailing!],
       ],
     );
@@ -1141,7 +1087,7 @@ class ShellVibeNavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = ShellVibeTokens.resolve(context);
-    final foreground = selected ? tokens.brandSoft : tokens.textMuted;
+    final foreground = selected ? tokens.textPrimary : tokens.textSecondary;
     return Semantics(
       button: true,
       selected: selected,
@@ -1150,22 +1096,15 @@ class ShellVibeNavItem extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(tokens.radiusMedium),
         child: Container(
-          height: 34,
+          height: 30,
           padding: const EdgeInsets.symmetric(horizontal: 10),
           decoration: BoxDecoration(
-            color: selected
-                ? tokens.brand.withValues(alpha: 0.12)
-                : Colors.transparent,
+            color: selected ? tokens.selectedFill : Colors.transparent,
             borderRadius: BorderRadius.circular(tokens.radiusMedium),
-            border: Border.all(
-              color: selected
-                  ? tokens.brand.withValues(alpha: 0.22)
-                  : Colors.transparent,
-            ),
           ),
           child: Row(
             children: [
-              Icon(icon, size: 14, color: foreground),
+              Icon(icon, size: 14, color: tokens.textMuted),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -1174,7 +1113,7 @@ class ShellVibeNavItem extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 13,
-                    fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                    fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
                     color: foreground,
                   ),
                 ),
@@ -1214,8 +1153,8 @@ class ShellVibeContextColumn extends StatelessWidget {
     final tokens = ShellVibeTokens.resolve(context);
     return ShellVibePanel(
       width: tokens.contextColumnWidth,
-      gradientExtent: 140,
       margin: EdgeInsets.only(right: tokens.panelGap),
+      border: shellvibeEdge(context, right: true),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1326,8 +1265,8 @@ class ShellVibeDetailDrawer extends StatelessWidget {
     final tokens = ShellVibeTokens.resolve(context);
     return ShellVibePanel(
       width: tokens.detailDrawerWidth,
-      gradientExtent: 160,
       margin: EdgeInsets.only(left: tokens.panelGap),
+      border: shellvibeEdge(context, left: true),
       padding: padding,
       child: child,
     );
@@ -1349,13 +1288,8 @@ class ShellVibeStatusBar extends StatelessWidget {
       margin: EdgeInsets.only(top: tokens.panelGap),
       padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [tokens.railBg, tokens.surfaceLow],
-        ),
-        borderRadius: BorderRadius.circular(tokens.radiusMedium),
-        border: Border.all(color: tokens.border),
+        color: tokens.railBg,
+        border: Border(top: BorderSide(color: tokens.border)),
       ),
       child: DefaultTextStyle.merge(
         style: shellvibeMono(context, size: 11, color: tokens.textSubtle),
@@ -1411,13 +1345,7 @@ class ShellVibeSurface extends StatelessWidget {
     return Container(
       padding: padding,
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: raised
-              ? [tokens.surfaceRaised, tokens.surface]
-              : [tokens.surface, tokens.surfaceLow],
-        ),
+        color: raised ? tokens.surfaceRaised : tokens.surface,
         border: Border.all(color: borderColor ?? tokens.border),
         borderRadius: borderRadius ?? BorderRadius.circular(tokens.radiusLarge),
       ),

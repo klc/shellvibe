@@ -162,21 +162,17 @@ class _VariableRowState extends State<_VariableRow> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
-              color: selected
-                  ? tokens.brand.withValues(alpha: 0.12)
-                  : Colors.transparent,
+              color: selected ? tokens.selectedFill : Colors.transparent,
               borderRadius: BorderRadius.circular(tokens.radiusPill),
               border: Border.all(
-                color: selected
-                    ? tokens.brand.withValues(alpha: 0.34)
-                    : tokens.border,
+                color: selected ? Colors.transparent : tokens.border,
               ),
             ),
             child: Text(
               label,
               style: TextStyle(
                 fontSize: 11,
-                color: selected ? tokens.brand : tokens.textMuted,
+                color: selected ? tokens.textPrimary : tokens.textMuted,
               ),
             ),
           ),

@@ -839,7 +839,7 @@ void main() {
       await seedAndRun(tester, factory);
       await openDetail(tester);
 
-      expect(find.text('Recent runs'.toUpperCase()), findsOneWidget);
+      expect(find.text('Recent runs'), findsOneWidget);
       expect(entry, findsOneWidget);
       expect(find.text('1 of 1 host succeeded'), findsWidgets);
 

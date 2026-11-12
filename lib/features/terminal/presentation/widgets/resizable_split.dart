@@ -6,7 +6,7 @@ import '../../domain/models/terminal_tab_session.dart';
 /// Draggable split container used for terminal split panes.
 ///
 /// Lays [first] and [second] out along [axis] with [ratio] as the share of
-/// [second]; a draggable divider sits between them — 10px wide under a pointer,
+/// [second]; a draggable divider sits between them — 4px wide under a pointer,
 /// 22px under a thumb, with a 2px visual
 /// line in [dividerColor]. Dragging updates [onRatioChanged] with the new
 /// [second] share, clamped to [kSplitPaneMinRatio]..[kSplitPaneMaxRatio].
@@ -57,10 +57,10 @@ class ResizableSplit extends StatefulWidget {
     this.dividerKey,
   });
 
-  /// Grab width of the divider. The visual rule stays 2px either way; this is
-  /// only how much of the gutter accepts the drag, and a thumb needs more of it
-  /// than a pointer does.
-  static double get _hit => isMobilePlatform ? 22 : 10;
+  /// Grab width of the divider, which is also the gap between the panes. The
+  /// visual rule stays 2px either way. A pointer, with the resize cursor to
+  /// find it by, needs no more than a 4px sash; a thumb needs more.
+  static double get _hit => isMobilePlatform ? 22 : 4;
   static const double _visual = 2;
   static const int _flexUnits = 1000;
 
@@ -172,7 +172,7 @@ class _ResizableSplitState extends State<ResizableSplit> {
   }
 }
 
-/// The draggable 10px-wide grip between two panes (2px visual line in
+/// The draggable grip between two panes (4px under a pointer, 2px visual line in
 /// [color]). Reports raw pointer deltas along [axis]; the owning
 /// [ResizableSplit] turns them into a ratio.
 class _SplitDivider extends StatelessWidget {

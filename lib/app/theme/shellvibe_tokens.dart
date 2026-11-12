@@ -2,41 +2,38 @@ import 'package:flutter/material.dart';
 
 /// ShellVibe's shared visual contract — the "Nocturne" system.
 ///
-/// Nocturne treats the shell as slabs floating on a night ground rather than
-/// one flat plane: panels carry a top-lit hairline, a downward gradient and a
-/// drop shadow, and they are separated by [panelGap] whitespace instead of
-/// divider rules.
+/// Nocturne is one flat plane: panels sit flush against each other and the
+/// window edge, filled with a single colour and split by one hairline. No
+/// gradients, no glows, no drop shadows under anything that is not an
+/// overlay.
 ///
 /// Terminal ANSI palettes intentionally live outside this extension. The app
 /// chrome keeps a stable identity while terminal sessions remain customizable.
 @immutable
 class ShellVibeTokens extends ThemeExtension<ShellVibeTokens> {
-  /// Root ground behind every panel. Paired with [canvasGlow] by [canvasGradient].
+  /// Root ground: the caption strip and anything not inside a panel.
   final Color canvas;
 
-  /// Warm lift painted into the top-left of the canvas.
-  final Color canvasGlow;
-
-  /// Top of a floating panel's gradient.
+  /// Panel fill.
   final Color surface;
 
-  /// Bottom of a floating panel's gradient.
+  /// One step below [surface]: wells, inputs, inactive strips.
   final Color surfaceLow;
 
   /// Overlays (dialogs, palette) and active tabs.
   final Color surfaceRaised;
 
-  /// Terminal body. Deliberately flat and opaque — readability is never traded
-  /// for the panel gradient.
+  /// Terminal body. Flat and opaque, a step darker than the panels so the
+  /// terminal reads as its own surface.
   final Color terminalBg;
 
   /// Chrome strip above a terminal body (pane header, tab bar backing).
   final Color terminalChrome;
 
-  /// Top of the navigation rail's gradient.
+  /// Status bar and other docked strips.
   final Color railBg;
 
-  /// The single hairline used by every panel edge.
+  /// The single hairline used by every panel edge and divider.
   final Color border;
 
   final Color textPrimary;
@@ -58,14 +55,8 @@ class ShellVibeTokens extends ThemeExtension<ShellVibeTokens> {
   /// Soft tint of [brand], used for chips, badges and subtle highlights.
   final Color brandSoft;
 
-  /// Text and icons drawn on top of [brand] or the brand gradient.
+  /// Text and icons drawn on top of [brand].
   final Color brandInk;
-
-  /// Top stop of the raised brand gradient used by primary actions.
-  final Color brandGradientTop;
-
-  /// Bottom stop of the raised brand gradient used by primary actions.
-  final Color brandGradientBottom;
 
   final Color info;
   final Color success;
@@ -81,9 +72,9 @@ class ShellVibeTokens extends ThemeExtension<ShellVibeTokens> {
   /// Border color for muted danger/error notices.
   final Color dangerMutedBorder;
 
-  /// Drop shadow under a floating panel. A night ground can take a heavy
-  /// shadow; a daylight one cannot, so the strength is a token rather than a
-  /// constant baked into [shadowPanel].
+  /// Drop shadow under a popover or floating menu. A night ground can take a
+  /// heavier shadow than a daylight one, so the strength is a token rather
+  /// than a constant baked into [shadowPanel].
   final Color shadowColor;
 
   /// Drop shadow under an overlay — deeper than [shadowColor].
@@ -95,7 +86,8 @@ class ShellVibeTokens extends ThemeExtension<ShellVibeTokens> {
   /// Controls, list rows, tabs.
   final double radiusMedium;
 
-  /// Floating panels, rail, terminal.
+  /// Cards and terminal panes. Shell panels are square: they meet the window
+  /// edge and each other.
   final double radiusLarge;
 
   /// Command palette and dialogs — one step above a panel.
@@ -105,8 +97,8 @@ class ShellVibeTokens extends ThemeExtension<ShellVibeTokens> {
   final double pagePadding;
   final double controlHeight;
 
-  /// Whitespace between floating slabs. Nocturne separates panels with this
-  /// gap instead of a divider line.
+  /// Whitespace between shell panels. Zero: panels sit flush and the shared
+  /// [border] hairline is what separates them.
   final double panelGap;
 
   /// Desktop list row height. 48px is what the radius and inner padding need.
@@ -152,7 +144,6 @@ class ShellVibeTokens extends ThemeExtension<ShellVibeTokens> {
 
   const ShellVibeTokens({
     required this.canvas,
-    required this.canvasGlow,
     required this.surface,
     required this.surfaceLow,
     required this.surfaceRaised,
@@ -165,11 +156,9 @@ class ShellVibeTokens extends ThemeExtension<ShellVibeTokens> {
     required this.textMuted,
     required this.textSubtle,
     required this.brand,
-    this.brandBright = const Color(0xFFA8AEFF),
-    this.brandSoft = const Color(0xFFC6CAFF),
+    this.brandBright = const Color(0xFFF0B65A),
+    this.brandSoft = const Color(0xFFF3C987),
     required this.brandInk,
-    required this.brandGradientTop,
-    required this.brandGradientBottom,
     required this.info,
     required this.success,
     required this.warning,
@@ -180,13 +169,13 @@ class ShellVibeTokens extends ThemeExtension<ShellVibeTokens> {
     required this.shadowColor,
     required this.shadowColorStrong,
     this.radiusSmall = 5,
-    this.radiusMedium = 9,
+    this.radiusMedium = 6,
     this.radiusLarge = 12,
     this.radiusOverlay = 14,
     this.radiusPill = 999,
     this.pagePadding = 16,
     this.controlHeight = 34,
-    this.panelGap = 10,
+    this.panelGap = 0,
     this.rowHeight = 48,
     this.railWidth = 56,
     this.contextColumnWidth = 240,
@@ -201,68 +190,59 @@ class ShellVibeTokens extends ThemeExtension<ShellVibeTokens> {
   });
 
   static const dark = ShellVibeTokens(
-    canvas: Color(0xFF0A0B11),
-    canvasGlow: Color(0xFF171B2B),
-    surface: Color(0xFF141726),
-    surfaceLow: Color(0xFF0F111C),
-    surfaceRaised: Color(0xFF1B1F30),
-    terminalBg: Color(0xFF101218),
-    terminalChrome: Color(0xFF151827),
-    railBg: Color(0xFF171A26),
-    // rgba(255,255,255,0.055) — the one hairline Nocturne uses everywhere.
-    border: Color(0x0EFFFFFF),
-    textPrimary: Color(0xFFEDEFF7),
-    textSecondary: Color(0xFFD9DDEA),
-    textMuted: Color(0xFF8E96AC),
-    textSubtle: Color(0xFF5F667E),
-    brand: Color(0xFF8B93FF),
-    brandInk: Color(0xFF0B0D16),
-    brandGradientTop: Color(0xFF9AA1FF),
-    brandGradientBottom: Color(0xFF6F77EA),
-    info: Color(0xFF8AB4F8),
-    success: Color(0xFF7FD1A6),
+    canvas: Color(0xFF141414),
+    surface: Color(0xFF141414),
+    surfaceLow: Color(0xFF101010),
+    surfaceRaised: Color(0xFF1E1E1E),
+    terminalBg: Color(0xFF101010),
+    terminalChrome: Color(0xFF181818),
+    railBg: Color(0xFF181818),
+    // rgba(255,255,255,0.09): reads as #2B2B2B on the ground, and still
+    // separates two panels that share it.
+    border: Color(0x17FFFFFF),
+    textPrimary: Color(0xFFEDEDEA),
+    textSecondary: Color(0xFFD6D6D2),
+    textMuted: Color(0xFF9A9A95),
+    textSubtle: Color(0xFF6E6E69),
+    brand: Color(0xFFE5A23C),
+    brandInk: Color(0xFF17130A),
+    info: Color(0xFF7FAEE6),
+    success: Color(0xFF6FBF73),
     warning: Color(0xFFE3C179),
-    danger: Color(0xFFF08C9E),
-    shadowColor: Color(0x80000000),
-    shadowColorStrong: Color(0xA6000000),
+    danger: Color(0xFFEE8A8A),
+    shadowColor: Color(0x66000000),
+    shadowColorStrong: Color(0x8C000000),
   );
 
-  /// Daylight counterpart. Nocturne is authored dark; the light theme mirrors
-  /// its structure (same roles, same radii) with inverted surfaces so the
-  /// gradients and hairlines still read.
+  /// Daylight counterpart: the same roles and radii on a white plane.
   static const light = ShellVibeTokens(
-    canvas: Color(0xFFF2F4F8),
-    canvasGlow: Color(0xFFFFFFFF),
+    canvas: Color(0xFFFFFFFF),
     surface: Color(0xFFFFFFFF),
-    surfaceLow: Color(0xFFF7F8FB),
+    surfaceLow: Color(0xFFF6F6F4),
     surfaceRaised: Color(0xFFFFFFFF),
-    // Daylight has its own terminal chrome. These two used to carry the dark
-    // theme's values verbatim, which painted a pane header and the bottom of
-    // the active tab's gradient near-black on a white app — and put dark text
-    // on a dark fill wherever else they are used.
-    terminalBg: Color(0xFFF2F4F8),
-    terminalChrome: Color(0xFFE9ECF2),
-    railBg: Color(0xFFFFFFFF),
-    border: Color(0x14101218),
-    textPrimary: Color(0xFF171B21),
-    textSecondary: Color(0xFF333A47),
-    textMuted: Color(0xFF667085),
-    textSubtle: Color(0xFF8A93A6),
-    brand: Color(0xFF5058D8),
-    brandBright: Color(0xFF3D44B8),
-    brandSoft: Color(0xFF636AE8),
+    // Daylight has its own terminal chrome; the dark values would paint a
+    // near-black pane header on a white app.
+    terminalBg: Color(0xFFF6F6F4),
+    terminalChrome: Color(0xFFEDEDEA),
+    railBg: Color(0xFFF6F6F4),
+    border: Color(0x1A000000),
+    textPrimary: Color(0xFF1A1A18),
+    textSecondary: Color(0xFF33332F),
+    textMuted: Color(0xFF63635D),
+    textSubtle: Color(0xFF8C8C85),
+    brand: Color(0xFF9A5A00),
+    brandBright: Color(0xFF7F4A00),
+    brandSoft: Color(0xFFB86E00),
     brandInk: Color(0xFFFFFFFF),
-    brandGradientTop: Color(0xFF6F77EA),
-    brandGradientBottom: Color(0xFF4C55CE),
-    info: Color(0xFF2563EB),
-    success: Color(0xFF15803D),
-    warning: Color(0xFFB45309),
-    danger: Color(0xFFBE123C),
+    info: Color(0xFF1D5FD1),
+    success: Color(0xFF1E7A35),
+    warning: Color(0xFFA15C00),
+    danger: Color(0xFFB4232F),
     dangerMutedSurface: Color(0xFFFFEBEF),
     dangerMutedText: Color(0xFF9F1239),
     dangerMutedBorder: Color(0xFFFCA5A5),
-    shadowColor: Color(0x14101218),
-    shadowColorStrong: Color(0x24101218),
+    shadowColor: Color(0x14000000),
+    shadowColorStrong: Color(0x24000000),
   );
 
   static ShellVibeTokens resolve(BuildContext context) {
@@ -270,76 +250,21 @@ class ShellVibeTokens extends ThemeExtension<ShellVibeTokens> {
         (Theme.of(context).brightness == Brightness.dark ? dark : light);
   }
 
-  /// The night ground: a soft glow thrown from above the top-left corner.
-  Gradient get canvasGradient => RadialGradient(
-    center: const Alignment(-0.64, -1.24),
-    radius: 1.1,
-    colors: [canvasGlow, canvas],
-    stops: const [0, 0.62],
-  );
+  /// Behind a selected row, chip, tab or list item. Selection is a state,
+  /// not the brand, so it is drawn in the text colour rather than the accent.
+  Color get selectedFill => textPrimary.withValues(alpha: 0.09);
 
-  /// A floating panel's fill.
-  ///
-  /// The design anchors the gradient's end to a pixel distance from the panel
-  /// top (140–300px depending on the panel), not to its height, so tall and
-  /// short panels share the same top-lit falloff. [gradientExtent] is that
-  /// distance and [height] the panel's laid-out height; pass the latter from a
-  /// `LayoutBuilder` to keep the stop honest. [top] is the colour at the top
-  /// edge; overlays start one step higher than panels.
-  Gradient panelGradient({
-    double gradientExtent = 200,
-    double? height,
-    Color? top,
-  }) {
-    final stop = height == null || height <= 0
-        ? 1.0
-        : (gradientExtent / height).clamp(0.05, 1.0);
-    return LinearGradient(
-      begin: Alignment.topCenter,
-      end: Alignment.bottomCenter,
-      colors: [top ?? surface, surfaceLow],
-      stops: [0, stop.toDouble()],
-    );
-  }
-
-  /// The raised fill of a primary action.
-  Gradient get brandGradient => LinearGradient(
-    begin: Alignment.topCenter,
-    end: Alignment.bottomCenter,
-    colors: [brandGradientTop, brandGradientBottom],
-  );
-
-  /// `inset 0 1px 0 rgba(255,255,255,.07), 0 10px 30px rgba(0,0,0,.5)`.
-  ///
-  /// Flutter has no inset shadow, so the top-light half is drawn as a hairline
-  /// border by the panel widgets; this carries the drop half.
+  /// Under a popover or floating menu. Shell panels have no shadow.
   List<BoxShadow> get shadowPanel => [
-    BoxShadow(color: shadowColor, blurRadius: 30, offset: const Offset(0, 10)),
+    BoxShadow(color: shadowColor, blurRadius: 16, offset: const Offset(0, 6)),
   ];
 
-  /// `0 30px 80px rgba(0,0,0,.65)` — palette, dialogs.
+  /// Under the command palette and dialogs.
   List<BoxShadow> get shadowOverlay => [
     BoxShadow(
       color: shadowColorStrong,
-      blurRadius: 80,
-      offset: const Offset(0, 30),
-    ),
-  ];
-
-  /// `0 6px 18px rgba(139,147,255,.3)` — under primary actions.
-  List<BoxShadow> get shadowBrand => [
-    BoxShadow(
-      color: brand.withValues(alpha: 0.3),
-      blurRadius: 18,
-      offset: const Offset(0, 6),
-    ),
-  ];
-
-  /// Halo around a live indicator.
-  List<BoxShadow> glow(Color color, {double alpha = 0.9, double blur = 10}) => [
-    BoxShadow(
-      color: color.withValues(alpha: alpha),
-      blurRadius: blur,
+      blurRadius: 40,
+      offset: const Offset(0, 16),
     ),
   ];
 
@@ -358,7 +283,6 @@ class ShellVibeTokens extends ThemeExtension<ShellVibeTokens> {
   @override
   ShellVibeTokens copyWith({
     Color? canvas,
-    Color? canvasGlow,
     Color? surface,
     Color? surfaceLow,
     Color? surfaceRaised,
@@ -374,8 +298,6 @@ class ShellVibeTokens extends ThemeExtension<ShellVibeTokens> {
     Color? brandBright,
     Color? brandSoft,
     Color? brandInk,
-    Color? brandGradientTop,
-    Color? brandGradientBottom,
     Color? info,
     Color? success,
     Color? warning,
@@ -407,7 +329,6 @@ class ShellVibeTokens extends ThemeExtension<ShellVibeTokens> {
   }) {
     return ShellVibeTokens(
       canvas: canvas ?? this.canvas,
-      canvasGlow: canvasGlow ?? this.canvasGlow,
       surface: surface ?? this.surface,
       surfaceLow: surfaceLow ?? this.surfaceLow,
       surfaceRaised: surfaceRaised ?? this.surfaceRaised,
@@ -423,8 +344,6 @@ class ShellVibeTokens extends ThemeExtension<ShellVibeTokens> {
       brandBright: brandBright ?? this.brandBright,
       brandSoft: brandSoft ?? this.brandSoft,
       brandInk: brandInk ?? this.brandInk,
-      brandGradientTop: brandGradientTop ?? this.brandGradientTop,
-      brandGradientBottom: brandGradientBottom ?? this.brandGradientBottom,
       info: info ?? this.info,
       success: success ?? this.success,
       warning: warning ?? this.warning,
@@ -461,7 +380,6 @@ class ShellVibeTokens extends ThemeExtension<ShellVibeTokens> {
     if (other == null) return this;
     return ShellVibeTokens(
       canvas: Color.lerp(canvas, other.canvas, t)!,
-      canvasGlow: Color.lerp(canvasGlow, other.canvasGlow, t)!,
       surface: Color.lerp(surface, other.surface, t)!,
       surfaceLow: Color.lerp(surfaceLow, other.surfaceLow, t)!,
       surfaceRaised: Color.lerp(surfaceRaised, other.surfaceRaised, t)!,
@@ -477,16 +395,6 @@ class ShellVibeTokens extends ThemeExtension<ShellVibeTokens> {
       brandBright: Color.lerp(brandBright, other.brandBright, t)!,
       brandSoft: Color.lerp(brandSoft, other.brandSoft, t)!,
       brandInk: Color.lerp(brandInk, other.brandInk, t)!,
-      brandGradientTop: Color.lerp(
-        brandGradientTop,
-        other.brandGradientTop,
-        t,
-      )!,
-      brandGradientBottom: Color.lerp(
-        brandGradientBottom,
-        other.brandGradientBottom,
-        t,
-      )!,
       info: Color.lerp(info, other.info, t)!,
       success: Color.lerp(success, other.success, t)!,
       warning: Color.lerp(warning, other.warning, t)!,

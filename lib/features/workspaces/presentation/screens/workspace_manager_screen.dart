@@ -207,8 +207,8 @@ class WorkspaceManagerScreen extends ConsumerWidget {
                                   height: 38,
                                   decoration: BoxDecoration(
                                     color: isActive
-                                        ? tokens.brand.withValues(alpha: 0.14)
-                                        : tokens.surfaceRaised,
+                                        ? tokens.selectedFill
+                                        : Colors.transparent,
                                     borderRadius: BorderRadius.circular(
                                       tokens.radiusMedium,
                                     ),
@@ -219,7 +219,7 @@ class WorkspaceManagerScreen extends ConsumerWidget {
                                         : LucideIcons.panelTop,
                                     size: 18,
                                     color: isActive
-                                        ? tokens.brand
+                                        ? tokens.textPrimary
                                         : tokens.textMuted,
                                   ),
                                 ),

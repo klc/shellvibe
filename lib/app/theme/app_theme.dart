@@ -12,6 +12,19 @@ import 'ui_font.dart';
 class AppTheme {
   /// Whichever of the palette's darkest and lightest inks reads better on
   /// [fill]. Used where the token contract has no dedicated on-colour.
+  /// The scrim behind a dialog. A night ground needs a deep one to set the
+  /// dialog apart; a daylight one only has to dim, or the app behind turns to
+  /// slate.
+  static Color dialogScrim(Brightness brightness) =>
+      brightness == Brightness.dark
+      ? const Color(0x99000000)
+      : const Color(0x4D000000);
+
+  /// [dialogScrim] for the theme in [context], for dialogs shown outside
+  /// Material's own (shadcn's carry an 80% scrim of their own).
+  static Color scrimOf(BuildContext context) =>
+      dialogScrim(Theme.of(context).brightness);
+
   static Color legibleInk(Color fill, ShellVibeTokens tokens) {
     final candidates = [tokens.brandInk, tokens.textPrimary, tokens.canvas];
     var best = candidates.first;
@@ -127,9 +140,9 @@ class AppTheme {
       // a grey smear on any tinted palette — most visibly on the selected row
       // of an open dropdown, which carries focus. Derive them from the palette.
       hoverColor: tokens.textPrimary.withValues(alpha: 0.05),
-      focusColor: tokens.brand.withValues(alpha: 0.12),
+      focusColor: tokens.selectedFill,
       highlightColor: tokens.textPrimary.withValues(alpha: 0.06),
-      splashColor: tokens.brand.withValues(alpha: 0.08),
+      splashColor: tokens.textPrimary.withValues(alpha: 0.06),
       // Applied to the Material typography before the ramp below is merged
       // over it, so every step inherits the family without repeating it.
       fontFamily: resolveUiFontFamily(settings.uiFontFamily),
@@ -168,8 +181,10 @@ class AppTheme {
         surfaceTint: Colors.transparent,
         outline: tokens.textSubtle,
         outlineVariant: tokens.border,
+        // Filter chips and segmented buttons fill their selected state from
+        // this: a neutral lift, not a wash of the accent.
         secondaryContainer: Color.alphaBlend(
-          tokens.brand.withValues(alpha: 0.16),
+          tokens.selectedFill,
           tokens.surface,
         ),
         onSecondaryContainer: tokens.textPrimary,
@@ -299,7 +314,7 @@ class AppTheme {
             return tokens.textMuted;
           }),
           overlayColor: WidgetStatePropertyAll(
-            tokens.brand.withValues(alpha: 0.08),
+            tokens.textPrimary.withValues(alpha: 0.06),
           ),
           shape: WidgetStatePropertyAll(
             RoundedRectangleBorder(
@@ -323,7 +338,7 @@ class AppTheme {
         backgroundColor: tokens.surfaceRaised,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        indicatorColor: tokens.brand.withValues(alpha: 0.12),
+        indicatorColor: tokens.selectedFill,
         labelTextStyle: WidgetStateProperty.resolveWith(
           (states) => TextStyle(
             fontSize: 11,
@@ -333,7 +348,7 @@ class AppTheme {
             // Same token as the selected icon above it; a literal here once
             // left every palette's selected tab label in Nocturne violet.
             color: states.contains(WidgetState.selected)
-                ? tokens.brandBright
+                ? tokens.textPrimary
                 : tokens.textMuted,
           ),
         ),
@@ -351,7 +366,7 @@ class AppTheme {
       dialogTheme: DialogThemeData(
         backgroundColor: tokens.surfaceRaised,
         surfaceTintColor: Colors.transparent,
-        barrierColor: const Color(0xA606070C),
+        barrierColor: dialogScrim(isDark ? Brightness.dark : Brightness.light),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(tokens.radiusOverlay),
           side: BorderSide(color: tokens.textPrimary.withValues(alpha: 0.09)),

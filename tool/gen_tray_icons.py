@@ -4,7 +4,7 @@
 The tray shows three states (see `TrayIconState` in
 lib/app/window/tray_icon_state.dart): the plain icon, a tunnel forwarding, and
 an error that happened while the window was out of sight. The plain icons are
-hand-cut from icon.png (see assets/brand/README.md); the variants are those
+drawn by tool/gen_app_icon.py; the variants are those
 same files with a badge in the bottom-right corner, so the glyph never moves
 between states.
 
@@ -34,7 +34,7 @@ SCALE = 8
 
 GREEN = (34, 197, 94, 255)
 RED = (239, 68, 68, 255)
-RING = (14, 16, 22, 255)
+RING = (28, 28, 28, 255)  # the plate, see tool/gen_app_icon.py
 
 
 def _badge_mask(size, triangle, ring):

@@ -125,7 +125,7 @@ class TerminalTabStrip extends ConsumerWidget {
     );
     // Same value the focused pane rings itself with, so the tab's outline and
     // the pane's are one unbroken line.
-    final activeTabRing = tokens.brand.withValues(alpha: 0.28);
+    final activeTabRing = tokens.textPrimary.withValues(alpha: 0.22);
     // What the terminal body really paints — its own scheme, not the app
     // palette's terminalBg — so the active tab has no seam where it meets it.
     final settings =
@@ -263,6 +263,21 @@ class TerminalTabStrip extends ConsumerWidget {
                     itemBuilder: (context, index) {
                       final tab = rootTabs[index];
                       final isActive = tab.id == activeRootTab?.id;
+                      final panes = panesOfTab(tabsState.tabs, tab);
+                      final paneCount = panes.length;
+                      // The tab is named after the pane in focus, so moving
+                      // between panes renames it to what you are looking at.
+                      final label = panes
+                          .firstWhere(
+                            (p) => p.id == tabsState.activeTabId,
+                            orElse: () => tab,
+                          )
+                          .displayTitle;
+                      // A tab holding one pane is that pane, so it grows out
+                      // of it. A tab holding several is the frame around all
+                      // of them: joined to the first pane it read as that
+                      // pane's header, and its close button as that pane's.
+                      final joinsPane = isActive && paneCount < 2;
                       // Tab identity is the host name plus a state dot. The old
                       // colour-coded tab edge is gone: the wireframe wants text to
                       // do the distinguishing so eight tabs stay readable.
@@ -276,7 +291,7 @@ class TerminalTabStrip extends ConsumerWidget {
 
                       final endpoint = terminalEndpointLabel(tab);
                       final tabChip = Semantics(
-                        label: 'Tab ${tab.title}',
+                        label: 'Tab $label',
                         selected: isActive,
                         button: true,
                         child: Padding(
@@ -297,7 +312,12 @@ class TerminalTabStrip extends ConsumerWidget {
                             child: AnimatedContainer(
                               duration: tokens.motionFast,
                               key: Key('tab_header_${tab.id}'),
-                              height: kTerminalTabStripHeight,
+                              height: joinsPane
+                                  ? kTerminalTabStripHeight
+                                  : kTerminalTabStripHeight - 8,
+                              margin: joinsPane
+                                  ? EdgeInsets.zero
+                                  : const EdgeInsets.symmetric(vertical: 4),
                               constraints: BoxConstraints(
                                 minWidth: compact ? 110 : 150,
                                 maxWidth: 230,
@@ -306,26 +326,25 @@ class TerminalTabStrip extends ConsumerWidget {
                                 horizontal: 12,
                               ),
                               decoration: BoxDecoration(
-                                // Only the active tab is a slab. The rest are text
+                                // Only the active tab is filled. The rest are text
                                 // on the canvas, which is what keeps eight open
                                 // sessions from reading as a toolbar.
                                 //
-                                // It lifts at the top and settles into the
-                                // terminal's own colour at the bottom, where it
-                                // has no border at all — so the tab does not end,
-                                // it becomes the pane.
-                                gradient: isActive
-                                    ? LinearGradient(
-                                        begin: Alignment.topCenter,
-                                        end: Alignment.bottomCenter,
-                                        colors: [
-                                          tokens.surfaceRaised,
-                                          terminalBg,
-                                        ],
-                                      )
+                                // A single-pane tab is filled in the terminal's
+                                // own colour and has no bottom border — so the
+                                // tab does not end, it becomes the pane. A tab
+                                // of several panes stands on its own instead.
+                                color: joinsPane
+                                    ? terminalBg
+                                    : isActive
+                                    ? tokens.selectedFill
                                     : null,
-                                borderRadius: tabRadius,
-                                border: isActive
+                                borderRadius: joinsPane
+                                    ? tabRadius
+                                    : BorderRadius.circular(
+                                        tokens.radiusMedium,
+                                      ),
+                                border: joinsPane
                                     ? Border(
                                         top: BorderSide(color: activeTabRing),
                                         left: BorderSide(color: activeTabRing),
@@ -367,7 +386,7 @@ class TerminalTabStrip extends ConsumerWidget {
                                   ],
                                   Flexible(
                                     child: Text(
-                                      tab.title,
+                                      label,
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
@@ -381,6 +400,29 @@ class TerminalTabStrip extends ConsumerWidget {
                                       ),
                                     ),
                                   ),
+                                  if (paneCount > 1) ...[
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      key: Key('tab_pane_count_${tab.id}'),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 5,
+                                        vertical: 1,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: tokens.selectedFill,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        '$paneCount',
+                                        semanticsLabel: '$paneCount panes',
+                                        style: shellvibeMono(
+                                          context,
+                                          size: 11,
+                                          color: tokens.textSecondary,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                   // With the status bar gone these are the
                                   // only trace of a quiet link or an attached
                                   // device on a tab that is not on screen.
@@ -404,20 +446,13 @@ class TerminalTabStrip extends ConsumerWidget {
                                     ],
                                   ],
                                   const SizedBox(width: 9),
-                                  Semantics(
-                                    label: 'Close tab ${tab.title}',
-                                    button: true,
-                                    child: InkWell(
-                                      key: Key('close_tab_${tab.id}'),
-                                      onTap: () => ref
-                                          .read(terminalTabsProvider.notifier)
-                                          .closeTab(tab.id),
-                                      child: Icon(
-                                        LucideIcons.x,
-                                        size: 14,
-                                        color: tokens.textSubtle,
-                                      ),
-                                    ),
+                                  _TabCloseButton(
+                                    tab: tab,
+                                    paneCount: paneCount,
+                                    tokens: tokens,
+                                    onClose: () => ref
+                                        .read(terminalTabsProvider.notifier)
+                                        .closeTab(tab.id),
                                   ),
                                 ],
                               ),
@@ -425,13 +460,19 @@ class TerminalTabStrip extends ConsumerWidget {
                           ),
                         ),
                       );
-                      // The tab names the host by its label; hovering it says
-                      // where that label points, which the status bar used to.
-                      final labelledChip = endpoint == null
+                      // The tab shows what is running in it; hovering it says
+                      // what the tab was opened as, where it points and the
+                      // directory it is in.
+                      final tooltipLines = [
+                        if (label != tab.title) tab.title,
+                        ?endpoint,
+                        ?tab.workingDirectory,
+                      ];
+                      final labelledChip = tooltipLines.isEmpty
                           ? tabChip
                           : Tooltip(
                               key: Key('tab_endpoint_${tab.id}'),
-                              message: endpoint,
+                              message: tooltipLines.join('\n'),
                               waitDuration: const Duration(milliseconds: 500),
                               child: tabChip,
                             );
@@ -450,7 +491,7 @@ class TerminalTabStrip extends ConsumerWidget {
                               border: Border.all(color: activeTabRing),
                             ),
                             child: Text(
-                              tab.title,
+                              tab.displayTitle,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
@@ -530,38 +571,26 @@ class TerminalTabStrip extends ConsumerWidget {
                   ],
                 )
               else
-                // Grouped into one hairline cluster: seven loose icon buttons
-                // read as a second tab strip, which is exactly the noise
-                // Nocturne takes out of the top of the screen.
-                //
-                // Shaped like a tab, not a pill: rounded at the top, square
-                // and unbordered at the bottom, where the pane's own top
-                // hairline closes it. The cluster sits on the terminal the
-                // same way the active tab does.
-                Container(
-                  height: kTerminalTabStripHeight,
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                  decoration: BoxDecoration(
-                    borderRadius: tabRadius,
-                    border: Border(
-                      top: BorderSide(color: tokens.border),
-                      left: BorderSide(color: tokens.border),
-                      right: BorderSide(color: tokens.border),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      for (final action in actions)
-                        _TabBarIconButton(
-                          buttonKey: action.buttonKey,
-                          icon: action.icon,
-                          tooltip: action.label,
-                          onPressed: action.onPressed,
-                        ),
-                    ],
-                  ),
+                // Quiet icons on the canvas, like the inactive tabs beside
+                // them: no frame, so only the active tab reads as a shape.
+                Row(
+                  children: [
+                    for (final action in actions)
+                      _TabBarIconButton(
+                        buttonKey: action.buttonKey,
+                        icon: action.icon,
+                        tooltip: action.label,
+                        onPressed: action.onPressed,
+                      ),
+                  ],
                 ),
-              const SizedBox(width: 8),
+              // Sets "new tab" apart from the actions on the current one.
+              Container(
+                width: 1,
+                height: 16,
+                margin: const EdgeInsets.symmetric(horizontal: 6),
+                color: tokens.border,
+              ),
               // New Tab Button
               // The Builder is the menu's anchor: on desktop the dropdown
               // opens under this button, so it needs the button's own box
@@ -571,7 +600,6 @@ class TerminalTabStrip extends ConsumerWidget {
                   buttonKey: const Key('new_tab_button'),
                   icon: LucideIcons.plus,
                   tooltip: 'New Tab',
-                  boxed: true,
                   onPressed: () => onShowNewTabMenu(buttonContext),
                 ),
               ),
@@ -708,21 +736,97 @@ class _TabDropTargetState extends State<_TabDropTarget> {
   }
 }
 
+/// A tab's close button.
+///
+/// Closing a tab closes every pane in it, and a click aimed at the first
+/// pane's close button can land here instead. So a tab of several panes asks
+/// once: the first click turns the button into "Close all?" — the pane
+/// count beside it says how many — the second
+/// closes, and the request lapses after a few seconds if it is not confirmed.
+/// A single-pane tab closes on the first click, as before.
+class _TabCloseButton extends StatefulWidget {
+  final TerminalTabSession tab;
+  final int paneCount;
+  final ShellVibeTokens tokens;
+  final VoidCallback onClose;
+
+  const _TabCloseButton({
+    required this.tab,
+    required this.paneCount,
+    required this.tokens,
+    required this.onClose,
+  });
+
+  @override
+  State<_TabCloseButton> createState() => _TabCloseButtonState();
+}
+
+class _TabCloseButtonState extends State<_TabCloseButton> {
+  static const _confirmWindow = Duration(seconds: 3);
+
+  bool _armed = false;
+  Timer? _lapse;
+
+  void _onTap() {
+    if (widget.paneCount < 2 || _armed) {
+      _lapse?.cancel();
+      widget.onClose();
+      return;
+    }
+    setState(() => _armed = true);
+    _lapse = Timer(_confirmWindow, () {
+      if (mounted) setState(() => _armed = false);
+    });
+  }
+
+  @override
+  void dispose() {
+    _lapse?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = widget.tokens;
+    return Semantics(
+      label: _armed
+          ? 'Confirm closing ${widget.paneCount} panes'
+          : 'Close tab ${widget.tab.title}',
+      button: true,
+      child: InkWell(
+        key: Key('close_tab_${widget.tab.id}'),
+        onTap: _onTap,
+        borderRadius: BorderRadius.circular(tokens.radiusSmall),
+        child: _armed
+            ? Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Text(
+                  'Close all?',
+                  key: Key('close_tab_confirm_${widget.tab.id}'),
+                  maxLines: 1,
+                  softWrap: false,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: tokens.danger,
+                  ),
+                ),
+              )
+            : Icon(LucideIcons.x, size: 14, color: tokens.textSubtle),
+      ),
+    );
+  }
+}
+
 /// Height of the tab strip, which is exactly the height of the tallest thing
-/// in it — a tab, and the grouped action pill — so it carries no slack above
-/// the terminal.
+/// in it — a tab — so it carries no slack above the terminal.
 const double kTerminalTabStripHeight = 38;
 
 /// A 32px quiet icon action in the terminal's top strip.
-///
-/// [boxed] gives it its own hairline, shaped like a tab — rounded on top,
-/// square and open at the bottom where the pane's hairline closes it — for the
-/// one action that sits outside the grouped cluster.
 class _TabBarIconButton extends StatelessWidget {
   final Key buttonKey;
   final IconData icon;
   final String tooltip;
-  final bool boxed;
   final VoidCallback onPressed;
 
   const _TabBarIconButton({
@@ -730,36 +834,22 @@ class _TabBarIconButton extends StatelessWidget {
     required this.icon,
     required this.tooltip,
     required this.onPressed,
-    this.boxed = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final tokens = ShellVibeTokens.resolve(context);
-    final boxedRadius = BorderRadius.vertical(
-      top: Radius.circular(tokens.radiusMedium),
-    );
     return Tooltip(
       message: tooltip,
       child: InkWell(
         key: buttonKey,
         onTap: onPressed,
-        borderRadius: boxed ? boxedRadius : BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(tokens.radiusMedium),
         child: Container(
-          width: boxed ? 34 : 32,
-          height: boxed ? kTerminalTabStripHeight : 32,
+          width: 32,
+          height: 32,
           alignment: Alignment.center,
-          decoration: boxed
-              ? BoxDecoration(
-                  borderRadius: boxedRadius,
-                  border: Border(
-                    top: BorderSide(color: tokens.border),
-                    left: BorderSide(color: tokens.border),
-                    right: BorderSide(color: tokens.border),
-                  ),
-                )
-              : null,
-          child: Icon(icon, size: boxed ? 17 : 16, color: tokens.textMuted),
+          child: Icon(icon, size: 16, color: tokens.textMuted),
         ),
       ),
     );

@@ -13,7 +13,7 @@ void main() {
   /// The drag recognizer consumes ~18px of touch slop before the divider
   /// starts moving, so exact pixel offsets are not asserted; instead tests
   /// assert direction, clamping, and that pane geometry always matches the
-  /// reported ratio exactly (widths/height sum minus the 10px divider).
+  /// reported ratio exactly (widths/height sum minus the 4px divider).
   Future<double> pumpAndDrag(
     WidgetTester tester, {
     required Axis axis,
@@ -51,9 +51,9 @@ void main() {
     return captured!;
   }
 
-  // The 10px divider leaves 790 shared px across 800 total width.
-  double firstWidthOfRatio(double ratio) => 790 * (1 - ratio);
-  double secondWidthOfRatio(double ratio) => 790 * ratio;
+  // The 4px divider leaves 796 shared px across 800 total width.
+  double firstWidthOfRatio(double ratio) => 796 * (1 - ratio);
+  double secondWidthOfRatio(double ratio) => 796 * ratio;
 
   group('ResizableSplit', () {
     testWidgets('horizontal drag right moves the divider right (first grows)',
@@ -71,11 +71,11 @@ void main() {
           closeTo(firstWidthOfRatio(ratio), 1));
       expect(tester.getSize(find.byKey(const Key('second'))).width,
           closeTo(secondWidthOfRatio(ratio), 1));
-      // total pane span is stable: 800 - 10px divider
+      // total pane span is stable: 800 - 4px divider
       expect(
         tester.getSize(find.byKey(const Key('first'))).width +
             tester.getSize(find.byKey(const Key('second'))).width,
-        closeTo(790, 1),
+        closeTo(796, 1),
       );
     });
 
@@ -116,12 +116,12 @@ void main() {
         offset: const Offset(0, 120),
       );
       expect(ratio, lessThan(0.5));
-      // top pane shrinks; heights sum to 400 - 10px divider
+      // top pane shrinks; heights sum to 400 - 4px divider
       final firstH = tester.getSize(find.byKey(const Key('first'))).height;
       final secondH = tester.getSize(find.byKey(const Key('second'))).height;
-      expect(firstH, closeTo(390 * (1 - ratio), 1));
-      expect(secondH, closeTo(390 * ratio, 1));
-      expect(firstH + secondH, closeTo(390, 1));
+      expect(firstH, closeTo(396 * (1 - ratio), 1));
+      expect(secondH, closeTo(396 * ratio, 1));
+      expect(firstH + secondH, closeTo(396, 1));
     });
 
     testWidgets('a ratio the owner does not publish is not kept locally',

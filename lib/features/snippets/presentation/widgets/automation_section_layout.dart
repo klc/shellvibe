@@ -37,11 +37,7 @@ class AutomationSectionLayout extends StatelessWidget {
     );
     return Row(
       children: [
-        Expanded(
-          child: framed
-              ? ShellVibePanel(gradientExtent: 160, child: work)
-              : work,
-        ),
+        Expanded(child: framed ? ShellVibePanel(child: work) : work),
         ?drawer,
       ],
     );

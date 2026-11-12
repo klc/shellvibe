@@ -114,14 +114,6 @@ void main() {
             tokens.brand,
             _kBodyMinimum,
           );
-          // The same label sits on the raised gradient, whose darkest stop is
-          // the one that can fail.
-          expectRatio(
-            '$where brandInk on brandGradientTop',
-            tokens.brandInk,
-            tokens.brandGradientTop,
-            _kDecorativeMinimum,
-          );
           // Danger states are read under pressure; they get no exemption.
           expectRatio(
             '$where dangerMutedText on dangerMutedSurface',

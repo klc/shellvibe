@@ -126,7 +126,7 @@ final class McpAccessSettingsSection extends ConsumerWidget {
                   ? LucideIcons.serverCog
                   : LucideIcons.serverOff,
               size: 18,
-              color: settings.serverRunning ? tokens.brand : tokens.textMuted,
+              color: settings.serverRunning ? tokens.success : tokens.textMuted,
             ),
             title: const Text('Server status'),
             trailing: Text(

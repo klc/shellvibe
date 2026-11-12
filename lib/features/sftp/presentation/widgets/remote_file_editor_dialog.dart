@@ -173,7 +173,7 @@ class _RemoteFileEditorDialogState
       child: ShadDialog(
         title: Row(
           children: [
-            Icon(Icons.edit_note, color: tokens.brand),
+            Icon(Icons.edit_note, color: tokens.textMuted),
             const SizedBox(width: 8),
             Expanded(
               child: Column(

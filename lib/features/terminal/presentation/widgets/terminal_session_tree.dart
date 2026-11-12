@@ -64,26 +64,32 @@ Widget buildTerminalSessionTree(
         ? tokens.danger.withValues(alpha: 0.30)
         : paneSession.isConnecting
         ? tokens.warning.withValues(alpha: 0.28)
-        : isBroadcastSelected || isActivePane
+        // Broadcast is a mode that sends your keystrokes elsewhere, so it is
+        // the one pane state that earns the accent. Focus is only a lift.
+        : isBroadcastSelected
         ? tokens.brand.withValues(alpha: 0.28)
+        : isActivePane
+        ? tokens.textPrimary.withValues(alpha: 0.22)
         : tokens.textPrimary.withValues(alpha: 0.06);
 
-    // Every pane is its own slab: rounded, ringed in the colour of its state,
-    // and opaque inside. A single-pane tab still gets the ring, but only a
+    // Every pane is its own frame: ringed in the colour of its state and
+    // opaque inside, with no shadow lifting it off the page. A single-pane tab still gets the ring, but only a
     // split tab gets the header — the header is what names the snippet
     // target, and with one pane there is nothing to disambiguate.
     Widget body = screen;
     if (paneOrder.length >= 2) {
       final paneNumber = paneOrder.indexOf(paneSession.id) + 1;
       final paneLabel = isBroadcastSelected
-          ? 'PANE $paneNumber · BROADCAST '
+          ? 'Pane $paneNumber · broadcast '
                 '${_deliverablePaneCount(allTabs, selectedPaneIds)}/'
                 '${selectedPaneIds.length}'
           : isActivePane
-          ? 'PANE $paneNumber · ACTIVE'
-          : 'PANE $paneNumber';
-      final paneLabelColor = isBroadcastSelected || isActivePane
+          ? 'Pane $paneNumber · active'
+          : 'Pane $paneNumber';
+      final paneLabelColor = isBroadcastSelected
           ? tokens.brand
+          : isActivePane
+          ? tokens.textPrimary
           : tokens.textSubtle;
       // The header doubles as the pane's drag handle: dropping it on another
       // pane swaps the two. The terminal below is never the handle — a drag
@@ -121,7 +127,7 @@ Widget buildTerminalSessionTree(
       );
     }
 
-    final radius = Radius.circular(tokens.radiusLarge);
+    final radius = Radius.circular(tokens.radiusMedium);
     // A corner cannot curve away underneath the tab that is supposed to be
     // growing out of it, so the merged tab squares the one it covers.
     final paneRadius = BorderRadius.only(
@@ -132,11 +138,7 @@ Widget buildTerminalSessionTree(
     );
     final paneBox = Container(
       clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: terminalBg,
-        borderRadius: paneRadius,
-        boxShadow: tokens.shadowPanel,
-      ),
+      decoration: BoxDecoration(color: terminalBg, borderRadius: paneRadius),
       // The ring is painted over the child, not behind it. A clipped child
       // fills the whole rounded box, so a border in the background decoration
       // survives only where the content happens to be inset — along the
@@ -253,7 +255,7 @@ Widget _paneHeader(
             children: [
               Flexible(
                 child: Text(
-                  paneSession.title,
+                  paneSession.displayTitle,
                   style: shellvibeMono(
                     context,
                     size: 11,
@@ -298,9 +300,8 @@ Widget _paneHeader(
           paneLabel,
           key: Key('pane_label_${paneSession.id}'),
           style: TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 1,
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
             color: paneLabelColor,
           ),
         ),
@@ -358,7 +359,7 @@ Widget _paneDragFeedback(
             const SizedBox(width: 8),
             Flexible(
               child: Text(
-                paneSession.title,
+                paneSession.displayTitle,
                 style: shellvibeMono(
                   context,
                   size: 11,

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../../app/theme/app_theme.dart';
 import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/widgets/adaptive_modal.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
@@ -70,6 +71,7 @@ Future<void> showProblemReportDialog(
 }) {
   return showShadDialog<void>(
     context: context,
+    barrierColor: AppTheme.scrimOf(context),
     builder: (dialogContext) {
       final tokens = ShellVibeTokens.resolve(dialogContext);
       final body = report.body();
