@@ -7,12 +7,110 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-11-13
+
+### Added
+
+- Terminal: drop a tab on the middle of another tab to merge it in as its
+  right half, splits included. Dropping on a tab's edge still reorders. Move
+  to New Tab in a pane's right-click menu takes the pane back out.
+- Terminal: a tab with several panes shows its pane count and asks before
+  closing them all.
+- Terminal: tabs and pane headers show the title or directory the running
+  program reports, falling back to the tab's own name.
+- Terminal: the multi-line paste confirmation accepts Enter, and Settings →
+  Terminal → Confirm Multi-Line Paste turns it off.
+- Hosts: Try connection in the host form tests the SSH login, jump hosts
+  included, before you save.
+- The app asks before quitting while sessions, SFTP transfers or a runbook
+  are still open or running.
+- Vault: a master password is typed twice and tried before it is set. The
+  lock screen offers Forgot password? Reset vault, which clears the secrets
+  and keeps hosts and settings.
+- SFTP: uploads and downloads ask before overwriting a file (Overwrite, Skip
+  or Cancel).
+
 ### Changed
 
+- New look: a flat graphite and amber theme, "ShellVibe Amber", is the
+  default for new installs, with a new app icon. Panels sit flush with no
+  gradients, glows or shadows, selections are neutral, and labels are in
+  sentence case. Other palettes take on the flat style and keep their
+  colours. The empty terminal screen is now a list of commands.
+- Terminal: 14 colour schemes got 23 legibility fixes for search hits,
+  selections and the cursor.
 - AI Access: in Full access mode, commands that delete files (`rm`, `shred`,
   `find -delete`, …) or run as another user (`sudo`, `su`, `doas`) now ask
   first, like reading secrets already did. An approval for them can still be
   remembered.
+- AI Access: Read only mode is stricter. Commands such as
+  `kubectl -n ns get pods`, `git --no-pager log` or `sudo systemctl status`
+  now need approval, and remembered multi-line approvals are asked once more.
+- AI Access: "Always" grants survive a restart, and Panic suspends agents in
+  every workspace until AI access is turned back on.
+- AI Access: every agent action is in the audit log, including closing or
+  interrupting a session, Panic, suspending a client and refused commands.
+- Runbooks: in rolling mode the approval is asked again for every wave.
+  Variable values an agent sends may not contain newlines or shell
+  metacharacters.
+- Desktop auto-lock counts time without input to ShellVibe, even while the
+  window is visible.
+- The database moved from `Documents` to the app's support folder, readable
+  only by you. It is moved once on first start.
+- Windows and Linux: the close button hides to the tray only while a tray
+  icon is shown; otherwise it quits, asking first when something is open.
+  Linux desktops with only an XEmbed tray no longer get a tray icon.
+- Secrets copied to the clipboard are marked sensitive on Android 13+ and
+  kept out of clipboard history on Windows, and are cleared when the app
+  quits.
+
+### Removed
+
+- Vault: the biometric lock.
+- App icon shortcuts no longer list hosts when a master password is set.
+
+### Fixed
+
+- Settings: a failed settings read (a denied keychain prompt, a locked Linux
+  keyring) no longer resets auto-lock, clipboard clearing, theme and
+  workspace to their defaults on the next change.
+- Vault (Android): a keystore read error no longer replaces the vault key
+  and leaves saved secrets unreadable. The vault shows Vault Key Missing with
+  Try Again instead, and app data is excluded from device backups.
+- Hosts: importing `RemoteForward 5432 localhost:15432` from ssh_config no
+  longer swaps the two ports and exposes the local port to the server.
+- Hosts: ssh_config import follows OpenSSH: `ProxyJump a,b` chains both
+  hops, Windows `IdentityFile` paths keep their backslashes, and only real
+  private key files are imported.
+- Terminal: switching to a split tab could send keys to a pane other than
+  the active one.
+- Terminal: with broadcast on, replies from programs like `vim` or `htop` no
+  longer reach the other panes as keystrokes.
+- Terminal: a drag-selection focuses its pane, so ⌘/Ctrl+C copies it.
+- Terminal: output kept flowing only while the window was visible; a long
+  build in a minimised or hidden window could stall.
+- Terminal: when a remote shell exits, its SSH connection and jump hops
+  close too, and the tab offers Reconnect.
+- SFTP: opening the file browser again, or for another host, no longer
+  aborts running transfers.
+- SFTP: uploads and saves from the editor keep the file's owner and mode and
+  follow symlinks.
+- Runbooks: a runbook with a snippet step no longer crashes and locks every
+  later run until restart.
+- AI Access: a command that ends with `exit`, `set -e` or a dropped
+  connection no longer waits for its timeout, and a command that reads input
+  can no longer swallow the commands after it.
+- AI Access: commands that only look read-only (a trailing `# git log`
+  comment, `sed -i`, `find -exec`, secret files read with `tac` or `nl`)
+  now need approval in Read only mode.
+- AI Access: redacting large outputs no longer freezes the app.
+- Sync: joining with more than 100 hosts syncs them all, a device with a
+  category turned off no longer breaks it for the next device, a restore on
+  a joined device reaches the others, and tables an older build skipped are
+  synced once the build knows them.
+- Tunnels: forwards respect backpressure, and overwriting an ssh_config
+  import or deleting a workspace stops forwards left without a host.
+- Device Link: pairings saved at the same time no longer drop each other.
 
 ## [1.12.0] - 2026-11-07
 
@@ -923,7 +1021,8 @@ entry describes what ShellVibe is rather than what changed.
 - iOS and Android are not released. The code builds for them and they are not
   part of this release.
 
-[Unreleased]: https://github.com/klc/shellvibe/compare/v1.12.0...HEAD
+[Unreleased]: https://github.com/klc/shellvibe/compare/v1.13.0...HEAD
+[1.13.0]: https://github.com/klc/shellvibe/compare/v1.12.0...v1.13.0
 [1.12.0]: https://github.com/klc/shellvibe/compare/v1.11.1...v1.12.0
 [1.11.1]: https://github.com/klc/shellvibe/compare/v1.11.0...v1.11.1
 [1.11.0]: https://github.com/klc/shellvibe/compare/v1.10.0...v1.11.0
