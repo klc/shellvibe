@@ -94,7 +94,6 @@ SMALL = 20
 # one keeps the master's padding. See patch_small.
 SMALL_TARGETS = (
     ("macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_16.png", True),
-    ("web/favicon.png", False),
 )
 
 # Supersampling factor. The chevron is a diagonal and the plate's corners are

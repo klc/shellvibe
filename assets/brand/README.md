@@ -27,5 +27,5 @@ dart run flutter_launcher_icons
 python3 tool/gen_app_icon.py --patch-small
 ```
 
-The generated icons under `android/`, `ios/`, `macos/`, `windows/` and `web/`
+The generated icons under `android/`, `ios/`, `macos/` and `windows/`
 are derived from these files and carry the same restriction.
