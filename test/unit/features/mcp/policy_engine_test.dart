@@ -102,6 +102,13 @@ void main() {
       RiskCategory.unclassified: 'frobnicate --now',
     };
 
+    // Deleting files and escalating privileges are never auto-allowed, not
+    // even in autonomous mode (MCP-25).
+    const alwaysConfirmed = {
+      RiskCategory.destructiveFs,
+      RiskCategory.privilege,
+    };
+
     test('readonlySafe always allows, in every mode', () async {
       for (final mode in McpAccessMode.values) {
         await grant(mode: mode);
@@ -125,7 +132,10 @@ void main() {
         McpAccessMode.autonomous: PolicyAction.allow,
       };
       for (final entry in commandFor.entries) {
-        if (entry.key == RiskCategory.readonlySafe) continue;
+        if (entry.key == RiskCategory.readonlySafe ||
+            alwaysConfirmed.contains(entry.key)) {
+          continue;
+        }
         for (final modeEntry in expectByMode.entries) {
           await grant(mode: modeEntry.key);
           final decision = await engine.evaluate(
@@ -138,6 +148,30 @@ void main() {
             reason: '${entry.key} in ${modeEntry.key}',
           );
           expect(decision.category, entry.key, reason: entry.value);
+        }
+      }
+    });
+
+    test('destructiveFs and privilege are deny/confirm/confirm across '
+        'readonly/guarded/autonomous', () async {
+      const expectByMode = {
+        McpAccessMode.readonly: PolicyAction.deny,
+        McpAccessMode.guarded: PolicyAction.confirm,
+        McpAccessMode.autonomous: PolicyAction.confirm,
+      };
+      for (final category in alwaysConfirmed) {
+        for (final modeEntry in expectByMode.entries) {
+          await grant(mode: modeEntry.key);
+          final decision = await engine.evaluate(
+            ctx(command: commandFor[category]!, mode: modeEntry.key),
+            workspaceId: 'default',
+          );
+          expect(
+            decision.action,
+            modeEntry.value,
+            reason: '$category in ${modeEntry.key}',
+          );
+          expect(decision.category, category);
         }
       }
     });

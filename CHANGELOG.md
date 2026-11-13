@@ -7,6 +7,13 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- AI Access: in Full access mode, commands that delete files (`rm`, `shred`,
+  `find -delete`, …) or run as another user (`sudo`, `su`, `doas`) now ask
+  first, like reading secrets already did. An approval for them can still be
+  remembered.
+
 ## [1.12.0] - 2026-11-07
 
 ### Changed
