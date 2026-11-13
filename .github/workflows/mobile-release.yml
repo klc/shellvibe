@@ -177,7 +177,6 @@ jobs:
           # Draft until the app has been reviewed once: Play refuses a
           # completed release for an app that has never been published.
           status: draft
-          whatsNewDirectory: distribution/whatsnew
 
   ios:
     name: iOS archive
