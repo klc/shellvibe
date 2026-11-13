@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io' show File, Platform;
 
-import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:flutter/foundation.dart' show kDebugMode, visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -348,8 +348,9 @@ final class McpAccessSettingsSection extends ConsumerWidget {
   /// is returned instead of guessing — see [_BridgeCommand.isPlaceholder].
   _BridgeCommand _detectBridgeCommand() {
     final candidates = mcpBridgeCandidates(
-      resolvedExecutable: Platform.resolvedExecutable,
-      environment: Platform.environment,
+      resolvedExecutable:
+          debugMcpResolvedExecutableOverride ?? Platform.resolvedExecutable,
+      environment: debugMcpAgentEnvironmentOverride ?? Platform.environment,
       isWindows: Platform.isWindows,
       isLinux: Platform.isLinux,
       isWindowsStorePackage: isWindowsStorePackage,
@@ -443,12 +444,20 @@ class _AgentAppsCard extends StatefulWidget {
   State<_AgentAppsCard> createState() => _AgentAppsCardState();
 }
 
+/// Override the environment and executable this screen derives paths from,
+/// so the screenshot test shows an installed app in a demo home rather than
+/// a build tree in the machine's own.
+@visibleForTesting
+Map<String, String>? debugMcpAgentEnvironmentOverride;
+@visibleForTesting
+String? debugMcpResolvedExecutableOverride;
+
 class _AgentAppsCardState extends State<_AgentAppsCard> {
   final Map<McpAgentApp, String> _paths = {
     for (final app in McpAgentApp.values)
       app: ?mcpAgentConfigPath(
         app,
-        environment: Platform.environment,
+        environment: debugMcpAgentEnvironmentOverride ?? Platform.environment,
         isWindows: Platform.isWindows,
         isMacOS: Platform.isMacOS,
       ),
