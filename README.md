@@ -34,11 +34,11 @@ ShellVibe brings modern, hardware-accelerated terminal rendering, a Zero-Knowled
 
 **Snippets** — parameterised commands (`${INPUT:name}`) reusable across every host in the workspace.
 
-![Snippet list with three parameterised commands and their tags](docs/screenshots/snippets.png)
+![Snippet list with four parameterised commands and their tags](docs/screenshots/snippets.png)
 
 **Identity vault** — Argon2id + AES-256-GCM, master-password gated.
 
-![Vault identity list showing one stored password identity](docs/screenshots/vault.png)
+![Vault identity list showing two stored password identities](docs/screenshots/vault.png)
 
 **AI access** — an MCP server, off by default, that lets an agent reach your hosts through ShellVibe instead of `ssh`, under per-host approval and a per-host max access level, never with the credential itself. Claude Code, Claude Desktop, Cursor, Antigravity and Codex connect in one click.
 
