@@ -106,7 +106,7 @@ class _FilePermissionsDialogState extends State<FilePermissionsDialog> {
     return ShadDialog(
       title: Row(
         children: [
-          Icon(Icons.security, color: tokens.brand),
+          Icon(Icons.security, color: tokens.textMuted),
           const SizedBox(width: 8),
           Expanded(
             child: Text(

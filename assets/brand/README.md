@@ -17,13 +17,14 @@ everything else.
 | `tray.png`, `tray.ico`        | The plate at 64px (and 16–64px in the `.ico`) for the Linux and Windows system trays.           |
 | `tray_tunnel.*`, `tray_error.*`, `tray_macos_tunnel.png`, `tray_macos_error.png` | The tray icons with a badge: a forward is up, or something failed out of sight. Cut from the files above by `tool/gen_tray_icons.py`; macOS takes a dot and a triangle because a template image cannot carry colour. |
 
-The tray icons are cut from `icon.png` by hand, not by `flutter_launcher_icons`;
-redo them when the master changes, then run `python3 tool/gen_tray_icons.py` to
-cut the badged variants from them. Regenerate the platform icons after
-changing any of these:
+Every file above is drawn by `tool/gen_app_icon.py`, the badged tray variants
+by `tool/gen_tray_icons.py`. After changing the mark, run all four:
 
 ```bash
+python3 tool/gen_app_icon.py
+python3 tool/gen_tray_icons.py
 dart run flutter_launcher_icons
+python3 tool/gen_app_icon.py --patch-small
 ```
 
 The generated icons under `android/`, `ios/`, `macos/`, `windows/` and `web/`

@@ -419,7 +419,7 @@ class _SnippetsScreenState extends ConsumerState<SnippetsScreen> {
           Column(
             children: [
               AutomationListHeader(
-                labels: const ['NAME', 'COMMAND', 'TAGS'],
+                labels: const ['Name', 'Command', 'Tags'],
                 columnFlex: _kSnippetColumnFlex,
                 compact: compact,
                 actionCount: 2,
@@ -813,20 +813,16 @@ class _FilterChip extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
           decoration: BoxDecoration(
-            color: selected
-                ? tokens.brand.withValues(alpha: 0.12)
-                : Colors.transparent,
+            color: selected ? tokens.selectedFill : Colors.transparent,
             borderRadius: BorderRadius.circular(tokens.radiusPill),
             border: Border.all(
-              color: selected
-                  ? tokens.brand.withValues(alpha: 0.34)
-                  : tokens.border,
+              color: selected ? Colors.transparent : tokens.border,
             ),
           ),
           child: Text(
             label,
             style: Theme.of(context).textTheme.labelMedium?.copyWith(
-              color: selected ? tokens.brand : tokens.textMuted,
+              color: selected ? tokens.textPrimary : tokens.textMuted,
             ),
           ),
         ),
@@ -997,13 +993,13 @@ class _SnippetDetailPanel extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 14),
-        _DetailRow(label: 'lines', value: '$lineCount'),
+        _DetailRow(label: 'Lines', value: '$lineCount'),
         _DetailRow(
-          label: 'variables',
+          label: 'Variables',
           value: variables.isEmpty ? 'none' : variables.join(', '),
         ),
         _DetailRow(
-          label: 'tags',
+          label: 'Tags',
           value: snippet.tags.isEmpty ? 'none' : '${snippet.tags.length}',
         ),
         const SizedBox(height: 14),
@@ -1037,12 +1033,10 @@ class _DetailRow extends StatelessWidget {
           SizedBox(
             width: 78,
             child: Text(
-              label.toUpperCase(),
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                fontSize: 9,
-                letterSpacing: 0.8,
-                color: tokens.textMuted,
-              ),
+              label,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: tokens.textMuted),
             ),
           ),
           Expanded(

@@ -164,7 +164,7 @@ class _RunbooksScreenState extends ConsumerState<RunbooksScreen> {
           Column(
             children: [
               AutomationListHeader(
-                labels: const ['NAME', 'DESCRIPTION', 'STEPS'],
+                labels: const ['Name', 'Description', 'Steps'],
                 columnFlex: _kRunbookColumnFlex,
                 compact: widget.compact,
                 actionCount: 1,

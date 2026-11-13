@@ -128,6 +128,8 @@ void main() {
 
     // The boxes stay editable afterwards.
     await tester.tap(find.byKey(const Key('run_target_host_h2')));
+    await tester.ensureVisible(find.byKey(const Key('run_target_host_h3')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('run_target_host_h3')));
     await tester.pump();
     await tester.tap(find.byKey(const Key('run_target_confirm')));

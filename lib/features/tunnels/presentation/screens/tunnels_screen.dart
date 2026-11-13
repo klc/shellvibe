@@ -76,7 +76,6 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: ShellVibePanel(
-        gradientExtent: 160,
         child: activeTunnelsAsync.when(
           data: (activeTunnels) {
             final activeMap = {for (var t in activeTunnels) t.ruleId: t};
@@ -145,7 +144,7 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
                           'Create a rule to route traffic through an SSH '
                           'session.',
                       actions: [
-                        ShellVibeButton(
+                        ShellVibeButton.secondary(
                           icon: LucideIcons.plus,
                           label: 'Create your first rule',
                           onPressed: _openRuleDialog,
@@ -212,7 +211,7 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
     final accent = hasError
         ? tokens.danger
         : isActive
-        ? tokens.brand
+        ? tokens.success
         : tokens.textMuted;
 
     final kindLabel = switch (rule.type) {
@@ -377,15 +376,11 @@ class _TunnelsScreenState extends ConsumerState<TunnelsScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
       decoration: BoxDecoration(
-        color: isActive && !hasError
-            ? tokens.brand.withValues(alpha: 0.08)
-            : Colors.transparent,
+        color: Colors.transparent,
         borderRadius: BorderRadius.circular(11),
         border: Border.all(
           color: hasError
               ? tokens.danger.withValues(alpha: 0.28)
-              : isActive
-              ? tokens.brand.withValues(alpha: 0.20)
               : tokens.border,
         ),
       ),

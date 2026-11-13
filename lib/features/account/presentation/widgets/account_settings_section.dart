@@ -309,9 +309,7 @@ class _AccountSettingsSectionState
     } on Object catch (e) {
       debugPrint('Sign-in failed: $e');
       if (!mounted) return;
-      setState(
-        () => _formError = 'Something went wrong. Please try again.',
-      );
+      setState(() => _formError = 'Something went wrong. Please try again.');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -458,7 +456,7 @@ final class _PlanRow extends StatelessWidget {
       children: [
         Row(
           children: [
-            Icon(LucideIcons.badgeCheck, size: 16, color: tokens.brand),
+            Icon(LucideIcons.badgeCheck, size: 16, color: tokens.success),
             const SizedBox(width: 8),
             Text(
               '$label plan',

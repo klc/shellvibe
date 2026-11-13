@@ -352,23 +352,10 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
       // 512px default. Expressed as a constraint rather than a fixed width on
       // the child: a phone shrinks it, a desktop gets the designed size.
       constraints: const BoxConstraints(maxWidth: 640),
-      // A brand-tinted glyph tile instead of a bare icon: the dialog is an
-      // overlay slab, and the tile is what gives its header the same weight as
-      // a panel's.
       title: Row(
         children: [
-          Container(
-            width: 40,
-            height: 40,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: tokens.brand.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: tokens.brand.withValues(alpha: 0.26)),
-            ),
-            child: Icon(LucideIcons.server, size: 19, color: tokens.brand),
-          ),
-          const SizedBox(width: 14),
+          Icon(LucideIcons.server, size: 20, color: tokens.textMuted),
+          const SizedBox(width: 12),
           Flexible(
             child: Text(
               isEditing
@@ -383,7 +370,8 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
         ],
       ),
       description: Padding(
-        padding: const EdgeInsets.only(left: 54),
+        // Under the title, past the 20px glyph and its 12px gap.
+        padding: const EdgeInsets.only(left: 32),
         child: Text(
           'workspace: ${_workspaceName(widget.workspaceId ?? 'default')}',
           style: shellvibeMono(context, size: 11, color: tokens.textSubtle),
@@ -840,15 +828,17 @@ class _HostFormDialogState extends ConsumerState<HostFormDialog> {
                     vertical: 12,
                   ),
                   decoration: BoxDecoration(
-                    color: tokens.brand.withValues(alpha: 0.07),
+                    color: tokens.textPrimary.withValues(alpha: 0.04),
                     borderRadius: BorderRadius.circular(tokens.radiusMedium),
-                    border: Border.all(
-                      color: tokens.brand.withValues(alpha: 0.16),
-                    ),
+                    border: Border.all(color: tokens.border),
                   ),
                   child: Row(
                     children: [
-                      Icon(LucideIcons.route, size: 15, color: tokens.brand),
+                      Icon(
+                        LucideIcons.route,
+                        size: 15,
+                        color: tokens.textMuted,
+                      ),
                       const SizedBox(width: 11),
                       Expanded(
                         // Typing changes the controllers without a setState,

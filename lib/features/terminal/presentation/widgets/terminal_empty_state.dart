@@ -60,9 +60,7 @@ class TerminalEmptyState extends ConsumerWidget {
                   spacing: 22,
                   runSpacing: 6,
                   children: [
-                    // An iPad has the keyboard but no local shell to open.
-                    if (supportsLocalShell)
-                      Text('${shortcutLabel(AppCommand.newLocalTab)} new tab'),
+                    // The new-tab key is on the Local shell row itself.
                     Text(
                       '${shortcutLabel(AppCommand.commandPalette)} '
                       'command palette',
@@ -78,13 +76,12 @@ class TerminalEmptyState extends ConsumerWidget {
     );
   }
 
-  /// Bookmarked hosts as one-tap chips on the empty screen.
+  /// Bookmarked hosts as one-tap rows under the start actions.
   ///
   /// This costs nothing while the app is in use — the empty state is only on
   /// screen when no session is open, which is exactly when a shortcut is what
-  /// is wanted. Returns null when nothing is starred, so the screen keeps the
-  /// shape it had.
-  Widget? _bookmarkShortcuts(BuildContext context, WidgetRef ref) {
+  /// is wanted. Empty when nothing is starred.
+  List<Widget> _bookmarkRows(BuildContext context, WidgetRef ref) {
     final bookmarks = ref.watch(bookmarksProvider).value ?? const [];
     final hosts = ref.watch(hostsProvider).value ?? const <HostModel>[];
     final starred = [
@@ -92,71 +89,130 @@ class TerminalEmptyState extends ConsumerWidget {
         if (bookmark.hostId != null)
           ...hosts.where((host) => host.id == bookmark.hostId),
     ];
-    if (starred.isEmpty) return null;
+    if (starred.isEmpty) return const [];
 
-    final tokens = ShellVibeTokens.resolve(context);
-    return Column(
-      children: [
-        Text(
-          'FAVORITES',
-          style: TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 1.2,
-            color: tokens.textSubtle,
-          ),
+    return [
+      const SizedBox(height: 20),
+      const ShellVibeSectionLabel(
+        label: 'Favorites',
+        padding: EdgeInsets.fromLTRB(10, 0, 10, 4),
+      ),
+      for (final host in starred)
+        _StartRow(
+          rowKey: Key('empty_bookmark_${host.id}'),
+          icon: LucideIcons.star,
+          label: host.label,
+          trailing: host.address,
+          onTap: () => unawaited(onConnectToHost(host)),
         ),
-        const SizedBox(height: 12),
-        Wrap(
-          alignment: WrapAlignment.center,
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final host in starred)
-              ShellVibeButton.secondary(
-                buttonKey: Key('empty_bookmark_${host.id}'),
-                icon: LucideIcons.star,
-                label: host.label,
-                onPressed: () => unawaited(onConnectToHost(host)),
-              ),
-          ],
-        ),
-      ],
-    );
+    ];
   }
 
+  /// A short list of ways in, not a hero: the shortcut sits on the row it
+  /// triggers.
   Widget _buildEmptyStateBody(BuildContext context, WidgetRef ref) {
-    return ShellVibeEmptyState(
-      footer: _bookmarkShortcuts(context, ref),
-      icon: LucideIcons.squareTerminal,
-      title: 'No open sessions',
-      description: isMobilePlatform
-          ? 'Connect to a saved server, or take over a session from your '
-                'desktop.'
-          : 'Open a local shell, connect to a saved server, or take over a '
-                'session from your phone.',
-      actions: [
-        if (supportsLocalShell)
-          ShellVibeButton(
-            buttonKey: const Key('empty_open_local_button'),
-            icon: LucideIcons.monitor,
-            label: 'Local shell',
-            onPressed: () =>
-                ref.read(terminalTabsProvider.notifier).openLocalTab(),
+    final tokens = ShellVibeTokens.resolve(context);
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 440),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
+                child: Text(
+                  'No open sessions',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: tokens.textPrimary,
+                  ),
+                ),
+              ),
+              if (supportsLocalShell)
+                _StartRow(
+                  rowKey: const Key('empty_open_local_button'),
+                  icon: LucideIcons.monitor,
+                  label: 'Local shell',
+                  trailing: shortcutLabel(AppCommand.newLocalTab),
+                  onTap: () =>
+                      ref.read(terminalTabsProvider.notifier).openLocalTab(),
+                ),
+              _StartRow(
+                rowKey: const Key('empty_select_host_button'),
+                icon: LucideIcons.server,
+                label: 'Connect to a host…',
+                onTap: onShowSelectHostModal,
+              ),
+              _StartRow(
+                rowKey: const Key('empty_device_link_button'),
+                icon: isMobilePlatform
+                    ? LucideIcons.scanQrCode
+                    : LucideIcons.smartphone,
+                label: isMobilePlatform
+                    ? 'Continue a session from your desktop'
+                    : 'Continue a session from your phone',
+                onTap: onDeviceLinkAction,
+              ),
+              ..._bookmarkRows(context, ref),
+            ],
           ),
-        ShellVibeButton.secondary(
-          buttonKey: const Key('empty_select_host_button'),
-          icon: LucideIcons.server,
-          label: 'Connect to host',
-          onPressed: onShowSelectHostModal,
         ),
-        ShellVibeButton.secondary(
-          buttonKey: const Key('empty_device_link_button'),
-          icon: isMobilePlatform ? LucideIcons.scanQrCode : LucideIcons.qrCode,
-          label: 'Device Link',
-          onPressed: onDeviceLinkAction,
+      ),
+    );
+  }
+}
+
+class _StartRow extends StatelessWidget {
+  final Key rowKey;
+  final IconData icon;
+  final String label;
+  final String? trailing;
+  final VoidCallback onTap;
+
+  const _StartRow({
+    required this.rowKey,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.trailing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = ShellVibeTokens.resolve(context);
+    return Semantics(
+      button: true,
+      child: InkWell(
+        key: rowKey,
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(tokens.radiusMedium),
+        child: Container(
+          height: isMobilePlatform ? tokens.touchTarget : 34,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: Row(
+            children: [
+              Icon(icon, size: 15, color: tokens.textMuted),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 13, color: tokens.textPrimary),
+                ),
+              ),
+              if (trailing != null) ...[
+                const SizedBox(width: 12),
+                Text(trailing!, style: shellvibeMono(context, size: 11)),
+              ],
+            ],
+          ),
         ),
-      ],
+      ),
     );
   }
 }

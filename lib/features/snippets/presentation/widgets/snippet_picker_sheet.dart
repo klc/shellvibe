@@ -109,12 +109,10 @@ class _SnippetPickerSheetState extends ConsumerState<SnippetPickerSheet> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    widget.targetLabel.toUpperCase(),
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      fontSize: 10,
-                      letterSpacing: 0.8,
-                      color: tokens.textMuted,
-                    ),
+                    widget.targetLabel,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: tokens.textMuted),
                   ),
                   const SizedBox(height: 8),
                   ShadInput(

@@ -199,9 +199,8 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
               // application header above it: switching modules must move only the
               // middle of the screen, never the chrome.
               //
-              // Nocturne floats that skeleton: the whole shell sits on the night
-              // canvas, inset by one panel gap, and the rail is a slab of its own
-              // separated by whitespace rather than a divider rule.
+              // The skeleton runs edge to edge: rail, column and work area sit
+              // flush and share hairlines.
               body: SafeArea(
                 top: true,
                 // The phone layout hands the bottom inset to the tab bar, which
@@ -257,7 +256,7 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
 
     return ShellVibePanel(
       width: tokens.railWidth,
-      gradientExtent: 120,
+      border: shellvibeEdge(context, right: true),
       child: Column(
         children: [
           const SizedBox(height: 12),
@@ -266,8 +265,12 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
             child: Image.asset(
               // The launcher icon itself, so the rail mark and the icon the
               // user clicked to get here are the same artwork. It ships its
-              // own squircle and margin, so it needs no plate behind it.
-              'assets/brand/icon.png',
+              // own squircle and margin, so it needs no plate behind it. The
+              // light theme takes the same drawing on a pale plate, which a
+              // dark tile on a white rail would otherwise punch a hole in.
+              Theme.of(context).brightness == Brightness.light
+                  ? 'assets/brand/icon_light.png'
+                  : 'assets/brand/icon.png',
               key: const Key('header_brand_logo'),
               width: 36,
               height: 36,
@@ -363,33 +366,22 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
     // removed below; the bottom inset is paid once, as the gap under the slab.
     final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
 
-    // On phones the bar is a slab too: it floats clear of the screen edge with
-    // the same raised gradient as the desktop overlays, so the night ground
-    // stays visible underneath it.
+    // On phones the bar floats clear of the screen edge, filled like the
+    // desktop overlays.
     return Padding(
       padding: EdgeInsets.fromLTRB(16, 6, 16, bottomInset > 0 ? 18 : 14),
       child: Container(
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [tokens.surfaceRaised, tokens.surfaceLow],
-          ),
+          color: tokens.surfaceRaised,
           borderRadius: BorderRadius.circular(15),
-          boxShadow: [
-            BoxShadow(
-              color: tokens.shadowColorStrong,
-              blurRadius: 24,
-              offset: const Offset(0, -6),
-            ),
-          ],
+          boxShadow: tokens.shadowPanel,
         ),
         // Drawn over the child: a clipped child covers a background border
         // along the corner arcs and breaks the outline there.
         foregroundDecoration: BoxDecoration(
           borderRadius: BorderRadius.circular(15),
-          border: Border.all(color: tokens.textPrimary.withValues(alpha: 0.08)),
+          border: Border.all(color: tokens.border),
         ),
         child: MediaQuery.removePadding(
           context: context,
@@ -403,7 +395,7 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
             // a selection pill on top of it would be a third layer for nothing.
             indicatorColor: Colors.transparent,
             overlayColor: WidgetStatePropertyAll(
-              tokens.brand.withValues(alpha: 0.08),
+              tokens.textPrimary.withValues(alpha: 0.06),
             ),
             labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
             // Modules outside the four tabs (tunnels, snippets, workspaces) keep
@@ -425,7 +417,7 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
                   selectedIcon: Icon(
                     appNavigationItems[navigationIndexForPath(path)].icon,
                     size: 20,
-                    color: tokens.brandBright,
+                    color: tokens.textPrimary,
                   ),
                   label: appNavigationItems[navigationIndexForPath(path)].label,
                 ),
@@ -539,10 +531,10 @@ class _RailButton extends StatelessWidget {
       icon,
       key: iconKey,
       size: 17,
-      color: selected ? tokens.brandBright : tokens.textMuted,
+      color: selected ? tokens.textPrimary : tokens.textMuted,
     );
     if (badgeKey != null) {
-      // Nocturne reports rail activity as a glowing dot rather than a counted
+      // Nocturne reports rail activity as a dot rather than a counted
       // pill: the number is legible in the module itself, and at 38px the
       // count only adds noise.
       // Badge only draws the small dot when its label is null — any non-null
@@ -552,7 +544,7 @@ class _RailButton extends StatelessWidget {
         key: badgeKey,
         isLabelVisible: badgeCount > 0,
         smallSize: 8,
-        backgroundColor: tokens.brand,
+        backgroundColor: tokens.success,
         child: glyph,
       );
     }
@@ -574,15 +566,8 @@ class _RailButton extends StatelessWidget {
               height: 38,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: selected
-                    ? tokens.brand.withValues(alpha: 0.14)
-                    : Colors.transparent,
+                color: selected ? tokens.selectedFill : Colors.transparent,
                 borderRadius: BorderRadius.circular(tokens.radiusMedium),
-                border: Border.all(
-                  color: selected
-                      ? tokens.brand.withValues(alpha: 0.30)
-                      : Colors.transparent,
-                ),
               ),
               child: glyph,
             ),

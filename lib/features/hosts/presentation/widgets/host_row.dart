@@ -111,14 +111,10 @@ class _HostRowState extends State<HostRow> {
               // Phone rows trade density for a 44px hit target on the row action.
               height: compact ? 62 : tokens.rowHeight,
               decoration: BoxDecoration(
-                color: selected
-                    ? tokens.brand.withValues(alpha: 0.10)
-                    : Colors.transparent,
+                color: selected ? tokens.selectedFill : Colors.transparent,
                 borderRadius: BorderRadius.circular(tokens.radiusMedium),
                 border: Border.all(
-                  color: selected
-                      ? tokens.brand.withValues(alpha: 0.22)
-                      : Colors.transparent,
+                  color: selected ? Colors.transparent : Colors.transparent,
                 ),
               ),
               child: Row(
@@ -231,7 +227,7 @@ class _HostRowState extends State<HostRow> {
                         style: shellvibeMono(
                           context,
                           size: 11,
-                          color: connected ? tokens.brand : tokens.textSubtle,
+                          color: connected ? tokens.success : tokens.textSubtle,
                         ),
                       ),
                     ),

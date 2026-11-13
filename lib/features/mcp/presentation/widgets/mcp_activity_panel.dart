@@ -33,7 +33,7 @@ class McpActivityPanel extends ConsumerWidget {
         children: [
           Row(
             children: [
-              Icon(LucideIcons.radioTower, size: 16, color: tokens.brand),
+              Icon(LucideIcons.radioTower, size: 16, color: tokens.textMuted),
               const SizedBox(width: 8),
               Text(
                 'AI Activity',
@@ -125,11 +125,11 @@ class _AuditLogLink extends StatelessWidget {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: tokens.brand,
+                color: tokens.textSecondary,
               ),
             ),
             const SizedBox(width: 4),
-            Icon(LucideIcons.chevronRight, size: 13, color: tokens.brand),
+            Icon(LucideIcons.chevronRight, size: 13, color: tokens.textMuted),
           ],
         ),
       ),

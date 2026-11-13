@@ -328,9 +328,8 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
               notifier.loadRemoteDirectory();
             },
           ),
-          SizedBox(height: tokens.panelGap),
           Padding(
-            padding: EdgeInsets.only(bottom: tokens.panelGap),
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
             child: ShellVibeSearchField(
               controller: _searchController,
               hintText: 'Filter files in both panes…',
@@ -379,7 +378,6 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
                 : Row(
                     children: [
                       Expanded(child: _buildLocalPane(state, notifier)),
-                      // A gap, not a rule: the two panes are separate slabs.
                       // (3A also puts a transfer-direction column here; that
                       // needs a multi-select model the app does not have yet,
                       // so per-row upload/download stays the way files move.)
@@ -542,13 +540,9 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
               .where((f) => f.name.toLowerCase().contains(searchQuery))
               .toList();
 
-    // The remote pane wears the brand hairline: of the two, it is the side
-    // whose state is not obvious, so it is the one that gets marked.
-    final accent = isLocal ? tokens.textMuted : tokens.brand;
-
+    // The two panes meet on one hairline: the local pane carries it.
     return ShellVibePanel(
-      gradientExtent: 200,
-      borderColor: isLocal ? null : tokens.brand.withValues(alpha: 0.22),
+      border: shellvibeEdge(context, top: true, right: isLocal),
       child: Column(
         children: [
           // Pane Header
@@ -562,17 +556,16 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
                     Icon(
                       isLocal ? LucideIcons.monitor : LucideIcons.server,
                       size: 15,
-                      color: accent,
+                      color: tokens.textMuted,
                     ),
                     const SizedBox(width: 9),
                     Expanded(
                       child: Text(
-                        title.toUpperCase(),
+                        title,
                         style: TextStyle(
-                          fontSize: 10,
+                          fontSize: 13,
                           fontWeight: FontWeight.w600,
-                          letterSpacing: 1.4,
-                          color: accent,
+                          color: tokens.textPrimary,
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -597,18 +590,14 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
                 // a move along this path, not a separate tool.
                 InkWell(
                   onTap: onNavigateUp,
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(tokens.radiusMedium),
                   child: Container(
                     height: 34,
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     decoration: BoxDecoration(
                       color: tokens.textPrimary.withValues(alpha: 0.035),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: isLocal
-                            ? tokens.textPrimary.withValues(alpha: 0.05)
-                            : tokens.brand.withValues(alpha: 0.22),
-                      ),
+                      borderRadius: BorderRadius.circular(tokens.radiusMedium),
+                      border: Border.all(color: tokens.border),
                     ),
                     child: Row(
                       children: [
@@ -1136,13 +1125,7 @@ class _SftpToolbar extends StatelessWidget {
       constraints: const BoxConstraints(minHeight: 52),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [tokens.railBg, tokens.surfaceLow],
-        ),
-        borderRadius: BorderRadius.circular(11),
-        border: Border.all(color: tokens.border),
+        border: Border(bottom: BorderSide(color: tokens.border)),
       ),
       child: Row(
         children: [
@@ -1155,7 +1138,7 @@ class _SftpToolbar extends StatelessWidget {
             ),
             const SizedBox(width: 6),
           ],
-          Icon(LucideIcons.folderSync, size: 18, color: tokens.brand),
+          Icon(LucideIcons.folderSync, size: 18, color: tokens.textMuted),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -1196,31 +1179,28 @@ class _SftpToolbar extends StatelessWidget {
             message: 'Transfer Queue',
             child: InkWell(
               onTap: onShowQueue,
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(tokens.radiusMedium),
               child: Container(
                 height: 34,
                 padding: const EdgeInsets.symmetric(horizontal: 13),
                 decoration: BoxDecoration(
-                  color: tokens.brand.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: tokens.brand.withValues(alpha: 0.22),
-                  ),
+                  borderRadius: BorderRadius.circular(tokens.radiusMedium),
+                  border: Border.all(color: tokens.border),
                 ),
                 child: Row(
                   children: [
                     Icon(
                       LucideIcons.arrowUpDown,
                       size: 15,
-                      color: tokens.brandSoft,
+                      color: tokens.textMuted,
                     ),
                     const SizedBox(width: 8),
                     Text(
                       'Queue',
                       style: TextStyle(
                         fontSize: 12.5,
-                        fontWeight: FontWeight.w600,
-                        color: tokens.brandSoft,
+                        fontWeight: FontWeight.w500,
+                        color: tokens.textSecondary,
                       ),
                     ),
                     if (queuedCount > 0) ...[
@@ -1231,7 +1211,7 @@ class _SftpToolbar extends StatelessWidget {
                           vertical: 1,
                         ),
                         decoration: BoxDecoration(
-                          color: tokens.brand.withValues(alpha: 0.22),
+                          color: tokens.textPrimary.withValues(alpha: 0.09),
                           borderRadius: BorderRadius.circular(5),
                         ),
                         child: Text(
@@ -1239,7 +1219,7 @@ class _SftpToolbar extends StatelessWidget {
                           style: shellvibeMono(
                             context,
                             size: 11,
-                            color: tokens.brandSoft,
+                            color: tokens.textPrimary,
                           ),
                         ),
                       ),
@@ -1261,25 +1241,23 @@ class _FileColumnHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final style = shellvibeMono(
-      context,
-      size: 10,
-      letterSpacing: 1.2,
-      color: ShellVibeTokens.resolve(context).textSubtle,
+    final style = TextStyle(
+      fontSize: 12,
+      color: ShellVibeTokens.resolve(context).textMuted,
     );
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 0, 18, 8),
       child: Row(
         children: [
           const SizedBox(width: 26),
-          Expanded(child: Text('NAME', style: style)),
+          Expanded(child: Text('Name', style: style)),
           SizedBox(
             width: 84,
-            child: Text('SIZE', style: style, textAlign: TextAlign.right),
+            child: Text('Size', style: style, textAlign: TextAlign.right),
           ),
           SizedBox(
             width: 96,
-            child: Text('MODIFIED', style: style, textAlign: TextAlign.right),
+            child: Text('Modified', style: style, textAlign: TextAlign.right),
           ),
           const SizedBox(width: 40),
         ],

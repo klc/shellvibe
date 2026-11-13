@@ -20,7 +20,7 @@ enum AppCursorStyle { block, underline, bar }
 
 extension AppPaletteLabel on AppPalette {
   String get label => switch (this) {
-    AppPalette.dark => 'ShellVibe Graphite',
+    AppPalette.dark => 'ShellVibe Amber',
     AppPalette.oled => 'ShellVibe OLED',
     AppPalette.teal => 'ShellVibe Teal',
     AppPalette.catppuccin => 'Catppuccin',
@@ -98,7 +98,7 @@ class AppSettingsModel {
 
   const AppSettingsModel({
     this.themeMode = ThemeMode.system,
-    this.palette = AppPalette.oled,
+    this.palette = AppPalette.dark,
     this.terminalPalette = TerminalPalette.matchApp,
     this.fontFamily = 'RobotoMono',
     this.uiFontFamily = 'InterTight',
@@ -237,7 +237,7 @@ class AppSettingsModel {
       // fresh install gets, so the two paths cannot disagree.
       palette: AppPalette.values.firstWhere(
         (e) => e.name == json['palette'],
-        orElse: () => AppPalette.oled,
+        orElse: () => AppPalette.dark,
       ),
       terminalPalette: TerminalPalette.values.firstWhere(
         (e) => e.name == json['terminalPalette'],

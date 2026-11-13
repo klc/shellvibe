@@ -37,7 +37,7 @@ class SftpTransferQueuePanel extends ConsumerWidget {
       key: const Key('sftp_transfer_queue_panel'),
       height: kSftpQueuePanelHeight,
       child: ShellVibePanel(
-        gradientExtent: 150,
+        border: shellvibeEdge(context, top: true),
         child: Column(
           children: [
             Padding(

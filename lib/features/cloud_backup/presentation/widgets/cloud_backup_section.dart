@@ -132,7 +132,7 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(LucideIcons.cloudDownload, size: 16, color: tokens.brand),
+            Icon(LucideIcons.cloudDownload, size: 16, color: tokens.textMuted),
             const SizedBox(width: 8),
             Expanded(
               child: Text(

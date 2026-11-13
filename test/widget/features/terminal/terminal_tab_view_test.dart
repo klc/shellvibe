@@ -98,13 +98,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 200));
 
       expect(find.byKey(const Key('empty_open_local_button')), findsNothing);
-      expect(
-        find.text(
-          'Connect to a saved server, or take over a session from your '
-          'desktop.',
-        ),
-        findsOneWidget,
-      );
+      expect(find.text('Continue a session from your desktop'), findsOneWidget);
 
       await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
       await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
@@ -425,20 +419,20 @@ void main() {
       await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
       await tester.pump();
 
-      expect(find.textContaining('· BROADCAST'), findsNWidgets(2));
+      expect(find.textContaining('· broadcast'), findsNWidgets(2));
       // Each selected pane's header reports deliverable/selected.
       // flutter_pty2's native library is not loadable under `flutter test`, so
       // no pane has a live session here and nothing is deliverable — the
       // counter has to say so rather than count panes that would silently
       // swallow the input.
-      expect(find.textContaining('· BROADCAST 0/2'), findsNWidgets(2));
+      expect(find.textContaining('· broadcast 0/2'), findsNWidgets(2));
 
       // Plain click on an unselected pane exits broadcast.
       await tester.tap(find.byType(TerminalView).at(2));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
 
-      expect(find.textContaining('BROADCAST'), findsNothing);
+      expect(find.textContaining('broadcast'), findsNothing);
     });
 
     testWidgets('right-clicking a terminal opens the pane menu', (
@@ -962,12 +956,11 @@ void main() {
       await tester.pumpAndSettle();
 
       // Scoped to the panel's own list: the empty screen behind the modal
-      // carries a FAVORITES heading of its own over the shortcut chips.
+      // carries a Favorites heading of its own over the shortcut rows.
       Finder heading(String text) =>
           find.descendant(of: find.byType(ListView), matching: find.text(text));
-      // ShellVibeSectionLabel renders its heading uppercased.
-      expect(heading('FAVORITES'), findsOneWidget);
-      expect(heading('ALL HOSTS'), findsOneWidget);
+      expect(heading('Favorites'), findsOneWidget);
+      expect(heading('All hosts'), findsOneWidget);
       expect(
         tester.getTopLeft(find.byKey(Key('select_host_row_${zulu.id}'))).dy,
         lessThan(
@@ -984,7 +977,7 @@ void main() {
         'alpha',
       );
       await tester.pumpAndSettle();
-      expect(heading('FAVORITES'), findsNothing);
+      expect(heading('Favorites'), findsNothing);
       expect(find.byKey(Key('select_host_row_${alpha.id}')), findsOneWidget);
     });
 
@@ -1848,6 +1841,62 @@ void main() {
         [for (final tab in container.read(terminalTabsProvider).tabs) tab.id],
         [ids[0]],
       );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a tab of several panes asks before it closes them all', (
+      tester,
+    ) async {
+      final container = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          localPtyManagerProvider.overrideWithValue(_NoShellPtyManager()),
+        ],
+      );
+      final notifier = container.read(terminalTabsProvider.notifier);
+      notifier.openLocalTab();
+      final rootId = container.read(terminalTabsProvider).tabs.single.id;
+      await notifier.splitTab(rootId);
+      notifier.setActiveTab(rootId);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: ShadTheme(
+            data: ShadThemeData(
+              colorScheme: const ShadSlateColorScheme.dark(),
+              brightness: Brightness.dark,
+            ),
+            child: const MaterialApp(home: TerminalTabView()),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.byKey(Key('tab_pane_count_$rootId')), findsOneWidget);
+
+      // The first click only asks.
+      await tester.tap(find.byKey(Key('close_tab_$rootId')));
+      await tester.pump();
+      expect(container.read(terminalTabsProvider).tabs, hasLength(2));
+      expect(find.text('Close all?'), findsOneWidget);
+
+      // Left alone, the request lapses and the button is a plain close again.
+      await tester.pump(const Duration(seconds: 4));
+      expect(find.text('Close all?'), findsNothing);
+      expect(container.read(terminalTabsProvider).tabs, hasLength(2));
+
+      // Asked and confirmed, the tab and both panes go.
+      await tester.tap(find.byKey(Key('close_tab_$rootId')));
+      await tester.pump();
+      await tester.tap(find.byKey(Key('close_tab_$rootId')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(container.read(terminalTabsProvider).tabs, isEmpty);
 
       await tester.pumpWidget(const SizedBox.shrink());
       container.dispose();

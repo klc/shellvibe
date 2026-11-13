@@ -170,7 +170,6 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
                       ),
                       child: activeRootTab == null
                           ? ShellVibePanel(
-                              gradientExtent: 220,
                               child: TerminalEmptyState(
                                 onConnectToHost: _connectToHost,
                                 onShowSelectHostModal: _showSelectHostModal,
@@ -214,9 +213,13 @@ class _TerminalTabViewState extends ConsumerState<TerminalTabView> {
     // top-left corner the one the merged tab grows out of. On any later tab
     // that corner sits under an inactive tab — text on the canvas, nothing to
     // merge with — and it keeps its curve.
+    // A tab of several panes stands apart from them (see TerminalTabStrip),
+    // so no pane corner is squared to meet it.
     final rootTabs = tabsState.tabs.where((t) => t.splitParentId == null);
     final activeIsFirstTab =
-        rootTabs.isNotEmpty && rootTabs.first.id == activeRootTab.id;
+        rootTabs.isNotEmpty &&
+        rootTabs.first.id == activeRootTab.id &&
+        _paneOrder(tabsState, activeRootTab).length < 2;
     return buildTerminalSessionTree(
       context,
       ref,

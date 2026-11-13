@@ -223,15 +223,11 @@ class _MobileExtraKeysBarState extends State<MobileExtraKeysBar> {
   }) {
     final tokens = ShellVibeTokens.resolve(context);
     // A held modifier is the one state on this bar that must survive a glance
-    // at a phone in daylight, so it gets the brand fill *and* a glow rather
-    // than a colour swap alone.
-    final Color background = isActive
-        ? tokens.brand.withValues(alpha: 0.20)
-        : Colors.transparent;
-    final Color ring = isActive
-        ? tokens.brand.withValues(alpha: 0.42)
-        : tokens.textPrimary.withValues(alpha: 0.07);
-    final Color foreground = isActive ? tokens.brandSoft : tokens.textSecondary;
+    // at a phone in daylight, so it takes the solid brand fill rather than a
+    // tint.
+    final Color background = isActive ? tokens.brand : Colors.transparent;
+    final Color ring = isActive ? tokens.brand : tokens.border;
+    final Color foreground = isActive ? tokens.brandInk : tokens.textSecondary;
 
     return Padding(
       padding: const EdgeInsets.only(right: 6),
@@ -248,14 +244,6 @@ class _MobileExtraKeysBarState extends State<MobileExtraKeysBar> {
             color: background,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: ring),
-            boxShadow: isActive
-                ? [
-                    BoxShadow(
-                      color: tokens.brand.withValues(alpha: 0.18),
-                      blurRadius: 16,
-                    ),
-                  ]
-                : null,
           ),
           child: Text(
             label,
@@ -278,14 +266,8 @@ class _MobileExtraKeysBarState extends State<MobileExtraKeysBar> {
       height: MobileExtraKeysBar.barHeight,
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [tokens.surfaceRaised, tokens.surfaceLow],
-        ),
-        border: Border(
-          top: BorderSide(color: tokens.textPrimary.withValues(alpha: 0.08)),
-        ),
+        color: tokens.surfaceRaised,
+        border: Border(top: BorderSide(color: tokens.border)),
       ),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,

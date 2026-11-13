@@ -281,10 +281,10 @@ void main() {
       await tester.pump(const Duration(milliseconds: 200));
 
       expect(find.text('Files · Test Server'), findsOneWidget);
-      expect(find.text('LOCAL WORKSTATION'), findsOneWidget);
+      expect(find.text('Local Workstation'), findsOneWidget);
       // The remote pane names the connection so the target server is never
       // ambiguous, even while it is disconnected.
-      expect(find.text('TEST SERVER (DISCONNECTED)'), findsOneWidget);
+      expect(find.text('Test Server (Disconnected)'), findsOneWidget);
     });
 
     testWidgets('renders segmented tab control on narrow screens (< 600px)', (

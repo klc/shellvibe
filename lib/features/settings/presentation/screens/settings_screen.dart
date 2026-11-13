@@ -107,7 +107,6 @@ class SettingsScreen extends StatelessWidget {
         _buildSectionNav(context),
         Expanded(
           child: ShellVibePanel(
-            gradientExtent: 200,
             child: Column(
               children: [
                 ShellVibeWorkToolbar(title: active.label, meta: active.meta),
@@ -147,8 +146,8 @@ class SettingsScreen extends StatelessWidget {
     final active = section ?? SettingsSection.values.first;
     return ShellVibePanel(
       width: tokens.contextColumnWidth,
-      gradientExtent: 140,
       margin: EdgeInsets.only(right: tokens.panelGap),
+      border: shellvibeEdge(context, right: true),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -297,7 +296,7 @@ class _IndexTile extends StatelessWidget {
       type: MaterialType.transparency,
       child: ListTile(
         key: itemKey,
-        leading: Icon(icon, size: 18, color: tokens.brand),
+        leading: Icon(icon, size: 18, color: tokens.textMuted),
         title: Text(label),
         subtitle: Text(
           meta,

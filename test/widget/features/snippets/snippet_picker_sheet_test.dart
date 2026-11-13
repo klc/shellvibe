@@ -69,7 +69,7 @@ void main() {
 
     await pump(tester, onSelect: (_) {});
 
-    expect(find.text('SEND TO THE ACTIVE PANE'), findsOneWidget);
+    expect(find.text('Send to the active pane'), findsOneWidget);
     expect(find.byKey(const Key('snippet_picker_s1')), findsOneWidget);
     expect(find.byKey(const Key('snippet_picker_s2')), findsOneWidget);
   });

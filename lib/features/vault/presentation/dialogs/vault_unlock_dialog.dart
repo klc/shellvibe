@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
+import '../../../../app/theme/app_theme.dart';
 import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/widgets/adaptive_modal.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
@@ -115,7 +116,7 @@ class _VaultUnlockDialogState extends ConsumerState<VaultUnlockDialog> {
         Icon(
           isLockedOut ? Icons.timer_outlined : Icons.lock_outline,
           size: 48,
-          color: isLockedOut ? tokens.danger : tokens.brand,
+          color: isLockedOut ? tokens.danger : tokens.textMuted,
         ),
         const SizedBox(height: 16),
         Text(
@@ -227,6 +228,7 @@ class _VaultUnlockDialogState extends ConsumerState<VaultUnlockDialog> {
   Future<void> _confirmReset() async {
     final confirmed = await showShadDialog<bool>(
       context: context,
+      barrierColor: AppTheme.scrimOf(context),
       builder: (_) => const _ResetVaultDialog(),
     );
     if (confirmed != true || !mounted) return;

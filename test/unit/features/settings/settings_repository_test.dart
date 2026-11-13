@@ -21,7 +21,7 @@ void main() {
     test('loadSettings returns default model when storage is empty', () async {
       final settings = await repository.loadSettings();
       expect(settings.themeMode, equals(ThemeMode.system));
-      expect(settings.palette, equals(AppPalette.oled));
+      expect(settings.palette, equals(AppPalette.dark));
     });
 
     // The storage key moved from `terly2_app_settings` to

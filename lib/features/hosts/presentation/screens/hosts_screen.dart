@@ -136,7 +136,7 @@ class _HostsScreenState extends ConsumerState<HostsScreen> {
                     // The list already carries its own gutter, so the phone
                     // layout adds nothing around it.
                     if (!showContextColumn) return workArea;
-                    return ShellVibePanel(gradientExtent: 160, child: workArea);
+                    return ShellVibePanel(child: workArea);
                   },
                 ),
               ),

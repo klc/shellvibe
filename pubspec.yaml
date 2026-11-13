@@ -163,6 +163,7 @@ flutter:
   # the OS shows on the app icon.
   assets:
     - assets/brand/icon.png
+    - assets/brand/icon_light.png
     # System tray / menu bar icons, read at runtime by tray_manager.
     - assets/brand/tray_macos.png
     - assets/brand/tray.png
@@ -445,7 +446,7 @@ flutter_launcher_icons:
   image_path: "assets/brand/icon.png"
 
   android: true
-  adaptive_icon_background: "#161926"
+  adaptive_icon_background: "#1C1C1C"
   adaptive_icon_foreground: "assets/brand/icon_android_foreground.png"
 
   ios: true
@@ -464,5 +465,5 @@ flutter_launcher_icons:
   web:
     generate: true
     image_path: "assets/brand/icon_ios.png"
-    background_color: "#101220"
-    theme_color: "#8B93FF"
+    background_color: "#1C1C1C"
+    theme_color: "#E5A23C"

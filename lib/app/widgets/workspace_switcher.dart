@@ -67,17 +67,6 @@ class ShellVibeWorkspaceSwitcher extends ConsumerWidget {
 
           return Row(
             children: [
-              if (!compact) ...[
-                Text(
-                  'WORKSPACE',
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    fontSize: 9,
-                    letterSpacing: 0.8,
-                    color: tokens.textMuted,
-                  ),
-                ),
-                const SizedBox(width: 8),
-              ],
               Expanded(
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(

@@ -278,7 +278,6 @@ class _CommandPaletteState extends ConsumerState<CommandPalette> {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 660, maxHeight: 620),
         child: ShellVibeOverlaySurface(
-          gradientExtent: 200,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -293,7 +292,7 @@ class _CommandPaletteState extends ConsumerState<CommandPalette> {
                 ),
                 child: Row(
                   children: [
-                    Icon(LucideIcons.search, size: 18, color: tokens.brand),
+                    Icon(LucideIcons.search, size: 18, color: tokens.textMuted),
                     const SizedBox(width: 12),
                     Expanded(
                       // Bound above the field, which leaves the arrow keys to
@@ -431,22 +430,15 @@ class _PaletteRow extends StatelessWidget {
           height: 44,
           padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
-            color: highlighted
-                ? tokens.brand.withValues(alpha: 0.12)
-                : Colors.transparent,
+            color: highlighted ? tokens.selectedFill : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: highlighted
-                  ? tokens.brand.withValues(alpha: 0.22)
-                  : Colors.transparent,
-            ),
           ),
           child: Row(
             children: [
               Icon(
                 icon,
                 size: 16,
-                color: highlighted ? tokens.brandBright : tokens.textMuted,
+                color: highlighted ? tokens.textPrimary : tokens.textMuted,
               ),
               const SizedBox(width: 12),
               // The label keeps its full width up to a cap and the detail gets
@@ -494,12 +486,12 @@ class _PaletteRow extends StatelessWidget {
                   'open',
                   style: TextStyle(
                     fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: tokens.brand,
+                    fontWeight: FontWeight.w500,
+                    color: tokens.textMuted,
                   ),
                 ),
                 const SizedBox(width: 10),
-                const _PaletteKeyCap(label: '↵', brand: true),
+                const _PaletteKeyCap(label: '↵'),
               ] else
                 Text(trailing, style: shellvibeMono(context, size: 11)),
             ],
@@ -513,9 +505,8 @@ class _PaletteRow extends StatelessWidget {
 /// The small mono key hint used in the palette's query row and result rows.
 class _PaletteKeyCap extends StatelessWidget {
   final String label;
-  final bool brand;
 
-  const _PaletteKeyCap({required this.label, this.brand = false});
+  const _PaletteKeyCap({required this.label});
 
   @override
   Widget build(BuildContext context) {
@@ -523,18 +514,12 @@ class _PaletteKeyCap extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
-        color: brand
-            ? tokens.brand.withValues(alpha: 0.18)
-            : tokens.textPrimary.withValues(alpha: 0.06),
+        color: tokens.textPrimary.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
         label,
-        style: shellvibeMono(
-          context,
-          size: 10,
-          color: brand ? tokens.brandSoft : tokens.textMuted,
-        ),
+        style: shellvibeMono(context, size: 10, color: tokens.textMuted),
       ),
     );
   }
