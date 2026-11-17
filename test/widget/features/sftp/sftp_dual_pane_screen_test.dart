@@ -1,6 +1,6 @@
 import 'package:dartssh2/dartssh2.dart';
 import 'package:desktop_drop/desktop_drop.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -14,6 +14,8 @@ import 'package:shellvibe/features/terminal/domain/models/terminal_tab_session.d
 import 'package:shellvibe/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:xterm3/xterm.dart';
+
+import '../../../support/shad_material_app.dart';
 
 /// Serves one local row and records what is deleted.
 class _FakeSftpNotifier extends SftpNotifier {
@@ -130,7 +132,7 @@ class _FakeTabs extends TerminalTabsNotifier {
   TerminalTabsState build() => TerminalTabsState(tabs: [tab]);
 }
 
-Widget _app(Widget home) => ShadApp(home: home);
+Widget _app(Widget home) => shadMaterialApp(home: home);
 
 void main() {
   group('SftpDualPaneScreen file operations', () {

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../theme/shellvibe_tokens.dart';
 import 'shellvibe_ui.dart';

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import '../../features/settings/domain/models/app_settings_model.dart';
 import 'shellvibe_tokens.dart';

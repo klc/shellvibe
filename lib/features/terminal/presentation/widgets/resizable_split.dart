@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../../core/utils/platform_capabilities.dart';
 import '../../domain/models/terminal_tab_session.dart';
