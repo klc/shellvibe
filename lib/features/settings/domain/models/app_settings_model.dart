@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../../core/models/mosh_prediction_mode.dart';
 import '../../../terminal/domain/models/terminal_palette.dart';

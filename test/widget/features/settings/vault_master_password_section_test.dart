@@ -1,15 +1,16 @@
 import 'package:cryptography/cryptography.dart';
 import 'package:drift/native.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:shellvibe/core/crypto/encryption_engine.dart';
 import 'package:shellvibe/features/settings/presentation/widgets/vault_master_password_section.dart';
 import 'package:shellvibe/features/vault/presentation/notifiers/vault_notifier.dart';
 import 'package:shellvibe/shared/database/app_database.dart';
 import 'package:shellvibe/shared/providers/database_providers.dart';
+
+import '../../../support/shad_material_app.dart';
 
 void main() {
   late AppDatabase db;
@@ -45,8 +46,8 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: const ShadApp(
-          home: Scaffold(body: VaultMasterPasswordSection()),
+        child: shadMaterialApp(
+          home: const Scaffold(body: VaultMasterPasswordSection()),
         ),
       ),
     );

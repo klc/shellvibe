@@ -1,4 +1,6 @@
-import 'package:flutter/material.dart';
+// ignore: deprecated_member_use
+import 'package:flutter/material.dart' as legacy show ThemeMode;
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:shellvibe/app/theme/app_theme.dart';
@@ -7,7 +9,7 @@ import 'package:shellvibe/features/settings/domain/models/app_settings_model.dar
 
 void main() {
   group('ThemeMode and Brightness Synchronization Tests', () {
-    testWidgets('materialThemeBuilder respects explicit theme.brightness', (
+    testWidgets('dark mode reaches the Material and the Shad theme', (
       tester,
     ) async {
       const settings = AppSettingsModel(
@@ -18,7 +20,7 @@ void main() {
       late BuildContext capturedContext;
 
       await tester.pumpWidget(
-        ShadApp(
+        ShadApp.custom(
           theme: AppTheme.buildShadTheme(
             settings,
             brightness: Brightness.light,
@@ -27,14 +29,20 @@ void main() {
             settings,
             brightness: Brightness.dark,
           ),
-          themeMode: ThemeMode.dark,
-          materialThemeBuilder: (context, theme) =>
-              AppTheme.buildTheme(settings, brightness: theme.brightness),
-          home: Builder(
-            builder: (context) {
-              capturedContext = context;
-              return const SizedBox();
-            },
+          themeMode: legacy.ThemeMode.dark,
+          appBuilder: (context) => MaterialApp(
+            theme: AppTheme.buildTheme(settings, brightness: Brightness.light),
+            darkTheme: AppTheme.buildTheme(
+              settings,
+              brightness: Brightness.dark,
+            ),
+            themeMode: ThemeMode.dark,
+            home: Builder(
+              builder: (context) {
+                capturedContext = context;
+                return const SizedBox();
+              },
+            ),
           ),
         ),
       );

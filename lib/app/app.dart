@@ -2,7 +2,9 @@ import 'dart:async';
 import 'dart:ui' show AppExitResponse;
 
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
+// ignore: deprecated_member_use
+import 'package:flutter/material.dart' as legacy show ThemeMode;
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -423,33 +425,53 @@ class _ShellVibeAppState extends ConsumerState<ShellVibeApp>
     final settingsAsync = ref.watch(settingsProvider);
     final settings = settingsAsync.value ?? const AppSettingsModel();
 
-    return ShadApp.router(
-      title: 'ShellVibe',
-      debugShowCheckedModeBanner: false,
+    // The root is a package:material_ui MaterialApp so the app's own widgets
+    // find its Theme, localizations and ScaffoldMessenger. shadcn_ui and
+    // several other dependencies still build on package:flutter/material.dart;
+    // the compatibility bridge hands them a legacy Theme and localizations
+    // mapped from the modern ones.
+    // ponytail: temporary bridge, drop it (and the legacy ThemeMode) once
+    // shadcn_ui, xterm3, window_manager & co. ship on material_ui.
+    return ShadApp.custom(
       theme: AppTheme.buildShadTheme(settings, brightness: Brightness.light),
       darkTheme: AppTheme.buildShadTheme(settings, brightness: Brightness.dark),
-      themeMode: settings.themeMode,
-      materialThemeBuilder: (context, theme) =>
-          AppTheme.buildTheme(settings, brightness: theme.brightness),
-      routerConfig: router,
-      // The MCP approval prompts are mounted above every route rather than
-      // inside one: an agent can ask for access while the user is on any
-      // screen, and an approval window that depends on where the user
-      // happened to navigate would silently time out into a refusal.
-      //
-      // The tray lives here too: it outlasts every route, and on a desktop it
-      // is what keeps the app running once the window is gone. A phone has no
-      // tray; its counterpart is the app-icon shortcut menu.
-      builder: (context, child) {
-        final host = McpApprovalHost(child: child ?? const SizedBox.shrink());
-        return isMobilePlatform
-            ? QuickActionsHost(child: _withForegroundService(host))
-            : WindowResizeEdges(
-                child: DesktopTrayHost(
-                  child: DesktopNotificationHost(child: host),
-                ),
+      themeMode: legacy.ThemeMode.values.byName(settings.themeMode.name),
+      appBuilder: (context) => MaterialApp.router(
+        title: 'ShellVibe',
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.buildTheme(settings, brightness: Brightness.light),
+        darkTheme: AppTheme.buildTheme(settings, brightness: Brightness.dark),
+        themeMode: settings.themeMode,
+        scrollBehavior: const ShadScrollBehavior(),
+        localizationsDelegates: const [GlobalShadLocalizations.delegate],
+        routerConfig: router,
+        // The MCP approval prompts are mounted above every route rather than
+        // inside one: an agent can ask for access while the user is on any
+        // screen, and an approval window that depends on where the user
+        // happened to navigate would silently time out into a refusal.
+        //
+        // The tray lives here too: it outlasts every route, and on a desktop
+        // it is what keeps the app running once the window is gone. A phone
+        // has no tray; its counterpart is the app-icon shortcut menu.
+        // ignore: deprecated_member_use
+        builder: (context, child) => MaterialUiCompatibilityBridge(
+          child: ShadAppBuilder(
+            child: child,
+            builder: (context, child) {
+              final host = McpApprovalHost(
+                child: child ?? const SizedBox.shrink(),
               );
-      },
+              return isMobilePlatform
+                  ? QuickActionsHost(child: _withForegroundService(host))
+                  : WindowResizeEdges(
+                      child: DesktopTrayHost(
+                        child: DesktopNotificationHost(child: host),
+                      ),
+                    );
+            },
+          ),
+        ),
+      ),
     );
   }
 }

@@ -1,7 +1,8 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:shellvibe/app/widgets/shellvibe_ui.dart';
+
+import '../../support/shad_material_app.dart';
 
 /// On a wide screen the actions of a page header and a work toolbar sit at
 /// the right edge. They used to stop near the middle: the row splits its
@@ -16,7 +17,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
-      ShadApp(
+      shadMaterialApp(
         home: Material(
           child: Align(alignment: Alignment.topLeft, child: header),
         ),

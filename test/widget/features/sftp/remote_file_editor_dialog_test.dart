@@ -1,10 +1,11 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:shellvibe/features/sftp/domain/models/sftp_file_item.dart';
 import 'package:shellvibe/features/sftp/presentation/providers/sftp_providers.dart';
 import 'package:shellvibe/features/sftp/presentation/widgets/remote_file_editor_dialog.dart';
+
+import '../../../support/shad_material_app.dart';
 
 class _FailingSaveNotifier extends SftpNotifier {
   @override
@@ -29,7 +30,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [sftpProvider.overrideWith(_FailingSaveNotifier.new)],
-        child: ShadApp(
+        child: shadMaterialApp(
           home: const Scaffold(
             body: RemoteFileEditorDialog(
               fileItem: SftpFileItem(

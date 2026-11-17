@@ -3,7 +3,7 @@ import 'dart:convert';
 
 import 'package:dartssh2/dartssh2.dart';
 import 'package:drift/native.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -26,10 +26,11 @@ import 'package:shellvibe/features/vault/presentation/notifiers/vault_notifier.d
 import 'package:shellvibe/features/tunnels/presentation/providers/tunnels_providers.dart';
 import 'package:shellvibe/shared/database/app_database.dart';
 import 'package:shellvibe/shared/providers/database_providers.dart';
-import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:xterm3/xterm.dart';
+
+import '../../../support/shad_material_app.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -171,7 +172,7 @@ void main() {
         child: withNavigator
             // The launcher's dialogs are shadcn ones, and are opened on the
             // root navigator through its key, as in the app.
-            ? ShadApp(
+            ? shadMaterialApp(
                 navigatorKey: rootNavigatorKey,
                 home: const DesktopTrayHost(child: SizedBox.shrink()),
               )

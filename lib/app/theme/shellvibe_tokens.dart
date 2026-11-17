@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// ShellVibe's shared visual contract — the "Nocturne" system.
 ///

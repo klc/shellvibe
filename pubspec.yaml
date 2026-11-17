@@ -126,6 +126,8 @@ dependencies:
   # builds can take up later.
   flutter_local_notifications: ^23.0.1
   flutter_foreground_task: ^11.0.3
+  # Material widgets, split out of the Flutter SDK in 3.50.
+  material_ui: ^1.11.0
 
 dev_dependencies:
   integration_test:

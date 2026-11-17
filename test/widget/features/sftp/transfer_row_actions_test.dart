@@ -1,11 +1,12 @@
 import 'package:dartssh2/dartssh2.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:shellvibe/features/sftp/domain/models/transfer_item.dart';
 import 'package:shellvibe/features/sftp/presentation/providers/sftp_providers.dart';
 import 'package:shellvibe/features/sftp/presentation/widgets/transfer_row_actions.dart';
+
+import '../../../support/shad_material_app.dart';
 
 class _FakeSftp implements SftpClient {
   @override
@@ -40,8 +41,8 @@ void main() {
           overrides: [
             sftpProvider.overrideWith(() => _ConnectedTo(connectedTab)),
           ],
-          child: const ShadApp(
-            home: Scaffold(body: TransferRowActions(item: _failed)),
+          child: shadMaterialApp(
+            home: const Scaffold(body: TransferRowActions(item: _failed)),
           ),
         ),
       );

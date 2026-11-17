@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -19,8 +19,9 @@ import 'package:shellvibe/features/mcp/domain/services/mcp_service_providers.dar
 import 'package:shellvibe/features/mcp/presentation/dialogs/mcp_command_approval_dialog.dart'
     show mcpApprovalArmDelay;
 import 'package:shellvibe/features/mcp/presentation/widgets/mcp_approval_host.dart';
-import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:shellvibe/app/widgets/shellvibe_ui.dart';
+
+import '../../../support/shad_material_app.dart';
 
 HostAccessRequest _hostAccessRequest() => const HostAccessRequest(
   clientId: 'client-1',
@@ -50,7 +51,7 @@ Widget _harness(
       approvalCoordinatorProvider.overrideWithValue(coordinator),
       ...overrides,
     ],
-    child: ShadApp(
+    child: shadMaterialApp(
       navigatorKey: navigatorKey ?? rootNavigatorKey,
       home: const Scaffold(body: SizedBox.shrink()),
       builder: (context, child) =>
