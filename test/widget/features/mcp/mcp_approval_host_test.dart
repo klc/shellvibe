@@ -169,6 +169,38 @@ void main() {
     expect(approveButton, findsNothing);
   });
 
+  testWidgets('a host-add request gets its own dialog, and the answer goes '
+      'back to the agent', (tester) async {
+    _ignoreOverflow(tester);
+    await tester.pumpWidget(_harness(coordinator));
+    await tester.pump();
+
+    HostAddDecision? outcome;
+    unawaited(
+      coordinator
+          .requestHostAdd(
+            const HostAddRequest(
+              clientId: 'c1',
+              clientName: 'Claude Code',
+              label: 'web-1',
+              hostname: 'web1',
+              port: 22,
+            ),
+          )
+          .then((d) => outcome = d),
+    );
+    await _pumpFrames(tester);
+
+    final approve = find.byKey(const Key('mcp_host_add_approve_button'));
+    expect(approve, findsOneWidget);
+    await tester.pump(mcpApprovalArmDelay);
+    tester.widget<ShellVibeButton>(approve).onPressed!();
+    await _pumpFrames(tester);
+
+    expect(outcome?.approved, isTrue);
+    expect(approve, findsNothing);
+  });
+
   testWidgets('a request seen while the navigator is missing does not wedge '
       'the host', (tester) async {
     _ignoreOverflow(tester);

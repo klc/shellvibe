@@ -62,6 +62,33 @@ class _PendingRunbook {
   });
 }
 
+/// A host-add approval waiting on a human answer.
+class PendingHostAddApproval {
+  final String id;
+  final HostAddRequest request;
+  final DateTime requestedAt;
+  final DateTime expiresAt;
+
+  const PendingHostAddApproval({
+    required this.id,
+    required this.request,
+    required this.requestedAt,
+    required this.expiresAt,
+  });
+}
+
+class _PendingHostAdd {
+  final PendingHostAddApproval pending;
+  final Completer<HostAddDecision> completer;
+  final Timer timer;
+
+  _PendingHostAdd({
+    required this.pending,
+    required this.completer,
+    required this.timer,
+  });
+}
+
 class _PendingCommand {
   final PendingCommandApproval pending;
   final Completer<ApprovalDecision> completer;
@@ -109,6 +136,14 @@ class ApprovalCoordinator {
   final Map<String, _PendingCommand> _commands = {};
   final Map<String, _PendingHostAccess> _hostAccess = {};
   final Map<String, _PendingRunbook> _runbooks = {};
+  final Map<String, _PendingHostAdd> _hostAdds = {};
+  final StreamController<List<PendingHostAddApproval>> _hostAddsController =
+      StreamController<List<PendingHostAddApproval>>.broadcast();
+
+  Stream<List<PendingHostAddApproval>> get pendingHostAdds =>
+      _hostAddsController.stream;
+  List<PendingHostAddApproval> get currentHostAdds =>
+      _hostAdds.values.map((h) => h.pending).toList(growable: false);
 
   final StreamController<List<PendingCommandApproval>> _commandsController =
       StreamController<List<PendingCommandApproval>>.broadcast();
@@ -139,7 +174,8 @@ class ApprovalCoordinator {
   bool isPending(String id) =>
       _commands.containsKey(id) ||
       _hostAccess.containsKey(id) ||
-      _runbooks.containsKey(id);
+      _runbooks.containsKey(id) ||
+      _hostAdds.containsKey(id);
 
   /// Registers one command approval and returns a [Future] that completes
   /// when the user answers, or with [ApprovalDecision.denied] if [timeout]
@@ -214,6 +250,45 @@ class ApprovalCoordinator {
   void _emitRunbooks() {
     if (_runbooksController.isClosed) return;
     _runbooksController.add(currentRunbooks);
+  }
+
+  /// Registers one host-add approval; an unanswered one is refused when
+  /// [timeout] elapses.
+  Future<HostAddDecision> requestHostAdd(
+    HostAddRequest request, {
+    Duration timeout = const Duration(seconds: 120),
+  }) {
+    final id = _uuid.v4();
+    final requestedAt = DateTime.now().toUtc();
+    final completer = Completer<HostAddDecision>();
+    _hostAdds[id] = _PendingHostAdd(
+      pending: PendingHostAddApproval(
+        id: id,
+        request: request,
+        requestedAt: requestedAt,
+        expiresAt: requestedAt.add(timeout),
+      ),
+      completer: completer,
+      timer: Timer(timeout, () => _completeHostAdd(id, HostAddDecision.denied)),
+    );
+    _emitHostAdds();
+    return completer.future;
+  }
+
+  void resolveHostAdd(String id, HostAddDecision decision) =>
+      _completeHostAdd(id, decision);
+
+  void _completeHostAdd(String id, HostAddDecision decision) {
+    final entry = _hostAdds.remove(id);
+    if (entry == null) return;
+    entry.timer.cancel();
+    if (!entry.completer.isCompleted) entry.completer.complete(decision);
+    _emitHostAdds();
+  }
+
+  void _emitHostAdds() {
+    if (_hostAddsController.isClosed) return;
+    _hostAddsController.add(currentHostAdds);
   }
 
   /// Registers one host-access request and returns a [Future] that completes
@@ -332,6 +407,9 @@ class ApprovalCoordinator {
     for (final id in _runbooks.keys.toList()) {
       _completeRunbook(id, RunbookApprovalDecision.denied);
     }
+    for (final id in _hostAdds.keys.toList()) {
+      _completeHostAdd(id, HostAddDecision.denied);
+    }
     for (final id in _hostAccess.keys.toList()) {
       final entry = _hostAccess[id];
       if (entry == null) continue;
@@ -349,6 +427,10 @@ class ApprovalCoordinator {
     for (final e in _runbooks.entries.toList()) {
       if (e.value.pending.request.clientId != clientId) continue;
       _completeRunbook(e.key, RunbookApprovalDecision.denied);
+    }
+    for (final e in _hostAdds.entries.toList()) {
+      if (e.value.pending.request.clientId != clientId) continue;
+      _completeHostAdd(e.key, HostAddDecision.denied);
     }
     for (final e in _hostAccess.entries.toList()) {
       final request = e.value.pending.request;
@@ -372,5 +454,6 @@ class ApprovalCoordinator {
     _commandsController.close();
     _hostAccessController.close();
     _runbooksController.close();
+    _hostAddsController.close();
   }
 }

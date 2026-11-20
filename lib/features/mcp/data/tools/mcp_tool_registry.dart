@@ -16,6 +16,7 @@ import '../../../snippets/presentation/notifiers/snippets_notifier.dart';
 import 'command_tools.dart';
 import 'discovery_tools.dart';
 import 'file_transfer_tools.dart';
+import 'host_tools.dart';
 import 'mcp_tool_handler.dart';
 import 'runbook_tools.dart';
 import 'session_tools.dart';
@@ -102,6 +103,13 @@ McpToolRegistry mcpToolRegistry(Ref ref) {
       grantRepository: grantRepository,
       approvalCoordinator: approvalCoordinator,
       auditRepository: auditRepository,
+    ),
+    AddHostTool(
+      hostsRepository: hostsRepository,
+      identitiesDao: ref.watch(appDatabaseProvider).identitiesDao,
+      auditRepository: auditRepository,
+      approvalCoordinator: approvalCoordinator,
+      onHostAdded: () => ref.invalidate(hostsProvider),
     ),
     OpenSessionTool(
       sessionPool: sessionPool,
