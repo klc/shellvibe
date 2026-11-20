@@ -231,6 +231,84 @@ class ListRunbooksTool with McpArgReaders implements McpToolHandler {
   };
 }
 
+/// `list_snippets` — the one-command snippets the user has saved.
+class ListSnippetsTool with McpArgReaders implements McpToolHandler {
+  final SnippetsRepository snippetsRepository;
+  final OutputRedactor redactor;
+
+  const ListSnippetsTool({
+    required this.snippetsRepository,
+    required this.redactor,
+  });
+
+  @override
+  String get name => 'list_snippets';
+
+  @override
+  McpToolDefinition get definition => McpToolDefinition(
+    name: name,
+    description:
+        'Lists the snippets in this client\'s workspace: single commands the '
+        'user saved in ShellVibe, each with its command text (secrets '
+        'masked) and the variables it asks for, described as in '
+        'list_runbooks. Prefer a snippet to retyping the same command with '
+        'run_command. To run one on hosts, call run_snippet, which always '
+        'asks the user.',
+    inputSchema: const {
+      'type': 'object',
+      'properties': {
+        'query': {
+          'type': 'string',
+          'description':
+              'Only snippets whose title, tags or command contain this, '
+              'ignoring case.',
+        },
+        'tag': {
+          'type': 'string',
+          'description': 'Only snippets carrying exactly this tag.',
+        },
+      },
+      'additionalProperties': false,
+    },
+  );
+
+  @override
+  Future<Object?> execute(McpToolContext ctx, Map<String, Object?> args) async {
+    final query = optionalString(args, 'query')?.trim().toLowerCase();
+    final tag = optionalString(args, 'tag');
+    final result = <Map<String, Object?>>[];
+    for (final snippet in await snippetsRepository.getSnippetsByWorkspace(
+      ctx.workspaceId,
+    )) {
+      if (tag != null && !snippet.tags.contains(tag)) continue;
+      final command = redactor.redact(snippet.code).text;
+      // The redacted text, as in list_runbooks: a query must not probe a
+      // masked secret.
+      if (query != null &&
+          query.isNotEmpty &&
+          !'${snippet.title}\n${snippet.tags.join('\n')}\n$command'
+              .toLowerCase()
+              .contains(query)) {
+        continue;
+      }
+      final needed = collectRunVariables(
+        RunbookRunService.runbookForSnippet(snippet),
+      );
+      result.add({
+        'id': snippet.id,
+        'title': snippet.title,
+        'tags': snippet.tags,
+        'command': command,
+        'variables': [
+          for (final d in needed.declarations)
+            ListRunbooksTool.describeVariable(d),
+        ],
+      });
+    }
+    return {'snippets': result};
+  }
+}
+
 /// The note an agent is given whenever a run is at an approval gate.
 const String kApprovalStepNote =
     'This run is waiting at an approval step. It cannot be approved through '
@@ -330,7 +408,11 @@ Map<String, Object?> _stepView(
 }
 
 /// `run_runbook` — start a runbook, after the user has said yes.
+///
+/// [RunRunbookTool.snippet] is `run_snippet`: the same run, approval and
+/// audit, on a snippet as the one-step runbook the app itself runs it as.
 class RunRunbookTool with McpArgReaders implements McpToolHandler {
+  final bool forSnippet;
   final RunbooksRepository runbooksRepository;
   final SnippetsRepository snippetsRepository;
   final HostsRepository hostsRepository;
@@ -353,24 +435,51 @@ class RunRunbookTool with McpArgReaders implements McpToolHandler {
     required this.gateway,
     required this.tracker,
     required this.redactor,
-  });
+  }) : forSnippet = false;
+
+  const RunRunbookTool.snippet({
+    required this.runbooksRepository,
+    required this.snippetsRepository,
+    required this.hostsRepository,
+    required this.hostsDao,
+    required this.grantRepository,
+    required this.auditRepository,
+    required this.approvalCoordinator,
+    required this.gateway,
+    required this.tracker,
+    required this.redactor,
+  }) : forSnippet = true;
 
   /// Refusals already written to the log with their own, richer entry.
   static final _audited = Expando<bool>();
 
   @override
-  String get name => 'run_runbook';
+  String get name => forSnippet ? 'run_snippet' : 'run_runbook';
+
+  String get _idArg => forSnippet ? 'snippetId' : 'runbookId';
+
+  static const _runbookIntro =
+      'Starts a runbook (see list_runbooks) on one or more hosts and '
+      'returns at once with a runId; the run goes on in ShellVibe. Every '
+      'call pauses for the user to approve it in a window that shows the '
+      'steps, the hosts and the values: there '
+      'is no policy mode or earlier approval that skips this, because a '
+      'runbook is several commands on several hosts. ';
+
+  static const _snippetIntro =
+      'Starts a snippet (see list_snippets) on one or more hosts as a '
+      'one-step run with a 60 second timeout, and returns at once with a '
+      'runId; the run goes on in ShellVibe. Every call pauses for the user '
+      'to approve it in a window that shows the command, the hosts and the '
+      'values: no policy mode or earlier approval skips this. For a quick '
+      'read on one host, run_command is the lighter tool, and the only one '
+      'a read only host allows. ';
 
   @override
   McpToolDefinition get definition => McpToolDefinition(
     name: name,
     description:
-        'Starts a runbook (see list_runbooks) on one or more hosts and '
-        'returns at once with a runId; the run goes on in ShellVibe. Every '
-        'call pauses for the user to approve it in a window that shows the '
-        'steps, the hosts and the values: there '
-        'is no policy mode or earlier approval that skips this, because a '
-        'runbook is several commands on several hosts. Every host must be '
+        '${forSnippet ? _snippetIntro : _runbookIntro}Every host must be '
         'visible to you and already granted (request_host_access first, or '
         'you get HOST_ACCESS_REQUIRED), and not read only: a host whose '
         'maxMode or grant is readonly refuses with POLICY_DENIED. Pass only '
@@ -383,14 +492,16 @@ class RunRunbookTool with McpArgReaders implements McpToolHandler {
         'with get_runbook_run; stop it with cancel_runbook_run. An '
         'approval step in the runbook waits for the user to press Continue '
         'in ShellVibe: you cannot continue it.',
-    inputSchema: const {
+    inputSchema: {
       'type': 'object',
       'properties': {
-        'runbookId': {
+        _idArg: {
           'type': 'string',
-          'description': 'The id of the runbook, from list_runbooks.',
+          'description': forSnippet
+              ? 'The id of the snippet, from list_snippets.'
+              : 'The id of the runbook, from list_runbooks.',
         },
-        'hostIds': {
+        'hostIds': const {
           'type': 'array',
           'items': {'type': 'string'},
           'minItems': 1,
@@ -402,7 +513,7 @@ class RunRunbookTool with McpArgReaders implements McpToolHandler {
           'type': 'object',
           'additionalProperties': {'type': 'string'},
           'description':
-              'Values for the runbook\'s non-secret variables, by name. '
+              'Values for the non-secret variables, by name. '
               'A variable with a default may be left out.',
         },
         'strategy': {
@@ -421,14 +532,14 @@ class RunRunbookTool with McpArgReaders implements McpToolHandler {
               'With "parallel": how many hosts at once. Defaults to 4.',
         },
       },
-      'required': ['runbookId', 'hostIds'],
+      'required': [_idArg, 'hostIds'],
       'additionalProperties': false,
     },
   );
 
   @override
   Future<Object?> execute(McpToolContext ctx, Map<String, Object?> args) async {
-    final runbookId = requireString(args, 'runbookId');
+    final runbookId = requireString(args, _idArg);
     final hostIds = requireStringList(args, 'hostIds');
 
     try {
@@ -442,11 +553,7 @@ class RunRunbookTool with McpArgReaders implements McpToolHandler {
         clientName: ctx.clientName,
         workspaceId: ctx.workspaceId,
         tool: name,
-        args: {
-          'runbookId': runbookId,
-          'hostIds': hostIds,
-          'rejected': e.message,
-        },
+        args: {_idArg: runbookId, 'hostIds': hostIds, 'rejected': e.message},
         decision: AuditDecision.denied,
       );
       rethrow;
@@ -459,14 +566,20 @@ class RunRunbookTool with McpArgReaders implements McpToolHandler {
     String runbookId,
     List<String> hostIds,
   ) async {
-    final runbook = (await runbooksRepository.getRunbooksByWorkspace(
-      ctx.workspaceId,
-    )).where((r) => r.id == runbookId).firstOrNull;
+    final runbook = forSnippet
+        ? (await snippetsRepository.getSnippetsByWorkspace(ctx.workspaceId))
+              .where((s) => s.id == runbookId)
+              .map(RunbookRunService.runbookForSnippet)
+              .firstOrNull
+        : (await runbooksRepository.getRunbooksByWorkspace(
+            ctx.workspaceId,
+          )).where((r) => r.id == runbookId).firstOrNull;
     if (runbook == null) {
+      final kind = forSnippet ? 'snippet' : 'runbook';
       throw McpToolException(
         McpErrorCode.runbookNotFound,
-        'No runbook with id "$runbookId" in this workspace. Call '
-        'list_runbooks to see the ids.',
+        'No $kind with id "$runbookId" in this workspace. Call '
+        'list_${kind}s to see the ids.',
       );
     }
 
@@ -500,6 +613,7 @@ class RunRunbookTool with McpArgReaders implements McpToolHandler {
         clientId: ctx.clientId,
         clientName: ctx.clientName,
         runbookTitle: runbook.title,
+        isSnippet: forSnippet,
         strategyLabel: strategy.label,
         variables: plain,
         secretFields: secretFields,
@@ -523,7 +637,7 @@ class RunRunbookTool with McpArgReaders implements McpToolHandler {
     );
 
     final audited = {
-      'runbookId': runbook.id,
+      _idArg: runbookId,
       'runbookTitle': runbook.title,
       'hostIds': hostIds,
       'strategy': strategy.wireName,
@@ -702,7 +816,8 @@ class RunRunbookTool with McpArgReaders implements McpToolHandler {
           McpAccessMode.readonly) {
         throw McpToolException(
           McpErrorCode.policyDenied,
-          'Host "$id" is read only for agents, so a runbook cannot run on it.',
+          'Host "$id" is read only for agents, so a '
+          '${forSnippet ? 'snippet' : 'runbook'} cannot run on it.',
         );
       }
       if (host.protocol == 'local') {
@@ -743,7 +858,7 @@ class RunRunbookTool with McpArgReaders implements McpToolHandler {
     if (unknown.isNotEmpty) {
       throw McpToolException(
         McpErrorCode.invalidVariables,
-        'This runbook has no variable named ${unknown.map((u) => '"$u"').join(', ')}. '
+        'This ${forSnippet ? 'snippet' : 'runbook'} has no variable named ${unknown.map((u) => '"$u"').join(', ')}. '
         'Its variables: ${byName.isEmpty ? '(none)' : byName.keys.join(', ')}.',
       );
     }
@@ -826,7 +941,7 @@ class GetRunbookRunTool with McpArgReaders implements McpToolHandler {
   McpToolDefinition get definition => McpToolDefinition(
     name: name,
     description:
-        'Reports a runbook run you started with run_runbook: an overall '
+        'Reports a run you started with run_runbook or run_snippet: an overall '
         'status ("running", "waiting_for_approval", "succeeded", "failed" '
         'or "cancelled"), each host\'s status and error, and each step\'s '
         'status, exit code, attempts and output (the last 8 KiB, with '
@@ -840,7 +955,7 @@ class GetRunbookRunTool with McpArgReaders implements McpToolHandler {
       'properties': {
         'runId': {
           'type': 'string',
-          'description': 'The runId run_runbook returned.',
+          'description': 'The runId run_runbook or run_snippet returned.',
         },
         'waitSeconds': {
           'type': 'integer',
@@ -928,7 +1043,7 @@ class CancelRunbookRunTool with McpArgReaders implements McpToolHandler {
       'properties': {
         'runId': {
           'type': 'string',
-          'description': 'The runId run_runbook returned.',
+          'description': 'The runId run_runbook or run_snippet returned.',
         },
       },
       'required': ['runId'],

@@ -14,6 +14,9 @@ and release versions follow [Semantic Versioning](https://semver.org/).
   the host's access level, ask before replacing a file or touching
   credentials, never leave a partial file, and land in the audit log with
   their size and SHA-256.
+- AI Access: agents can list your snippets and run one on several hosts with
+  the new `list_snippets` and `run_snippet` tools. A snippet run asks every
+  time, like a runbook, and shows in the run view and run history.
 
 ## [1.13.0] - 2026-11-13
 

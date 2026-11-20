@@ -160,6 +160,22 @@ McpToolRegistry mcpToolRegistry(Ref ref) {
       tracker: runTracker,
       redactor: redactor,
     ),
+    ListSnippetsTool(
+      snippetsRepository: snippetsRepository,
+      redactor: redactor,
+    ),
+    RunRunbookTool.snippet(
+      runbooksRepository: runbooksRepository,
+      snippetsRepository: snippetsRepository,
+      hostsRepository: hostsRepository,
+      hostsDao: hostsDao,
+      grantRepository: grantRepository,
+      auditRepository: auditRepository,
+      approvalCoordinator: approvalCoordinator,
+      gateway: runGateway,
+      tracker: runTracker,
+      redactor: redactor,
+    ),
     GetRunbookRunTool(
       gateway: runGateway,
       tracker: runTracker,

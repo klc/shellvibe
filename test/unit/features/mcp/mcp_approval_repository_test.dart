@@ -189,24 +189,24 @@ void main() {
   test(
     'ApprovalScope.once stores nothing at all, so it never matches later',
     () async {
-    await repo.remember(
-      clientId: 'client-1',
-      hostId: 'host-1',
-      cwd: '/tmp',
-      command: 'ls -la',
-      scope: ApprovalScope.once,
-    );
-
-    expect(
-      await repo.hasApproval(
+      await repo.remember(
         clientId: 'client-1',
         hostId: 'host-1',
         cwd: '/tmp',
         command: 'ls -la',
-      ),
-      isFalse,
-    );
-    expect(await repo.listActive('client-1'), isEmpty);
+        scope: ApprovalScope.once,
+      );
+
+      expect(
+        await repo.hasApproval(
+          clientId: 'client-1',
+          hostId: 'host-1',
+          cwd: '/tmp',
+          command: 'ls -la',
+        ),
+        isFalse,
+      );
+      expect(await repo.listActive('client-1'), isEmpty);
     },
   );
 
@@ -268,7 +268,7 @@ void main() {
         scope: ApprovalScope.session,
         connectionScopeId: 'conn-1',
       ),
-      );
+    );
 
     test('answers only in the connection that recorded it', () async {
       // A row that outlived its connection — the app killed before cleanup
@@ -281,13 +281,13 @@ void main() {
     test(
       'is dropped when its connection ends, and an "always" one is not',
       () async {
-      await repo.remember(
-        clientId: 'client-1',
-        hostId: 'host-1',
-        cwd: '/tmp',
-        command: 'always-cmd',
-        scope: ApprovalScope.always,
-      );
+        await repo.remember(
+          clientId: 'client-1',
+          hostId: 'host-1',
+          cwd: '/tmp',
+          command: 'always-cmd',
+          scope: ApprovalScope.always,
+        );
 
         await repo.revokeByConnectionScope('conn-1');
 
@@ -299,9 +299,9 @@ void main() {
 
     test('is dropped when the server starts again', () async {
       await repo.remember(
-          clientId: 'client-1',
-          hostId: 'host-1',
-          cwd: '/tmp',
+        clientId: 'client-1',
+        hostId: 'host-1',
+        cwd: '/tmp',
         command: 'always-cmd',
         scope: ApprovalScope.always,
       );
@@ -320,12 +320,12 @@ void main() {
     // lookup throw, which failed the command instead of running it.
     for (final scope in [ApprovalScope.fifteenMinutes, ApprovalScope.always]) {
       await repo.remember(
-          clientId: 'client-1',
-          hostId: 'host-1',
-          cwd: '/tmp',
+        clientId: 'client-1',
+        hostId: 'host-1',
+        cwd: '/tmp',
         command: 'ls -la',
         scope: scope,
-  );
+      );
     }
 
     expect(await approvedIn(null, command: 'ls -la'), isTrue);

@@ -110,6 +110,8 @@ void main() {
   late RunRunbookTool run;
   late GetRunbookRunTool get;
   late CancelRunbookRunTool cancel;
+  late ListSnippetsTool listSnippets;
+  late RunRunbookTool runSnippet;
 
   Future<void> host(
     String id, {
@@ -269,6 +271,22 @@ void main() {
       gateway: gateway,
       tracker: tracker,
       auditRepository: audit,
+      redactor: redactor,
+    );
+    listSnippets = ListSnippetsTool(
+      snippetsRepository: snippetsRepo,
+      redactor: redactor,
+    );
+    runSnippet = RunRunbookTool.snippet(
+      runbooksRepository: runbooksRepo,
+      snippetsRepository: snippetsRepo,
+      hostsRepository: hostsRepo,
+      hostsDao: db.hostsDao,
+      grantRepository: grants,
+      auditRepository: audit,
+      approvalCoordinator: coordinator,
+      gateway: gateway,
+      tracker: tracker,
       redactor: redactor,
     );
   });
@@ -1262,6 +1280,147 @@ void main() {
     });
   });
 
+  group('snippets', () {
+    Future<void> snippet({
+      String id = 'sn',
+      String workspace = 'ws',
+      String title = 'Tail logs',
+      String code = r'tail -n ${INPUT:lines} /var/log/app.log',
+      String? tags,
+      String? variables,
+    }) => db.snippetsDao.insertSnippet(
+      SnippetsCompanion.insert(
+        id: id,
+        workspaceId: workspace,
+        title: title,
+        code: code,
+        tags: Value(tags),
+        variables: Value(variables),
+      ),
+    );
+
+    test('list_snippets: this workspace only, secrets masked, variables '
+        'described, query on the masked text', () async {
+      await snippet(
+        tags: '["ops"]',
+        variables:
+            '[{"name":"lines","type":"text","defaultValue":"100"},'
+            '{"name":"pw","type":"secret","defaultValue":"leak"}]',
+        code: r'tail -n ${INPUT:lines} log ${INPUT:pw} AKIAABCDEFGHIJKLMNOP',
+      );
+      await snippet(id: 'foreign', workspace: 'other-ws', title: 'Elsewhere');
+
+      final r = await listSnippets.execute(_ctx, const {}) as Map;
+      final sn = (r['snippets'] as List).single as Map<String, Object?>;
+      expect(sn['id'], 'sn');
+      expect(sn['tags'], ['ops']);
+      expect(sn['command'], isNot(contains('AKIAABCDEFGHIJKLMNOP')));
+      expect(sn['command'], contains('[REDACTED'));
+      final vars = sn['variables'] as List;
+      expect(vars.map((v) => (v as Map)['name']), ['lines', 'pw']);
+      expect(jsonEncode(vars), isNot(contains('leak')));
+
+      Future<int> count(Map<String, Object?> args) async =>
+          ((await listSnippets.execute(_ctx, args) as Map)['snippets'] as List)
+              .length;
+      expect(await count({'query': 'TAIL'}), 1);
+      expect(await count({'query': 'AKIAABCD'}), 0);
+      expect(await count({'tag': 'ops'}), 1);
+      expect(await count({'tag': 'dev'}), 0);
+    });
+
+    test('run_snippet: a snippet of another workspace is not found, and the '
+        'refusal is logged', () async {
+      await host('h1');
+      await snippet(id: 'foreign', workspace: 'other-ws');
+      await expectLater(
+        runSnippet.execute(_ctx, {
+          'snippetId': 'foreign',
+          'hostIds': ['h1'],
+        }),
+        toolError(McpErrorCode.runbookNotFound, contains('list_snippets')),
+      );
+      final row = (await auditRows()).single;
+      expect(row['tool'], 'run_snippet');
+      expect(row['decision'], 'denied');
+      expect((row['args'] as Map)['snippetId'], 'foreign');
+      expect(gateway.started, isEmpty);
+    });
+
+    test('run_snippet: a secret variable cannot be passed', () async {
+      await host('h1');
+      await snippet(
+        code: r'login ${INPUT:pw}',
+        variables: '[{"name":"pw","type":"secret"}]',
+      );
+      await expectLater(
+        runSnippet.execute(_ctx, {
+          'snippetId': 'sn',
+          'hostIds': ['h1'],
+          'variables': {'pw': 'hunter2'},
+        }),
+        toolError(McpErrorCode.invalidVariables, contains('secret')),
+      );
+    });
+
+    test('run_snippet: a read only host refuses', () async {
+      await host('h1', maxMode: 'readonly');
+      await snippet();
+      await expectLater(
+        runSnippet.execute(_ctx, {
+          'snippetId': 'sn',
+          'hostIds': ['h1'],
+          'variables': {'lines': '5'},
+        }),
+        toolError(McpErrorCode.policyDenied),
+      );
+    });
+
+    test('run_snippet: asks, then starts the one-step run the app runs a '
+        'snippet as, readable with get_runbook_run', () async {
+      await host('h1');
+      await snippet();
+      final future = runSnippet.execute(_ctx, {
+        'snippetId': 'sn',
+        'hostIds': ['h1'],
+        'variables': {'lines': '50'},
+      });
+      final request = await answer(
+        const RunbookApprovalDecision(approved: true),
+      );
+      final result = await future as Map<String, Object?>;
+
+      expect(request.runbookTitle, 'Tail logs');
+      expect(
+        request.steps.single.text,
+        r'tail -n ${INPUT:lines} /var/log/app.log',
+      );
+      expect(request.variables, {'lines': '50'});
+
+      final started = gateway.started.single;
+      expect(started.runbook.id, '${RunbookRunService.snippetRunbookPrefix}sn');
+      expect(RunbookRunService.isSnippetRunbook(started.runbook), isTrue);
+      expect(started.values, {'lines': '50'});
+      expect(result['runId'], started.runId);
+
+      final status = await get.execute(_ctx, {'runId': started.runId}) as Map;
+      expect(status['runbook'], 'Tail logs');
+
+      // Settled and saved as a snippet run, it still reads back from history.
+      await history.save(
+        gateway.current!.copyWith(running: false, finishedAt: DateTime.now()),
+      );
+      gateway.current = null;
+      final stored = await get.execute(_ctx, {'runId': started.runId}) as Map;
+      expect(stored['runId'], started.runId);
+      expect(stored['runbook'], 'Tail logs');
+      expect(
+        (await audit.query()).map((r) => jsonDecode(r.argsJson)['snippetId']),
+        contains('sn'),
+      );
+    });
+  });
+
   group('tool definitions', () {
     test('the four tools are named and their required arguments declared', () {
       final defs = {
@@ -1284,6 +1443,20 @@ void main() {
         'hostIds',
       ]);
       expect(defs['get_runbook_run']!.inputSchema['required'], ['runId']);
+      expect(listSnippets.definition.name, 'list_snippets');
+      expect(runSnippet.definition.name, 'run_snippet');
+      expect(runSnippet.definition.inputSchema['required'], [
+        'snippetId',
+        'hostIds',
+      ]);
+      // The two run tools differ only in what they start.
+      expect((runSnippet.definition.inputSchema['properties'] as Map).keys, [
+        'snippetId',
+        'hostIds',
+        'variables',
+        'strategy',
+        'concurrency',
+      ]);
       expect(defs['cancel_runbook_run']!.inputSchema['required'], ['runId']);
     });
   });
