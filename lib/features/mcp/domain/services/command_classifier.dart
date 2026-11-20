@@ -126,7 +126,9 @@ class CommandClassifier {
     RiskCategory.networkFw ||
     RiskCategory.database ||
     RiskCategory.vcs ||
-    RiskCategory.container => 2,
+    RiskCategory.container ||
+    // Never classified; ranked with the mutating rows to stay exhaustive.
+    RiskCategory.fileTransfer => 2,
     RiskCategory.secretRead => 3,
     RiskCategory.interactive => 4,
     RiskCategory.opaqueExec => 5,
@@ -327,6 +329,12 @@ class CommandClassifier {
     r'|\.git-credentials\b',
     caseSensitive: false,
   );
+
+  /// Whether [path] names credential material by the same list
+  /// [_credentialPath] checks commands against, so a file transfer and a
+  /// `cat` agree on what a secret is.
+  static bool isCredentialPath(String path) => _credentialPath.hasMatch(path);
+
   static final RegExp _bareEnvDump = RegExp(
     r'^\s*(?:env|printenv)(?:\s+-0)?\s*$',
     caseSensitive: false,

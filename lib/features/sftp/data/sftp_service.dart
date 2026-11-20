@@ -222,6 +222,10 @@ class RemoteReplacement {
   final bool _replacesExisting;
   bool _targetRemoved = false;
 
+  /// True when [file] is the target itself, so [discard] cannot undo a
+  /// failed write.
+  bool get writesInPlace => _temporaryPath == null;
+
   /// Moves the written temp file into place.
   Future<void> commit(SftpClient client) async {
     final temporaryPath = _temporaryPath;
