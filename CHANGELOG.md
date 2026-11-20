@@ -17,6 +17,11 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 - AI Access: agents can list your snippets and run one on several hosts with
   the new `list_snippets` and `run_snippet` tools. A snippet run asks every
   time, like a runbook, and shows in the run view and run history.
+- AI Access: Settings → AI access can add a hook to Claude Code, Codex and
+  Cursor that turns their `ssh`, `scp`, `sftp` and remote `rsync` commands
+  back to ShellVibe's tools, for an agent that forgets to use them. Off by
+  default, on macOS and Linux. It is a nudge, not a lock: an agent can still
+  reach a shell another way. Codex runs it once you trust it in `/hooks`.
 
 ## [1.13.0] - 2026-11-13
 
