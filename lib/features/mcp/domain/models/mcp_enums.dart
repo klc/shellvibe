@@ -89,6 +89,11 @@ enum RiskCategory {
   /// Reads credential material: `cat …/.env`, `/etc/shadow`, `printenv`.
   secretRead,
 
+  /// Copies one file between this machine and the host (`upload_file`,
+  /// `download_file`). Never produced by the classifier: the transfer tools
+  /// hand it to `PolicyEngine.evaluateTransfer` directly.
+  fileTransfer,
+
   /// The classifier could not place the command. Treated as risky.
   unclassified;
 
@@ -106,6 +111,7 @@ enum RiskCategory {
     RiskCategory.opaqueExec => 'opaque_exec',
     RiskCategory.interactive => 'interactive',
     RiskCategory.secretRead => 'secret_read',
+    RiskCategory.fileTransfer => 'file_transfer',
     RiskCategory.unclassified => 'unclassified',
   };
 }

@@ -7,6 +7,14 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- AI Access: agents can copy one file to or from a server with the new
+  `upload_file` and `download_file` tools instead of `scp`. Transfers follow
+  the host's access level, ask before replacing a file or touching
+  credentials, never leave a partial file, and land in the audit log with
+  their size and SHA-256.
+
 ## [1.13.0] - 2026-11-13
 
 ### Added

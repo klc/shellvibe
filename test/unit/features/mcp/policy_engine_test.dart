@@ -630,4 +630,50 @@ void main() {
       expect(engine.canRemember(RiskCategory.unclassified), isTrue);
     });
   });
+
+  group('evaluateTransfer', () {
+    const r = McpAccessMode.readonly;
+    const g = McpAccessMode.guarded;
+    const a = McpAccessMode.autonomous;
+    const allow = PolicyAction.allow;
+    const confirm = PolicyAction.confirm;
+    const deny = PolicyAction.deny;
+
+    // (upload, replaces remote file, credential path) -> category and the
+    // action in readonly / guarded / autonomous.
+    final table = <(bool, bool, bool), (RiskCategory, List<PolicyAction>)>{
+      (false, false, false): (
+        RiskCategory.fileTransfer,
+        [confirm, confirm, allow],
+      ),
+      (true, false, false): (RiskCategory.fileTransfer, [deny, confirm, allow]),
+      (true, true, false): (
+        RiskCategory.destructiveFs,
+        [deny, confirm, confirm],
+      ),
+      (false, false, true): (RiskCategory.secretRead, [deny, confirm, confirm]),
+      (true, false, true): (RiskCategory.secretRead, [deny, confirm, confirm]),
+      (true, true, true): (RiskCategory.secretRead, [deny, confirm, confirm]),
+    };
+
+    for (final MapEntry(key: facts, value: (category, actions))
+        in table.entries) {
+      final (upload, replaces, credential) = facts;
+      test('upload=$upload replaces=$replaces credential=$credential', () {
+        for (final (i, mode) in [r, g, a].indexed) {
+          final decision = engine.evaluateTransfer(
+            upload: upload,
+            replacesRemoteFile: replaces,
+            touchesCredentialPath: credential,
+            mode: mode,
+          );
+          expect(decision.category, category, reason: mode.name);
+          expect(decision.action, actions[i], reason: mode.name);
+          if (decision.action != allow) {
+            expect(decision.message, contains('file transfer'));
+          }
+        }
+      });
+    }
+  });
 }

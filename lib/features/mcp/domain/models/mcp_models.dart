@@ -180,6 +180,11 @@ class CommandApprovalRequest {
   /// see the rule exists.
   final bool canRemember;
 
+  /// Set when this asks about `upload_file` / `download_file` rather than a
+  /// shell command. The dialog then shows these facts instead of a command
+  /// that will run, and [command] is only a one-line summary for lists.
+  final FileTransferApproval? transfer;
+
   const CommandApprovalRequest({
     required this.clientId,
     required this.clientName,
@@ -189,6 +194,32 @@ class CommandApprovalRequest {
     required this.cwd,
     required this.category,
     required this.canRemember,
+    this.transfer,
+  });
+}
+
+/// What the user needs to judge one file transfer: which way, both paths
+/// exactly as they will be used, how big, and whether a file is replaced.
+class FileTransferApproval {
+  final bool upload;
+  final String localPath;
+
+  /// Absolute and resolved through the server's realpath.
+  final String remotePath;
+
+  /// Null when the server does not report a size.
+  final int? bytes;
+
+  /// Whether the destination (remote for an upload, local for a download)
+  /// exists and will be replaced.
+  final bool replacesExisting;
+
+  const FileTransferApproval({
+    required this.upload,
+    required this.localPath,
+    required this.remotePath,
+    required this.bytes,
+    required this.replacesExisting,
   });
 }
 

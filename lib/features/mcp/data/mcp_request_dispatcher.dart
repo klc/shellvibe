@@ -23,8 +23,10 @@ const _kInstructions =
     'otherwise do with ssh, scp or a terminal. The servers the user saved in '
     'ShellVibe are reached through these tools, not through ssh in a local '
     'shell. Flow: list_hosts -> request_host_access (once, with every host '
-    'the task needs) -> open_session -> run_command -> close_session. If '
-    'list_runbooks already has the operation, prefer run_runbook. You only '
+    'the task needs) -> open_session -> run_command -> close_session. To '
+    'copy a file, use upload_file / download_file instead of scp, sftp or '
+    'rsync. If list_runbooks already has the operation, prefer run_runbook. '
+    'You only '
     'ever get hostIds, never hostnames or credentials. A command may pause '
     'for the user\'s approval or be denied by the host\'s policy: read the '
     'error code and adapt rather than falling back to ssh.';

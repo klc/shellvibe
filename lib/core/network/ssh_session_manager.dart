@@ -470,6 +470,18 @@ class SSHSessionManager {
     return await activeClient.execute(command);
   }
 
+  /// Opens an SFTP client on its own channel of the connected client.
+  ///
+  /// For the MCP file-transfer tools, which open one per call on a session's
+  /// connection and close it when the call ends.
+  Future<SftpClient> openSftp() async {
+    final activeClient = _client;
+    if (activeClient == null || !_isConnected || activeClient.isClosed) {
+      throw StateError('SSHClient is not connected. Call connect() first.');
+    }
+    return await activeClient.sftp();
+  }
+
   /// Sends a keep-alive ping to the remote server.
   Future<void> ping() async {
     final activeClient = _client;

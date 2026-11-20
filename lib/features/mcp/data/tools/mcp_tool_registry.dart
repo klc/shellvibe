@@ -15,6 +15,7 @@ import '../../../snippets/presentation/notifiers/runbooks_notifier.dart';
 import '../../../snippets/presentation/notifiers/snippets_notifier.dart';
 import 'command_tools.dart';
 import 'discovery_tools.dart';
+import 'file_transfer_tools.dart';
 import 'mcp_tool_handler.dart';
 import 'runbook_tools.dart';
 import 'session_tools.dart';
@@ -124,6 +125,22 @@ McpToolRegistry mcpToolRegistry(Ref ref) {
       policyEngine: policyEngine,
       approvalCoordinator: approvalCoordinator,
       redactor: redactor,
+    ),
+    FileTransferTool.upload(
+      sessionPool: sessionPool,
+      hostsDao: hostsDao,
+      grantRepository: grantRepository,
+      auditRepository: auditRepository,
+      policyEngine: policyEngine,
+      approvalCoordinator: approvalCoordinator,
+    ),
+    FileTransferTool.download(
+      sessionPool: sessionPool,
+      hostsDao: hostsDao,
+      grantRepository: grantRepository,
+      auditRepository: auditRepository,
+      policyEngine: policyEngine,
+      approvalCoordinator: approvalCoordinator,
     ),
     ListRunbooksTool(
       runbooksRepository: runbooksRepository,
