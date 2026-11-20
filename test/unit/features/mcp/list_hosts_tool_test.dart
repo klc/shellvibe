@@ -60,8 +60,7 @@ void main() {
   tearDown(() async => db.close());
 
   test('names the workspace the token is bound to', () async {
-    final result =
-        await tool.execute(ctx, const {}) as Map<String, Object?>;
+    final result = await tool.execute(ctx, const {}) as Map<String, Object?>;
 
     expect(result['workspace'], {'id': 'novus', 'name': 'Novus'});
   });
@@ -70,8 +69,7 @@ void main() {
     await insertHost(id: 'nfs-dev', workspaceId: 'novus');
     await insertHost(id: 'mk-contabo', workspaceId: 'default');
 
-    final result =
-        await tool.execute(ctx, const {}) as Map<String, Object?>;
+    final result = await tool.execute(ctx, const {}) as Map<String, Object?>;
     final hosts = (result['hosts'] as List).cast<Map<String, Object?>>();
 
     expect(hosts.map((h) => h['id']), ['nfs-dev']);
@@ -81,8 +79,7 @@ void main() {
     await insertHost(id: 'nfs-dev', workspaceId: 'novus');
     await insertHost(id: 'secret', workspaceId: 'novus', mcpVisible: false);
 
-    final result =
-        await tool.execute(ctx, const {}) as Map<String, Object?>;
+    final result = await tool.execute(ctx, const {}) as Map<String, Object?>;
     final hosts = (result['hosts'] as List).cast<Map<String, Object?>>();
 
     expect(hosts.map((h) => h['id']), ['nfs-dev']);
@@ -96,8 +93,7 @@ void main() {
       grantRepository: McpGrantRepository(db.mcpDao),
     );
 
-    final listed =
-        await tool.execute(ctx, const {}) as Map<String, Object?>;
+    final listed = await tool.execute(ctx, const {}) as Map<String, Object?>;
     final described =
         await describe.execute(ctx, const {'hostId': 'nfs-dev'})
             as Map<String, Object?>;
@@ -121,8 +117,7 @@ void main() {
       connectionScopeId: 'scope-1',
     );
 
-    final result =
-        await tool.execute(orphan, const {}) as Map<String, Object?>;
+    final result = await tool.execute(orphan, const {}) as Map<String, Object?>;
 
     expect(result['workspace'], {
       'id': 'deleted-workspace',

@@ -141,7 +141,9 @@ class _McpRunbookApprovalDialogState extends State<McpRunbookApprovalDialog> {
       child: ShadDialog(
         key: const Key('mcp_runbook_approval_dialog'),
         constraints: const BoxConstraints(maxWidth: 560),
-        title: const Text('Run this runbook?'),
+        title: Text(
+          request.isSnippet ? 'Run this snippet?' : 'Run this runbook?',
+        ),
         description: Padding(
           padding: const EdgeInsets.only(top: 4),
           child: Text(

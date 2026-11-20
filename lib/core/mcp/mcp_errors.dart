@@ -29,7 +29,8 @@ enum McpErrorCode {
   /// The host exists but is hidden from MCP.
   hostNotVisible,
 
-  /// No runbook with that id in this client's workspace.
+  /// No runbook (or, for `run_snippet`, snippet) with that id in this
+  /// client's workspace.
   runbookNotFound,
 
   /// No run with that id that this client started.

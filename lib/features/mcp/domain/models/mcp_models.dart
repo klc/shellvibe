@@ -281,6 +281,9 @@ class RunbookApprovalRequest {
   final Map<String, String> variables;
   final List<RunbookSecretField> secretFields;
 
+  /// A `run_snippet` request: the dialog names it a snippet.
+  final bool isSnippet;
+
   const RunbookApprovalRequest({
     required this.clientId,
     required this.clientName,
@@ -290,6 +293,7 @@ class RunbookApprovalRequest {
     required this.strategyLabel,
     this.variables = const {},
     this.secretFields = const [],
+    this.isSnippet = false,
   });
 }
 
