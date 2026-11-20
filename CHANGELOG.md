@@ -22,6 +22,11 @@ and release versions follow [Semantic Versioning](https://semver.org/).
   back to ShellVibe's tools, for an agent that forgets to use them. Off by
   default, on macOS and Linux. It is a nudge, not a lock: an agent can still
   reach a shell another way. Codex runs it once you trust it in `/hooks`.
+- AI Access: agents can propose a new server with the new `add_host` tool.
+  You see the label and address it gives, attach one of your identities (an
+  agent never handles credentials) and add it or deny. The new host is not
+  granted to the agent: it still asks for access as usual. An address that is
+  already saved is not added again; the agent is told which host it is.
 
 ## [1.13.0] - 2026-11-13
 

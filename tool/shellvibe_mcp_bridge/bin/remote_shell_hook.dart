@@ -64,7 +64,8 @@ String denyMessage(String tool, {required bool appRunning}) =>
     'Do not run `$tool` here. Reach the user\'s servers through the '
     'ShellVibe MCP tools: list_hosts -> request_host_access -> open_session '
     '-> run_command, and upload_file / download_file to copy a file. If the '
-    'server is not in ShellVibe, ask the user to add it there. Do not work '
+    'server is not in ShellVibe, offer add_host or ask the user to add it. '
+    'Do not work '
     'around this block (bash -c, a script, another binary): the user can '
     'turn it off in ShellVibe under Settings > AI access.';
 

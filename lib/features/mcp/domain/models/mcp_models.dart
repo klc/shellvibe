@@ -350,3 +350,54 @@ class HostAccessCandidate {
     required this.maxMode,
   });
 }
+
+/// An agent's `add_host`: the address it proposed, for the user to save or
+/// refuse. Credentials never come from the agent: the user picks one of
+/// [identities] in the window, or none.
+class HostAddRequest {
+  final String clientId;
+  final String clientName;
+  final String label;
+  final String hostname;
+  final int port;
+  final String? username;
+
+  /// The workspace's identities, for the window's picker. Never sent to the
+  /// agent.
+  final List<HostAddIdentity> identities;
+
+  const HostAddRequest({
+    required this.clientId,
+    required this.clientName,
+    required this.label,
+    required this.hostname,
+    required this.port,
+    this.username,
+    this.identities = const [],
+  });
+}
+
+/// One identity the user may attach to the new host.
+class HostAddIdentity {
+  final String id;
+  final String title;
+  final String username;
+
+  const HostAddIdentity({
+    required this.id,
+    required this.title,
+    required this.username,
+  });
+}
+
+/// The user's answer to a [HostAddRequest].
+class HostAddDecision {
+  final bool approved;
+
+  /// The identity the user attached, or null for none.
+  final String? identityId;
+
+  const HostAddDecision({required this.approved, this.identityId});
+
+  static const denied = HostAddDecision(approved: false);
+}
