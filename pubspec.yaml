@@ -57,7 +57,13 @@ dependencies:
   # 6.4.0 stops remote output from resizing the terminal, reading the
   # clipboard over OSC 52 or echoing the title into the input, and makes
   # readOnly views block hardware keys and paste too.
-  xterm3: ^6.5.0
+  # Test build: 6.6.0-beta.1 (the rewritten write path and painter) is not on
+  # pub.dev or tagged, only on xterm3's perf/dart-core branch, so this pins
+  # that branch's head. Back to `^6.6.0` once the release ships.
+  xterm3:
+    git:
+      url: https://github.com/klc/xterm3.git
+      ref: 62657bbcc6b04c6d76073f91b841d2090445ca94
   # Back on the pub.dev release: every fix we carried on our fork landed
   # upstream by 4.0.1 (the transport, KEX, SFTP, web and HTTP work in #229,
   # #230 and #231), so there is nothing left for a pin to hold.

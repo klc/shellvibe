@@ -1686,11 +1686,12 @@ packages:
   xterm3:
     dependency: "direct main"
     description:
-      name: xterm3
-      sha256: e12fffa281acaa024b73ba4262363b0b166f40b5d74e680174f8b8f64f99ec76
-      url: "https://pub.dev"
-    source: hosted
-    version: "6.5.0"
+      path: "."
+      ref: "62657bbcc6b04c6d76073f91b841d2090445ca94"
+      resolved-ref: "62657bbcc6b04c6d76073f91b841d2090445ca94"
+      url: "https://github.com/klc/xterm3.git"
+    source: git
+    version: "6.6.0-beta.1"
   yaml:
     dependency: transitive
     description:
