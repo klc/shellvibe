@@ -28,6 +28,13 @@ and release versions follow [Semantic Versioning](https://semver.org/).
   granted to the agent: it still asks for access as usual. An address that is
   already saved is not added again; the agent is told which host it is.
 
+### Changed
+
+- Local terminals run on `flutter_pty2` 3.1.0-beta.1: output arrives in larger
+  chunks, the native library is built by a Dart build hook instead of a
+  CocoaPods or CMake plugin, and closing a tab still hangs the shell up before
+  it is stopped.
+
 ## [1.13.0] - 2026-11-13
 
 ### Added

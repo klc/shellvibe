@@ -5,63 +5,15 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:ffi';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/core/network/pty_session.dart';
 
-/// The PTY plugin, whose native library `flutter test` does not build.
-const _plugin = 'flutter_pty2';
-
 void main() {
-  late Directory nativeDir;
-  late Directory originalCwd;
-
-  setUpAll(() async {
-    // Builds the plugin's single C translation unit and puts it where the
-    // plugin's own loader looks: `<name>.framework/<name>` relative to the
-    // working directory on macOS, an already-loaded soname on Linux.
-    // `Isolate.resolvePackageUri` is unsupported under `flutter test`.
-    final configFile = File('.dart_tool/package_config.json');
-    final config = jsonDecode(await configFile.readAsString()) as Map;
-    final package = (config['packages'] as List).cast<Map>().singleWhere(
-      (p) => p['name'] == _plugin,
-    );
-    final root = configFile.absolute.uri.resolve('${package['rootUri']}/');
-    final source = File.fromUri(root.resolve('src/flutter_pty.c'));
-    originalCwd = Directory.current;
-    nativeDir = await Directory.systemTemp.createTemp('pty_session_test');
-    final out = Platform.isMacOS
-        ? '${nativeDir.path}/$_plugin.framework/$_plugin'
-        : '${nativeDir.path}/lib$_plugin.so';
-    await File(out).parent.create(recursive: true);
-    final cc = await Process.run('cc', [
-      '-shared',
-      '-fPIC',
-      '-DDART_SHARED_LIB',
-      if (Platform.isLinux) '-Wl,-soname,lib$_plugin.so',
-      if (Platform.isLinux) '-lpthread',
-      '-o',
-      out,
-      source.path,
-    ]);
-    expect(cc.exitCode, 0, reason: '${cc.stderr}');
-    if (Platform.isMacOS) {
-      Directory.current = nativeDir;
-    } else {
-      DynamicLibrary.open(out);
-    }
-  });
-
-  tearDownAll(() async {
-    Directory.current = originalCwd;
-    // Windows refuses to delete a DLL this process still has loaded.
-    await nativeDir
-        .delete(recursive: true)
-        .catchError((_) => nativeDir, test: (e) => e is FileSystemException);
-  });
+  // flutter_pty2's build hook builds and bundles its native library for
+  // `flutter test` as it does for an app, so nothing is compiled here.
 
   test(
     'a paste larger than the tty input queue reaches the process',
@@ -151,6 +103,76 @@ void main() {
       }
 
       expect(await openFds() - before, lessThan(sessions));
+    },
+    timeout: const Timeout(Duration(seconds: 20)),
+    skip: Platform.isWindows,
+  );
+
+  test(
+    'exit is reported while a background job still holds the terminal',
+    () async {
+      // `done` waits for the PTY's output to end, and a job left running in
+      // the background keeps the terminal open. The tab must still learn that
+      // its shell exited.
+      final tag = 'pty-session-test-${DateTime.now().microsecondsSinceEpoch}';
+      addTearDown(() => Process.run('pkill', ['-f', tag]));
+
+      final session = await PtyIsolateSession.start(
+        PtySessionConfig(
+          executable: '/bin/sh',
+          arguments: ['-c', 'sleep 30 & exit 3 # $tag'],
+          workingDirectory: null,
+          environment: Platform.environment,
+          rows: 24,
+          columns: 80,
+        ),
+      );
+      final output = session.output.listen((_) => session.acknowledge());
+
+      expect(await session.exitCode.timeout(const Duration(seconds: 5)), 3);
+
+      await output.cancel();
+      await session.dispose();
+    },
+    timeout: const Timeout(Duration(seconds: 20)),
+    skip: Platform.isWindows,
+  );
+
+  test(
+    'dispose hangs the shell up before it is killed',
+    () async {
+      // What a closing terminal sends. Without it a shell is SIGKILLed and
+      // never saves its history or hangs up its jobs.
+      final dir = await Directory.systemTemp.createTemp('pty_session_hup');
+      addTearDown(() => dir.delete(recursive: true));
+      final marker = File('${dir.path}/hup');
+      final ready = File('${dir.path}/ready');
+
+      final session = await PtyIsolateSession.start(
+        PtySessionConfig(
+          executable: '/bin/sh',
+          arguments: [
+            '-c',
+            'trap "echo hup > ${marker.path}; exit 0" HUP; '
+                ': > ${ready.path}; '
+                'while :; do sleep 0.05; done',
+          ],
+          workingDirectory: null,
+          environment: Platform.environment,
+          rows: 24,
+          columns: 80,
+        ),
+      );
+      final output = session.output.listen((_) => session.acknowledge());
+      for (var i = 0; i < 100 && !ready.existsSync(); i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+      expect(ready.existsSync(), isTrue, reason: 'the shell never started');
+
+      await session.dispose();
+      await output.cancel();
+
+      expect(marker.existsSync(), isTrue);
     },
     timeout: const Timeout(Duration(seconds: 20)),
     skip: Platform.isWindows,

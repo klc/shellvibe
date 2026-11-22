@@ -508,11 +508,12 @@ packages:
   flutter_pty2:
     dependency: "direct main"
     description:
-      name: flutter_pty2
-      sha256: "61e0f65d3d361b8bb265c166d552650b4053110a3949d6f42ad861db877ad892"
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.0.2"
+      path: "."
+      ref: b5782b093830a43f9aa25c6bead5f34cb2a0d1bb
+      resolved-ref: b5782b093830a43f9aa25c6bead5f34cb2a0d1bb
+      url: "https://github.com/klc/flutter_pty2.git"
+    source: git
+    version: "3.1.0-beta.1"
   flutter_riverpod:
     dependency: "direct main"
     description:
