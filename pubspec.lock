@@ -1687,11 +1687,11 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "62657bbcc6b04c6d76073f91b841d2090445ca94"
-      resolved-ref: "62657bbcc6b04c6d76073f91b841d2090445ca94"
+      ref: "9e0770851b54ef30d9518e4ee1f694e75fee96e7"
+      resolved-ref: "9e0770851b54ef30d9518e4ee1f694e75fee96e7"
       url: "https://github.com/klc/xterm3.git"
     source: git
-    version: "6.6.0-beta.1"
+    version: "6.6.0-beta.2"
   yaml:
     dependency: transitive
     description:
