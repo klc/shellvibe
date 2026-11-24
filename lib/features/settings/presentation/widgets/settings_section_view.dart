@@ -52,6 +52,46 @@ class SettingsSectionView extends ConsumerStatefulWidget {
 }
 
 class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
+  // The scheme and palette dropdowns preview what is pointed at, until the
+  // list closes; nothing is saved until one is picked.
+  TerminalPalette? _terminalPreview;
+  final _terminalPopover = ShadPopoverController();
+  final _palettePopover = ShadPopoverController();
+  late final AppPalettePreview _palettePreview;
+  bool _previewingPalette = false;
+
+  void _previewPalette(AppPalette? palette) {
+    _previewingPalette = palette != null;
+    _palettePreview.show(palette);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _palettePreview = ref.read(appPalettePreviewProvider.notifier);
+    _terminalPopover.addListener(() {
+      if (!_terminalPopover.isOpen && _terminalPreview != null) {
+        setState(() => _terminalPreview = null);
+      }
+    });
+    _palettePopover.addListener(() {
+      if (!_palettePopover.isOpen) _previewPalette(null);
+    });
+  }
+
+  @override
+  void dispose() {
+    // Left mid-preview (the list still open): put the saved palette back once
+    // the tree is done, since a provider may not change while it unmounts.
+    if (_previewingPalette) {
+      final preview = _palettePreview;
+      Future.microtask(() => preview.show(null));
+    }
+    _terminalPopover.dispose();
+    _palettePopover.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final settingsAsync = ref.watch(settingsProvider);
@@ -133,11 +173,18 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
                   trailing: ShadSelect<AppPalette>(
                     key: const Key('settings_palette_dropdown'),
                     initialValue: settings.palette,
+                    popoverController: _palettePopover,
                     selectedOptionBuilder: (context, value) =>
                         Text(value.label),
                     options: [
                       for (final p in _kPaletteOrder)
-                        ShadOption(value: p, child: Text(p.label)),
+                        ShadOption(
+                          value: p,
+                          child: _OnHighlight(
+                            onHighlight: () => _previewPalette(p),
+                            child: Text(p.label),
+                          ),
+                        ),
                     ],
                     onChanged: (palette) {
                       if (palette != null) {
@@ -237,6 +284,15 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
           settings.resolvedTerminalPalette(Theme.of(context).brightness),
         );
         final followsApp = settings.terminalPalette == TerminalPalette.matchApp;
+        final previewed = _terminalPreview == null
+            ? resolvedTerminal
+            : TerminalPaletteData.of(
+                settings
+                    .copyWith(terminalPalette: _terminalPreview)
+                    .resolvedTerminalPalette(Theme.of(context).brightness),
+              );
+        void preview(TerminalPalette palette) =>
+            setState(() => _terminalPreview = palette);
         return [
           // --- Section 2: Terminal Customization & Theme ---
           _buildSectionHeader(
@@ -256,6 +312,7 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
                   trailing: ShadSelect<TerminalPalette>(
                     key: const Key('settings_terminal_palette_dropdown'),
                     initialValue: settings.terminalPalette,
+                    popoverController: _terminalPopover,
                     selectedOptionBuilder: (context, value) {
                       if (value == TerminalPalette.matchApp) {
                         return _IconLabel(
@@ -274,31 +331,37 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
                     options: [
                       ShadOption(
                         value: TerminalPalette.matchApp,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            _PaletteSwatch(theme: resolvedTerminal.theme),
-                            const SizedBox(width: 10),
-                            const _IconLabel(
-                              icon: LucideIcons.sunMoon,
-                              label: 'Match App Theme',
-                            ),
-                          ],
+                        child: _OnHighlight(
+                          onHighlight: () => preview(TerminalPalette.matchApp),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _PaletteSwatch(theme: resolvedTerminal.theme),
+                              const SizedBox(width: 10),
+                              const _IconLabel(
+                                icon: LucideIcons.sunMoon,
+                                label: 'Match App Theme',
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                       for (final p in kTerminalPalettes)
                         ShadOption(
                           value: p.palette,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              _PaletteSwatch(theme: p.theme),
-                              const SizedBox(width: 10),
-                              _IconLabel(
-                                icon: _brightnessIcon(isLight: p.isLight),
-                                label: p.label,
-                              ),
-                            ],
+                          child: _OnHighlight(
+                            onHighlight: () => preview(p.palette),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _PaletteSwatch(theme: p.theme),
+                                const SizedBox(width: 10),
+                                _IconLabel(
+                                  icon: _brightnessIcon(isLight: p.isLight),
+                                  label: p.label,
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                     ],
@@ -312,7 +375,7 @@ class _SettingsSectionViewState extends ConsumerState<SettingsSectionView> {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
                   child: _TerminalThemePreview(
-                    theme: resolvedTerminal.theme,
+                    theme: previewed.theme,
                     fontFamily: resolveTerminalFontFamily(settings.fontFamily),
                   ),
                 ),
@@ -783,6 +846,54 @@ List<Color> _themeAnsiColors(TerminalTheme theme) => [
   theme.brightCyan,
   theme.brightWhite,
 ];
+
+/// Calls [onHighlight] when the option it sits in is pointed at, with the
+/// mouse or by moving the keyboard focus onto it. [ShadOption] reports
+/// neither, but its child sits under the option's own [Focus].
+class _OnHighlight extends StatefulWidget {
+  const _OnHighlight({required this.onHighlight, required this.child});
+
+  final VoidCallback onHighlight;
+  final Widget child;
+
+  @override
+  State<_OnHighlight> createState() => _OnHighlightState();
+}
+
+class _OnHighlightState extends State<_OnHighlight> {
+  FocusNode? _option;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final node = Focus.maybeOf(context);
+    if (node == _option) return;
+    _option?.removeListener(_onFocusChange);
+    _option = node?..addListener(_onFocusChange);
+  }
+
+  void _onFocusChange() {
+    if (_option?.hasFocus ?? false) widget.onHighlight();
+  }
+
+  @override
+  void dispose() {
+    _option?.removeListener(_onFocusChange);
+    super.dispose();
+  }
+
+  // Stretched to the option's width, so the whole row answers the mouse, not
+  // only its label.
+  @override
+  Widget build(BuildContext context) => MouseRegion(
+    onEnter: (_) => widget.onHighlight(),
+    child: Align(
+      alignment: AlignmentDirectional.centerStart,
+      heightFactor: 1,
+      child: widget.child,
+    ),
+  );
+}
 
 /// Live preview of the selected terminal color scheme.
 class _TerminalThemePreview extends StatelessWidget {

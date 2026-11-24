@@ -424,6 +424,11 @@ class _ShellVibeAppState extends ConsumerState<ShellVibeApp>
     final router = ref.watch(appRouterProvider);
     final settingsAsync = ref.watch(settingsProvider);
     final settings = settingsAsync.value ?? const AppSettingsModel();
+    // A palette pointed at in Settings themes the app until the list closes.
+    final preview = ref.watch(appPalettePreviewProvider);
+    final themed = preview == null
+        ? settings
+        : settings.copyWith(palette: preview);
 
     // The root is a package:material_ui MaterialApp so the app's own widgets
     // find its Theme, localizations and ScaffoldMessenger. shadcn_ui and
@@ -433,14 +438,14 @@ class _ShellVibeAppState extends ConsumerState<ShellVibeApp>
     // ponytail: temporary bridge, drop it (and the legacy ThemeMode) once
     // shadcn_ui, xterm3, window_manager & co. ship on material_ui.
     return ShadApp.custom(
-      theme: AppTheme.buildShadTheme(settings, brightness: Brightness.light),
-      darkTheme: AppTheme.buildShadTheme(settings, brightness: Brightness.dark),
+      theme: AppTheme.buildShadTheme(themed, brightness: Brightness.light),
+      darkTheme: AppTheme.buildShadTheme(themed, brightness: Brightness.dark),
       themeMode: legacy.ThemeMode.values.byName(settings.themeMode.name),
       appBuilder: (context) => MaterialApp.router(
         title: 'ShellVibe',
         debugShowCheckedModeBanner: false,
-        theme: AppTheme.buildTheme(settings, brightness: Brightness.light),
-        darkTheme: AppTheme.buildTheme(settings, brightness: Brightness.dark),
+        theme: AppTheme.buildTheme(themed, brightness: Brightness.light),
+        darkTheme: AppTheme.buildTheme(themed, brightness: Brightness.dark),
         themeMode: settings.themeMode,
         scrollBehavior: const ShadScrollBehavior(),
         localizationsDelegates: const [GlobalShadLocalizations.delegate],
