@@ -1,4 +1,5 @@
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../core/models/mosh_prediction_mode.dart';
@@ -206,4 +207,17 @@ class SettingsNotifier extends _$SettingsNotifier {
     if (_lastKnown == null) await future;
     return updateSettings(change(_base));
   }
+}
+
+/// An app palette shown while it is pointed at in Settings, never saved.
+/// Null when nothing is being previewed; the app themes itself from this
+/// over the saved palette.
+final appPalettePreviewProvider =
+    NotifierProvider<AppPalettePreview, AppPalette?>(AppPalettePreview.new);
+
+class AppPalettePreview extends Notifier<AppPalette?> {
+  @override
+  AppPalette? build() => null;
+
+  void show(AppPalette? palette) => state = palette;
 }
