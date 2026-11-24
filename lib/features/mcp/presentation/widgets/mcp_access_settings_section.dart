@@ -463,6 +463,15 @@ class _AgentAppsCardState extends State<_AgentAppsCard> {
       ),
   };
   final Map<McpAgentApp, McpAgentConfigStatus> _statuses = {};
+  final Map<McpAgentApp, String> _hookPaths = {
+    for (final app in McpAgentApp.values)
+      app: ?mcpHookConfigPath(
+        app,
+        environment: debugMcpAgentEnvironmentOverride ?? Platform.environment,
+        isWindows: Platform.isWindows,
+      ),
+  };
+  final Map<McpAgentApp, McpAgentConfigStatus> _hookStatuses = {};
 
   @override
   void initState() {
@@ -480,6 +489,49 @@ class _AgentAppsCardState extends State<_AgentAppsCard> {
       if (!mounted) return;
       setState(() => _statuses[app] = status);
     }
+    for (final MapEntry(key: app, value: path) in _hookPaths.entries) {
+      final status = await readMcpHookStatus(
+        app,
+        path,
+        mcpHookCommand(app, widget.bridge.command),
+      );
+      if (!mounted) return;
+      setState(() => _hookStatuses[app] = status);
+    }
+  }
+
+  Future<void> _setHook(McpAgentApp app, bool on) async {
+    try {
+      await setMcpHook(
+        app,
+        _hookPaths[app]!,
+        on ? mcpHookCommand(app, widget.bridge.command) : null,
+      );
+    } on Exception catch (e) {
+      if (mounted) {
+        ShadToaster.of(context).show(
+          ShadToast.destructive(
+            description: Text('Could not update ${app.label}\'s hooks: $e'),
+          ),
+        );
+      }
+      return;
+    }
+    await _refresh();
+    if (!mounted) return;
+    ShadToaster.of(context).show(
+      ShadToast(
+        description: Text(
+          !on
+              ? '${app.label} can run ssh again.'
+              : app == McpAgentApp.codex
+              ? 'Added the hook to Codex. Codex runs it once you trust it in '
+                    '/hooks.'
+              : '${app.label} now sends ssh, scp, sftp and rsync to '
+                    'ShellVibe.',
+        ),
+      ),
+    );
   }
 
   Future<void> _install(McpAgentApp app) async {
@@ -563,6 +615,56 @@ class _AgentAppsCardState extends State<_AgentAppsCard> {
                   ),
                 },
               ),
+              // Offered once the tools are there, since the hook points the
+              // agent at them; kept while it is on, so it can be turned off.
+              if (_hookPaths[app] case final hookPath?
+                  when _statuses[app] == McpAgentConfigStatus.installed ||
+                      (_hookStatuses[app] ?? McpAgentConfigStatus.missing) !=
+                          McpAgentConfigStatus.missing)
+                ListTile(
+                  key: Key('mcp_agent_hook_${app.name}'),
+                  contentPadding: const EdgeInsets.only(left: 32, right: 16),
+                  title: const Text(
+                    'Send ssh, scp, sftp and rsync to ShellVibe',
+                  ),
+                  subtitle: Text.rich(
+                    TextSpan(
+                      children: [
+                        const TextSpan(
+                          text:
+                              'A nudge for an agent that forgets the tools, '
+                              'not a lock. ',
+                        ),
+                        TextSpan(
+                          text: hookPath,
+                          style: shellvibeMono(
+                            context,
+                            size: 11.5,
+                            color: tokens.textMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                    style: TextStyle(color: tokens.textMuted),
+                  ),
+                  trailing: switch (_hookStatuses[app]) {
+                    null => null,
+                    McpAgentConfigStatus.unreadable => Text(
+                      'Edit by hand',
+                      style: TextStyle(color: tokens.warning),
+                    ),
+                    McpAgentConfigStatus.outdated => ShellVibeButton.secondary(
+                      key: Key('mcp_agent_hook_update_${app.name}'),
+                      label: 'Update',
+                      onPressed: () => _setHook(app, true),
+                    ),
+                    final status => ShadSwitch(
+                      key: Key('mcp_agent_hook_switch_${app.name}'),
+                      value: status == McpAgentConfigStatus.installed,
+                      onChanged: (on) => _setHook(app, on),
+                    ),
+                  },
+                ),
             ],
             const Divider(height: 1),
             Padding(

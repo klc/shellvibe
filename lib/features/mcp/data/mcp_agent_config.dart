@@ -131,7 +131,11 @@ Future<void> installMcpAgentServer(
   McpAgentApp app,
   String path,
   String command,
-) async {
+) => _rewrite(path, (text) => withMcpAgentServer(app, text, command));
+
+/// Writes [edit] of [path]'s content back to [path], atomically and without
+/// losing a concurrent change (see [installMcpAgentServer]).
+Future<void> _rewrite(String path, String Function(String? text) edit) async {
   var file = File(path);
   // Through a symlink (a dotfiles repo), not over it.
   if (await file.exists()) file = File(await file.resolveSymbolicLinks());
@@ -140,7 +144,7 @@ Future<void> installMcpAgentServer(
   try {
     for (var attempt = 0; ; attempt++) {
       final original = await _readIfExists(file.path);
-      final updated = withMcpAgentServer(app, original, command);
+      final updated = edit(original);
       if (original != null) await file.copy(temp.path);
       await temp.writeAsString(updated, flush: true);
       if (await _readIfExists(file.path) != original && attempt < 2) continue;
@@ -243,4 +247,173 @@ String _withCodexServer(String? text, String command) {
     return '${body.isEmpty ? '' : '$body\n\n'}$_codexHeader\n$entry\n';
   }
   return lines.join('\n');
+}
+
+// --- The ssh hook ---------------------------------------------------------
+//
+// `shellvibe-mcp hook <agent>` in an agent's own hook config sends that
+// agent's `ssh`, `scp`, `sftp` and remote `rsync` back to ShellVibe's tools
+// (tool/shellvibe_mcp_bridge/bin/remote_shell_hook.dart). A nudge for an
+// agent that forgets the tools, not a lock: `bash -c` walks past it.
+
+/// The name the bridge's `hook` subcommand knows [app] by, or null when [app]
+/// has no shell-command hook ShellVibe can add. Antigravity has one, but its
+/// contract is not documented anywhere ShellVibe could check it against.
+String? mcpHookAgentName(McpAgentApp app) => switch (app) {
+  McpAgentApp.claudeCode => 'claude-code',
+  McpAgentApp.codex => 'codex',
+  McpAgentApp.cursor => 'cursor',
+  McpAgentApp.claudeDesktop || McpAgentApp.antigravity => null,
+};
+
+/// The user-level file [app] reads its hooks from, or null.
+// ponytail: macOS and Linux only. On Windows each agent runs hooks through a
+// different shell (Git Bash, PowerShell, Codex's commandWindows) and the
+// quoting is untested; add a per-agent command form when it can be tried.
+String? mcpHookConfigPath(
+  McpAgentApp app, {
+  required Map<String, String> environment,
+  required bool isWindows,
+}) {
+  final home = environment['HOME'];
+  if (isWindows || home == null || home.isEmpty) return null;
+  String dir(String variable, String fallback) {
+    final value = environment[variable];
+    return value == null || value.isEmpty ? p.join(home, fallback) : value;
+  }
+
+  return switch (app) {
+    McpAgentApp.claudeCode => p.join(
+      dir('CLAUDE_CONFIG_DIR', '.claude'),
+      'settings.json',
+    ),
+    McpAgentApp.codex => p.join(dir('CODEX_HOME', '.codex'), 'hooks.json'),
+    McpAgentApp.cursor => p.join(home, '.cursor', 'hooks.json'),
+    McpAgentApp.claudeDesktop || McpAgentApp.antigravity => null,
+  };
+}
+
+/// The hook command line for [app]: the bridge at [bridge], bare when that is
+/// safe in any shell and quoted for `sh` otherwise.
+String mcpHookCommand(McpAgentApp app, String bridge) {
+  final path = RegExp(r'^[A-Za-z0-9_./-]+$').hasMatch(bridge)
+      ? bridge
+      : "'${bridge.replaceAll("'", r"'\''")}'";
+  return '$path hook ${mcpHookAgentName(app)}';
+}
+
+/// What [text], [app]'s hook config, says about ShellVibe's hook.
+McpAgentConfigStatus mcpHookStatus(
+  McpAgentApp app,
+  String? text,
+  String command,
+) {
+  try {
+    final ours = [
+      for (final hook in _hookObjects(app, _decodeJson(text)))
+        if (_isOurHook(hook)) hook['command'],
+    ];
+    if (ours.isEmpty) return McpAgentConfigStatus.missing;
+    return ours.every((c) => c == command)
+        ? McpAgentConfigStatus.installed
+        : McpAgentConfigStatus.outdated;
+  } on FormatException {
+    return McpAgentConfigStatus.unreadable;
+  }
+}
+
+/// [text] with ShellVibe's hook set to [command], or removed when [command]
+/// is null. Every other hook is kept, and only what removing ours left empty
+/// is pruned. Throws [FormatException] when [text] is not safe to edit.
+String withMcpHook(McpAgentApp app, String? text, String? command) {
+  final config = _decodeJson(text);
+  _hookObjects(app, config).length; // Validates the shape before editing.
+  final event = _hookEvent(app);
+  final hooks = (config['hooks'] ??= <String, dynamic>{}) as Map;
+  final entries = (hooks[event] ??= <dynamic>[]) as List;
+
+  if (app == McpAgentApp.cursor) {
+    entries.removeWhere(_isOurHook);
+  } else {
+    final emptied = Set<Object>.identity();
+    for (final group in entries) {
+      final list = group is Map ? group['hooks'] : null;
+      if (list is! List || !list.any(_isOurHook)) continue;
+      list.removeWhere(_isOurHook);
+      if (list.isEmpty) emptied.add(group as Object);
+    }
+    entries.removeWhere(emptied.contains);
+  }
+
+  if (command != null) {
+    if (app == McpAgentApp.cursor) {
+      config['version'] ??= 1;
+      // Cursor matches this against the whole command, so the bridge is not
+      // started for every `ls`.
+      entries.add({'command': command, 'matcher': r'\b(ssh|scp|sftp|rsync)\b'});
+    } else {
+      entries.add({
+        'matcher': 'Bash',
+        'hooks': [
+          {'type': 'command', 'command': command},
+        ],
+      });
+    }
+  }
+  if (entries.isEmpty) hooks.remove(event);
+  if (hooks.isEmpty) config.remove('hooks');
+  return '${const JsonEncoder.withIndent('  ').convert(config)}\n';
+}
+
+/// Reads [path] and reports [mcpHookStatus]; unreadable when it cannot be
+/// read at all.
+Future<McpAgentConfigStatus> readMcpHookStatus(
+  McpAgentApp app,
+  String path,
+  String command,
+) async {
+  try {
+    return mcpHookStatus(app, await _readIfExists(path), command);
+  } on Exception {
+    return McpAgentConfigStatus.unreadable;
+  }
+}
+
+/// Adds ShellVibe's hook to [app]'s config at [path] pointing at [command],
+/// or removes it when [command] is null, the way [installMcpAgentServer]
+/// writes.
+Future<void> setMcpHook(McpAgentApp app, String path, String? command) async {
+  if (command == null && !await File(path).exists()) return;
+  await _rewrite(path, (text) => withMcpHook(app, text, command));
+}
+
+String _hookEvent(McpAgentApp app) =>
+    app == McpAgentApp.cursor ? 'beforeShellExecution' : 'PreToolUse';
+
+bool _isOurHook(Object? hook) {
+  final command = hook is Map ? hook['command'] : null;
+  return command is String &&
+      command.contains('shellvibe-mcp') &&
+      command.contains(' hook ');
+}
+
+/// Every hook object under [app]'s shell-command event in [config]. Throws
+/// [FormatException] when the containers are not the shape the agent reads.
+List<Map<dynamic, dynamic>> _hookObjects(
+  McpAgentApp app,
+  Map<String, dynamic> config,
+) {
+  final hooks = config['hooks'];
+  if (hooks == null) return const [];
+  if (hooks is! Map) throw const FormatException('"hooks" is not an object.');
+  final entries = hooks[_hookEvent(app)];
+  if (entries == null) return const [];
+  if (entries is! List) {
+    throw FormatException('"${_hookEvent(app)}" is not a list.');
+  }
+  if (app == McpAgentApp.cursor) return [...entries.whereType<Map>()];
+  return [
+    for (final group in entries.whereType<Map>())
+      if (group['hooks'] is List) ...(group['hooks'] as List).whereType<Map>(),
+  ];
 }

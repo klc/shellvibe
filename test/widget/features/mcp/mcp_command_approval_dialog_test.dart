@@ -40,7 +40,11 @@ void main() {
     });
   });
 
-  Future<void> open(WidgetTester tester, String command) async {
+  Future<void> open(
+    WidgetTester tester,
+    String command, {
+    CommandApprovalRequest? request,
+  }) async {
     tester.view.physicalSize = const Size(1000, 1600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -53,7 +57,7 @@ void main() {
         child: MaterialApp(
           home: Scaffold(
             body: McpCommandApprovalDialog(
-              request: _request(command),
+              request: request ?? _request(command),
               expiresAt: DateTime.now().toUtc().add(const Duration(minutes: 2)),
             ),
           ),
@@ -98,5 +102,49 @@ void main() {
     expect(tester.widget<ShellVibeButton>(approve).onPressed, isNull);
     await tester.pump(mcpApprovalArmDelay);
     expect(tester.widget<ShellVibeButton>(approve).onPressed, isNotNull);
+  });
+
+  testWidgets('a file transfer shows its facts, not a command to run', (
+    tester,
+  ) async {
+    await open(
+      tester,
+      '',
+      request: const CommandApprovalRequest(
+        clientId: 'c1',
+        clientName: 'Claude Code',
+        hostId: 'h1',
+        hostLabel: 'web-1',
+        command: 'upload_file /tmp/a.tar → /srv/a.tar',
+        cwd: '/srv/app',
+        category: RiskCategory.destructiveFs,
+        canRemember: false,
+        transfer: FileTransferApproval(
+          upload: true,
+          localPath: '/tmp/a.tar',
+          remotePath: '/srv/a\u202Etar',
+          bytes: 1234,
+          replacesExisting: true,
+        ),
+      ),
+    );
+
+    expect(find.text('Approve file transfer?'), findsOneWidget);
+    expect(find.textContaining('cwd:'), findsNothing);
+    final shown = tester
+        .widget<SelectableText>(find.byKey(const Key('mcp_command_text')))
+        .data!;
+    expect(shown, contains('Upload: this computer → web-1'));
+    expect(shown, contains('From: /tmp/a.tar'));
+    expect(shown, contains('To:   /srv/a⟨U+202E⟩tar'));
+    expect(shown, contains('Size: 1234 bytes'));
+    expect(
+      find.byKey(const Key('mcp_transfer_replace_warning')),
+      findsOneWidget,
+    );
+    expect(
+      find.text('File transfers are asked about every time.'),
+      findsOneWidget,
+    );
   });
 }

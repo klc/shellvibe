@@ -76,5 +76,5 @@ docs/*
 # claim nobody can read is not one anybody has to believe.
 !docs/SYNC_CONTRACT_V1.md
 
-# graphify skill cache: local tooling output, carries absolute local paths.
-graphify-out/
+# CodeGraph local index
+.codegraph/

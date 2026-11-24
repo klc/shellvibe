@@ -180,6 +180,11 @@ class CommandApprovalRequest {
   /// see the rule exists.
   final bool canRemember;
 
+  /// Set when this asks about `upload_file` / `download_file` rather than a
+  /// shell command. The dialog then shows these facts instead of a command
+  /// that will run, and [command] is only a one-line summary for lists.
+  final FileTransferApproval? transfer;
+
   const CommandApprovalRequest({
     required this.clientId,
     required this.clientName,
@@ -189,6 +194,32 @@ class CommandApprovalRequest {
     required this.cwd,
     required this.category,
     required this.canRemember,
+    this.transfer,
+  });
+}
+
+/// What the user needs to judge one file transfer: which way, both paths
+/// exactly as they will be used, how big, and whether a file is replaced.
+class FileTransferApproval {
+  final bool upload;
+  final String localPath;
+
+  /// Absolute and resolved through the server's realpath.
+  final String remotePath;
+
+  /// Null when the server does not report a size.
+  final int? bytes;
+
+  /// Whether the destination (remote for an upload, local for a download)
+  /// exists and will be replaced.
+  final bool replacesExisting;
+
+  const FileTransferApproval({
+    required this.upload,
+    required this.localPath,
+    required this.remotePath,
+    required this.bytes,
+    required this.replacesExisting,
   });
 }
 
@@ -250,6 +281,9 @@ class RunbookApprovalRequest {
   final Map<String, String> variables;
   final List<RunbookSecretField> secretFields;
 
+  /// A `run_snippet` request: the dialog names it a snippet.
+  final bool isSnippet;
+
   const RunbookApprovalRequest({
     required this.clientId,
     required this.clientName,
@@ -259,6 +293,7 @@ class RunbookApprovalRequest {
     required this.strategyLabel,
     this.variables = const {},
     this.secretFields = const [],
+    this.isSnippet = false,
   });
 }
 
@@ -314,4 +349,55 @@ class HostAccessCandidate {
     required this.suggestedMode,
     required this.maxMode,
   });
+}
+
+/// An agent's `add_host`: the address it proposed, for the user to save or
+/// refuse. Credentials never come from the agent: the user picks one of
+/// [identities] in the window, or none.
+class HostAddRequest {
+  final String clientId;
+  final String clientName;
+  final String label;
+  final String hostname;
+  final int port;
+  final String? username;
+
+  /// The workspace's identities, for the window's picker. Never sent to the
+  /// agent.
+  final List<HostAddIdentity> identities;
+
+  const HostAddRequest({
+    required this.clientId,
+    required this.clientName,
+    required this.label,
+    required this.hostname,
+    required this.port,
+    this.username,
+    this.identities = const [],
+  });
+}
+
+/// One identity the user may attach to the new host.
+class HostAddIdentity {
+  final String id;
+  final String title;
+  final String username;
+
+  const HostAddIdentity({
+    required this.id,
+    required this.title,
+    required this.username,
+  });
+}
+
+/// The user's answer to a [HostAddRequest].
+class HostAddDecision {
+  final bool approved;
+
+  /// The identity the user attached, or null for none.
+  final String? identityId;
+
+  const HostAddDecision({required this.approved, this.identityId});
+
+  static const denied = HostAddDecision(approved: false);
 }

@@ -129,6 +129,52 @@ class PolicyEngine {
   ///   credentials unasked from then on.
   bool canRemember(RiskCategory category) => !_alwaysAsks(category);
 
+  /// Decides one `upload_file` / `download_file` call from the facts the
+  /// tool established, not from a made-up shell string: the classifier is
+  /// never run on a transfer.
+  ///
+  /// A credential path on either end is [RiskCategory.secretRead]; an upload
+  /// over an existing remote file is [RiskCategory.destructiveFs]; anything
+  /// else is [RiskCategory.fileTransfer]. Each goes through [_matrixAction],
+  /// with one exception: a plain download asks in readonly instead of being
+  /// denied — and is not simply allowed there either, because unlike `cat`
+  /// through `run_command` the bytes never pass through `OutputRedactor`.
+  ///
+  /// User policy rules (`McpPolicyRules`) are command-text patterns, so they
+  /// are not applied here, and no remembered approval answers a transfer:
+  /// the tool asks with `canRemember: false` every time.
+  PolicyDecision evaluateTransfer({
+    required bool upload,
+    required bool replacesRemoteFile,
+    required bool touchesCredentialPath,
+    required McpAccessMode mode,
+  }) {
+    final category = touchesCredentialPath
+        ? RiskCategory.secretRead
+        : upload && replacesRemoteFile
+        ? RiskCategory.destructiveFs
+        : RiskCategory.fileTransfer;
+    final action =
+        !upload &&
+            category == RiskCategory.fileTransfer &&
+            mode == McpAccessMode.readonly
+        ? PolicyAction.confirm
+        : _matrixAction(category, mode);
+    return PolicyDecision(
+      action: action,
+      category: category,
+      message: switch (action) {
+        PolicyAction.deny =>
+          'This file transfer was refused in ${mode.name} mode (category: '
+              '${category.wireName}).',
+        PolicyAction.confirm =>
+          'This file transfer needs user confirmation in ${mode.name} mode '
+              '(category: ${category.wireName}).',
+        PolicyAction.allow || PolicyAction.rejectInteractive => null,
+      },
+    );
+  }
+
   /// Categories a human is asked about on every call.
   static bool _alwaysAsks(RiskCategory category) =>
       category == RiskCategory.opaqueExec ||
@@ -213,6 +259,8 @@ class PolicyEngine {
   /// human's call even in autonomous mode. Unlike `secretRead` they can still
   /// be remembered ([canRemember]). `interactive` is handled in step 2 and
   /// never reaches this switch; the case exists only to keep it exhaustive.
+  /// `fileTransfer` never comes out of the classifier either; it reaches this
+  /// matrix only through [evaluateTransfer], on the destructive row.
   PolicyAction _matrixAction(RiskCategory category, McpAccessMode mode) {
     switch (category) {
       case RiskCategory.readonlySafe:
@@ -241,6 +289,7 @@ class PolicyEngine {
       case RiskCategory.database:
       case RiskCategory.vcs:
       case RiskCategory.container:
+      case RiskCategory.fileTransfer:
         return switch (mode) {
           McpAccessMode.readonly => PolicyAction.deny,
           McpAccessMode.guarded => PolicyAction.confirm,

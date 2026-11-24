@@ -57,7 +57,13 @@ dependencies:
   # 6.4.0 stops remote output from resizing the terminal, reading the
   # clipboard over OSC 52 or echoing the title into the input, and makes
   # readOnly views block hardware keys and paste too.
-  xterm3: ^6.5.0
+  # Test build: 6.6.0-beta.2 (the rewritten write path and painter) is not on
+  # pub.dev, only tagged `v6.6.0-beta.2` in xterm3, so this pins that tag's
+  # commit. Back to `^6.6.0` once the release ships.
+  xterm3:
+    git:
+      url: https://github.com/klc/xterm3.git
+      ref: 9e0770851b54ef30d9518e4ee1f694e75fee96e7
   # Back on the pub.dev release: every fix we carried on our fork landed
   # upstream by 4.0.1 (the transport, KEX, SFTP, web and HTTP work in #229,
   # #230 and #231), so there is nothing left for a pin to hold.
@@ -71,12 +77,19 @@ dependencies:
   # negotiate rather than connecting weakly, and has to be re-enabled through
   # `SSHAlgorithms` if we ever need to talk to one.
   dartssh2: ^4.0.1
-  # Queues input natively instead of blocking in write(): flutter_pty 0.4.2's
-  # blocking write deadlocked the ackRead reader on a large paste. 2.x drops
-  # ackRead, so moving to it is its own migration. 3.0.0 also fails the iOS
-  # build: its build hook compiles pty_unix_spawn.c, which includes
-  # <libproc.h>, a header the iOS SDK does not ship.
-  flutter_pty2: ^1.0.2
+  # 3.x is the session API (Pty.spawn, async input, automatic output credits)
+  # built by a Dart build hook instead of platform plugin folders.
+  # 3.1.0-beta.1 is the first release whose hook builds for iOS (3.0.0
+  # included <libproc.h>, which the iOS SDK does not ship), and it delivers
+  # Unix output in chunks of up to 64 KiB instead of 16 KiB. 3.1.0-beta.2 adds
+  # the bug-hunt fixes (port leak and use-after-free, Windows stdio and batch
+  # quoting, Android close_range, PTY close-on-exec race and others). The beta
+  # is tagged only on our fork, not on pub.dev, so this pins the tag's commit;
+  # move back to a pub.dev release once 3.1.0 ships there.
+  flutter_pty2:
+    git:
+      url: https://github.com/klc/flutter_pty2.git
+      ref: b236b93d8d948ea165add1c129aefbb0b3703040
   # Mosh UDP transport. Pinned to our fork by commit, not to the pub.dev
   # release: the package is at 0.0.x, so protocol fixes have to be able to land
   # here without waiting on upstream. Sync with upstream before bumping the ref.

@@ -61,6 +61,7 @@ String riskCategoryLabel(RiskCategory category) => switch (category) {
   RiskCategory.opaqueExec => 'Opaque execution (content unreadable)',
   RiskCategory.interactive => 'Interactive command',
   RiskCategory.secretRead => 'Reads credential material',
+  RiskCategory.fileTransfer => 'File transfer',
   RiskCategory.unclassified => 'Unclassified (treated as risky)',
 };
 
@@ -73,6 +74,9 @@ String riskCategoryLabel(RiskCategory category) => switch (category) {
 /// from [CommandApprovalRequest.category] well enough to show the user which
 /// rule fired, rather than just that one did.
 String _cannotRememberReason(CommandApprovalRequest request) {
+  if (request.transfer != null) {
+    return 'File transfers are asked about every time.';
+  }
   if (request.category == RiskCategory.opaqueExec) {
     return "This command cannot be remembered: its effect can't be read "
         'from the command text.';
@@ -86,7 +90,8 @@ String _cannotRememberReason(CommandApprovalRequest request) {
 
 /// Single-command approval prompt, shown for every `confirm` policy
 /// decision. See docs/mcp_plan.md "Erişim onayı akışı" and "Onay hatırlama
-/// semantiği".
+/// semantiği". A file transfer ([CommandApprovalRequest.transfer]) is asked
+/// through the same prompt, showing the transfer instead of a command.
 ///
 /// Every way of leaving this dialog other than pressing "Approve" — "Deny",
 /// the barrier (blocked), Escape, a back gesture, or the countdown reaching
@@ -178,6 +183,7 @@ class _McpCommandApprovalDialogState extends State<McpCommandApprovalDialog> {
     final tokens = ShellVibeTokens.resolve(context);
     final request = widget.request;
     final bodyStyle = Theme.of(context).textTheme.bodySmall;
+    final transfer = request.transfer;
 
     return PopScope(
       canPop: false,
@@ -187,7 +193,9 @@ class _McpCommandApprovalDialogState extends State<McpCommandApprovalDialog> {
       },
       child: ShadDialog(
         constraints: const BoxConstraints(maxWidth: 520),
-        title: const Text('Approve command?'),
+        title: Text(
+          transfer == null ? 'Approve command?' : 'Approve file transfer?',
+        ),
         description: Padding(
           padding: const EdgeInsets.only(top: 4),
           child: Text(
@@ -231,15 +239,17 @@ class _McpCommandApprovalDialogState extends State<McpCommandApprovalDialog> {
                   color: tokens.textPrimary,
                 ),
               ),
-              const SizedBox(height: 4),
-              Text(
-                'cwd: ${request.cwd}',
-                style: shellvibeMono(
-                  context,
-                  size: 12,
-                  color: tokens.textMuted,
+              if (transfer == null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  'cwd: ${request.cwd}',
+                  style: shellvibeMono(
+                    context,
+                    size: 12,
+                    color: tokens.textMuted,
+                  ),
                 ),
-              ),
+              ],
               const SizedBox(height: 4),
               Row(
                 children: [
@@ -277,7 +287,9 @@ class _McpCommandApprovalDialogState extends State<McpCommandApprovalDialog> {
                     child: SingleChildScrollView(
                       controller: _commandScroll,
                       child: SelectableText(
-                        visibleControlChars(request.command),
+                        transfer == null
+                            ? visibleControlChars(request.command)
+                            : _transferText(transfer, request.hostLabel),
                         key: const Key('mcp_command_text'),
                         style: shellvibeMono(
                           context,
@@ -289,7 +301,17 @@ class _McpCommandApprovalDialogState extends State<McpCommandApprovalDialog> {
                   ),
                 ),
               ),
-              if (request.command.contains('\n')) ...[
+              if (transfer != null && transfer.replacesExisting) ...[
+                const SizedBox(height: 6),
+                Text(
+                  transfer.upload
+                      ? 'Replaces the existing file on ${request.hostLabel}'
+                      : 'Replaces the existing local file',
+                  key: const Key('mcp_transfer_replace_warning'),
+                  style: bodyStyle?.copyWith(color: tokens.warning),
+                ),
+              ],
+              if (transfer == null && request.command.contains('\n')) ...[
                 const SizedBox(height: 6),
                 Text(
                   '${'\n'.allMatches(request.command).length + 1} lines — '
@@ -382,6 +404,22 @@ class _McpCommandApprovalDialogState extends State<McpCommandApprovalDialog> {
         ),
       ),
     );
+  }
+
+  /// Every fact the user approves a transfer on, one per line. Paths go
+  /// through [visibleControlChars] like a command does: the remote one comes
+  /// from the server's realpath, not from anything this app checked.
+  String _transferText(FileTransferApproval transfer, String hostLabel) {
+    final local = visibleControlChars(transfer.localPath);
+    final remote = visibleControlChars(transfer.remotePath);
+    return [
+      transfer.upload
+          ? 'Upload: this computer → $hostLabel'
+          : 'Download: $hostLabel → this computer',
+      'From: ${transfer.upload ? local : remote}',
+      'To:   ${transfer.upload ? remote : local}',
+      'Size: ${transfer.bytes == null ? 'unknown' : '${transfer.bytes} bytes'}',
+    ].join('\n');
   }
 
   String _scopeLabel(ApprovalScope scope) => switch (scope) {

@@ -10,6 +10,16 @@ endpoint file and HTTP server it talks to.
 This package has no Flutter dependency by design, so it is not built with
 `flutter build`. It is compiled standalone with `dart compile exe`.
 
+## `hook` subcommand
+
+`shellvibe-mcp hook <claude-code|codex|cursor>` is an agent's pre-shell-command
+hook, added from Settings → AI access. It reads the agent's hook JSON on stdin
+and denies `ssh`, `scp`, `sftp` and remote `rsync` with a message pointing the
+agent at ShellVibe's MCP tools; anything else, including input it cannot read,
+runs. It always exits 0, so a broken hook never stops an agent's commands. The
+logic is in `bin/remote_shell_hook.dart`, tested from
+`test/unit/features/mcp/remote_shell_hook_test.dart`.
+
 ## Building
 
 Run from the repo root, once per target platform:

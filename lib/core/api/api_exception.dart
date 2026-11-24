@@ -30,6 +30,8 @@ abstract final class ApiErrorCode {
   static const String syncCursorExpired = 'sync_cursor_expired';
   static const String invalidCredentials = 'invalid_credentials';
   static const String accountOwnsSharedTeam = 'account_owns_shared_team';
+  static const String signInDenied = 'sign_in_denied';
+  static const String signInExpired = 'sign_in_expired';
 
   /// Substituted when a response carries no usable `code`, so that callers
   /// always have a non-empty string to switch on.

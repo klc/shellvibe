@@ -29,7 +29,8 @@ enum McpErrorCode {
   /// The host exists but is hidden from MCP.
   hostNotVisible,
 
-  /// No runbook with that id in this client's workspace.
+  /// No runbook (or, for `run_snippet`, snippet) with that id in this
+  /// client's workspace.
   runbookNotFound,
 
   /// No run with that id that this client started.
@@ -40,6 +41,10 @@ enum McpErrorCode {
 
   /// The variables passed to a runbook are not acceptable.
   invalidVariables,
+
+  /// A file transfer's destination already exists and `overwrite` was not
+  /// set; retry with `overwrite: true` only if replacing it is intended.
+  destinationExists,
 
   /// Anything not covered above.
   internal;
@@ -57,6 +62,7 @@ enum McpErrorCode {
     McpErrorCode.runNotFound => 'RUN_NOT_FOUND',
     McpErrorCode.runbookBusy => 'RUNBOOK_BUSY',
     McpErrorCode.invalidVariables => 'INVALID_VARIABLES',
+    McpErrorCode.destinationExists => 'DESTINATION_EXISTS',
     McpErrorCode.internal => 'INTERNAL_ERROR',
   };
 }

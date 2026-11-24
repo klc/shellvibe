@@ -6,6 +6,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
+import 'package:shellvibe/core/api/api_exception.dart';
+import 'package:shellvibe/features/account/data/account_api.dart';
 import 'package:shellvibe/features/account/domain/account_session.dart';
 import 'package:shellvibe/features/account/presentation/notifiers/account_notifier.dart';
 import 'package:shellvibe/features/account/presentation/widgets/account_settings_section.dart';
@@ -47,7 +49,7 @@ void main() {
     testWidgets('offers sign-in without demanding it', (tester) async {
       await pumpSection(tester);
 
-      expect(find.byKey(const Key('account_submit_button')), findsOneWidget);
+      expect(find.byKey(const Key('account_sign_in_button')), findsOneWidget);
       expect(
         find.textContaining('only needed for cloud backup'),
         findsOneWidget,
@@ -55,33 +57,11 @@ void main() {
             'The copy must not read as a requirement; the app works signed '
             'out.',
       );
-    });
-
-    testWidgets('switches between sign-in and create-account', (tester) async {
-      await pumpSection(tester);
-
-      expect(find.text('Sign In'), findsOneWidget);
-      expect(find.byKey(const Key('account_field_name')), findsNothing);
-
-      await tester.tap(find.byKey(const Key('account_toggle_mode_button')));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Create Account'), findsOneWidget);
       expect(
-        find.byKey(const Key('account_field_name')),
-        findsOneWidget,
-        reason: 'Registration needs a name; sign-in does not.',
+        find.byType(EditableText),
+        findsNothing,
+        reason: 'Email and password are typed in the browser, not here.',
       );
-    });
-
-    testWidgets('prefills the last email that signed in here', (tester) async {
-      FlutterSecureStorage.setMockInitialValues({
-        SecureStorageKeys.accountEmail: 'returning@shellvibe.dev',
-      });
-
-      await pumpSection(tester);
-
-      expect(find.text('returning@shellvibe.dev'), findsOneWidget);
     });
 
     testWidgets('does not show plan or device controls', (tester) async {
@@ -90,6 +70,102 @@ void main() {
       expect(find.byKey(const Key('account_devices_button')), findsNothing);
       expect(find.byKey(const Key('account_sign_out_button')), findsNothing);
       expect(find.textContaining('plan'), findsNothing);
+    });
+  });
+
+  group('browser sign-in', () {
+    Future<_BrowserSignInNotifier> pumpWith(
+      WidgetTester tester,
+      _BrowserSignInNotifier notifier,
+    ) async {
+      tester.view.physicalSize = const Size(1080, 1920);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            accountProvider.overrideWith(() => notifier),
+            entitlementProvider.overrideWith(
+              () => _StubEntitlementNotifier(
+                const EntitlementState(
+                  entitlement: Entitlement.free,
+                  source: EntitlementSource.server,
+                ),
+              ),
+            ),
+          ],
+          child: ShadTheme(
+            data: ShadThemeData(
+              colorScheme: const ShadSlateColorScheme.light(),
+              brightness: Brightness.light,
+            ),
+            child: const MaterialApp(
+              home: Scaffold(
+                body: SingleChildScrollView(child: AccountSettingsSection()),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('account_sign_in_button')));
+      await tester.pump();
+      await tester.pump();
+      return notifier;
+    }
+
+    testWidgets('shows the code, then signs in once the browser approves', (
+      tester,
+    ) async {
+      final notifier = await pumpWith(
+        tester,
+        _BrowserSignInNotifier(approveOnPoll: 2),
+      );
+
+      expect(find.text('ABCD-EFGH'), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 2));
+      expect(notifier.polls, 1);
+      expect(find.text('ABCD-EFGH'), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+      expect(notifier.polls, 2);
+      expect(find.byKey(const Key('account_sign_out_button')), findsOneWidget);
+    });
+
+    testWidgets('a denial in the browser is said, and sign-in offered again', (
+      tester,
+    ) async {
+      await pumpWith(
+        tester,
+        _BrowserSignInNotifier(
+          error: ApiException(
+            statusCode: 403,
+            code: ApiErrorCode.signInDenied,
+            message: 'denied',
+          ),
+        ),
+      );
+
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('denied in the browser'), findsOneWidget);
+      expect(find.byKey(const Key('account_sign_in_button')), findsOneWidget);
+    });
+
+    testWidgets('cancelling stops polling', (tester) async {
+      final notifier = await pumpWith(tester, _BrowserSignInNotifier());
+
+      await tester.tap(find.byKey(const Key('account_sign_in_cancel_button')));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 10));
+
+      expect(notifier.polls, 0);
+      expect(find.byKey(const Key('account_sign_in_button')), findsOneWidget);
+      expect(find.text('ABCD-EFGH'), findsNothing);
     });
   });
 
@@ -125,7 +201,7 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
-        await tester.tap(find.byKey(const Key('account_submit_button')));
+        await tester.tap(find.byKey(const Key('account_sign_in_button')));
         await tester.pump();
 
         await tester.pumpWidget(const MaterialApp(home: SizedBox()));
@@ -144,10 +220,7 @@ void main() {
           overrides: [
             accountProvider.overrideWith(
               () => _StubAccountNotifier(
-                const AccountState(
-                  status: AccountStatus.sessionExpired,
-                  lastEmail: 'user@shellvibe.dev',
-                ),
+                const AccountState(status: AccountStatus.sessionExpired),
               ),
             ),
           ],
@@ -170,9 +243,10 @@ void main() {
         find.textContaining('signed out by the server'),
         findsOneWidget,
         reason:
-            'An unexplained empty form reads as the app losing the account.',
+            'An unexplained sign-in button reads as the app losing the '
+            'account.',
       );
-      expect(find.byKey(const Key('account_submit_button')), findsOneWidget);
+      expect(find.byKey(const Key('account_sign_in_button')), findsOneWidget);
     });
   });
 
@@ -427,11 +501,6 @@ void main() {
         findsOneWidget,
       );
       expect(find.byKey(const Key('account_delete_dialog')), findsOneWidget);
-      expect(
-        find.byKey(const Key('account_delete_web_panel')),
-        findsNothing,
-        reason: 'The API answered; the web panel would refuse the same way.',
-      );
       expect(entitlement.cacheCleared, isFalse);
 
       await confirmWith(tester, 'right');
@@ -439,7 +508,7 @@ void main() {
       expect(transport.lastRequest!.method, 'DELETE');
       expect(transport.lastBody, {'password': 'right'});
       expect(find.byKey(const Key('account_delete_dialog')), findsNothing);
-      expect(find.byKey(const Key('account_submit_button')), findsOneWidget);
+      expect(find.byKey(const Key('account_sign_in_button')), findsOneWidget);
       expect(
         entitlement.cacheCleared,
         isTrue,
@@ -483,7 +552,15 @@ void main() {
       expect(find.textContaining('Try again in 30 seconds'), findsOneWidget);
     });
 
-    testWidgets('offers the web panel only when the API cannot be reached', (
+    testWidgets('offers the web panel up front, for accounts without a '
+        'password', (tester) async {
+      await openDeleteDialog(tester);
+
+      expect(find.byKey(const Key('account_delete_web_panel')), findsOneWidget);
+      expect(find.textContaining('Google or GitHub'), findsOneWidget);
+    });
+
+    testWidgets('offers the web panel when the API cannot be reached', (
       tester,
     ) async {
       await openDeleteDialog(tester);
@@ -506,7 +583,6 @@ const _signedInState = AccountState(
     email: 'user@shellvibe.dev',
     name: 'User',
   ),
-  lastEmail: 'user@shellvibe.dev',
 );
 
 final _teamEntitlement = Entitlement.fromJson(const {
@@ -536,8 +612,42 @@ final class _HeldSignInNotifier extends AccountNotifier {
   Future<AccountState> build() async => const AccountState.signedOut();
 
   @override
-  Future<void> signIn({required String email, required String password}) =>
-      gate.future;
+  Future<BrowserSignIn> startBrowserSignIn() async {
+    await gate.future;
+    return _request;
+  }
+}
+
+const _request = BrowserSignIn(
+  id: '01REQUESTULID0000000000000',
+  secret: 'secret',
+  userCode: 'ABCD-EFGH',
+  verificationUrl: 'https://shellvibe.dev/panel/app-sign-in/01REQUEST',
+);
+
+/// Hands out [_request] and answers polls without a server: approved on poll
+/// number [approveOnPoll], or [error] on every poll.
+final class _BrowserSignInNotifier extends AccountNotifier {
+  _BrowserSignInNotifier({this.approveOnPoll, this.error});
+
+  final int? approveOnPoll;
+  final ApiException? error;
+  int polls = 0;
+
+  @override
+  Future<AccountState> build() async => const AccountState.signedOut();
+
+  @override
+  Future<BrowserSignIn> startBrowserSignIn() async => _request;
+
+  @override
+  Future<bool> pollBrowserSignIn(BrowserSignIn request) async {
+    polls++;
+    if (error case final error?) throw error;
+    if (polls != approveOnPoll) return false;
+    state = const AsyncValue.data(_signedInState);
+    return true;
+  }
 }
 
 /// Publishes a fixed [EntitlementState].

@@ -25,6 +25,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import 'remote_shell_hook.dart';
+
 const int _parseErrorCode = -32700;
 const int _internalErrorCode = -32603;
 
@@ -50,6 +52,10 @@ final String _connectionId = () {
 
 Future<void> main(List<String> arguments) async {
   final endpointPath = _resolveEndpointPath(arguments);
+  if (arguments.isNotEmpty && arguments.first == 'hook') {
+    await _runHook(arguments.length > 1 ? arguments[1] : '', endpointPath);
+    return;
+  }
   final orphanWatch = _watchForOrphaning();
 
   // Not awaited: a client does send the next request while one is still
@@ -66,6 +72,29 @@ Future<void> main(List<String> arguments) async {
   }
 
   orphanWatch?.cancel();
+}
+
+/// `shellvibe-mcp hook <agent>`: an agent's shell-command hook, run once per
+/// command with the agent's JSON on stdin (see remote_shell_hook.dart). Exits
+/// 0 whatever happens: a hook that fails must not stop every command.
+Future<void> _runHook(String agent, String endpointPath) async {
+  if (!hookAgents.contains(agent)) {
+    stderr.writeln(
+      'shellvibe-mcp: unknown hook agent "$agent", expected one of '
+      '${hookAgents.join(', ')}.',
+    );
+    return;
+  }
+  final input = await stdin
+      .transform(const Utf8Decoder(allowMalformed: true))
+      .join();
+  final output = await hookOutput(
+    agent,
+    input,
+    appRunning: () async => await _loadEndpoint(endpointPath) != null,
+  );
+  if (output != null) stdout.writeln(output);
+  await stdout.flush();
 }
 
 /// Exits once this process has been orphaned, i.e. the MCP client that

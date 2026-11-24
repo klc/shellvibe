@@ -15,6 +15,8 @@ import '../../../snippets/presentation/notifiers/runbooks_notifier.dart';
 import '../../../snippets/presentation/notifiers/snippets_notifier.dart';
 import 'command_tools.dart';
 import 'discovery_tools.dart';
+import 'file_transfer_tools.dart';
+import 'host_tools.dart';
 import 'mcp_tool_handler.dart';
 import 'runbook_tools.dart';
 import 'session_tools.dart';
@@ -102,6 +104,13 @@ McpToolRegistry mcpToolRegistry(Ref ref) {
       approvalCoordinator: approvalCoordinator,
       auditRepository: auditRepository,
     ),
+    AddHostTool(
+      hostsRepository: hostsRepository,
+      identitiesDao: ref.watch(appDatabaseProvider).identitiesDao,
+      auditRepository: auditRepository,
+      approvalCoordinator: approvalCoordinator,
+      onHostAdded: () => ref.invalidate(hostsProvider),
+    ),
     OpenSessionTool(
       sessionPool: sessionPool,
       hostsRepository: hostsRepository,
@@ -125,6 +134,22 @@ McpToolRegistry mcpToolRegistry(Ref ref) {
       approvalCoordinator: approvalCoordinator,
       redactor: redactor,
     ),
+    FileTransferTool.upload(
+      sessionPool: sessionPool,
+      hostsDao: hostsDao,
+      grantRepository: grantRepository,
+      auditRepository: auditRepository,
+      policyEngine: policyEngine,
+      approvalCoordinator: approvalCoordinator,
+    ),
+    FileTransferTool.download(
+      sessionPool: sessionPool,
+      hostsDao: hostsDao,
+      grantRepository: grantRepository,
+      auditRepository: auditRepository,
+      policyEngine: policyEngine,
+      approvalCoordinator: approvalCoordinator,
+    ),
     ListRunbooksTool(
       runbooksRepository: runbooksRepository,
       snippetsRepository: snippetsRepository,
@@ -132,6 +157,22 @@ McpToolRegistry mcpToolRegistry(Ref ref) {
       redactor: redactor,
     ),
     RunRunbookTool(
+      runbooksRepository: runbooksRepository,
+      snippetsRepository: snippetsRepository,
+      hostsRepository: hostsRepository,
+      hostsDao: hostsDao,
+      grantRepository: grantRepository,
+      auditRepository: auditRepository,
+      approvalCoordinator: approvalCoordinator,
+      gateway: runGateway,
+      tracker: runTracker,
+      redactor: redactor,
+    ),
+    ListSnippetsTool(
+      snippetsRepository: snippetsRepository,
+      redactor: redactor,
+    ),
+    RunRunbookTool.snippet(
       runbooksRepository: runbooksRepository,
       snippetsRepository: snippetsRepository,
       hostsRepository: hostsRepository,

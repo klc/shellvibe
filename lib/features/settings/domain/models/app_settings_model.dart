@@ -51,7 +51,7 @@ extension MoshPredictionModeLabel on MoshPredictionMode {
 
 /// The terminal font size range: the Settings slider's ends, and where the
 /// zoom shortcuts stop.
-const double kTerminalFontSizeMin = 10;
+const double kTerminalFontSizeMin = 6;
 const double kTerminalFontSizeMax = 24;
 
 /// The Settings line height slider's ends.

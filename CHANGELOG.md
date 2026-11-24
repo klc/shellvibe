@@ -7,6 +7,34 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- AI Access: agents can copy one file to or from a server with the new
+  `upload_file` and `download_file` tools instead of `scp`. Transfers follow
+  the host's access level, ask before replacing a file or touching
+  credentials, never leave a partial file, and land in the audit log with
+  their size and SHA-256.
+- AI Access: agents can list your snippets and run one on several hosts with
+  the new `list_snippets` and `run_snippet` tools. A snippet run asks every
+  time, like a runbook, and shows in the run view and run history.
+- AI Access: Settings → AI access can add a hook to Claude Code, Codex and
+  Cursor that turns their `ssh`, `scp`, `sftp` and remote `rsync` commands
+  back to ShellVibe's tools, for an agent that forgets to use them. Off by
+  default, on macOS and Linux. It is a nudge, not a lock: an agent can still
+  reach a shell another way. Codex runs it once you trust it in `/hooks`.
+- AI Access: agents can propose a new server with the new `add_host` tool.
+  You see the label and address it gives, attach one of your identities (an
+  agent never handles credentials) and add it or deny. The new host is not
+  granted to the agent: it still asks for access as usual. An address that is
+  already saved is not added again; the agent is told which host it is.
+
+### Changed
+
+- Local terminals run on `flutter_pty2` 3.1.0-beta.1: output arrives in larger
+  chunks, the native library is built by a Dart build hook instead of a
+  CocoaPods or CMake plugin, and closing a tab still hangs the shell up before
+  it is stopped.
+
 ## [1.13.0] - 2026-11-13
 
 ### Added

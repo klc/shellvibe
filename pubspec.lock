@@ -508,11 +508,12 @@ packages:
   flutter_pty2:
     dependency: "direct main"
     description:
-      name: flutter_pty2
-      sha256: "61e0f65d3d361b8bb265c166d552650b4053110a3949d6f42ad861db877ad892"
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.0.2"
+      path: "."
+      ref: b236b93d8d948ea165add1c129aefbb0b3703040
+      resolved-ref: b236b93d8d948ea165add1c129aefbb0b3703040
+      url: "https://github.com/klc/flutter_pty2.git"
+    source: git
+    version: "3.1.0-beta.2"
   flutter_riverpod:
     dependency: "direct main"
     description:
@@ -1685,11 +1686,12 @@ packages:
   xterm3:
     dependency: "direct main"
     description:
-      name: xterm3
-      sha256: e12fffa281acaa024b73ba4262363b0b166f40b5d74e680174f8b8f64f99ec76
-      url: "https://pub.dev"
-    source: hosted
-    version: "6.5.0"
+      path: "."
+      ref: "9e0770851b54ef30d9518e4ee1f694e75fee96e7"
+      resolved-ref: "9e0770851b54ef30d9518e4ee1f694e75fee96e7"
+      url: "https://github.com/klc/xterm3.git"
+    source: git
+    version: "6.6.0-beta.2"
   yaml:
     dependency: transitive
     description:

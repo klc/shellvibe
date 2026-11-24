@@ -1,9 +1,10 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:isolate';
 import 'dart:typed_data';
 
-import 'package:flutter_pty2/flutter_pty2.dart';
+// Prefixed: the package exports its own `PtySession`, which this file's
+// interface would otherwise shadow.
+import 'package:flutter_pty2/flutter_pty2.dart' as pty2;
 
 /// What a terminal bridge needs from a local shell process.
 ///
@@ -25,9 +26,9 @@ abstract class PtySession {
   /// Reports that a batch has been parsed and the next may be sent.
   ///
   /// This is the brake. Until it is called for a batch, the reader eventually
-  /// stops acknowledging the PTY, the kernel's buffer fills, and the process
-  /// writing into it blocks — which is the only thing that actually slows a
-  /// producer down.
+  /// stops taking the PTY's output, the PTY stops reading, the kernel's buffer
+  /// fills, and the process writing into it blocks — which is the only thing
+  /// that actually slows a producer down.
   void acknowledge();
 
   /// Stops reading and releases the process.
@@ -66,13 +67,11 @@ class PtySessionConfig {
   /// comes to draw, without the reader posting a message per PTY read.
   final Duration flushInterval;
 
-  /// Batches that may be in flight before the reader stops acknowledging the
-  /// PTY.
+  /// Batches that may be in flight before the reader pauses the PTY's output.
   ///
-  /// The credit window. macOS hands over at most 1024 bytes per read of a PTY
-  /// master, so acknowledging per read would cost a round trip per KiB; this
-  /// puts the round trip on the batch instead, which is two orders of
-  /// magnitude less often.
+  /// The credit window. `flutter_pty2` returns read credit as its listener
+  /// takes output, so pausing that listener is what holds the PTY back; this
+  /// puts the round trip to the UI isolate on the batch rather than the read.
   final int maxOutstandingBatches;
 }
 
@@ -95,18 +94,18 @@ class _Wire {
 
 /// Runs the PTY on its own isolate and delivers its output in batches.
 ///
-/// The UI isolate cannot be the one reading a PTY. `flutter_pty2` posts every
-/// read as its own port message and macOS caps a read at 1024 bytes, so a
-/// process producing at any speed buries the isolate in messages — measured at
-/// 27,332 a second, which is an event loop that never empties long enough for
-/// a frame to run. None of that work is the terminal's: it is a copy, a port
-/// hop and a listener call per KiB.
+/// The UI isolate should not be the one reading a PTY. `flutter_pty2` 1.x
+/// posted every read as its own port message and macOS caps a read at 1024
+/// bytes, so a process producing at any speed buried the isolate in messages —
+/// measured at 27,332 a second, an event loop that never empties long enough
+/// for a frame to run. 3.1 coalesces Unix reads into chunks of up to 64 KiB,
+/// which removes most of that, but the reading isolate still keeps the native
+/// event traffic and the batching off the isolate that draws frames.
 ///
 /// Here the reading isolate absorbs that stream and hands the UI isolate
-/// roughly a hundred batches a second instead. It is also where the
-/// acknowledgement lives, so the brake costs a round trip per batch rather
-/// than per KiB — and the round trip is cheap because this isolate has no
-/// frames to draw while it waits.
+/// roughly a hundred batches a second. It is also where the brake lives, so
+/// holding the PTY back costs a round trip per batch — and the round trip is
+/// cheap because this isolate has no frames to draw while it waits.
 class PtyIsolateSession implements PtySession {
   PtyIsolateSession._(this._isolate, this._commands, this._port, this._events);
 
@@ -239,22 +238,21 @@ class PtySessionException implements Exception {
 }
 
 /// Entry point of the reading isolate.
-void _readerMain(List<Object?> args) {
+Future<void> _readerMain(List<Object?> args) async {
   final events = args[0]! as SendPort;
   final config = args[1]! as PtySessionConfig;
 
-  final Pty pty;
+  final pty2.PtySession pty;
   try {
-    pty = Pty.start(
-      config.executable,
-      arguments: config.arguments,
-      workingDirectory: config.workingDirectory,
-      environment: config.environment,
-      rows: config.rows,
-      columns: config.columns,
-      // Acknowledged from this isolate, which has no frames to draw, so the
-      // round trip costs microseconds rather than waiting behind a paint.
-      ackRead: true,
+    pty = await pty2.Pty.spawn(
+      pty2.PtySpawnOptions(
+        executable: config.executable,
+        arguments: config.arguments,
+        workingDirectory: config.workingDirectory,
+        // The caller already merged the inherited environment with its own.
+        environment: pty2.PtyEnvironment.replace(config.environment),
+        size: pty2.PtySize(columns: config.columns, rows: config.rows),
+      ),
     );
   } catch (e) {
     events.send([_Wire.failure, '$e']);
@@ -264,38 +262,40 @@ void _readerMain(List<Object?> args) {
   _Reader(pty: pty, events: events, config: config).run();
 }
 
-/// The reading side: absorbs the PTY's message-per-KiB stream, batches it, and
-/// holds the acknowledgement when the far end has not kept up.
+/// The reading side: batches the PTY's output, and pauses it when the far end
+/// has not kept up.
 class _Reader {
   _Reader({required this.pty, required this.events, required this.config});
 
-  final Pty pty;
+  final pty2.PtySession pty;
   final SendPort events;
   final PtySessionConfig config;
 
   final _commands = ReceivePort();
   final _pending = BytesBuilder(copy: false);
 
+  StreamSubscription<Uint8List>? _output;
   Timer? _flushTimer;
   int _outstanding = 0;
-  int _ownedAcks = 0;
   bool _disposed = false;
 
   void run() {
     _commands.listen(_onCommand);
     events.send([_Wire.ready, _commands.sendPort]);
 
-    pty.output.listen(
+    _output = pty.output.listen(
       _onChunk,
       onError: (Object error) => events.send([_Wire.failure, '$error']),
-      onDone: _onDone,
+      onDone: _flush,
     );
 
+    // `done`, not `processExit`: it completes only once the output has been
+    // delivered, so the exit cannot overtake the process's last bytes.
     unawaited(
-      pty.exitCode
-          .then((code) {
+      pty.done
+          .then((exit) {
             _flush();
-            events.send([_Wire.exit, code]);
+            events.send([_Wire.exit, _exitCode(exit)]);
           })
           .catchError((Object _) {
             _flush();
@@ -316,13 +316,6 @@ class _Reader {
         _flush();
       });
     }
-
-    // Read again unless the far end is already holding as much as it may.
-    if (_outstanding < config.maxOutstandingBatches) {
-      pty.ackRead();
-    } else {
-      _ownedAcks++;
-    }
   }
 
   void _flush() {
@@ -334,6 +327,14 @@ class _Reader {
       _Wire.data,
       TransferableTypedData.fromList([_pending.takeBytes()]),
     ]);
+    // The far end holds as much as it may: stop taking output, so the PTY
+    // runs out of credit and stops reading.
+    final output = _output;
+    if (_outstanding >= config.maxOutstandingBatches &&
+        output != null &&
+        !output.isPaused) {
+      output.pause();
+    }
   }
 
   void _onCommand(Object? message) {
@@ -341,70 +342,81 @@ class _Reader {
     switch (command[0]) {
       case _Wire.write:
         final data = command[1]! as Uint8List;
-        try {
-          // Queued natively, so a paste never blocks this isolate's
-          // acknowledgements. False means the PTY refused it: the process is
-          // gone or ~8 MiB of input is already waiting.
-          if (!pty.write(data) && data.isNotEmpty) {
-            events.send([
-              _Wire.failure,
-              'write: the PTY refused ${data.length} bytes of input',
-            ]);
-          }
-        } catch (e) {
-          events.send([_Wire.failure, 'write: $e']);
-        }
+        // Queued natively and admitted in order, so a paste never blocks this
+        // isolate. A write racing the process's exit is dropped quietly: the
+        // exit is reported on its own.
+        unawaited(
+          pty.input.write(data).catchError((Object e) {
+            if (_disposed || e is pty2.PtyClosedException) return;
+            events.send([_Wire.failure, 'write: $e']);
+          }),
+        );
       case _Wire.resize:
         try {
-          pty.resize(command[1]! as int, command[2]! as int);
+          pty.resize(
+            pty2.PtySize(columns: command[2]! as int, rows: command[1]! as int),
+          );
         } catch (e) {
           events.send([_Wire.failure, 'resize: $e']);
         }
       case _Wire.acknowledge:
         if (_outstanding > 0) _outstanding--;
-        _releaseOwedAcks();
+        final output = _output;
+        if (_outstanding < config.maxOutstandingBatches &&
+            output != null &&
+            output.isPaused) {
+          output.resume();
+        }
       case _Wire.dispose:
-        _dispose(kill: command[1]! as bool);
+        unawaited(_dispose(kill: command[1]! as bool));
     }
   }
 
-  /// Lets the reader catch up on the reads it declined while the far end was
-  /// full.
-  ///
-  /// Only one read can be outstanding at a time, so the debt is paid one
-  /// acknowledgement per freed slot rather than all at once.
-  void _releaseOwedAcks() {
-    if (_ownedAcks == 0 || _outstanding >= config.maxOutstandingBatches) return;
-    _ownedAcks--;
-    // One acknowledgement releases exactly one read — the PTY holds a single
-    // outstanding read at a time — and the chunk it produces decides for
-    // itself whether to ask for another.
-    pty.ackRead();
-  }
-
-  void _onDone() {
-    _flush();
-  }
-
-  void _dispose({required bool kill}) {
+  Future<void> _dispose({required bool kill}) async {
     if (_disposed) return;
     _disposed = true;
     _flushTimer?.cancel();
     _flushTimer = null;
-    if (kill) {
-      try {
-        // SIGHUP is what a closing terminal sends; interactive shells ignore
-        // the SIGTERM default and would outlive the tab.
-        pty.kill(ProcessSignal.sighup);
-      } catch (_) {}
-    }
-    try {
-      // Closes the master fd and the plugin's wake pipe, which nothing else
-      // does: a closed tab would otherwise leak three descriptors for good.
-      pty.destroy();
-    } catch (_) {}
     _commands.close();
+    // `close()` SIGKILLs whatever is still running, so [kill] only decides
+    // whether the shell gets a hangup first; there is no way to release the
+    // process and leave it alive.
+    if (kill) await _hangUp();
+    try {
+      await _output?.cancel();
+      // Closes the master fd and the native session; a closed tab would
+      // otherwise leak them for good.
+      await pty.close();
+    } catch (_) {}
     // Exits with the acknowledgement so it cannot be lost behind the exit.
     Isolate.exit(events, const [_Wire.disposed]);
   }
+
+  /// Sends the shell SIGHUP, what a closing terminal sends, and gives it a
+  /// moment to exit.
+  ///
+  /// Interactive shells ignore the SIGTERM default, and `close()` would
+  /// SIGKILL them, so without this a shell never gets to save its history or
+  /// hang up its jobs. The wait stays well under the 2 s the UI isolate gives
+  /// the whole dispose. Windows has no signals; `close()` ends the process
+  /// tree there.
+  Future<void> _hangUp() async {
+    if (!pty.capabilities.posixSignals) return;
+    try {
+      pty.sendSignal(
+        pty2.PosixSignal.hup,
+        target: pty2.PosixSignalTarget.shellProcess,
+      );
+      await pty.processExit.timeout(const Duration(milliseconds: 500));
+    } catch (_) {
+      // Already exited, or did not exit in time: `close()` handles both.
+    }
+  }
 }
+
+/// The code a shell would report for [exit]: 128 plus the signal number for a
+/// process a signal ended.
+int _exitCode(pty2.PtyExit exit) => switch (exit) {
+  pty2.PtyExitCode(:final code) => code,
+  pty2.PtySignalExit(:final signal) => 128 + signal,
+};

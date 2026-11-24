@@ -422,7 +422,11 @@ class _TimelineRowTile extends StatelessWidget {
       McpActivityPendingRow(:final pending) => (
         pending.requestedAt,
         pending.request.hostLabel,
-        'run_command',
+        switch (pending.request.transfer?.upload) {
+          null => 'run_command',
+          true => 'upload_file',
+          false => 'download_file',
+        },
         pending.request.command,
         null,
       ),

@@ -185,4 +185,176 @@ void main() {
     },
     skip: Platform.isWindows,
   );
+
+  group('ssh hook', () {
+    final claude = mcpHookCommand(McpAgentApp.claudeCode, _bridge);
+    final cursor = mcpHookCommand(McpAgentApp.cursor, _bridge);
+
+    test('the command quotes the bridge only when it must', () {
+      expect(claude, '$_bridge hook claude-code');
+      expect(
+        mcpHookCommand(McpAgentApp.codex, "/opt/it's/shellvibe-mcp"),
+        r"'/opt/it'\''s/shellvibe-mcp' hook codex",
+      );
+    });
+
+    test('paths follow CLAUDE_CONFIG_DIR and CODEX_HOME, not Windows', () {
+      String? path(McpAgentApp app, Map<String, String> env) =>
+          mcpHookConfigPath(app, environment: env, isWindows: false);
+      const home = {'HOME': '/home/me'};
+      expect(
+        path(McpAgentApp.claudeCode, home),
+        '/home/me/.claude/settings.json',
+      );
+      expect(
+        path(McpAgentApp.claudeCode, {...home, 'CLAUDE_CONFIG_DIR': '/c'}),
+        '/c/settings.json',
+      );
+      expect(path(McpAgentApp.codex, home), '/home/me/.codex/hooks.json');
+      expect(
+        path(McpAgentApp.codex, {...home, 'CODEX_HOME': '/x'}),
+        '/x/hooks.json',
+      );
+      expect(path(McpAgentApp.cursor, home), '/home/me/.cursor/hooks.json');
+      expect(path(McpAgentApp.antigravity, home), isNull);
+      expect(path(McpAgentApp.claudeDesktop, home), isNull);
+      expect(
+        mcpHookConfigPath(
+          McpAgentApp.claudeCode,
+          environment: home,
+          isWindows: true,
+        ),
+        isNull,
+      );
+    });
+
+    test('Claude Code: added beside other hooks, then removed leaving them '
+        'and the rest of the settings exactly', () {
+      const app = McpAgentApp.claudeCode;
+      final original = {
+        'model': 'opus',
+        'hooks': {
+          'PreToolUse': [
+            {
+              'matcher': 'Bash',
+              'hooks': [
+                {'type': 'command', 'command': 'my-guard'},
+              ],
+            },
+          ],
+          'Stop': [
+            {
+              'hooks': [
+                {'type': 'command', 'command': 'notify'},
+              ],
+            },
+          ],
+        },
+      };
+      final text = jsonEncode(original);
+      expect(mcpHookStatus(app, text, claude), McpAgentConfigStatus.missing);
+
+      final added = withMcpHook(app, text, claude);
+      expect(mcpHookStatus(app, added, claude), McpAgentConfigStatus.installed);
+      final pre = (jsonDecode(added) as Map)['hooks']['PreToolUse'] as List;
+      expect(pre, hasLength(2));
+      expect(pre.last, {
+        'matcher': 'Bash',
+        'hooks': [
+          {'type': 'command', 'command': claude},
+        ],
+      });
+
+      // Adding again replaces rather than duplicates.
+      expect(withMcpHook(app, added, claude), added);
+
+      expect(jsonDecode(withMcpHook(app, added, null)), original);
+    });
+
+    test('a hook pointing at a moved bridge is outdated and updated in '
+        'place', () {
+      const app = McpAgentApp.codex;
+      final old = withMcpHook(
+        app,
+        null,
+        mcpHookCommand(app, '/old/shellvibe-mcp'),
+      );
+      final command = mcpHookCommand(app, _bridge);
+      expect(mcpHookStatus(app, old, command), McpAgentConfigStatus.outdated);
+      final updated = withMcpHook(app, old, command);
+      expect(
+        mcpHookStatus(app, updated, command),
+        McpAgentConfigStatus.installed,
+      );
+      expect(updated, isNot(contains('/old/')));
+    });
+
+    test('removing the only hook leaves an empty config, not empty '
+        'containers', () {
+      const app = McpAgentApp.claudeCode;
+      final added = withMcpHook(app, '{"model":"opus"}', claude);
+      expect(jsonDecode(withMcpHook(app, added, null)), {'model': 'opus'});
+    });
+
+    test('Cursor: version, a matcher, and other hooks kept', () {
+      const app = McpAgentApp.cursor;
+      final text = jsonEncode({
+        'version': 1,
+        'hooks': {
+          'beforeShellExecution': [
+            {'command': 'kube-guard'},
+          ],
+          'afterFileEdit': [
+            {'command': 'fmt'},
+          ],
+        },
+      });
+      final added = jsonDecode(withMcpHook(app, text, cursor)) as Map;
+      final before = added['hooks']['beforeShellExecution'] as List;
+      expect(before.first, {'command': 'kube-guard'});
+      expect(before.last['command'], cursor);
+      expect(before.last['matcher'], contains('ssh'));
+      expect(
+        jsonDecode(withMcpHook(app, jsonEncode(added), null)),
+        jsonDecode(text),
+      );
+      expect((jsonDecode(withMcpHook(app, null, cursor)) as Map)['version'], 1);
+    });
+
+    test('a shape the agent would not read is left alone', () {
+      const app = McpAgentApp.claudeCode;
+      for (final text in [
+        '{"hooks": []}',
+        '{"hooks": {"PreToolUse": {}}}',
+        '// comment\n{}',
+      ]) {
+        expect(
+          mcpHookStatus(app, text, claude),
+          McpAgentConfigStatus.unreadable,
+        );
+        expect(() => withMcpHook(app, text, claude), throwsFormatException);
+      }
+    });
+
+    test('setMcpHook writes the file, and removing from no file creates '
+        'none', () async {
+      final dir = await Directory.systemTemp.createTemp('mcp_hook');
+      addTearDown(() => dir.delete(recursive: true));
+      final file = File('${dir.path}/sub/settings.json');
+
+      await setMcpHook(McpAgentApp.claudeCode, file.path, null);
+      expect(await file.exists(), isFalse);
+
+      await setMcpHook(McpAgentApp.claudeCode, file.path, claude);
+      expect(
+        await readMcpHookStatus(McpAgentApp.claudeCode, file.path, claude),
+        McpAgentConfigStatus.installed,
+      );
+      await setMcpHook(McpAgentApp.claudeCode, file.path, null);
+      expect(
+        await readMcpHookStatus(McpAgentApp.claudeCode, file.path, claude),
+        McpAgentConfigStatus.missing,
+      );
+    });
+  });
 }

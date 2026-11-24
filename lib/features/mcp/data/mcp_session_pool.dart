@@ -38,6 +38,11 @@ class McpSession {
   /// command.
   DateTime lastActivityAt;
 
+  /// `upload_file` / `download_file` calls in flight. They run on their own
+  /// SFTP channel, not the shell, so without this a long transfer would
+  /// look idle to the sweep and be closed underneath itself.
+  int activeTransfers = 0;
+
   McpSession({
     required this.sessionId,
     required this.hostId,
@@ -51,7 +56,7 @@ class McpSession {
     required this.lastActivityAt,
   });
 
-  bool get busy => shell.isBusy;
+  bool get busy => shell.isBusy || activeTransfers > 0;
 }
 
 /// Owns every open MCP shell session across every connected client.

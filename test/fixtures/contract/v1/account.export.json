@@ -11,6 +11,7 @@
                 "email_verified_at": null,
                 "created_at": "<timestamp>"
             },
+            "social_accounts": [],
             "devices": [
                 {
                     "id": "<ulid>",
