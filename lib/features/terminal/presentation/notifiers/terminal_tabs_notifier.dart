@@ -413,7 +413,7 @@ class TerminalTabsNotifier extends _$TerminalTabsNotifier {
         // itself, or just this tab): its dispose ran with no bridge to kill,
         // so the shell is killed here instead of outliving its pane. Past
         // disposal touching `state` throws, hence the order of the checks.
-        await bridge?.dispose(killPty: true);
+        await bridge?.dispose(killPty: true, discardOutput: true);
         return;
       }
 

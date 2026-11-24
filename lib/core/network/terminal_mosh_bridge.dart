@@ -173,7 +173,13 @@ class TerminalMoshBridge {
 
   /// Cancels subscriptions, detaches terminal callbacks, and optionally closes
   /// the underlying Mosh session.
-  Future<void> dispose({bool closeSession = true}) async {
+  ///
+  /// [discardOutput] drops output still queued instead of parsing it: for a
+  /// terminal that is being thrown away.
+  Future<void> dispose({
+    bool closeSession = true,
+    bool discardOutput = false,
+  }) async {
     if (_isDisposed) return;
     _isDisposed = true;
 
@@ -193,11 +199,10 @@ class TerminalMoshBridge {
     await _doneSubscription?.cancel();
     _doneSubscription = null;
 
-    // Teardown must not swallow output the host already sent, so drain what is
-    // queued before dropping the writer.
-    _writer
-      ..flush()
-      ..dispose();
+    // A terminal that stays on screen must not lose output the host already
+    // sent, so what is queued is drained before the writer goes.
+    if (!discardOutput) _writer.flush();
+    _writer.dispose();
 
     predictionEngine.reset();
     onPredictionChanged?.call();

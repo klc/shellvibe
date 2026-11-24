@@ -150,7 +150,14 @@ class TerminalSSHBridge {
 
   /// Cancels stdout/stderr subscriptions, detaches terminal callbacks,
   /// and optionally closes the underlying SSH session.
-  Future<void> dispose({bool closeSession = true}) async {
+  ///
+  /// [discardOutput] drops output still queued instead of parsing it: for a
+  /// terminal that is being thrown away, where parsing a large backlog only
+  /// holds the UI.
+  Future<void> dispose({
+    bool closeSession = true,
+    bool discardOutput = false,
+  }) async {
     if (_isDisposed) return;
     _isDisposed = true;
 
@@ -164,11 +171,10 @@ class TerminalSSHBridge {
     await _stderrSubscription?.cancel();
     _stderrSubscription = null;
 
-    // Teardown must not swallow output the remote already sent, so drain what
-    // is queued before dropping the writer.
-    _writer
-      ..flush()
-      ..dispose();
+    // A terminal that stays on screen must not lose output the remote already
+    // sent, so what is queued is drained before the writer goes.
+    if (!discardOutput) _writer.flush();
+    _writer.dispose();
 
     if (closeSession) {
       try {

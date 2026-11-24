@@ -118,6 +118,11 @@ class CoalescingTerminalWriter {
     _writer.flush();
   }
 
+  /// Resolves when the next frame has been drawn (or the injected wait has
+  /// passed), so an owner can recheck [pendingChunks] once parsing has had a
+  /// turn.
+  Future<void> nextFrame() => _waitForFrame();
+
   /// Drops anything not yet written and stops batching.
   void dispose() {
     _disposed = true;
