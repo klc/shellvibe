@@ -2,6 +2,7 @@ import 'package:dartssh2/dartssh2.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:shellvibe/app/widgets/window_chrome_frame.dart';
@@ -162,16 +163,14 @@ void main() {
       final fake = await pumpOps(tester);
       fake.remoteExists = true;
 
-      await openMenu(tester, 1);
-      await tester.tap(find.text('Upload to Remote'));
+      await tester.tap(find.byTooltip('Upload to Remote'));
       await tester.pumpAndSettle();
       expect(find.text('Replace notes.txt?'), findsOneWidget);
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
       expect(fake.uploaded, isEmpty);
 
-      await openMenu(tester, 1);
-      await tester.tap(find.text('Upload to Remote'));
+      await tester.tap(find.byTooltip('Upload to Remote'));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('sftp_overwrite_confirm')));
       await tester.pumpAndSettle();
@@ -181,18 +180,62 @@ void main() {
     testWidgets('a new remote file uploads without asking', (tester) async {
       final fake = await pumpOps(tester);
 
-      await openMenu(tester, 1);
-      await tester.tap(find.text('Upload to Remote'));
+      await tester.tap(find.byTooltip('Upload to Remote'));
       await tester.pumpAndSettle();
       expect(find.textContaining('Replace'), findsNothing);
       expect(fake.uploaded, ['/tmp/notes.txt']);
     });
 
-    testWidgets('a folder is not offered an upload', (tester) async {
+    testWidgets('a file shows its upload on the row; a folder has none', (
+      tester,
+    ) async {
       await pumpOps(tester);
 
-      await openMenu(tester, 0);
+      // One local file, one folder: a single upload button, on the file.
+      expect(find.byTooltip('Upload to Remote'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.ancestor(
+            of: find.text('photos'),
+            matching: find.byType(InkWell),
+          ),
+          matching: find.byTooltip('Upload to Remote'),
+        ),
+        findsNothing,
+      );
+    });
+
+    testWidgets('the "..." menu leaves the upload to its button', (
+      tester,
+    ) async {
+      await pumpOps(tester);
+
+      await openMenu(tester, 1);
       expect(find.text('Upload to Remote'), findsNothing);
+      expect(find.text('Delete'), findsOneWidget);
+    });
+
+    testWidgets('right-clicking a file lists every action, upload included', (
+      tester,
+    ) async {
+      final fake = await pumpOps(tester);
+
+      await tester.tap(find.text('notes.txt'), buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+      expect(find.text('Upload to Remote'), findsOneWidget);
+      expect(find.text('Delete'), findsOneWidget);
+
+      await tester.tap(find.text('Upload to Remote'));
+      await tester.pumpAndSettle();
+      expect(fake.uploaded, ['/tmp/notes.txt']);
+    });
+
+    testWidgets('a long press opens the same menu', (tester) async {
+      await pumpOps(tester);
+
+      await tester.longPress(find.text('notes.txt'));
+      await tester.pumpAndSettle();
+      expect(find.text('Upload to Remote'), findsOneWidget);
       expect(find.text('Delete'), findsOneWidget);
     });
 
