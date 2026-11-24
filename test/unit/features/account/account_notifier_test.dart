@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shellvibe/core/api/api_exception.dart';
 import 'package:shellvibe/core/api/api_transport.dart';
+import 'package:shellvibe/features/account/data/account_api.dart';
 import 'package:shellvibe/features/account/presentation/notifiers/account_notifier.dart';
 import 'package:shellvibe/shared/storage/secure_storage_service.dart';
 
@@ -159,9 +160,16 @@ void main() {
     // Sent with the old token, answered only after a fresh sign-in.
     final devices = notifier.devices();
     await gated.held.future;
-    final login = ContractFixture.load('auth.login');
-    transport.enqueue(status: login.status, body: login.body);
-    await notifier.signIn(email: 'user@shellvibe.dev', password: 'pw');
+    final approved = ContractFixture.load('auth.app-sign-in.token');
+    transport.enqueue(status: approved.status, body: approved.body);
+    await notifier.pollBrowserSignIn(
+      const BrowserSignIn(
+        id: '01REQ',
+        secret: 'secret',
+        userCode: 'ABCD-EFGH',
+        verificationUrl: 'https://shellvibe.dev/panel/app-sign-in/01REQ',
+      ),
+    );
     final newToken = await stored(SecureStorageKeys.accountToken);
     expect(newToken, isNot('test-token'));
 

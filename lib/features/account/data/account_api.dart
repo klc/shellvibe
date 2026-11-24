@@ -1,10 +1,11 @@
 import 'package:flutter/foundation.dart';
 
 import '../../../core/api/api_client.dart';
+import '../../../core/api/api_exception.dart';
 import '../domain/account_session.dart';
 import 'device_descriptor.dart';
 
-/// A successful `register` or `login`, carrying the one and only copy of the
+/// A completed sign-in, carrying the one and only copy of the
 /// bearer token before it is handed to storage.
 @immutable
 final class AuthResult {
@@ -14,57 +15,86 @@ final class AuthResult {
   const AuthResult({required this.token, required this.session});
 }
 
+/// A browser sign-in waiting for the person to approve it in the web panel.
+@immutable
+final class BrowserSignIn {
+  final String id;
+
+  /// Proves to the server that the poll comes from the app that opened the
+  /// request. Never shown, never put in a URL.
+  final String secret;
+
+  /// Shown in the app and on the approval page, so the person can tell this
+  /// request from one somebody else sent them a link to.
+  final String userCode;
+
+  /// The approval page, on the panel's host.
+  final String verificationUrl;
+
+  final Duration interval;
+
+  const BrowserSignIn({
+    required this.id,
+    required this.secret,
+    required this.userCode,
+    required this.verificationUrl,
+    this.interval = const Duration(seconds: 2),
+  });
+
+  factory BrowserSignIn.fromJson(Map<String, Object?> json) {
+    final id = json['id'];
+    final secret = json['secret'];
+    final userCode = json['user_code'];
+    final url = json['verification_url'];
+
+    if (id is! String ||
+        id.isEmpty ||
+        secret is! String ||
+        secret.isEmpty ||
+        userCode is! String ||
+        url is! String) {
+      throw const AccountApiException(
+        'The sign-in request came back without its id, secret, code or URL.',
+      );
+    }
+
+    final interval = json['interval'];
+
+    return BrowserSignIn(
+      id: id,
+      secret: secret,
+      userCode: userCode,
+      verificationUrl: url,
+      interval: Duration(
+        seconds: interval is int && interval > 0 ? interval : 2,
+      ),
+    );
+  }
+}
+
 /// The `/auth`, `/me`, `/devices` and `/account` part of the v1 API.
 final class AccountApi {
   final ApiClient client;
 
   const AccountApi({required this.client});
 
-  /// Creates an account and this device's first session.
-  Future<AuthResult> register({
-    required String name,
-    required String email,
-    required String password,
-    DeviceDescriptor? device,
-  }) async {
-    final descriptor = device ?? DeviceDescriptor.current();
-
-    final response = await client.post(
-      '/auth/register',
-      authenticated: false,
-      body: {
-        'name': name,
-        'email': email,
-        'password': password,
-        'device_name': descriptor.name,
-        'platform': descriptor.platform,
-        'app_version': descriptor.appVersion,
-      },
-    );
-
-    return _authResult(response.dataMap, fallbackEmail: email);
-  }
-
-  /// Signs in, reusing [knownDeviceId] when this install already has a device
-  /// record.
+  /// Opens a browser sign-in. The person approves it in the web panel, where
+  /// they sign in or create an account however they like, and
+  /// [pollBrowserSignIn] collects the token.
   ///
-  /// Sending the id matters: without it the server opens a *new* device record
-  /// on every sign-in, so the same laptop accumulates entries in the account's
-  /// device list and in relay presence.
-  Future<AuthResult> login({
-    required String email,
-    required String password,
+  /// Sending [knownDeviceId] matters: without it the server opens a *new*
+  /// device record on every sign-in, so the same laptop accumulates entries in
+  /// the account's device list and in relay presence.
+  Future<BrowserSignIn> startBrowserSignIn({
     String? knownDeviceId,
     DeviceDescriptor? device,
   }) async {
     final descriptor = device ?? DeviceDescriptor.current();
 
     final response = await client.post(
-      '/auth/login',
+      '/auth/app-sign-in',
       authenticated: false,
       body: {
-        'email': email,
-        'password': password,
         'device_name': descriptor.name,
         'platform': descriptor.platform,
         'app_version': descriptor.appVersion,
@@ -73,7 +103,24 @@ final class AccountApi {
       },
     );
 
-    return _authResult(response.dataMap, fallbackEmail: email);
+    return BrowserSignIn.fromJson(response.dataMap);
+  }
+
+  /// The session once [request] is approved, null while it is still waiting.
+  ///
+  /// Throws [ApiException] `sign_in_denied` when it was denied in the browser
+  /// and `sign_in_expired` when it ran out or was already collected.
+  Future<AuthResult?> pollBrowserSignIn(BrowserSignIn request) async {
+    final response = await client.post(
+      '/auth/app-sign-in/${request.id}/token',
+      authenticated: false,
+      body: {'secret': request.secret},
+    );
+
+    final data = response.dataMap;
+    if (data['status'] != 'approved') return null;
+
+    return _authResult(data);
   }
 
   /// Revokes this device's token.
@@ -93,9 +140,9 @@ final class AccountApi {
   Future<List<AccountDevice>> devices() async {
     final response = await client.get('/devices');
 
-    return response.dataList.map(AccountDevice.fromJson).toList(
-      growable: false,
-    );
+    return response.dataList
+        .map(AccountDevice.fromJson)
+        .toList(growable: false);
   }
 
   /// Revokes another device's access.
@@ -112,10 +159,7 @@ final class AccountApi {
   Future<void> deleteAccount({required String password}) =>
       client.delete('/account', body: {'password': password});
 
-  AuthResult _authResult(
-    Map<String, Object?> data, {
-    required String fallbackEmail,
-  }) {
+  AuthResult _authResult(Map<String, Object?> data) {
     final token = data['token'];
     if (token is! String || token.isEmpty) {
       throw const AccountApiException(
@@ -123,16 +167,10 @@ final class AccountApi {
       );
     }
 
-    return AuthResult(
-      token: token,
-      session: _sessionFrom(data, fallbackEmail: fallbackEmail),
-    );
+    return AuthResult(token: token, session: _sessionFrom(data));
   }
 
-  AccountSession _sessionFrom(
-    Map<String, Object?> data, {
-    String? fallbackEmail,
-  }) {
+  AccountSession _sessionFrom(Map<String, Object?> data) {
     final user = data['user'];
     final device = data['device'];
 
@@ -159,9 +197,7 @@ final class AccountApi {
     return AccountSession(
       userId: userId,
       deviceId: deviceId,
-      email: email is String && email.isNotEmpty
-          ? email
-          : (fallbackEmail ?? ''),
+      email: email is String ? email : '',
       name: user['name'] is String ? user['name']! as String : '',
     );
   }

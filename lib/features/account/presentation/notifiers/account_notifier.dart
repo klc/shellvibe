@@ -40,16 +40,9 @@ final class AccountState {
   /// Present exactly when [status] is [AccountStatus.signedIn].
   final AccountSession? session;
 
-  /// Email to prefill a sign-in form with, when one is known.
-  final String? lastEmail;
+  const AccountState({required this.status, this.session});
 
-  const AccountState({
-    required this.status,
-    this.session,
-    this.lastEmail,
-  });
-
-  const AccountState.signedOut({this.lastEmail})
+  const AccountState.signedOut()
     : status = AccountStatus.signedOut,
       session = null;
 
@@ -94,47 +87,36 @@ class AccountNotifier extends _$AccountNotifier {
     _api = AccountApi(client: _apiClient);
 
     final stored = await _store.read();
-    final lastEmail = await _store.readEmail();
-
-    if (stored == null) {
-      return AccountState.signedOut(lastEmail: lastEmail);
-    }
+    if (stored == null) return const AccountState.signedOut();
 
     // The stored session is published straight away rather than verified
     // first. `GET /me` would make app start depend on the network for a
     // feature the user may not touch this session; a token the server has
     // revoked surfaces on the first real call, which is where
     // [_onServerRejectedToken] handles it.
-    return AccountState(
-      status: AccountStatus.signedIn,
-      session: stored,
-      lastEmail: lastEmail ?? stored.email,
-    );
+    return AccountState(status: AccountStatus.signedIn, session: stored);
   }
 
   /// The API client bound to this session. Feature repositories take this.
   ApiClient get apiClient => _apiClient;
 
-  /// Creates an account and signs in.
-  Future<void> register({
-    required String name,
-    required String email,
-    required String password,
-  }) => _serialize(
-    () => _api.register(name: name, email: email, password: password),
-  );
+  /// Opens a browser sign-in for this install, reusing its device record
+  /// when it has one. Throws [ApiFailure].
+  Future<BrowserSignIn> startBrowserSignIn() async =>
+      _api.startBrowserSignIn(knownDeviceId: await _store.readDeviceId());
 
-  /// Signs in, reusing this install's device record when it has one.
-  Future<void> signIn({
-    required String email,
-    required String password,
-  }) => _serialize(
-    () async => _api.login(
-      email: email,
-      password: password,
-      knownDeviceId: await _store.readDeviceId(),
-    ),
-  );
+  /// Asks once whether [request] was approved, and signs in when it was.
+  ///
+  /// False while the person has not answered in the browser. Only the write
+  /// of the session is queued: the waiting happens outside the queue, so a
+  /// sign-out or a 401 is never stuck behind a browser tab left open.
+  Future<bool> pollBrowserSignIn(BrowserSignIn request) async {
+    final result = await _api.pollBrowserSignIn(request);
+    if (result == null) return false;
+
+    await _serialize(() async => result);
+    return true;
+  }
 
   /// Revokes this device's token and drops the local session.
   ///
@@ -148,14 +130,12 @@ class AccountNotifier extends _$AccountNotifier {
   /// [ApiFailure] and leaves this device signed in: signing out locally would
   /// read as success and leave no token to retry with.
   Future<void> signOut({bool everywhere = false}) async {
-    final previous = await future;
+    await future;
 
     return _enqueue(() async {
       if (everywhere) await _api.logoutAll();
 
-      state = AsyncValue.data(
-        AccountState.signedOut(lastEmail: previous.lastEmail),
-      );
+      state = const AsyncValue.data(AccountState.signedOut());
 
       try {
         if (!everywhere) await _api.logout();
@@ -194,11 +174,7 @@ class AccountNotifier extends _$AccountNotifier {
         await _store.write(token: result.token, session: result.session);
 
         state = AsyncValue.data(
-          AccountState(
-            status: AccountStatus.signedIn,
-            session: result.session,
-            lastEmail: result.session.email,
-          ),
+          AccountState(status: AccountStatus.signedIn, session: result.session),
         );
       });
 
@@ -232,15 +208,10 @@ class AccountNotifier extends _$AccountNotifier {
 
         await _store.clearSession();
 
-        final lastEmail = await _store.readEmail();
-
         // `state` may still be loading if the very first call raced app
         // start.
-        state = AsyncValue.data(
-          AccountState(
-            status: AccountStatus.sessionExpired,
-            lastEmail: lastEmail,
-          ),
+        state = const AsyncValue.data(
+          AccountState(status: AccountStatus.sessionExpired),
         );
       }),
     );

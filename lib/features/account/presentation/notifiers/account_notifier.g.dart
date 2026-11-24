@@ -60,7 +60,7 @@ final class AccountNotifierProvider
   AccountNotifier create() => AccountNotifier();
 }
 
-String _$accountNotifierHash() => r'87ddccd1c720849cb59cb532992aaa57d77ee401';
+String _$accountNotifierHash() => r'83917f9ed4f69eb3fc5b75e8641febee18fd0e61';
 
 /// Single owner of the account session.
 ///

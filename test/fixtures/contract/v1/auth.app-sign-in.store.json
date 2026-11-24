@@ -1,0 +1,13 @@
+{
+    "status": 201,
+    "body": {
+        "data": {
+            "id": "<ulid>",
+            "secret": "<secret>",
+            "user_code": "<user_code>",
+            "verification_url": "<verification_url>",
+            "interval": 2,
+            "expires_at": "<timestamp>"
+        }
+    }
+}

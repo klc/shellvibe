@@ -28,81 +28,40 @@ void main() {
     );
   });
 
-  group('register', () {
-    test('decodes the pinned auth.register fixture', () async {
-      final fixture = ContractFixture.load('auth.register');
+  group('browser sign-in', () {
+    test('decodes the pinned auth.app-sign-in.store fixture', () async {
+      final fixture = ContractFixture.load('auth.app-sign-in.store');
       transport.enqueue(status: fixture.status, body: fixture.body);
 
-      final result = await api.register(
-        name: 'Contract Fixture',
-        email: 'contract@shellvibe.app',
-        password: 'SecurePassword123!',
-        device: descriptor,
-      );
+      final request = await api.startBrowserSignIn(device: descriptor);
 
-      expect(result.token, isNotEmpty);
-      expect(result.session.userId, isNotEmpty);
-      expect(result.session.deviceId, isNotEmpty);
-      expect(result.session.email, 'contract@shellvibe.app');
-      expect(result.session.name, 'Contract Fixture');
+      expect(request.id, isNotEmpty);
+      expect(request.secret, isNotEmpty);
+      expect(request.userCode, isNotEmpty);
+      expect(request.verificationUrl, isNotEmpty);
+      expect(request.interval, const Duration(seconds: 2));
     });
 
-    test('describes this device to the server', () async {
-      final fixture = ContractFixture.load('auth.register');
+    test('describes this device, unauthenticated', () async {
+      final fixture = ContractFixture.load('auth.app-sign-in.store');
       transport.enqueue(status: fixture.status, body: fixture.body);
 
-      await api.register(
-        name: 'A',
-        email: 'a@b.c',
-        password: 'x',
-        device: descriptor,
-      );
+      await api.startBrowserSignIn(device: descriptor);
 
       expect(transport.lastBody['device_name'], 'Fixture MacBook');
       expect(transport.lastBody['platform'], 'macos');
       expect(transport.lastBody['app_version'], '2.0.0');
-    });
-
-    test('registers without a bearer token', () async {
-      final fixture = ContractFixture.load('auth.register');
-      transport.enqueue(status: fixture.status, body: fixture.body);
-
-      await api.register(
-        name: 'A',
-        email: 'a@b.c',
-        password: 'x',
-        device: descriptor,
-      );
-
       expect(
         transport.lastRequest!.headers.containsKey('Authorization'),
         isFalse,
       );
     });
-  });
-
-  group('login', () {
-    test('decodes the pinned auth.login fixture', () async {
-      final fixture = ContractFixture.load('auth.login');
-      transport.enqueue(status: fixture.status, body: fixture.body);
-
-      final result = await api.login(
-        email: 'contract@shellvibe.app',
-        password: 'SecurePassword123!',
-        device: descriptor,
-      );
-
-      expect(result.token, isNotEmpty);
-      expect(result.session.deviceId, isNotEmpty);
-    });
 
     test('sends the known device id so the server reuses the record', () async {
-      final fixture = ContractFixture.load('auth.login');
+      final fixture = ContractFixture.load('auth.app-sign-in.store');
       transport.enqueue(status: fixture.status, body: fixture.body);
 
-      await api.login(
-        email: 'a@b.c',
-        password: 'x',
+      await api.startBrowserSignIn(
         knownDeviceId: '01HZY7Q2K3M4N5P6R7S8T9V0WX',
         device: descriptor,
       );
@@ -111,10 +70,10 @@ void main() {
     });
 
     test('omits device_id entirely on a first sign-in', () async {
-      final fixture = ContractFixture.load('auth.login');
+      final fixture = ContractFixture.load('auth.app-sign-in.store');
       transport.enqueue(status: fixture.status, body: fixture.body);
 
-      await api.login(email: 'a@b.c', password: 'x', device: descriptor);
+      await api.startBrowserSignIn(device: descriptor);
 
       expect(
         transport.lastBody.containsKey('device_id'),
@@ -123,21 +82,54 @@ void main() {
       );
     });
 
-    test('never puts the password anywhere but the request body', () async {
-      final fixture = ContractFixture.load('auth.login');
-      transport.enqueue(status: fixture.status, body: fixture.body);
+    test('a pending poll is null; an approved one is the session', () async {
+      final pending = ContractFixture.load('auth.app-sign-in.token.pending');
+      final approved = ContractFixture.load('auth.app-sign-in.token');
+      transport
+        ..enqueue(status: pending.status, body: pending.body)
+        ..enqueue(status: approved.status, body: approved.body);
 
-      await api.login(
-        email: 'a@b.c',
-        password: 'hunter2-should-not-leak',
-        device: descriptor,
-      );
+      expect(await api.pollBrowserSignIn(_request), isNull);
+      final result = await api.pollBrowserSignIn(_request);
+
+      expect(result!.token, isNotEmpty);
+      expect(result.session.userId, isNotEmpty);
+      expect(result.session.deviceId, isNotEmpty);
+      expect(result.session.email, 'contract@shellvibe.app');
+    });
+
+    test('polls with the secret in the body only', () async {
+      final pending = ContractFixture.load('auth.app-sign-in.token.pending');
+      transport.enqueue(status: pending.status, body: pending.body);
+
+      await api.pollBrowserSignIn(_request);
 
       final request = transport.lastRequest!;
-      expect(request.url.toString(), isNot(contains('hunter2')));
-      expect(
-        request.headers.values.join(' '),
-        isNot(contains('hunter2')),
+      expect(request.url.path, endsWith('/auth/app-sign-in/01REQ/token'));
+      expect(transport.lastBody, {'secret': 'the-secret'});
+      expect(request.url.toString(), isNot(contains('the-secret')));
+      expect(request.headers.containsKey('Authorization'), isFalse);
+    });
+
+    test('a denial surfaces as sign_in_denied', () async {
+      transport.enqueue(
+        status: 403,
+        body: {
+          'code': 'sign_in_denied',
+          'message': 'The sign-in was denied in the browser.',
+          'details': <String, Object?>{},
+        },
+      );
+
+      await expectLater(
+        api.pollBrowserSignIn(_request),
+        throwsA(
+          isA<ApiException>().having(
+            (e) => e.code,
+            'code',
+            ApiErrorCode.signInDenied,
+          ),
+        ),
       );
     });
   });
@@ -270,6 +262,7 @@ void main() {
         status: 201,
         body: {
           'data': {
+            'status': 'approved',
             'user': {'id': '01U', 'email': 'a@b.c', 'name': 'A'},
             'device': {'id': '01D'},
           },
@@ -277,12 +270,7 @@ void main() {
       );
 
       await expectLater(
-        api.register(
-          name: 'A',
-          email: 'a@b.c',
-          password: 'x',
-          device: descriptor,
-        ),
+        api.pollBrowserSignIn(_request),
         throwsA(isA<AccountApiException>()),
       );
     });
@@ -292,6 +280,7 @@ void main() {
         status: 201,
         body: {
           'data': {
+            'status': 'approved',
             'token': 'abc',
             'user': {'email': 'a@b.c'},
             'device': {'name': 'x'},
@@ -300,12 +289,7 @@ void main() {
       );
 
       await expectLater(
-        api.register(
-          name: 'A',
-          email: 'a@b.c',
-          password: 'x',
-          device: descriptor,
-        ),
+        api.pollBrowserSignIn(_request),
         throwsA(isA<AccountApiException>()),
       );
     });
@@ -327,6 +311,13 @@ void main() {
     });
   });
 }
+
+const _request = BrowserSignIn(
+  id: '01REQ',
+  secret: 'the-secret',
+  userCode: 'ABCD-EFGH',
+  verificationUrl: 'https://shellvibe.dev/panel/app-sign-in/01REQ',
+);
 
 /// Exposes [AccountDevice.fromJson] under a name that says it is a test seam.
 abstract final class AccountDeviceHarness {

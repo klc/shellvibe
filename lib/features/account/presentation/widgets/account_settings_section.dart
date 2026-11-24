@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -10,6 +12,7 @@ import '../../../../core/api/api_exception.dart';
 import '../../../billing/domain/entitlement.dart';
 import '../../../device_link/presentation/platform_icon.dart';
 import '../../../billing/presentation/notifiers/entitlement_notifier.dart';
+import '../../data/account_api.dart';
 import '../../domain/account_session.dart';
 import '../notifiers/account_notifier.dart';
 
@@ -36,31 +39,12 @@ final class AccountSettingsSection extends ConsumerStatefulWidget {
 
 class _AccountSettingsSectionState
     extends ConsumerState<AccountSettingsSection> {
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  final _nameController = TextEditingController();
-
-  /// True while the form is in "create account" mode rather than "sign in".
-  bool _isRegistering = false;
-
   bool _busy = false;
 
-  /// Field errors from a `422`, keyed by the server's field names.
-  Map<String, List<String>> _fieldErrors = const {};
+  /// The browser sign-in being waited on. Cleared to cancel it.
+  BrowserSignIn? _pending;
 
-  /// A single message for failures that are not field-shaped.
   String? _formError;
-
-  /// Whether the email field has been seeded from the stored last-used email.
-  bool _emailPrefilled = false;
-
-  @override
-  void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
-    _nameController.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -78,8 +62,6 @@ class _AccountSettingsSectionState
         child: _ErrorText('The account state could not be read: $error'),
       ),
       data: (state) {
-        _prefillEmail(state.lastEmail);
-
         return state.isSignedIn
             ? _buildSignedIn(context, tokens, state.session!)
             : _buildSignedOut(context, tokens, state.status);
@@ -115,61 +97,60 @@ class _AccountSettingsSectionState
               style: TextStyle(fontSize: 13, color: tokens.textMuted),
             ),
           const SizedBox(height: 12),
-          if (_isRegistering) ...[
-            _Field(
-              label: 'Name',
-              controller: _nameController,
-              errors: _fieldErrors['name'],
-              placeholder: 'How the account is addressed',
+          if (_pending case final pending?) ...[
+            Text(
+              'Finish signing in in your browser. The page there should show '
+              'this code:',
+              style: TextStyle(fontSize: 13, color: tokens.textSecondary),
             ),
             const SizedBox(height: 8),
-          ],
-          _Field(
-            label: 'Email',
-            controller: _emailController,
-            errors: _fieldErrors['email'],
-            placeholder: 'you@example.com',
-            keyboardType: TextInputType.emailAddress,
-          ),
-          const SizedBox(height: 8),
-          _Field(
-            label: 'Password',
-            controller: _passwordController,
-            errors: _fieldErrors['password'],
-            placeholder: _isRegistering ? 'At least 8 characters' : 'Password',
-            obscure: true,
-          ),
-          if (_formError != null) ...[
-            const SizedBox(height: 8),
-            _ErrorText(_formError!),
-          ],
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              ShellVibeButton(
-                buttonKey: const Key('account_submit_button'),
-                label: _isRegistering ? 'Create Account' : 'Sign In',
-                icon: _isRegistering ? LucideIcons.userPlus : LucideIcons.logIn,
-                busy: _busy,
-                onPressed: _busy ? null : _submit,
+            SelectableText(
+              pending.userCode,
+              key: const Key('account_sign_in_code'),
+              style: const TextStyle(
+                fontSize: 22,
+                fontFamily: 'monospace',
+                letterSpacing: 4,
+                fontWeight: FontWeight.w600,
               ),
-              ShellVibeButton.quiet(
-                buttonKey: const Key('account_toggle_mode_button'),
-                label: _isRegistering
-                    ? 'I Have an Account'
-                    : 'Create an Account',
-                onPressed: _busy
-                    ? null
-                    : () => setState(() {
-                        _isRegistering = !_isRegistering;
-                        _fieldErrors = const {};
-                        _formError = null;
-                      }),
-              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ShellVibeButton.secondary(
+                  buttonKey: const Key('account_sign_in_reopen_button'),
+                  label: 'Open Browser Again',
+                  icon: LucideIcons.externalLink,
+                  onPressed: () => _openSignInPage(pending.verificationUrl),
+                ),
+                ShellVibeButton.quiet(
+                  buttonKey: const Key('account_sign_in_cancel_button'),
+                  label: 'Cancel',
+                  onPressed: () => setState(() => _pending = null),
+                ),
+              ],
+            ),
+          ] else ...[
+            if (_formError != null) ...[
+              _ErrorText(_formError!),
+              const SizedBox(height: 8),
             ],
-          ),
+            ShellVibeButton(
+              buttonKey: const Key('account_sign_in_button'),
+              label: 'Sign In',
+              icon: LucideIcons.logIn,
+              busy: _busy,
+              onPressed: _busy ? null : _signIn,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Opens shellvibe.dev in your browser. Sign in or create an '
+              'account there with email, Google or GitHub.',
+              style: TextStyle(fontSize: 12, color: tokens.textSubtle),
+            ),
+          ],
         ],
       ),
     );
@@ -263,72 +244,105 @@ class _AccountSettingsSectionState
 
   // --- Actions ------------------------------------------------------------
 
-  void _prefillEmail(String? email) {
-    if (_emailPrefilled || email == null || email.isEmpty) return;
-    _emailPrefilled = true;
-    _emailController.text = email;
-  }
-
-  Future<void> _submit() async {
+  /// Opens a browser sign-in and polls until it is approved, denied, expired
+  /// or cancelled (by clearing [_pending], or by leaving this screen).
+  Future<void> _signIn() async {
+    final notifier = ref.read(accountProvider.notifier);
     setState(() {
       _busy = true;
-      _fieldErrors = const {};
       _formError = null;
     });
 
+    BrowserSignIn? request;
     try {
-      final notifier = ref.read(accountProvider.notifier);
-      if (_isRegistering) {
-        await notifier.register(
-          name: _nameController.text.trim(),
-          email: _emailController.text.trim(),
-          password: _passwordController.text,
-        );
-      } else {
-        await notifier.signIn(
-          email: _emailController.text.trim(),
-          password: _passwordController.text,
-        );
-      }
-
-      if (!mounted) return;
-      _passwordController.clear();
-    } on ApiException catch (e) {
+      request = await notifier.startBrowserSignIn();
       if (!mounted) return;
       setState(() {
-        _fieldErrors = e.validationErrors;
-        _formError = _messageFor(e);
+        _pending = request;
+        _busy = false;
       });
+      unawaited(_openSignInPage(request.verificationUrl));
+
+      // The server ends the request after ten minutes, but only a server it
+      // can reach can say so.
+      final deadline = DateTime.now().add(const Duration(minutes: 10));
+      while (true) {
+        await Future<void>.delayed(request.interval);
+        if (!mounted || !identical(_pending, request)) return;
+        if (DateTime.now().isAfter(deadline)) {
+          setState(
+            () => _formError = 'The sign-in link expired. Sign in again.',
+          );
+          return;
+        }
+        try {
+          if (await notifier.pollBrowserSignIn(request)) break;
+        } on ApiTransportException {
+          // The person is in the browser; a dropped poll is worth another try.
+        } on ApiException catch (e) {
+          if (!e.isThrottled) rethrow;
+          await Future<void>.delayed(
+            Duration(seconds: e.retryAfterSeconds ?? 10),
+          );
+        }
+      }
+    } on ApiException catch (e) {
+      if (mounted && (request == null || identical(_pending, request))) {
+        setState(() => _formError = _messageFor(e));
+      }
     } on ApiTransportException catch (e) {
-      if (!mounted) return;
-      setState(
-        () => _formError = e.timedOut
-            ? 'The server did not answer in time.'
-            : 'The server could not be reached.',
-      );
+      if (mounted) {
+        setState(
+          () => _formError = e.timedOut
+              ? 'The server did not answer in time.'
+              : 'The server could not be reached.',
+        );
+      }
     } on Object catch (e) {
       debugPrint('Sign-in failed: $e');
-      if (!mounted) return;
-      setState(() => _formError = 'Something went wrong. Please try again.');
+      if (mounted) {
+        setState(() => _formError = 'Something went wrong. Please try again.');
+      }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted && (request == null || identical(_pending, request))) {
+        setState(() {
+          _busy = false;
+          _pending = null;
+        });
+      }
     }
+  }
+
+  Future<void> _openSignInPage(String url) async {
+    final uri = Uri.tryParse(url);
+    var opened = false;
+    try {
+      opened =
+          uri != null &&
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } on Object catch (e) {
+      debugPrint('Opening the sign-in page failed: $e');
+    }
+    if (opened || !mounted) return;
+    ShadToaster.maybeOf(context)?.show(
+      ShadToast(
+        description: Text('No browser could be opened. Visit $url to sign in.'),
+      ),
+    );
   }
 
   /// Turns a failure into one sentence the user can act on.
   ///
   /// Branches on `code` only. The server's `message` is a debug summary and the
   /// contract explicitly does not keep it stable.
-  String? _messageFor(ApiException e) {
-    if (e.isValidationFailure) {
-      // The fields carry their own errors; a duplicate summary above them
-      // would just be noise.
-      return e.validationErrors.isEmpty
-          ? 'Check the form and try again.'
-          : null;
+  String _messageFor(ApiException e) {
+    if (e.code == ApiErrorCode.signInDenied) {
+      return 'The sign-in was denied in the browser.';
     }
 
-    if (e.isUnauthenticated) return 'That email and password do not match.';
+    if (e.code == ApiErrorCode.signInExpired) {
+      return 'The sign-in link expired. Sign in again.';
+    }
 
     if (e.isThrottled) {
       final seconds = e.retryAfterSeconds;
@@ -347,7 +361,6 @@ class _AccountSettingsSectionState
     try {
       await ref.read(accountProvider.notifier).signOut(everywhere: everywhere);
       await ref.read(entitlementProvider.notifier).clearCache();
-      _passwordController.clear();
     } on ApiFailure catch (e) {
       // Only signing out everywhere throws: the other devices' tokens are
       // still good, and this one is still signed in to try again.
@@ -382,7 +395,6 @@ class _AccountSettingsSectionState
     );
     if (deleted != true || !mounted) return;
 
-    _emailController.clear();
     await ref.read(entitlementProvider.notifier).clearCache();
     if (!mounted) return;
     ShadToaster.maybeOf(context)?.show(
@@ -512,11 +524,6 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
   bool _busy = false;
   String? _error;
 
-  /// True when the request got no answer from the API. Only then is the web
-  /// panel offered: it is the same deletion by another road, for when this one
-  /// is closed, not a second option to weigh.
-  bool _offerWebPanel = false;
-
   @override
   void dispose() {
     _password.dispose();
@@ -530,23 +537,19 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
     setState(() {
       _busy = true;
       _error = null;
-      _offerWebPanel = false;
     });
 
     String? error;
-    var offerWebPanel = false;
     try {
       await widget.delete(_password.text);
       if (mounted) Navigator.of(context).pop(true);
       return;
     } on ApiException catch (e) {
       error = _messageFor(e);
-      offerWebPanel = e.statusCode >= 500;
     } on ApiTransportException catch (e) {
       error = e.timedOut
           ? 'The server did not answer in time.'
           : 'The server could not be reached.';
-      offerWebPanel = true;
     } on Object catch (e) {
       error = '$e';
     }
@@ -555,7 +558,6 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
     setState(() {
       _busy = false;
       _error = error;
-      _offerWebPanel = offerWebPanel;
     });
   }
 
@@ -635,18 +637,25 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
               const SizedBox(height: 8),
               _ErrorText(_error!),
             ],
-            if (_offerWebPanel) ...[
-              const SizedBox(height: 8),
-              ShellVibeButton.quiet(
-                buttonKey: const Key('account_delete_web_panel'),
-                label: 'Delete in the Web Panel',
-                icon: LucideIcons.externalLink,
-                onPressed: () {
-                  Navigator.of(context).pop(false);
-                  widget.openWebPanel();
-                },
-              ),
-            ],
+            // The same deletion by another road: for an account opened with
+            // Google or GitHub, which has no password to type here but
+            // confirms with its provider there, and for when the API is down.
+            const SizedBox(height: 12),
+            Text(
+              'Signed up with Google or GitHub? The account has no password; '
+              'delete it in the web panel instead.',
+              style: TextStyle(fontSize: 12, color: tokens.textMuted),
+            ),
+            const SizedBox(height: 4),
+            ShellVibeButton.quiet(
+              buttonKey: const Key('account_delete_web_panel'),
+              label: 'Delete in the Web Panel',
+              icon: LucideIcons.externalLink,
+              onPressed: () {
+                Navigator.of(context).pop(false);
+                widget.openWebPanel();
+              },
+            ),
           ],
         ),
         actions: adaptiveDialogActions(context, [
@@ -758,53 +767,6 @@ class _DeviceListSheetState extends State<_DeviceListSheet> {
           },
         ),
       ),
-    );
-  }
-}
-
-final class _Field extends StatelessWidget {
-  const _Field({
-    required this.label,
-    required this.controller,
-    this.errors,
-    this.placeholder,
-    this.obscure = false,
-    this.keyboardType,
-  });
-
-  final String label;
-  final TextEditingController controller;
-  final List<String>? errors;
-  final String? placeholder;
-  final bool obscure;
-  final TextInputType? keyboardType;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = ShellVibeTokens.resolve(context);
-    final fieldErrors = errors ?? const [];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(fontSize: 12, color: tokens.textSecondary),
-        ),
-        const SizedBox(height: 4),
-        ShadInput(
-          key: Key('account_field_${label.toLowerCase()}'),
-          controller: controller,
-          obscureText: obscure,
-          keyboardType: keyboardType,
-          placeholder: placeholder == null ? null : Text(placeholder!),
-        ),
-        for (final error in fieldErrors)
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: _ErrorText(error),
-          ),
-      ],
     );
   }
 }
