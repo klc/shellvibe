@@ -280,11 +280,152 @@ void main() {
     expect(candidate.suggestedMode, McpAccessMode.readonly);
     expect(candidate.maxMode, McpAccessMode.readonly);
     expect(result['granted'], [
-      {'hostId': 'host-a', 'mode': 'readonly'},
+      {
+        'hostId': 'host-a',
+        'mode': 'readonly',
+        'requestedMode': 'autonomous',
+        'reason': 'max_mode',
+      },
     ]);
     expect(
       await grants.effectiveMode('client-1', 'host-a'),
       McpAccessMode.readonly,
     );
+  });
+
+  group('asking for more than a held grant', () {
+    RequestHostAccessTool toolWith(ApprovalCoordinator coordinator) =>
+        RequestHostAccessTool(
+          hostsRepository: HostsRepository(hostsDao: db.hostsDao),
+          hostsDao: db.hostsDao,
+          grantRepository: grants,
+          approvalCoordinator: coordinator,
+          auditRepository: audit,
+        );
+
+    Future<Map<String, Object?>> ask(
+      ApprovalCoordinator coordinator,
+      String? mode,
+    ) async =>
+        await toolWith(coordinator).execute(ctx, {
+              'hostIds': ['host-a'],
+              'reason': 'restart the app',
+              'requestedMode': ?mode,
+            })
+            as Map<String, Object?>;
+
+    setUp(
+      () => grants.grant(
+        clientId: 'client-1',
+        hostId: 'host-a',
+        mode: McpAccessMode.readonly,
+      ),
+    );
+
+    test('opens the window and raises the grant when approved', () async {
+      final coordinator = _ApproveAs(McpAccessMode.guarded);
+
+      final result = await ask(coordinator, 'guarded');
+
+      expect(
+        coordinator.requests.single.candidates.single.suggestedMode,
+        McpAccessMode.guarded,
+      );
+      expect(result['granted'], [
+        {'hostId': 'host-a', 'mode': 'guarded'},
+      ]);
+      expect(
+        await grants.effectiveMode('client-1', 'host-a'),
+        McpAccessMode.guarded,
+      );
+    });
+
+    for (final reason in ['user_denied', 'timeout', 'cancelled']) {
+      test('keeps the held grant, live, when "$reason"', () async {
+        final result = await ask(_DenyAll(reason), 'guarded');
+
+        expect(result['granted'], [
+          {
+            'hostId': 'host-a',
+            'mode': 'readonly',
+            'requestedMode': 'guarded',
+            'reason': reason,
+          },
+        ]);
+        expect(result['denied'], isEmpty);
+        expect(
+          await grants.effectiveMode('client-1', 'host-a'),
+          McpAccessMode.readonly,
+        );
+        expect(await grants.isInCooldown('client-1', 'host-a'), isFalse);
+        expect(await auditedDecisions('request_host_access'), {
+          'host-a': 'denied',
+        });
+      });
+    }
+
+    test('without a mode, or with a lower one, no window opens and nothing '
+        'is lowered', () async {
+      await grants.grant(
+        clientId: 'client-1',
+        hostId: 'host-a',
+        mode: McpAccessMode.guarded,
+      );
+      final coordinator = _ApproveAs(McpAccessMode.readonly);
+
+      for (final mode in [null, 'readonly', 'guarded']) {
+        final result = await ask(coordinator, mode);
+        expect(result['granted'], [
+          {'hostId': 'host-a', 'mode': 'guarded'},
+        ]);
+      }
+      expect(coordinator.requests, isEmpty);
+    });
+
+    test('above the host\'s max access, says so without a window', () async {
+      await (db.update(db.hosts)..where((h) => h.id.equals('host-a'))).write(
+        const HostsCompanion(mcpDefaultMode: Value('readonly')),
+      );
+      final coordinator = _ApproveAs(McpAccessMode.autonomous);
+
+      final result = await ask(coordinator, 'guarded');
+
+      expect(coordinator.requests, isEmpty);
+      expect(result['granted'], [
+        {
+          'hostId': 'host-a',
+          'mode': 'readonly',
+          'requestedMode': 'guarded',
+          'reason': 'max_mode',
+        },
+      ]);
+    });
+  });
+
+  test('a mode the user lowers in the window is reported as lowered', () async {
+    final tool = RequestHostAccessTool(
+      hostsRepository: HostsRepository(hostsDao: db.hostsDao),
+      hostsDao: db.hostsDao,
+      grantRepository: grants,
+      approvalCoordinator: _ApproveAs(McpAccessMode.readonly),
+      auditRepository: audit,
+    );
+
+    final result =
+        await tool.execute(ctx, {
+              'hostIds': ['host-a'],
+              'reason': 'deploy',
+              'requestedMode': 'guarded',
+            })
+            as Map<String, Object?>;
+
+    expect(result['granted'], [
+      {
+        'hostId': 'host-a',
+        'mode': 'readonly',
+        'requestedMode': 'guarded',
+        'reason': 'user_lowered',
+      },
+    ]);
   });
 }

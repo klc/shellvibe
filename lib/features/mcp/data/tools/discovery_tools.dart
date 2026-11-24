@@ -251,7 +251,12 @@ class RequestHostAccessTool with McpArgReaders implements McpToolHandler {
         'The user can approve some hosts and deny others, and can change the '
         'mode per host, so the response reports "granted" and "denied" '
         'separately — plan around what you did not get rather than assuming '
-        'the whole batch succeeded. Call this once with everything you '
+        'the whole batch succeeded. A grant below the mode you asked for '
+        'carries "requestedMode" and a "reason": "max_mode" (the host allows '
+        'no more), "user_lowered", or, when you asked to raise a grant you '
+        'already hold, "user_denied", "timeout" or "cancelled" with the held '
+        'grant kept. Do not re-ask an upgrade the user denied; work within '
+        'the mode you have or tell the user. Call this once with everything you '
         'expect to need for the task at hand: open_session refuses to open '
         'an approval window on its own, so a host missing from this call '
         'means a HOST_ACCESS_REQUIRED error later.',
@@ -300,6 +305,12 @@ class RequestHostAccessTool with McpArgReaders implements McpToolHandler {
     final denied = <HostAccessDenial>[];
     final candidates = <HostAccessCandidate>[];
     final labels = <String, String>{};
+    // Hosts already held at a lower mode, asked for more: the held grant is
+    // what stands if the upgrade is not approved.
+    final upgrades = <String, HostAccessGrant>{};
+    // Upgrades the window did not approve: kept at the held mode, but audited
+    // as the denial they were.
+    final refusedUpgrades = <String>{};
 
     final live = {
       for (final g in await grantRepository.activeGrantsForClient(
@@ -325,23 +336,31 @@ class RequestHostAccessTool with McpArgReaders implements McpToolHandler {
         continue;
       }
       labels[hostId] = host.label;
+      final maxMode = _maxModeOf(row);
 
       final held = live[hostId];
       if (held != null) {
-        // Already approved: no prompt, and a denial of a repeat request must
-        // not put the existing grant into cooldown.
-        granted.add(
-          HostAccessGrant(
-            hostId: hostId,
-            mode: McpAccessMode.fromName(held.mode).atMost(_maxModeOf(row)),
-            expiresAt: held.expiresAt,
-            sessionScoped: held.connectionScopeId != null,
-          ),
+        final heldGrant = HostAccessGrant(
+          hostId: hostId,
+          mode: McpAccessMode.fromName(held.mode).atMost(maxMode),
+          expiresAt: held.expiresAt,
+          sessionScoped: held.connectionScopeId != null,
         );
-        continue;
-      }
-
-      if (await grantRepository.isInCooldown(ctx.clientId, hostId)) {
+        // Only an explicit ask for more than is held, within the host's max
+        // access, opens the window again. An omitted mode is a repeat,
+        // answered from the grant without a prompt, and an ask for less never
+        // lowers it.
+        final wanted = requestedMode?.atMost(maxMode);
+        if (wanted == null || wanted.index <= heldGrant.mode.index) {
+          granted.add(
+            requestedMode != null && requestedMode.index > heldGrant.mode.index
+                ? _lowered(heldGrant, requestedMode, 'max_mode')
+                : heldGrant,
+          );
+          continue;
+        }
+        upgrades[hostId] = heldGrant;
+      } else if (await grantRepository.isInCooldown(ctx.clientId, hostId)) {
         // Cooldown auto-denies WITHOUT opening a window — the whole point of
         // the cooldown is to stop a looping agent from re-prompting the user
         // for something it was just told no to.
@@ -353,10 +372,8 @@ class RequestHostAccessTool with McpArgReaders implements McpToolHandler {
         HostAccessCandidate(
           hostId: hostId,
           label: host.label,
-          suggestedMode: (requestedMode ?? _maxModeOf(row)).atMost(
-            _maxModeOf(row),
-          ),
-          maxMode: _maxModeOf(row),
+          suggestedMode: (requestedMode ?? maxMode).atMost(maxMode),
+          maxMode: maxMode,
         ),
       );
     }
@@ -374,16 +391,23 @@ class RequestHostAccessTool with McpArgReaders implements McpToolHandler {
 
       final maxModes = {for (final c in candidates) c.hostId: c.maxMode};
       for (final answer in result.granted) {
+        final maxMode = maxModes[answer.hostId] ?? McpAccessMode.readonly;
+        final asked = requestedMode ?? maxMode;
         // Capped again here, not only in the window: what is stored must hold
         // whatever the UI let through.
-        final grant = HostAccessGrant(
+        var grant = HostAccessGrant(
           hostId: answer.hostId,
-          mode: answer.mode.atMost(
-            maxModes[answer.hostId] ?? McpAccessMode.readonly,
-          ),
+          mode: answer.mode.atMost(maxMode),
           expiresAt: answer.expiresAt,
           sessionScoped: answer.sessionScoped,
         );
+        if (grant.mode.index < asked.index) {
+          grant = _lowered(
+            grant,
+            asked,
+            grant.mode == maxMode ? 'max_mode' : 'user_lowered',
+          );
+        }
         await grantRepository.grant(
           clientId: ctx.clientId,
           hostId: grant.hostId,
@@ -394,6 +418,17 @@ class RequestHostAccessTool with McpArgReaders implements McpToolHandler {
         granted.add(grant);
       }
       for (final denial in result.denied) {
+        final held = upgrades[denial.hostId];
+        if (held != null) {
+          // A refused upgrade leaves the held grant as it was. No cooldown:
+          // on an existing row it would suspend the held grant too.
+          // ponytail: so an agent can re-ask an upgrade at once; the reason
+          // in the answer tells it not to. Add an upgrade-only cooldown if
+          // agents loop on it.
+          granted.add(_lowered(held, requestedMode!, denial.reason));
+          refusedUpgrades.add(denial.hostId);
+          continue;
+        }
         // Only the user saying no cools down. A prompt that timed out unseen
         // in the queue, or was cancelled by a lock, is not an answer.
         if (denial.reason == 'user_denied') {
@@ -412,14 +447,23 @@ class RequestHostAccessTool with McpArgReaders implements McpToolHandler {
     final prompted = {for (final c in candidates) c.hostId};
     final redactedReason = const OutputRedactor().redact(reason).text;
     for (final grant in granted) {
+      final refused = refusedUpgrades.contains(grant.hostId);
       await _audit(
         ctx,
         grant.hostId,
         labels[grant.hostId],
-        prompted.contains(grant.hostId)
+        refused
+            ? AuditDecision.denied
+            : prompted.contains(grant.hostId)
             ? AuditDecision.confirmed
             : AuditDecision.allowed,
-        {'reason': redactedReason, 'mode': grant.mode.name},
+        {
+          'reason': redactedReason,
+          'mode': grant.mode.name,
+          if (grant.requestedMode != null)
+            'requestedMode': grant.requestedMode!.name,
+          if (refused) 'denial': grant.reason,
+        },
       );
     }
     for (final denial in denied) {
@@ -452,6 +496,20 @@ class RequestHostAccessTool with McpArgReaders implements McpToolHandler {
     tool: name,
     args: args,
     decision: decision,
+  );
+
+  /// [grant] marked as below what was [asked], and [why].
+  static HostAccessGrant _lowered(
+    HostAccessGrant grant,
+    McpAccessMode asked,
+    String why,
+  ) => HostAccessGrant(
+    hostId: grant.hostId,
+    mode: grant.mode,
+    expiresAt: grant.expiresAt,
+    sessionScoped: grant.sessionScoped,
+    requestedMode: asked,
+    reason: why,
   );
 
   /// An unknown name is reported rather than read as `readonly` (what
