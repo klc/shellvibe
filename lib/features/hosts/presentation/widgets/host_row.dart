@@ -200,11 +200,14 @@ class _HostRowState extends State<HostRow> {
                     ),
                     Expanded(
                       flex: kHostColumnFlex[1],
-                      child: Text(
+                      // Selectable, so the address can be copied without
+                      // opening the edit form. A plain click still selects
+                      // the row; a drag or double-click selects the text.
+                      child: SelectableText(
                         address,
                         maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                         style: monoStyle,
+                        onTap: onSelect,
                       ),
                     ),
                     Expanded(

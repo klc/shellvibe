@@ -119,4 +119,47 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(slot, reserved);
   }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+
+  testWidgets('the address can be selected as text, and a click on it still '
+      'selects the row', (tester) async {
+    var selects = 0;
+    await tester.pumpWidget(
+      ShadTheme(
+        data: ShadThemeData(
+          colorScheme: const ShadSlateColorScheme.dark(),
+          brightness: Brightness.dark,
+        ),
+        child: MaterialApp(
+          home: Material(
+            child: SizedBox(
+              width: 1000,
+              child: HostRow(
+                host: host,
+                groups: const [],
+                connected: false,
+                isConnecting: false,
+                selected: false,
+                compact: false,
+                isFavorite: false,
+                onSelect: () => selects++,
+                onConnect: () {},
+                onOpenSftp: () {},
+                onEdit: () {},
+                onDuplicate: () {},
+                onDelete: () {},
+                onToggleFavorite: () {},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final address = find.widgetWithText(SelectableText, 'root@10.0.0.5:22');
+    expect(address, findsOneWidget);
+
+    await tester.tap(address);
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(selects, 1);
+  });
 }
