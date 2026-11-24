@@ -81,9 +81,11 @@ void main() {
         ),
       ),
     );
-    // The card reads and writes real files, one await at a time.
-    Future<void> settle() async {
-      for (var i = 0; i < 40; i++) {
+    // The card reads and writes real files, one await at a time, so a slow
+    // runner needs more turns than a fast one: wait for [done] when given.
+    Future<void> settle([bool Function()? done]) async {
+      for (var i = 0; i < (done == null ? 40 : 400); i++) {
+        if (done?.call() ?? false) return;
         await tester.runAsync(
           () => Future<void>.delayed(const Duration(milliseconds: 10)),
         );
@@ -102,8 +104,11 @@ void main() {
     expect(find.byKey(const Key('mcp_agent_hook_cursor')), findsNothing);
     expect(find.byKey(const Key('mcp_agent_hook_codex')), findsNothing);
 
+    bool switchIs(bool value) =>
+        tester.widget<ShadSwitch>(hookSwitch).value == value;
+
     await tester.tap(hookSwitch);
-    await settle();
+    await settle(() => switchIs(true));
     expect(
       mcpHookStatus(
         McpAgentApp.claudeCode,
@@ -115,7 +120,7 @@ void main() {
     expect(tester.widget<ShadSwitch>(hookSwitch).value, isTrue);
 
     await tester.tap(hookSwitch);
-    await settle();
+    await settle(() => switchIs(false));
     expect(jsonDecode(settings.readAsStringSync()), <String, dynamic>{});
     expect(tester.widget<ShadSwitch>(hookSwitch).value, isFalse);
   });
