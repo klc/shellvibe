@@ -509,11 +509,11 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: b5782b093830a43f9aa25c6bead5f34cb2a0d1bb
-      resolved-ref: b5782b093830a43f9aa25c6bead5f34cb2a0d1bb
+      ref: b236b93d8d948ea165add1c129aefbb0b3703040
+      resolved-ref: b236b93d8d948ea165add1c129aefbb0b3703040
       url: "https://github.com/klc/flutter_pty2.git"
     source: git
-    version: "3.1.0-beta.1"
+    version: "3.1.0-beta.2"
   flutter_riverpod:
     dependency: "direct main"
     description:

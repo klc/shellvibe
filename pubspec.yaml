@@ -81,13 +81,15 @@ dependencies:
   # built by a Dart build hook instead of platform plugin folders.
   # 3.1.0-beta.1 is the first release whose hook builds for iOS (3.0.0
   # included <libproc.h>, which the iOS SDK does not ship), and it delivers
-  # Unix output in chunks of up to 64 KiB instead of 16 KiB. The beta is tagged
-  # only on our fork, not on pub.dev, so this pins the tag's commit; move back
-  # to a pub.dev release once 3.1.0 ships there.
+  # Unix output in chunks of up to 64 KiB instead of 16 KiB. 3.1.0-beta.2 adds
+  # the bug-hunt fixes (port leak and use-after-free, Windows stdio and batch
+  # quoting, Android close_range, PTY close-on-exec race and others). The beta
+  # is tagged only on our fork, not on pub.dev, so this pins the tag's commit;
+  # move back to a pub.dev release once 3.1.0 ships there.
   flutter_pty2:
     git:
       url: https://github.com/klc/flutter_pty2.git
-      ref: b5782b093830a43f9aa25c6bead5f34cb2a0d1bb
+      ref: b236b93d8d948ea165add1c129aefbb0b3703040
   # Mosh UDP transport. Pinned to our fork by commit, not to the pub.dev
   # release: the package is at 0.0.x, so protocol fixes have to be able to land
   # here without waiting on upstream. Sync with upstream before bumping the ref.
