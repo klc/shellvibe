@@ -766,8 +766,63 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
       iconColor = tokens.textSubtle;
     }
 
+    // Transfers move single files; folders are not offered them.
+    final transfer = item.isDirectory
+        ? null
+        : (isLocal ? onUpload : onDownload);
+    final buttonSide = shellvibeControlHeight(tokens, tokens.controlHeight);
+
+    // The "..." menu leaves out the transfer, which is a button of its own;
+    // a right-click or a long press lists every action.
+    Future<void> showActions(
+      BuildContext anchor, {
+      required bool withTransfer,
+      Offset? at,
+    }) async {
+      final chosen = await showAdaptiveActionMenu<VoidCallback>(
+        context: anchor,
+        globalPosition: at,
+        actions: [
+          if (withTransfer && transfer != null)
+            AdaptiveMenuAction(
+              value: transfer,
+              icon: isLocal ? LucideIcons.upload : LucideIcons.download,
+              label: isLocal ? 'Upload to Remote' : 'Download',
+            ),
+          if (!isLocal && !item.isDirectory && onEditContent != null)
+            AdaptiveMenuAction(
+              value: onEditContent,
+              icon: LucideIcons.filePenLine,
+              label: 'Edit Content',
+            ),
+          if (!isLocal && onEditPermissions != null)
+            AdaptiveMenuAction(
+              value: onEditPermissions,
+              icon: LucideIcons.shieldCheck,
+              label: 'Permissions (chmod)',
+            ),
+          if (!isLocal && onRename != null)
+            AdaptiveMenuAction(
+              value: onRename,
+              icon: LucideIcons.pencil,
+              label: 'Rename',
+            ),
+          AdaptiveMenuAction(
+            value: onDelete,
+            icon: LucideIcons.trash2,
+            label: 'Delete',
+          ),
+        ],
+      );
+      chosen?.call();
+    }
+
     return InkWell(
       onTap: onTap,
+      onSecondaryTapDown: (details) => unawaited(
+        showActions(context, withTransfer: true, at: details.globalPosition),
+      ),
+      onLongPress: () => unawaited(showActions(context, withTransfer: true)),
       borderRadius: BorderRadius.circular(7),
       child: Container(
         height: 36,
@@ -816,93 +871,23 @@ class _SftpDualPaneScreenState extends ConsumerState<SftpDualPaneScreen> {
                 ),
               ),
             ),
-            PopupMenuButton<String>(
-              padding: EdgeInsets.zero,
-              iconSize: 16,
-              tooltip: 'File actions',
-              icon: Icon(
-                LucideIcons.ellipsis,
-                size: 16,
-                color: tokens.textSubtle,
+            // The transfer is the row's main action, so it is always on show;
+            // a folder keeps the space empty so the columns stay aligned.
+            if (transfer == null)
+              SizedBox(width: buttonSide)
+            else
+              ShellVibeIconButton(
+                icon: isLocal ? LucideIcons.upload : LucideIcons.download,
+                tooltip: isLocal ? 'Upload to Remote' : 'Download',
+                onPressed: transfer,
               ),
-              onSelected: (val) {
-                if (val == 'upload' && onUpload != null) onUpload();
-                if (val == 'download' && onDownload != null) onDownload();
-                if (val == 'edit' && onEditContent != null) onEditContent();
-                if (val == 'chmod' && onEditPermissions != null) {
-                  onEditPermissions();
-                }
-                if (val == 'rename' && onRename != null) onRename();
-                if (val == 'delete') onDelete();
-              },
-              // Transfers move single files; folders are not offered them.
-              itemBuilder: (context) => [
-                if (isLocal && !item.isDirectory && onUpload != null)
-                  const PopupMenuItem(
-                    value: 'upload',
-                    child: Row(
-                      children: [
-                        Icon(LucideIcons.upload, size: 16),
-                        SizedBox(width: 8),
-                        Text('Upload to Remote'),
-                      ],
-                    ),
-                  ),
-                if (!isLocal && !item.isDirectory && onDownload != null)
-                  const PopupMenuItem(
-                    value: 'download',
-                    child: Row(
-                      children: [
-                        Icon(LucideIcons.download, size: 16),
-                        SizedBox(width: 8),
-                        Text('Download'),
-                      ],
-                    ),
-                  ),
-                if (!isLocal && !item.isDirectory && onEditContent != null)
-                  const PopupMenuItem(
-                    value: 'edit',
-                    child: Row(
-                      children: [
-                        Icon(LucideIcons.filePenLine, size: 16),
-                        SizedBox(width: 8),
-                        Text('Edit Content'),
-                      ],
-                    ),
-                  ),
-                if (!isLocal && onEditPermissions != null)
-                  const PopupMenuItem(
-                    value: 'chmod',
-                    child: Row(
-                      children: [
-                        Icon(LucideIcons.shieldCheck, size: 16),
-                        SizedBox(width: 8),
-                        Text('Permissions (chmod)'),
-                      ],
-                    ),
-                  ),
-                if (!isLocal && onRename != null)
-                  const PopupMenuItem(
-                    value: 'rename',
-                    child: Row(
-                      children: [
-                        Icon(LucideIcons.pencil, size: 16),
-                        SizedBox(width: 8),
-                        Text('Rename'),
-                      ],
-                    ),
-                  ),
-                const PopupMenuItem(
-                  value: 'delete',
-                  child: Row(
-                    children: [
-                      Icon(LucideIcons.trash2, size: 16),
-                      SizedBox(width: 8),
-                      Text('Delete'),
-                    ],
-                  ),
-                ),
-              ],
+            Builder(
+              builder: (buttonContext) => ShellVibeIconButton(
+                icon: LucideIcons.ellipsis,
+                tooltip: 'File actions',
+                onPressed: () =>
+                    showActions(buttonContext, withTransfer: false),
+              ),
             ),
           ],
         ),
