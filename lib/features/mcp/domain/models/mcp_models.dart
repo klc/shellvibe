@@ -107,17 +107,31 @@ class HostAccessGrant {
   /// granted on, not on a clock, so [expiresAt] alone cannot express it.
   final bool sessionScoped;
 
+  /// Set only when [mode] is below what the agent asked for, so a lower grant
+  /// is never silent.
+  final McpAccessMode? requestedMode;
+
+  /// Why [mode] is below [requestedMode]: `max_mode` (the host's max access),
+  /// `user_lowered` (picked lower in the window), or, for an upgrade of a
+  /// grant already held, the denial reason (`user_denied` · `timeout` ·
+  /// `cancelled`) with the held grant kept.
+  final String? reason;
+
   const HostAccessGrant({
     required this.hostId,
     required this.mode,
     this.expiresAt,
     this.sessionScoped = false,
+    this.requestedMode,
+    this.reason,
   });
 
   Map<String, Object?> toJson() => {
     'hostId': hostId,
     'mode': mode.name,
     if (expiresAt != null) 'expiresAt': expiresAt!.toIso8601String(),
+    if (requestedMode != null) 'requestedMode': requestedMode!.name,
+    if (reason != null) 'reason': reason,
   };
 }
 
