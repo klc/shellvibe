@@ -365,4 +365,27 @@ void _pacedWriteTests() {
       expect(terminal.buffer.lines[0].toString(), contains('kept'));
     });
   });
+
+  test('dispose drops queued output only when told to', () async {
+    Future<String> afterDispose({required bool discardOutput}) async {
+      final terminal = Terminal();
+      final session = FakeSSHSession();
+      final bridge = TerminalSSHBridge(
+        terminal: terminal,
+        session: session,
+        writerOverride: CoalescingTerminalWriter(
+          PacedTerminalWriter(terminal),
+          maxWriteChars: 8 * 1024 * 1024,
+          waitForFrame: () => Completer<void>().future,
+        ),
+      );
+      session.emitStdout('hello');
+      await pumpEventQueue();
+      await bridge.dispose(discardOutput: discardOutput);
+      return terminal.buffer.lines[0].toString();
+    }
+
+    expect(await afterDispose(discardOutput: false), contains('hello'));
+    expect(await afterDispose(discardOutput: true), isNot(contains('hello')));
+  });
 }

@@ -279,6 +279,93 @@ void main() {
 
       await bridge.dispose();
     });
+    test(
+      'the PTY is not read on while the paced writer holds a backlog',
+      () async {
+        // The bug this pins: the read credit went back as soon as a batch was
+        // handed to the paced writer, which queues without limit. A producer
+        // faster than the terminal (`yes`) grew that queue for as long as it
+        // ran, and closing the tab parsed all of it at once and froze the app.
+        final terminal = Terminal();
+        final session = FakePtySession(exitCode: 0);
+        final writer = CoalescingTerminalWriter(
+          // A budget the first write spends, so later chunks wait: a terminal
+          // slower than its producer. Frames never come; the pacer drains on
+          // its own timeout, as it does for a hidden window.
+          PacedTerminalWriter(
+            terminal,
+            frameBudget: const Duration(microseconds: 1),
+            waitForFrame: () => Completer<void>().future,
+          ),
+          maxWriteChars: 1024,
+          waitForFrame: () =>
+              Future<void>.delayed(const Duration(milliseconds: 5)),
+        );
+        final bridge = TerminalLocalPtyBridge(
+          terminal: terminal,
+          session: session,
+          writerOverride: writer,
+        );
+
+        const batches = 8;
+        for (var i = 0; i < batches; i++) {
+          session.emitOutput(List<int>.filled(1024, 0x61 + i));
+        }
+        await pumpEventQueue();
+
+        expect(
+          writer.pendingChunks,
+          greaterThan(TerminalLocalPtyBridge.maxPendingChunks),
+        );
+        expect(
+          session.ackCount,
+          lessThanOrEqualTo(TerminalLocalPtyBridge.maxPendingChunks + 1),
+          reason: 'credit held while the backlog is over the limit',
+        );
+
+        // Once the pacer works its way through, every batch is reported.
+        for (var i = 0; i < 100 && session.ackCount < batches; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        }
+        expect(session.ackCount, equals(batches));
+        // The credit came back with the queue under the limit, not empty;
+        // the rest still drains, and none of it is lost.
+        for (var i = 0; i < 100 && writer.pendingChunks > 0; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        }
+        expect(writer.pendingChunks, isZero);
+        expect(renderBuffer(terminal), contains('h' * 80));
+
+        await bridge.dispose();
+      },
+    );
+
+    test('dispose drops queued output only when told to', () async {
+      // Closing a tab throws its terminal away, so parsing what is queued
+      // only holds the UI. A session that ends on its own keeps its terminal
+      // on screen, and there the output must still land.
+      Future<String> afterDispose({required bool discardOutput}) async {
+        final terminal = Terminal();
+        final session = FakePtySession(exitCode: 0);
+        final bridge = TerminalLocalPtyBridge(
+          terminal: terminal,
+          session: session,
+          writerOverride: CoalescingTerminalWriter(
+            PacedTerminalWriter(terminal),
+            maxWriteChars: 8 * 1024 * 1024,
+            waitForFrame: () => Completer<void>().future,
+          ),
+        );
+        session.emitOutput(utf8.encode('hello'));
+        await pumpEventQueue();
+        await bridge.dispose(discardOutput: discardOutput);
+        return terminal.buffer.lines[0].toString();
+      }
+
+      expect(await afterDispose(discardOutput: false), contains('hello'));
+      expect(await afterDispose(discardOutput: true), isNot(contains('hello')));
+    });
+
     for (final hiddenState in [
       AppLifecycleState.hidden,
       AppLifecycleState.paused,

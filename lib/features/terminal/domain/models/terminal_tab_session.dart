@@ -304,7 +304,10 @@ class TerminalTabSession {
   /// Every field is detached before the first await. A call still closing
   /// when a reconnect installs new transports (a drop's unawaited teardown,
   /// then a quick Reconnect) closes only what it took, never the new ones.
-  Future<void> closeSessions() async {
+  ///
+  /// [discardOutput] drops output the bridges still have queued: for the
+  /// tab's own disposal, where the terminal goes too.
+  Future<void> closeSessions({bool discardOutput = false}) async {
     final clientChangesCancelled = sshClientChangesSub?.cancel();
     sshClientChangesSub = null;
     final linkCancelled = moshLinkSub?.cancel();
@@ -325,12 +328,12 @@ class TerminalTabSession {
 
     await clientChangesCancelled;
     await linkCancelled;
-    await ssh?.dispose(closeSession: true);
-    await mosh?.dispose(closeSession: true);
+    await ssh?.dispose(closeSession: true, discardOutput: discardOutput);
+    await mosh?.dispose(closeSession: true, discardOutput: discardOutput);
     // Closed before the SSH manager: the bootstrap client is the one below,
     // and nothing about the UDP session outlives it.
     await moshManager?.close();
-    await pty?.dispose(killPty: true);
+    await pty?.dispose(killPty: true, discardOutput: discardOutput);
     await sshManager?.close();
     // Closed innermost-first (reverse of connect order): the target's own
     // manager is already down above, so nothing downstream depends on these
@@ -347,7 +350,9 @@ class TerminalTabSession {
     moshPredictionEngine.reset();
     refreshMoshPredictionText();
     outputChain.dispose();
-    await closeSessions();
+    // The terminal is disposed below, so parsing what is still queued would
+    // only hold the UI — for a flood like `yes`, for seconds.
+    await closeSessions(discardOutput: true);
     await _moshPredictionChanges.close();
     // xterm3 guards write() against a disposed terminal, so late writes from
     // an in-flight connect do not crash after disposal.

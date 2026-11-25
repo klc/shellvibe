@@ -181,8 +181,16 @@ class TerminalLocalPtyBridge {
   /// stops, with no freeze to show for it.
   int _unacknowledgedBatches = 0;
 
-  /// Reports the parsed batches, which is what lets the reader ask the PTY for
-  /// more.
+  /// How many chunks the paced writer may hold before the PTY stops being
+  /// read. A chunk is at most [CoalescingTerminalWriter.maxWriteChars], so
+  /// this keeps the backlog to a frame or two of parsing.
+  static const maxPendingChunks = 2;
+
+  /// A recheck of [_acknowledgeBatch] is waiting for the next frame.
+  bool _acknowledgementHeld = false;
+
+  /// Reports the handed-over batches, which is what lets the reader ask the
+  /// PTY for more.
   ///
   /// The credit window lives on the reading isolate: it stops acknowledging
   /// the PTY once enough batches are in flight unreported, which fills the
@@ -190,8 +198,27 @@ class TerminalLocalPtyBridge {
   /// batch rather than per read is the whole point — macOS hands over at most
   /// 1024 bytes per read, so a per-read acknowledgement would cost a round
   /// trip per KiB and cap throughput near 3 MB/s.
+  ///
+  /// [PacedTerminalWriter] applies no backpressure of its own: it queues
+  /// whatever it is given. Acknowledging on hand-over alone let a producer
+  /// faster than the terminal (`yes`) grow that queue without bound — memory,
+  /// output still scrolling long after Ctrl+C, and a flush of the whole
+  /// backlog when the tab closed that froze the app. So the credit is held
+  /// while the pacer has more than [maxPendingChunks] queued, and returned
+  /// once a frame has let it parse its way back under.
   void _acknowledgeBatch() {
-    if (_isDisposed) return;
+    if (_isDisposed || _unacknowledgedBatches == 0) return;
+    if (_writer.pendingChunks > maxPendingChunks) {
+      if (_acknowledgementHeld) return;
+      _acknowledgementHeld = true;
+      unawaited(
+        _writer.nextFrame().then((_) {
+          _acknowledgementHeld = false;
+          _acknowledgeBatch();
+        }),
+      );
+      return;
+    }
     while (_unacknowledgedBatches > 0) {
       _unacknowledgedBatches--;
       session.acknowledge();
@@ -234,7 +261,13 @@ class TerminalLocalPtyBridge {
 
   /// Cancels PTY output subscription, detaches terminal callbacks,
   /// and optionally kills the PTY process.
-  Future<void> dispose({bool killPty = true}) async {
+  ///
+  /// [discardOutput] drops output still queued instead of parsing it: for a
+  /// terminal that is being thrown away, where parsing it only holds the UI.
+  Future<void> dispose({
+    bool killPty = true,
+    bool discardOutput = false,
+  }) async {
     if (_isDisposed) return;
     _isDisposed = true;
 
@@ -247,11 +280,10 @@ class TerminalLocalPtyBridge {
     await _outputSubscription?.cancel();
     _outputSubscription = null;
 
-    // Teardown must not swallow output the process already produced, so drain
-    // what is queued before dropping the writer.
-    _writer
-      ..flush()
-      ..dispose();
+    // A terminal that stays on screen must not lose output the process
+    // already produced, so what is queued is drained before the writer goes.
+    if (!discardOutput) _writer.flush();
+    _writer.dispose();
 
     await session.dispose(kill: killPty);
   }
