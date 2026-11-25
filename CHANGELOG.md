@@ -53,6 +53,8 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 
 - AI Access: an agent holding a lower access level that asks for a higher
   one is asked about again, instead of silently keeping the lower grant.
+- Terminal: closing a local tab while a program floods output (`yes`) no
+  longer freezes the app, and Ctrl+C stops such output at once.
 - Terminal (xterm3 6.6.0): vim colour schemes no longer leave stripes when
   they scroll, ncurses box lines no longer come out as `lqqqk`, Ctrl+C and
   Esc work in the shell after a TUI that left kitty keyboard mode on, and the
