@@ -1,6 +1,6 @@
 # Privacy
 
-**Last updated:** 2026-11-13 · Applies to ShellVibe 1.13.0 for macOS,
+**Last updated:** 2026-11-25 · Applies to ShellVibe 1.14.0 for macOS,
 Windows, Linux, iOS and Android.
 
 ShellVibe is a terminal, SSH and SFTP client. It runs on your machine and talks
@@ -108,7 +108,8 @@ thing, and only when you start it:
 | Data | Readable by us? | Kept for |
 | --- | --- | --- |
 | Name and email address you registered with | Yes | Until you delete the account |
-| Password | No — stored as a bcrypt hash | Until you delete the account |
+| Password, if you set one | No — stored as a bcrypt hash | Until you delete the account |
+| Google or GitHub account you sign in with: the provider's name and its ID for your account (no access tokens) | Yes | Until you delete the account |
 | Each device you signed in on: its name, platform (macOS, Windows, …), app version and when it was last seen | Yes | Until you delete the account. Removing a device signs it out but keeps the entry, marked removed |
 | Public keys each device generated for itself | Public by design | Until you delete the account |
 | Cloud backups | **No** — encrypted on your device with your backup passphrase (Argon2id, AES-256-GCM) | The newest 10 revisions; older ones are deleted automatically |
