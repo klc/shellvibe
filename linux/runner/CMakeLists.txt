@@ -20,6 +20,13 @@ apply_standard_settings(${BINARY_NAME})
 add_definitions(-DAPPLICATION_ID="${APPLICATION_ID}")
 
 # Add dependency libraries. Add any application-specific dependencies here.
+# libgcc_s has to load before the engine: Flutter 3.50's libflutter_linux_gtk.so
+# exports its own libunwind `_Unwind_*` symbols, and when libstdc++ binds to
+# those, a C++ exception that a plugin throws and catches itself aborts the
+# app instead (flutter_secure_storage without a Secret Service, at launch).
+# Drop this once the engine hides them (flutter/flutter#196402, PR #196451).
+target_link_libraries(${BINARY_NAME} PRIVATE
+  "-Wl,--push-state,--no-as-needed" gcc_s "-Wl,--pop-state")
 target_link_libraries(${BINARY_NAME} PRIVATE flutter)
 target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::GTK)
 
