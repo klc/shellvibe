@@ -7,6 +7,8 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-11-25
+
 ### Added
 
 - AI Access: agents can copy one file to or from a server with the new
@@ -27,13 +29,37 @@ and release versions follow [Semantic Versioning](https://semver.org/).
   agent never handles credentials) and add it or deny. The new host is not
   granted to the agent: it still asks for access as usual. An address that is
   already saved is not added again; the agent is told which host it is.
+- Settings: pointing at a terminal colour scheme or an app palette, or moving
+  to it with the arrow keys, previews it. Nothing is saved until you pick
+  one.
+- SFTP: Upload to Remote and Download are a button on every file row, and a
+  right-click or long press on a row opens all of its actions.
+- Hosts: the address in the host list can be selected and copied.
+- Terminal: font sizes go down to 6.
 
 ### Changed
 
-- Local terminals run on `flutter_pty2` 3.1.0-beta.1: output arrives in larger
+- Account: Sign In opens the web panel in your browser, where you sign in or
+  register with a password, Google or GitHub and allow the app. The email and
+  password form in the app is gone.
+- Terminal: faster output on `xterm3` 6.6.0, most of all for coloured,
+  box-drawing and CJK text, with less memory for `grep --color`-style output.
+- Local terminals run on `flutter_pty2` 3.1.0: output arrives in larger
   chunks, the native library is built by a Dart build hook instead of a
   CocoaPods or CMake plugin, and closing a tab still hangs the shell up before
   it is stopped.
+
+### Fixed
+
+- AI Access: an agent holding a lower access level that asks for a higher
+  one is asked about again, instead of silently keeping the lower grant.
+- Terminal: closing a local tab while a program floods output (`yes`) no
+  longer freezes the app, and Ctrl+C stops such output at once.
+- Terminal (xterm3 6.6.0): vim colour schemes no longer leave stripes when
+  they scroll, ncurses box lines no longer come out as `lqqqk`, Ctrl+C and
+  Esc work in the shell after a TUI that left kitty keyboard mode on, and the
+  iOS return key sends one Enter. Untrusted output can no longer stall the
+  terminal.
 
 ## [1.13.0] - 2026-11-13
 
