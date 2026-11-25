@@ -30,7 +30,7 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- Local terminals run on `flutter_pty2` 3.1.0-beta.1: output arrives in larger
+- Local terminals run on `flutter_pty2` 3.1.0: output arrives in larger
   chunks, the native library is built by a Dart build hook instead of a
   CocoaPods or CMake plugin, and closing a tab still hangs the shell up before
   it is stopped.
