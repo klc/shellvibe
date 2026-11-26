@@ -96,6 +96,10 @@ class AppSettingsModel {
   /// (see `Terminal.isPasteSafe`). Off, such text is pasted straight away.
   final bool confirmMultiLinePaste;
 
+  /// Desktop builds outside a store only. Asks GitHub once a day, at launch,
+  /// whether a newer release is out, and says so in a toast. See PRIVACY.md.
+  final bool checkUpdatesAtLaunch;
+
   const AppSettingsModel({
     this.themeMode = ThemeMode.system,
     this.palette = AppPalette.dark,
@@ -114,6 +118,7 @@ class AppSettingsModel {
     this.keepRunningInTray = true,
     this.desktopNotifications = true,
     this.confirmMultiLinePaste = true,
+    this.checkUpdatesAtLaunch = true,
   });
 
   /// The brightness the app is drawn in, for callers with no theme to read it
@@ -182,6 +187,7 @@ class AppSettingsModel {
     bool? keepRunningInTray,
     bool? desktopNotifications,
     bool? confirmMultiLinePaste,
+    bool? checkUpdatesAtLaunch,
   }) {
     return AppSettingsModel(
       themeMode: themeMode ?? this.themeMode,
@@ -204,6 +210,7 @@ class AppSettingsModel {
       desktopNotifications: desktopNotifications ?? this.desktopNotifications,
       confirmMultiLinePaste:
           confirmMultiLinePaste ?? this.confirmMultiLinePaste,
+      checkUpdatesAtLaunch: checkUpdatesAtLaunch ?? this.checkUpdatesAtLaunch,
     );
   }
 
@@ -225,6 +232,7 @@ class AppSettingsModel {
     'keepRunningInTray': keepRunningInTray,
     'desktopNotifications': desktopNotifications,
     'confirmMultiLinePaste': confirmMultiLinePaste,
+    'checkUpdatesAtLaunch': checkUpdatesAtLaunch,
   };
 
   factory AppSettingsModel.fromJson(Map<String, dynamic> json) {
@@ -272,6 +280,7 @@ class AppSettingsModel {
       keepRunningInTray: _read<bool>(json['keepRunningInTray']) ?? true,
       desktopNotifications: _read<bool>(json['desktopNotifications']) ?? true,
       confirmMultiLinePaste: _read<bool>(json['confirmMultiLinePaste']) ?? true,
+      checkUpdatesAtLaunch: _read<bool>(json['checkUpdatesAtLaunch']) ?? true,
     );
   }
 

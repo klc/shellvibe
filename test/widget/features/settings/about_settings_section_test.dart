@@ -215,5 +215,56 @@ void main() {
         reason: 'the app and SECURITY.md must name the same address',
       );
     });
+
+    testWidgets('the launch check has its own switch, on by default', (
+      tester,
+    ) async {
+      debugPlatformCapabilitiesOverride = TargetPlatform.macOS;
+      addTearDown(() => debugPlatformCapabilitiesOverride = null);
+      await pumpSection(tester);
+
+      final tile = find.byKey(const Key('about_check_updates_at_launch'));
+      expect(tile, findsOneWidget);
+      expect(tester.widget<SwitchListTile>(tile).value, isTrue);
+    });
+
+    testWidgets('the update toast names the version and can skip it', (
+      tester,
+    ) async {
+      var skipped = 0;
+      await tester.pumpWidget(
+        ShadTheme(
+          data: ShadThemeData(
+            colorScheme: const ShadSlateColorScheme.light(),
+            brightness: Brightness.light,
+          ),
+          child: MaterialApp(
+            builder: (context, child) => ShadToaster(child: child!),
+            home: Builder(
+              builder: (context) => TextButton(
+                onPressed: () => showUpdateAvailableToast(
+                  context,
+                  const UpdateAvailable(
+                    version: '99.0.0',
+                    url: 'https://example.test',
+                  ),
+                  onSkip: () => skipped++,
+                ),
+                child: const Text('show'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('show'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('ShellVibe 99.0.0 is out'), findsOneWidget);
+      expect(find.text('You have ${AppConstants.appVersion}.'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('update_toast_skip')));
+      await tester.pumpAndSettle();
+      expect(skipped, 1);
+      expect(find.text('ShellVibe 99.0.0 is out'), findsNothing);
+    });
   });
 }

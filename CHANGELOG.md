@@ -7,6 +7,15 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Updates: the macOS, Windows (installer and portable) and Linux builds now
+  check GitHub for a newer release at launch, at most once a day, and say so
+  in a notice you can follow to the release notes or skip. Turn it off under
+  Settings → About → "Check at launch". This changes the privacy policy, which
+  said the check ran only when asked; see `PRIVACY.md`. Store builds are
+  unchanged: their stores update them.
+
 ## [1.14.0] - 2026-11-25
 
 ### Added

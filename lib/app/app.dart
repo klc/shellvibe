@@ -14,6 +14,10 @@ import '../features/device_link/presentation/notifiers/device_link_notifier.dart
 import '../features/mcp/presentation/notifiers/mcp_settings_notifier.dart';
 import '../features/mcp/presentation/widgets/mcp_approval_host.dart';
 import '../features/settings/domain/models/app_settings_model.dart';
+import '../features/settings/domain/services/launch_update_check.dart';
+import '../features/settings/domain/services/update_check_service.dart';
+import '../features/settings/presentation/widgets/about_settings_section.dart';
+import '../shared/providers/database_providers.dart';
 import '../features/settings/presentation/dialogs/problem_report_dialog.dart';
 import '../features/settings/presentation/notifiers/settings_notifier.dart';
 import '../features/cloud_backup/presentation/notifiers/cloud_backup_notifier.dart';
@@ -92,7 +96,34 @@ class _ShellVibeAppState extends ConsumerState<ShellVibeApp>
       _syncSecureWindow(ref.read(vaultProvider));
       _syncWindowChrome();
       _offerUnreportedCrash(ref.read(vaultProvider));
+      unawaited(_checkForUpdateAtLaunch());
     });
+  }
+
+  /// A newer release, announced once in a toast. Only where the user updates
+  /// the app themselves: a store updates the mobile and Microsoft Store
+  /// builds. Settings > About turns it off; at most once a day either way.
+  Future<void> _checkForUpdateAtLaunch() async {
+    if (isMobilePlatform || isWindowsStorePackage) return;
+    try {
+      final settings = await ref.read(settingsProvider.future);
+      if (!settings.checkUpdatesAtLaunch) return;
+      final check = LaunchUpdateCheck(
+        service: ref.read(updateCheckServiceProvider),
+        storage: ref.read(secureStorageServiceProvider),
+      );
+      final update = await check.run();
+      if (update == null || !mounted) return;
+      final context = rootNavigatorKey.currentContext;
+      if (context == null || !context.mounted) return;
+      showUpdateAvailableToast(
+        context,
+        update,
+        onSkip: () => unawaited(check.skip(update.version)),
+      );
+    } on Object catch (error) {
+      debugPrint('[UpdateCheck] launch check failed: $error');
+    }
   }
 
   bool _crashOffered = false;
