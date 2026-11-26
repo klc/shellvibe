@@ -153,3 +153,34 @@ jobs:
           else
             flutter test --reporter compact
           fi
+
+  # Nothing else builds Android before a release: the desugaring break (#35)
+  # from flutter_local_notifications reached main because CI never ran Gradle.
+  # Release mode, so R8 runs too; without the upload keystore Gradle signs
+  # with the debug key, which is fine for a build that is thrown away.
+  android:
+    name: Android
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          channel: stable
+          flutter-version: 3.50.0
+          cache: true
+          pub-cache: true
+
+      # No --no-pub, for the plugin registrant reason in mobile-release.yml.
+      - name: Build APK
+        run: flutter build apk --release --target-platform android-arm64
