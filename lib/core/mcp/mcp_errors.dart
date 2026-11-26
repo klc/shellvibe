@@ -46,6 +46,10 @@ enum McpErrorCode {
   /// set; retry with `overwrite: true` only if replacing it is intended.
   destinationExists,
 
+  /// The user switched this tool off in ShellVibe. Retrying cannot help, and
+  /// neither can reaching the host another way.
+  toolDisabled,
+
   /// Anything not covered above.
   internal;
 
@@ -63,6 +67,7 @@ enum McpErrorCode {
     McpErrorCode.runbookBusy => 'RUNBOOK_BUSY',
     McpErrorCode.invalidVariables => 'INVALID_VARIABLES',
     McpErrorCode.destinationExists => 'DESTINATION_EXISTS',
+    McpErrorCode.toolDisabled => 'TOOL_DISABLED',
     McpErrorCode.internal => 'INTERNAL_ERROR',
   };
 }

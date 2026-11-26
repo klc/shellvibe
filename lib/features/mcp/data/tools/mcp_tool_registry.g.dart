@@ -8,6 +8,49 @@ part of 'mcp_tool_registry.dart';
 
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // ignore_for_file: type=lint, type=warning
+
+@ProviderFor(mcpToolSwitches)
+final mcpToolSwitchesProvider = McpToolSwitchesProvider._();
+
+final class McpToolSwitchesProvider
+    extends
+        $FunctionalProvider<McpToolSwitches, McpToolSwitches, McpToolSwitches>
+    with $Provider<McpToolSwitches> {
+  McpToolSwitchesProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'mcpToolSwitchesProvider',
+        isAutoDispose: false,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$mcpToolSwitchesHash();
+
+  @$internal
+  @override
+  $ProviderElement<McpToolSwitches> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  McpToolSwitches create(Ref ref) {
+    return mcpToolSwitches(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(McpToolSwitches value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<McpToolSwitches>(value),
+    );
+  }
+}
+
+String _$mcpToolSwitchesHash() => r'54b6a364662d615fa2964d4ba9e4d354d95b732b';
+
 /// Provider for [McpToolRegistry].
 ///
 /// `keepAlive`, matching every other provider in this feature that backs a
@@ -71,4 +114,4 @@ final class McpToolRegistryProvider
   }
 }
 
-String _$mcpToolRegistryHash() => r'c92e546756f1b03db85e64750f12e6e77e582261';
+String _$mcpToolRegistryHash() => r'ed320a803167329dea6847a417f249d714d3b12a';

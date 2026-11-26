@@ -183,3 +183,51 @@ enum AuditDecision {
     _ => AuditDecision.error,
   };
 }
+
+/// The tools the user can switch off for every agent, a group at a time, in
+/// Settings > AI Access.
+///
+/// Finding hosts, asking for access and opening sessions are not in any
+/// group: every other tool needs them, and on their own they change nothing.
+enum McpToolGroup {
+  commands('Run commands', 'run_command and interrupt in an open session.', {
+    'run_command',
+    'interrupt',
+  }),
+  fileTransfer(
+    'File transfer',
+    'upload_file and download_file between this machine and a host.',
+    {'upload_file', 'download_file'},
+  ),
+  automation(
+    'Runbooks and snippets',
+    'List and run the runbooks and snippets saved in ShellVibe.',
+    {
+      'list_runbooks',
+      'run_runbook',
+      'get_runbook_run',
+      'cancel_runbook_run',
+      'list_snippets',
+      'run_snippet',
+    },
+  ),
+  addHost(
+    'Add hosts',
+    'add_host, which asks you to save a new host for the agent.',
+    {'add_host'},
+  );
+
+  final String label;
+  final String description;
+  final Set<String> tools;
+
+  const McpToolGroup(this.label, this.description, this.tools);
+
+  /// The group [tool] belongs to, or null for a tool that is always on.
+  static McpToolGroup? of(String tool) {
+    for (final group in values) {
+      if (group.tools.contains(tool)) return group;
+    }
+    return null;
+  }
+}
