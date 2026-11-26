@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/klc/shellvibe/actions/workflows/ci.yml/badge.svg)](https://github.com/klc/shellvibe/actions/workflows/ci.yml)
 [![Website](https://img.shields.io/badge/website-shellvibe.dev-blue)](https://shellvibe.dev)
+[![klc/shellvibe MCP server](https://glama.ai/mcp/servers/klc/shellvibe/badges/score.svg)](https://glama.ai/mcp/servers/klc/shellvibe)
 
 > Cross-platform (macOS, Windows, Linux; iOS and Android in beta) terminal, SSH/SFTP client and remote infrastructure workstation built with **Flutter 3.x / Dart 3.x**. Official website: [shellvibe.dev](https://shellvibe.dev).
 
