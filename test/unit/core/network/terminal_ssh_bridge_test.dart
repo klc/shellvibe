@@ -69,6 +69,8 @@ class FakeSSHSession implements SSHSession {
     _stdoutController.close();
   }
 
+  bool get stdoutPaused => _stdoutController.isPaused;
+
   void closeStderr() {
     _stderrController.close();
   }
@@ -364,6 +366,58 @@ void _pacedWriteTests() {
       expect(writer.flushCount, greaterThan(0));
       expect(terminal.buffer.lines[0].toString(), contains('kept'));
     });
+  });
+
+  test('stdout is paused while the paced writer holds a backlog', () async {
+    // The bug this pins: the bridge read stdout as fast as it came and the
+    // paced writer queued without limit, so a `cat` of a large file grew
+    // the queue for as long as it ran.
+    final terminal = Terminal();
+    final session = FakeSSHSession();
+    final writer = CoalescingTerminalWriter(
+      // A budget the first write spends, so later chunks wait: a terminal
+      // slower than the remote. Frames never come; the pacer drains on its
+      // own timeout, as it does for a hidden window.
+      PacedTerminalWriter(
+        terminal,
+        frameBudget: const Duration(microseconds: 1),
+        waitForFrame: () => Completer<void>().future,
+      ),
+      maxWriteChars: 1024,
+      waitForFrame: () => Future<void>.delayed(const Duration(milliseconds: 5)),
+    );
+    final bridge = TerminalSSHBridge(
+      terminal: terminal,
+      session: session,
+      writerOverride: writer,
+    );
+
+    for (var i = 0; i < 8; i++) {
+      session.emitStdout(String.fromCharCode(0x61 + i) * 1024);
+    }
+    await pumpEventQueue();
+
+    expect(writer.pendingChunks,
+        greaterThan(TerminalSSHBridge.maxPendingChunks));
+    expect(session.stdoutPaused, isTrue,
+        reason: 'stdout paused while the backlog is over the limit');
+
+    // Once the pacer works its way through, reading resumes and nothing is
+    // lost.
+    for (var i = 0;
+        i < 100 && (session.stdoutPaused || writer.hasPendingOutput);
+        i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+    expect(session.stdoutPaused, isFalse);
+    expect(writer.hasPendingOutput, isFalse);
+    final text = terminal.buffer.getText();
+    for (var i = 0; i < 8; i++) {
+      expect(text, contains(String.fromCharCode(0x61 + i) * 80));
+    }
+
+    await bridge.dispose(closeSession: false);
+    session.close();
   });
 
   test('dispose drops queued output only when told to', () async {

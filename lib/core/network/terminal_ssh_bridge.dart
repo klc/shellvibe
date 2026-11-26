@@ -69,6 +69,10 @@ class TerminalSSHBridge {
   }
 
   void _bind() {
+    // Wired here rather than at construction so an injected writer applies
+    // backpressure exactly like the one this bridge builds for itself.
+    _writer.onHandOff = _holdWhileBacklogged;
+
     // 1. Wire user input from xterm Terminal -> SSH session stdin
     void send(String data) {
       if (_isDisposed) return;
@@ -127,6 +131,37 @@ class TerminalSSHBridge {
     terminal.onResize = (int width, int height, int pixelWidth, int pixelHeight) {
       resizeTerminal(width, height, pixelWidth, pixelHeight);
     };
+  }
+
+  /// How many chunks the paced writer may hold before stdout is paused, as
+  /// for the local PTY.
+  static const maxPendingChunks = 2;
+
+  /// stdout is paused until the backlog is back under [maxPendingChunks].
+  bool _stdoutHeld = false;
+
+  /// Stops reading while the paced writer has a backlog.
+  ///
+  /// The paced writer queues without limit, so a remote faster than the
+  /// terminal (`cat` of a large file, `yes`) grew that queue for as long as
+  /// it ran. Pausing stdout pauses the SSH channel under it, and dartssh2
+  /// sends no window adjust while its channel is paused, so the remote stops
+  /// once it has spent the window it holds. stderr shares that channel and
+  /// stops with it.
+  void _holdWhileBacklogged() {
+    if (_isDisposed || _stdoutHeld) return;
+    if (_writer.pendingChunks <= maxPendingChunks) return;
+    _stdoutHeld = true;
+    _stdoutSubscription?.pause();
+    unawaited(_resumeWhenDrained());
+  }
+
+  Future<void> _resumeWhenDrained() async {
+    while (!_isDisposed && _writer.pendingChunks > maxPendingChunks) {
+      await _writer.nextFrame();
+    }
+    _stdoutHeld = false;
+    if (!_isDisposed) _stdoutSubscription?.resume();
   }
 
   void _checkStreamsDone() {
