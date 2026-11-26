@@ -3,9 +3,9 @@
 [![CI](https://github.com/klc/shellvibe/actions/workflows/ci.yml/badge.svg)](https://github.com/klc/shellvibe/actions/workflows/ci.yml)
 [![Website](https://img.shields.io/badge/website-shellvibe.dev-blue)](https://shellvibe.dev)
 
-> Cross-platform (iOS, Android, macOS, Windows, Linux) terminal, SSH/SFTP client and remote infrastructure workstation built with **Flutter 3.x / Dart 3.x**. Official website: [shellvibe.dev](https://shellvibe.dev).
+> Cross-platform (macOS, Windows, Linux; iOS and Android in beta) terminal, SSH/SFTP client and remote infrastructure workstation built with **Flutter 3.x / Dart 3.x**. Official website: [shellvibe.dev](https://shellvibe.dev).
 
-ShellVibe brings modern, hardware-accelerated terminal rendering, a Zero-Knowledge encrypted identity vault, dual-pane SFTP, visual port-forwarding tunnels and multi-step runbook automation to **five platforms from a single codebase** — competing with Termius, Warp, Tabby, Blink Shell and MobaXterm.
+ShellVibe brings modern, hardware-accelerated terminal rendering, a Zero-Knowledge encrypted identity vault, dual-pane SFTP, visual port-forwarding tunnels and multi-step runbook automation to **five platforms from a single codebase** (the iOS and Android apps are in beta) — competing with Termius, Warp, Tabby, Blink Shell and MobaXterm.
 
 ## 📸 Screenshots
 
@@ -62,7 +62,7 @@ ShellVibe brings modern, hardware-accelerated terminal rendering, a Zero-Knowled
 - **Bookmarks & command palette** — Star a host or a saved layout and it leads the ⌘K palette, the Connect to Host panel and the terminal's empty screen, so a server opens from anywhere.
 - **Dual-pane SFTP** — Background transfer queue, atomic uploads (temp + rename), in-app remote file editor, chmod/chown, path-traversal protection.
 - **Visual Tunnels** — Local (`-L`), Remote (`-R`) and Dynamic SOCKS5 (`-D`) port forwarding with live throughput stats.
-- **Identity Vault** — Argon2id + AES-256-GCM Zero-Knowledge encryption. Master password protected DEK/KEK architecture, brute-force lockout and auto-lock on background.
+- **Identity Vault** — Argon2id + AES-256-GCM Zero-Knowledge encryption. Master password protected DEK/KEK architecture, brute-force lockout and an optional auto-lock.
 - **Snippets & Runbooks** — `${INPUT:variable}` parameterised commands and multi-step runbook execution with exit-code / regex output verification.
 - **Workspaces** — Isolated workspace scoping for hosts, identities, tunnels and automation; switched by clicking the workspace card.
 - **AI access (MCP)** — A localhost-only MCP server, off by default per workspace, that gives an agent (Claude Code, Claude Desktop, Cursor, Antigravity and Codex in one click, or any MCP client by hand) `list_hosts`, `describe_host`, `add_host`, `request_host_access`, `open_session`, `run_command`, `upload_file`, `download_file`, `interrupt`, `close_session`, `list_sessions` and the runbook tools `list_runbooks`, `run_runbook`, `get_runbook_run` and `cancel_runbook_run`, and `list_snippets` and `run_snippet` for saved snippets — under per-host approval and policy, with an audit log and a kill switch, and never a stored credential. An optional hook (Claude Code, Codex, Cursor; macOS and Linux) sends an agent's own `ssh`, `scp`, `sftp` and `rsync` back to these tools.
@@ -151,7 +151,7 @@ flutter test
 - Identity secrets (passwords, private keys, passphrases) are encrypted with a random Data Encryption Key (DEK). With a master password configured, the DEK is stored only in its AES-256-GCM wrapped form and the plaintext copy is purged from the keychain.
 - Failed unlock attempts trigger exponential back-off lockout (30s → … → 1h).
 - SFTP operations mitigate path-traversal (slip) attacks and uploads use atomic temp-file + rename commits.
-- AI access is off by default in every workspace. When it is on, the MCP server listens on `127.0.0.1` only, an agent sees a host as an opaque id rather than a hostname or credential, each host has its own AI access switch and a max access level (Read only, Ask before changes or Full access) that no grant or approval can exceed, every tool call is written to an audit log, and one button cuts all agent access.
+- AI access is off by default in every workspace. When it is on, the MCP server listens on `127.0.0.1` only, an agent sees a host as an opaque id rather than a hostname or credential, each host has its own AI access switch and a max access level (Read only, Ask before changes or Full access) that no grant or approval can exceed, every command, file transfer, access request and run is written to an audit log, and one button cuts all agent access.
 
 ### macOS App Sandbox is disabled
 
@@ -166,9 +166,9 @@ Consequences to keep in mind:
 ### Privacy
 
 ShellVibe has no analytics, no telemetry and no automatic crash reporting, and
-it needs no account. Signed out, it reaches the network in four places only:
-the hosts you connect to, a manual update check you press a button for, the
-font CDN if you pick a non-bundled font, and Device Link over your own LAN.
+it needs no account. Signed out, it reaches the network in three places only:
+the hosts you connect to, a manual update check you press a button for, and
+Device Link over your own LAN.
 
 The account is optional and exists for cloud backup and sync. Signed in, the
 app talks to `api.shellvibe.dev`, which holds your name, email, device list and
@@ -182,7 +182,8 @@ Every push and pull request is scanned for secrets over the full history, then
 analysed and tested on Linux, macOS and Windows.
 
 A `vX.Y.Z` tag builds and packages all three desktop platforms — a signed and
-notarized DMG, a signed Windows installer, an AppImage and `.deb`, `.rpm` and
+notarized DMG, a Windows installer (signed once a code-signing certificate is
+in place; today's is unsigned), an AppImage and `.deb`, `.rpm` and
 Arch packages — and opens a draft GitHub Release carrying every artifact and a
 `SHA256SUMS` file. Publishing is a person pressing a button, never a side effect
 of pushing a tag. Builds made

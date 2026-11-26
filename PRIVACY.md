@@ -141,6 +141,10 @@ are signed in.
 
 ### Server logs
 
+Traffic to shellvibe.dev and api.shellvibe.dev passes through Cloudflare, which
+carries it to our server and filters abuse. Cloudflare sees each request,
+including your IP address, under its own privacy terms.
+
 Our server records each request's time, method, path, status, duration and the
 account or device it came from, and the web server that terminates TLS records
 the requesting IP address. Authorization headers, cookies and tokens are
@@ -155,7 +159,7 @@ database are kept for 14 days, so data you delete disappears from them within
 
 We do not sell or share account data, send marketing email, or use it for
 advertising. No one else receives it except the hosting provider that stores it
-on our behalf.
+on our behalf and Cloudflare, which carries the traffic.
 
 ## Backups to a file
 
@@ -175,6 +179,12 @@ iPhone and iPad we enter it in App Store Connect to send a TestFlight invite, so
 Google or Apple receive it under their own privacy terms. Nothing else is
 shared, and your IP address is not stored with it. We delete the list when the
 beta ends, or sooner if you ask at info@shellvibe.dev.
+
+The beta form and the panel's sign-in and sign-up forms use Cloudflare
+Turnstile to tell people from bots. It runs a check in your browser, and
+Cloudflare processes your IP address and browser signals for that check under
+its own privacy terms; our server also sends your IP address along when it
+asks Cloudflare whether the check passed. We keep only the answer.
 
 ## Crashes
 
