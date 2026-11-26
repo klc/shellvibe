@@ -276,6 +276,27 @@ void main() {
       );
     });
 
+    test('the shortcut list has its own chord, and the find bar keys', () {
+      expect(
+        shortcutLabel(AppCommand.showShortcuts, platform: TargetPlatform.macOS),
+        '⇧⌘H',
+      );
+      expect(
+        shortcutLabel(
+          AppCommand.showShortcuts,
+          platform: TargetPlatform.windows,
+        ),
+        'Ctrl+Shift+H',
+      );
+      final terminalRows = shortcutReference(
+        platform: TargetPlatform.linux,
+      ).firstWhere((g) => g.$1 == 'Terminal').$2;
+      expect(
+        terminalRows.map((row) => (row.label, row.keys)),
+        contains(('Next / previous match', 'Enter / Shift+Enter')),
+      );
+    });
+
     test('a device with no local shell is not told about local tabs', () {
       final rows = [
         for (final (_, rows) in shortcutReference(
