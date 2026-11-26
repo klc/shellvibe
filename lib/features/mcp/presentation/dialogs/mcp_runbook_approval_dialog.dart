@@ -175,6 +175,23 @@ class _McpRunbookApprovalDialogState extends State<McpRunbookApprovalDialog> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // The agent's claim; the steps below are what will run.
+                  if (request.description case final description?) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      "Agent's description",
+                      style: bodyStyle?.copyWith(
+                        color: tokens.textMuted,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      description,
+                      key: const Key('mcp_runbook_description'),
+                      style: bodyStyle?.copyWith(color: tokens.textPrimary),
+                    ),
+                  ],
                   const SizedBox(height: 8),
                   Text(
                     'Hosts · ${request.strategyLabel}',

@@ -67,6 +67,44 @@ void main() {
     await tester.pump();
   }
 
+  testWidgets('shows the agent description above the command, when given', (
+    tester,
+  ) async {
+    await open(tester, 'ls');
+    expect(find.byKey(const Key('mcp_command_description')), findsNothing);
+
+    final base = _request('rm -rf /tmp/build && make');
+    await open(
+      tester,
+      '',
+      request: CommandApprovalRequest(
+        clientId: base.clientId,
+        clientName: base.clientName,
+        hostId: base.hostId,
+        hostLabel: base.hostLabel,
+        command: base.command,
+        cwd: base.cwd,
+        category: base.category,
+        canRemember: base.canRemember,
+        description: 'Clean the build directory and rebuild',
+      ),
+    );
+    expect(find.text("Agent's description"), findsOneWidget);
+    expect(
+      tester
+          .widget<Text>(find.byKey(const Key('mcp_command_description')))
+          .data,
+      'Clean the build directory and rebuild',
+    );
+    // The command is still shown in full: it is what gets approved.
+    expect(
+      tester
+          .widget<SelectableText>(find.byKey(const Key('mcp_command_text')))
+          .data,
+      'rm -rf /tmp/build && make',
+    );
+  });
+
   testWidgets('shows every line of a multi-line command and warns', (
     tester,
   ) async {

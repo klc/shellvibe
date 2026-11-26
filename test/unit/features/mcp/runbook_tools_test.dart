@@ -760,6 +760,23 @@ void main() {
       expect(request.secretFields.map((f) => f.name), ['token']);
     });
 
+    test('the agent description reaches the dialog and the log', () async {
+      await seed();
+      final future = run.execute(_ctx, {
+        'runbookId': 'rb',
+        'hostIds': ['h2'],
+        'description': 'Roll out\tthe fix',
+      });
+      final request = await answer(RunbookApprovalDecision.denied);
+      await expectLater(future, toolError(McpErrorCode.policyDenied));
+
+      expect(request.description, 'Roll out the fix');
+      expect(
+        (await auditRows()).single['args'],
+        containsPair('description', 'Roll out the fix'),
+      );
+    });
+
     test('denied: no run, and a refusal in the log', () async {
       await seed();
       final future = run.execute(_ctx, {
@@ -1456,6 +1473,7 @@ void main() {
         'variables',
         'strategy',
         'concurrency',
+        'description',
       ]);
       expect(defs['cancel_runbook_run']!.inputSchema['required'], ['runId']);
     });

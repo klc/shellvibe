@@ -68,7 +68,9 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
         '`[REDACTED:type]` before being returned. A command still running '
         'when the timeout runs out comes back with `timedOut: true`. Output '
         'that is not valid UTF-8 comes back lossy with `binary: true`; pipe '
-        'it through `base64` or `xxd` to read the bytes.',
+        'it through `base64` or `xxd` to read the bytes. Pass a one-line '
+        '`description` of what the command does and why: the user sees it '
+        'when asked to approve.',
     inputSchema: const {
       'type': 'object',
       'properties': {
@@ -93,6 +95,7 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
               'Defaults to the timeout set in ShellVibe\'s settings (60 '
               'unless changed); clamped to a maximum of $_maxTimeoutSeconds.',
         },
+        'description': agentDescriptionSchema,
       },
       'required': ['sessionId', 'command'],
       'additionalProperties': false,
@@ -107,6 +110,7 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
         optionalInt(args, 'timeoutSeconds') ??
         sessionPool.defaultCommandTimeout.inSeconds;
     final timeoutSeconds = rawTimeout.clamp(1, _maxTimeoutSeconds);
+    final description = agentDescription(args);
 
     final session = sessionPool.requireOwned(
       ctx.clientId,
@@ -120,6 +124,9 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
     // `McpAuditRepository`'s own contract that it performs no masking of
     // its own.
     final redactedCommand = redactor.redact(command).text;
+    final redactedDescription = description == null
+        ? null
+        : redactor.redact(description).text;
 
     // Re-checked here rather than trusted from `open_session` time: a grant
     // can expire, be revoked, or enter cooldown while a session stays open
@@ -137,6 +144,7 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
         ctx: ctx,
         session: session,
         redactedCommand: redactedCommand,
+        redactedDescription: redactedDescription,
         timeoutSeconds: timeoutSeconds,
         decision: AuditDecision.autoDenied,
       );
@@ -153,6 +161,7 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
         ctx: ctx,
         session: session,
         redactedCommand: redactedCommand,
+        redactedDescription: redactedDescription,
         timeoutSeconds: timeoutSeconds,
         decision: AuditDecision.autoDenied,
       );
@@ -199,6 +208,7 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
           ctx: ctx,
           session: session,
           redactedCommand: redactedCommand,
+          redactedDescription: redactedDescription,
           timeoutSeconds: timeoutSeconds,
           decision: AuditDecision.denied,
           category: decision.category,
@@ -215,6 +225,7 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
           ctx: ctx,
           session: session,
           redactedCommand: redactedCommand,
+          redactedDescription: redactedDescription,
           timeoutSeconds: timeoutSeconds,
           decision: AuditDecision.denied,
           category: decision.category,
@@ -239,6 +250,7 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
           cwd: cwd,
           category: decision.category,
           canRemember: policyEngine.canRemember(decision.category),
+          description: description,
         );
         final approval = await approvalCoordinator.requestCommandApproval(
           approvalRequest,
@@ -248,6 +260,7 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
             ctx: ctx,
             session: session,
             redactedCommand: redactedCommand,
+            redactedDescription: redactedDescription,
             timeoutSeconds: timeoutSeconds,
             decision: AuditDecision.denied,
             category: decision.category,
@@ -275,6 +288,7 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
           command: command,
           cwd: cwd,
           redactedCommand: redactedCommand,
+          redactedDescription: redactedDescription,
           timeoutSeconds: timeoutSeconds,
           category: decision.category,
           successDecision: AuditDecision.confirmed,
@@ -287,6 +301,7 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
           command: command,
           cwd: cwd,
           redactedCommand: redactedCommand,
+          redactedDescription: redactedDescription,
           timeoutSeconds: timeoutSeconds,
           category: decision.category,
           successDecision: AuditDecision.allowed,
@@ -307,6 +322,7 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
     required String command,
     required String cwd,
     required String redactedCommand,
+    String? redactedDescription,
     required int timeoutSeconds,
     required RiskCategory category,
     required AuditDecision successDecision,
@@ -363,6 +379,7 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
         ctx: ctx,
         session: session,
         redactedCommand: redactedCommand,
+        redactedDescription: redactedDescription,
         timeoutSeconds: timeoutSeconds,
         decision: successDecision,
         category: category,
@@ -378,6 +395,7 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
         ctx: ctx,
         session: session,
         redactedCommand: redactedCommand,
+        redactedDescription: redactedDescription,
         timeoutSeconds: timeoutSeconds,
         decision: AuditDecision.error,
         category: category,
@@ -390,6 +408,7 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
     required McpToolContext ctx,
     required McpSession session,
     required String redactedCommand,
+    String? redactedDescription,
     required int timeoutSeconds,
     required AuditDecision decision,
     RiskCategory? category,
@@ -409,6 +428,7 @@ class RunCommandTool with McpArgReaders implements McpToolHandler {
         'sessionId': session.sessionId,
         'command': redactedCommand,
         'timeoutSeconds': timeoutSeconds,
+        'description': ?redactedDescription,
       },
       decision: decision,
       category: category,

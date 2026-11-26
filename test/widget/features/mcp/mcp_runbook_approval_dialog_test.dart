@@ -8,6 +8,7 @@ RunbookApprovalRequest _request({
   List<RunbookSecretField> secrets = const [
     RunbookSecretField(name: 'token', label: 'API token'),
   ],
+  String? description,
 }) => RunbookApprovalRequest(
   clientId: 'c1',
   clientName: 'Claude Code',
@@ -15,6 +16,7 @@ RunbookApprovalRequest _request({
   strategyLabel: 'rolling',
   variables: const {'env': 'production'},
   secretFields: secrets,
+  description: description,
   steps: const [
     RunbookApprovalStep(
       order: 1,
@@ -95,6 +97,24 @@ void main() {
     expect(find.text('2. Waits for you to continue'), findsOneWidget);
     expect(find.text('Check the dashboards'), findsOneWidget);
     expect(find.text('env = production'), findsOneWidget);
+  });
+
+  testWidgets('shows the agent description only when one is given', (
+    tester,
+  ) async {
+    await open(tester, _request());
+    expect(find.byKey(const Key('mcp_runbook_description')), findsNothing);
+    await tester.tap(find.byKey(const Key('mcp_runbook_deny_button')));
+    await tester.pumpAndSettle();
+
+    await open(tester, _request(description: 'Ship the hotfix'));
+    expect(find.text("Agent's description"), findsOneWidget);
+    expect(
+      tester
+          .widget<Text>(find.byKey(const Key('mcp_runbook_description')))
+          .data,
+      'Ship the hotfix',
+    );
   });
 
   testWidgets('a secret is typed here, obscured, and returned only with an '

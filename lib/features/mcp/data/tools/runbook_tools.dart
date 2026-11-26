@@ -531,6 +531,7 @@ class RunRunbookTool with McpArgReaders implements McpToolHandler {
           'description':
               'With "parallel": how many hosts at once. Defaults to 4.',
         },
+        'description': agentDescriptionSchema,
       },
       'required': [_idArg, 'hostIds'],
       'additionalProperties': false,
@@ -566,6 +567,7 @@ class RunRunbookTool with McpArgReaders implements McpToolHandler {
     String runbookId,
     List<String> hostIds,
   ) async {
+    final description = agentDescription(args);
     final runbook = forSnippet
         ? (await snippetsRepository.getSnippetsByWorkspace(ctx.workspaceId))
               .where((s) => s.id == runbookId)
@@ -614,6 +616,7 @@ class RunRunbookTool with McpArgReaders implements McpToolHandler {
         clientName: ctx.clientName,
         runbookTitle: runbook.title,
         isSnippet: forSnippet,
+        description: description,
         strategyLabel: strategy.label,
         variables: plain,
         secretFields: secretFields,
@@ -643,6 +646,7 @@ class RunRunbookTool with McpArgReaders implements McpToolHandler {
       'strategy': strategy.wireName,
       // Names only: a value may be a credential, and the log is not the place.
       'variables': [...plain.keys, ...secretFields.map((f) => f.name)],
+      if (description != null) 'description': redactor.redact(description).text,
     };
     final hostLabels = hosts.map((h) => h.label).join(', ');
 
