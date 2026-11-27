@@ -172,7 +172,13 @@ class _McpHostAccessDialogState extends State<McpHostAccessDialog> {
     required bool suspendClient,
     String reason = 'user_denied',
   }) {
-    if (_resolved || !mounted) return;
+    // Already closed by the host (still animating out), a pop here would take
+    // the route under this one.
+    if (_resolved ||
+        !mounted ||
+        !(ModalRoute.of(context)?.isCurrent ?? false)) {
+      return;
+    }
     _resolved = true;
     Navigator.of(context).pop(
       HostAccessDialogOutcome(
@@ -183,7 +189,7 @@ class _McpHostAccessDialogState extends State<McpHostAccessDialog> {
   }
 
   void _approve() {
-    if (_resolved) return;
+    if (_resolved || !(ModalRoute.of(context)?.isCurrent ?? false)) return;
     _resolved = true;
     final now = DateTime.now().toUtc();
     final expiresAt = _duration.expiresAt(now);

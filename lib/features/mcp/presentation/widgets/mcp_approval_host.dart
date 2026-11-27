@@ -96,6 +96,20 @@ class _McpApprovalHostState extends ConsumerState<McpApprovalHost> {
   /// dialogs. Guards against showing a second dialog while one is already up.
   String? _activeId;
 
+  /// True only while [_activeId]'s dialog is pushed. Between claiming a
+  /// request and showing it (the window is still being brought forward) the
+  /// top route is the user's page, which is not ours to pop.
+  bool _dialogOpen = false;
+
+  Future<T?> _open<T>(Future<T?> dialog) async {
+    _dialogOpen = true;
+    try {
+      return await dialog;
+    } finally {
+      _dialogOpen = false;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -157,7 +171,7 @@ class _McpApprovalHostState extends ConsumerState<McpApprovalHost> {
   /// requests that are still pending.
   void _closeActiveIfAbandoned() {
     final activeId = _activeId;
-    if (activeId == null) return;
+    if (activeId == null || !_dialogOpen) return;
     final stillPending =
         _commands.any((c) => c.id == activeId) ||
         _hostAccess.any((h) => h.id == activeId) ||
@@ -273,43 +287,51 @@ class _McpApprovalHostState extends ConsumerState<McpApprovalHost> {
       if (navigatorContext == null || !navigatorContext.mounted) return;
 
       if (nextCommand != null) {
-        final decision = await McpCommandApprovalDialog.show(
-          navigatorContext,
-          request: nextCommand.request,
-          expiresAt: nextCommand.expiresAt,
+        final decision = await _open(
+          McpCommandApprovalDialog.show(
+            navigatorContext,
+            request: nextCommand.request,
+            expiresAt: nextCommand.expiresAt,
+          ),
         );
         coordinator.resolveCommand(
           nextCommand.id,
           decision ?? ApprovalDecision.denied,
         );
       } else if (nextRunbook != null) {
-        final decision = await McpRunbookApprovalDialog.show(
-          navigatorContext,
-          request: nextRunbook.request,
-          expiresAt: nextRunbook.expiresAt,
+        final decision = await _open(
+          McpRunbookApprovalDialog.show(
+            navigatorContext,
+            request: nextRunbook.request,
+            expiresAt: nextRunbook.expiresAt,
+          ),
         );
         coordinator.resolveRunbook(
           nextRunbook.id,
           decision ?? RunbookApprovalDecision.denied,
         );
       } else if (nextHostAdd != null) {
-        final decision = await McpHostAddDialog.show(
-          navigatorContext,
-          request: nextHostAdd.request,
-          expiresAt: nextHostAdd.expiresAt,
+        final decision = await _open(
+          McpHostAddDialog.show(
+            navigatorContext,
+            request: nextHostAdd.request,
+            expiresAt: nextHostAdd.expiresAt,
+          ),
         );
         coordinator.resolveHostAdd(
           nextHostAdd.id,
           decision ?? HostAddDecision.denied,
         );
       } else if (nextHostAccess != null) {
-        final outcome = await McpHostAccessDialog.show(
-          navigatorContext,
-          request: nextHostAccess.request,
-          // Counted from now, not from when the agent asked.
-          expiresAt:
-              coordinator.restartHostAccessClock(nextHostAccess.id) ??
-              nextHostAccess.expiresAt,
+        final outcome = await _open(
+          McpHostAccessDialog.show(
+            navigatorContext,
+            request: nextHostAccess.request,
+            // Counted from now, not from when the agent asked.
+            expiresAt:
+                coordinator.restartHostAccessClock(nextHostAccess.id) ??
+                nextHostAccess.expiresAt,
+          ),
         );
         final result = outcome?.result ?? _allDenied(nextHostAccess.request);
         coordinator.resolveHostAccess(nextHostAccess.id, result);

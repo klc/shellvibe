@@ -78,7 +78,13 @@ class _McpHostAddDialogState extends State<McpHostAddDialog> {
   }
 
   void _resolve(HostAddDecision decision) {
-    if (_resolved || !mounted) return;
+    // Already closed by the host (still animating out), a pop here would take
+    // the route under this one.
+    if (_resolved ||
+        !mounted ||
+        !(ModalRoute.of(context)?.isCurrent ?? false)) {
+      return;
+    }
     _resolved = true;
     Navigator.of(context).pop(decision);
   }
