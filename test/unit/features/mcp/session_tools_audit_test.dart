@@ -162,4 +162,57 @@ void main() {
 
     expect(await rows(), [('run_command', 'host-a', 'auto_denied')]);
   });
+
+  test('run_command audits the agent description, secrets masked', () async {
+    final tool = RunCommandTool(
+      sessionPool: pool,
+      hostsDao: db.hostsDao,
+      grantRepository: McpGrantRepository(db.mcpDao),
+      approvalRepository: McpApprovalRepository(db.mcpDao),
+      auditRepository: audit,
+      policyEngine: PolicyEngine(
+        approvals: McpApprovalRepository(db.mcpDao),
+        dao: db.mcpDao,
+      ),
+      approvalCoordinator: ApprovalCoordinator(),
+      redactor: const OutputRedactor(),
+    );
+    final token = 'ghp_${'a' * 36}';
+
+    await expectLater(
+      tool.execute(ctx, {
+        'sessionId': session.sessionId,
+        'command': 'ls',
+        'description': 'List files\nwith $token',
+      }),
+      throwsA(isA<McpToolException>()),
+    );
+
+    final args = (await audit.query()).single.argsJson;
+    expect(args, contains('List files with'));
+    expect(args, isNot(contains(token)));
+  });
+
+  group('agentDescription', () {
+    final reader = _Reader();
+    String? read(Object? value) =>
+        reader.agentDescription({'description': value});
+
+    test('absent or blank is null', () {
+      expect(read(null), isNull);
+      expect(read(' \n\t '), isNull);
+    });
+
+    test('line breaks, controls and bidi marks become one space', () {
+      expect(read('a\nb\u202Ec\u200Bd\x07e'), 'a b c d e');
+    });
+
+    test('is cut to the limit with an ellipsis', () {
+      final cut = read('x' * 500)!;
+      expect(cut.length, maxAgentDescriptionChars);
+      expect(cut, endsWith('…'));
+    });
+  });
 }
+
+class _Reader with McpArgReaders {}

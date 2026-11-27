@@ -342,12 +342,14 @@ void main() {
     String remote, {
     bool? overwrite,
     int? timeoutSeconds,
+    String? description,
   }) => tool(upload: upload).execute(ctx, {
     'sessionId': session.sessionId,
     'localPath': local,
     'remotePath': remote,
     'overwrite': ?overwrite,
     'timeoutSeconds': ?timeoutSeconds,
+    'description': ?description,
   });
 
   /// Answers the next approval request with [approve], handing it back.
@@ -577,6 +579,28 @@ void main() {
     expect(request.transfer!.replacesExisting, isFalse);
     expect(Directory(remoteDir).listSync(), isEmpty);
     expect(await rows(), [('upload_file', 'denied', 'file_transfer')]);
+  });
+
+  test('the agent description reaches the approval and the audit', () async {
+    await insertHost();
+    await grant(McpAccessMode.guarded);
+    final local = p.join(localDir, 'a.bin');
+    File(local).writeAsBytesSync(content);
+
+    final call = run(
+      true,
+      local,
+      p.join(remoteDir, 'a.bin'),
+      description: 'Ship the build\nfor review',
+    );
+    final request = await answerNext(approve: false);
+    await expectLater(call, throwsCode(McpErrorCode.policyDenied));
+
+    expect(request.description, 'Ship the build for review');
+    expect(
+      (await audit.query()).single.argsJson,
+      contains('Ship the build for review'),
+    );
   });
 
   test('upload arrives intact with the right hash, no temp left', () async {

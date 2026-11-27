@@ -51,6 +51,21 @@ abstract class McpToolHandler {
   Future<Object?> execute(McpToolContext ctx, Map<String, Object?> args);
 }
 
+/// Longest agent description shown in an approval window.
+const maxAgentDescriptionChars = 200;
+
+/// The `description` argument of the tools that may ask the user to approve
+/// something, in their input schemas.
+const agentDescriptionSchema = <String, Object?>{
+  'type': 'string',
+  'maxLength': maxAgentDescriptionChars,
+  'description':
+      'One short sentence for the user: what this does and why. Shown in the '
+      'approval window next to the exact command, which is what the user '
+      'judges; it does not change what is allowed. Recommended for chained '
+      'or long commands.',
+};
+
 /// Argument-reading helpers shared by every handler.
 ///
 /// An agent is a model guessing at a JSON Schema, not a compiler — it will
@@ -83,6 +98,31 @@ mixin McpArgReaders {
       );
     }
     return value;
+  }
+
+  /// The agent's optional `description` of a call, made safe to show:
+  /// control, whitespace and bidi/zero-width characters collapse to one
+  /// space, and it is cut to [maxAgentDescriptionChars]. Null when absent or
+  /// blank.
+  ///
+  /// It is the agent's own claim. The user reads it next to the command; the
+  /// policy, the remember choice and everything else look only at the
+  /// command.
+  String? agentDescription(Map<String, Object?> args) {
+    final raw = optionalString(args, 'description');
+    if (raw == null) return null;
+    final text = raw
+        .replaceAll(
+          RegExp(
+            r'[\s\x00-\x1F\x7F-\x9F\u200B-\u200F\u202A-\u202E\u2066-\u2069]+',
+          ),
+          ' ',
+        )
+        .trim();
+    if (text.isEmpty) return null;
+    return text.length <= maxAgentDescriptionChars
+        ? text
+        : '${text.substring(0, maxAgentDescriptionChars - 1)}…';
   }
 
   int? optionalInt(Map<String, Object?> args, String key) {

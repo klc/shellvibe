@@ -265,6 +265,24 @@ class _McpCommandApprovalDialogState extends State<McpCommandApprovalDialog> {
                   ),
                 ],
               ),
+              // Labelled as the agent's claim: what is approved is the
+              // command in the box below, which stays on screen in full.
+              if (request.description case final description?) ...[
+                const SizedBox(height: 12),
+                Text(
+                  "Agent's description",
+                  style: bodyStyle?.copyWith(
+                    color: tokens.textMuted,
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  description,
+                  key: const Key('mcp_command_description'),
+                  style: bodyStyle?.copyWith(color: tokens.textPrimary),
+                ),
+              ],
               const SizedBox(height: 12),
               Container(
                 width: double.infinity,

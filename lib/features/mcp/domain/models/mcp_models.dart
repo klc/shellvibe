@@ -199,6 +199,11 @@ class CommandApprovalRequest {
   /// that will run, and [command] is only a one-line summary for lists.
   final FileTransferApproval? transfer;
 
+  /// What the agent says this does, already sanitized
+  /// (`McpArgReaders.agentDescription`). Shown labelled as the agent's claim;
+  /// nothing decides on it.
+  final String? description;
+
   const CommandApprovalRequest({
     required this.clientId,
     required this.clientName,
@@ -209,6 +214,7 @@ class CommandApprovalRequest {
     required this.category,
     required this.canRemember,
     this.transfer,
+    this.description,
   });
 }
 
@@ -298,6 +304,10 @@ class RunbookApprovalRequest {
   /// A `run_snippet` request: the dialog names it a snippet.
   final bool isSnippet;
 
+  /// What the agent says the run is for, sanitized as for
+  /// [CommandApprovalRequest.description]. Shown as the agent's claim only.
+  final String? description;
+
   const RunbookApprovalRequest({
     required this.clientId,
     required this.clientName,
@@ -307,6 +317,7 @@ class RunbookApprovalRequest {
     required this.strategyLabel,
     this.variables = const {},
     this.secretFields = const [],
+    this.description,
     this.isSnippet = false,
   });
 }

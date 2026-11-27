@@ -138,6 +138,7 @@ class FileTransferTool with McpArgReaders implements McpToolHandler {
               'partial file removed. Defaults to $_defaultTimeoutSeconds; '
               'clamped to a maximum of $_maxTimeoutSeconds.',
         },
+        'description': agentDescriptionSchema,
       },
       'required': ['sessionId', 'localPath', 'remotePath'],
       'additionalProperties': false,
@@ -149,6 +150,7 @@ class FileTransferTool with McpArgReaders implements McpToolHandler {
     final sessionId = requireString(args, 'sessionId');
     final localPath = _requirePath(args, 'localPath');
     final remoteArg = _requirePath(args, 'remotePath');
+    final description = agentDescription(args);
     if (!p.isAbsolute(localPath)) {
       throw McpToolException(
         McpErrorCode.internal,
@@ -200,6 +202,7 @@ class FileTransferTool with McpArgReaders implements McpToolHandler {
         'remotePath': remoteArg,
         'overwrite': overwrite,
         'timeoutSeconds': timeoutSeconds,
+        'description': ?description,
       },
       decision: decision,
       category: category,
@@ -297,6 +300,7 @@ class FileTransferTool with McpArgReaders implements McpToolHandler {
               cwd: session.shell.cwd,
               category: decision.category,
               canRemember: false,
+              description: description,
               transfer: FileTransferApproval(
                 upload: upload,
                 localPath: plan.localPath,
