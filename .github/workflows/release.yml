@@ -118,19 +118,23 @@ jobs:
             ninja-build \
             pkg-config
 
+      # Built from a commit, not a release: up to v2.49.0 a `type: tree` entry
+      # leaks Go's ModeDir bit into the Arch tar and .MTREE modes
+      # (20000000755), so pacman prints "directory permissions differ" for
+      # every existing directory, 36 lines on an upgrade. Fixed by
+      # goreleaser/nfpm#1193, not yet released. The module checksum database
+      # verifies the source, as the sha256 did for the release archive.
+      # ponytail: commit pin, move back to the release archive once v2.50 ships.
       - name: Install nfpm
         if: runner.os == 'Linux'
         shell: bash
         env:
-          NFPM_VERSION: 2.47.0
-          NFPM_SHA256: 0660ca602b2d2d2ae4781a06c692b3eeb9d437ffea05b831d76e41f4a3188783
+          NFPM_REF: b72f295252514c24a29c5f8b3e9ab4077e9d9b54
+          # nfpm's go.mod asks for a newer Go than the runner has.
+          GOTOOLCHAIN: auto
         run: |
           set -euo pipefail
-          archive="nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz"
-          curl -fsSL -o "$RUNNER_TEMP/$archive" \
-            "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/$archive"
-          echo "$NFPM_SHA256  $RUNNER_TEMP/$archive" | sha256sum -c -
-          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" nfpm
+          GOBIN="$RUNNER_TEMP" go install "github.com/goreleaser/nfpm/v2/cmd/nfpm@${NFPM_REF}"
           echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
 
       - name: Set up Flutter

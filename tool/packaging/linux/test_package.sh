@@ -32,7 +32,14 @@ elif command -v dnf >/dev/null; then
 else
   pacman -Syu --noconfirm
   pacman -S --noconfirm xorg-server-xvfb xorg-xauth
-  pacman -U --noconfirm "$dist"/*.pkg.tar.zst
+  # The install finishes despite warnings, so they are checked here: a
+  # malformed package (directory modes, ownership) only shows up as one.
+  out="$(pacman -U --noconfirm "$dist"/*.pkg.tar.zst 2>&1)"
+  echo "$out"
+  if grep '^warning:' <<<"$out"; then
+    echo 'pacman warned while installing the package.' >&2
+    exit 1
+  fi
   remove=(pacman -R --noconfirm shellvibe)
 fi
 
