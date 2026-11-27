@@ -55,6 +55,29 @@ class KeyboardShortcutsSettingsSection extends StatelessWidget {
   }
 }
 
+/// The same list over whatever is on screen, for the shortcut and the command
+/// palette: the Settings section itself, so the two cannot disagree.
+Future<void> showKeyboardShortcutsDialog(BuildContext context) =>
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => ShadDialog(
+        key: const Key('keyboard_shortcuts_dialog'),
+        title: const Text('Keyboard Shortcuts'),
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: Material(
+          type: MaterialType.transparency,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(dialogContext).height * 0.7,
+            ),
+            child: const SingleChildScrollView(
+              child: KeyboardShortcutsSettingsSection(),
+            ),
+          ),
+        ),
+      ),
+    );
+
 class _ShortcutRow extends StatelessWidget {
   final ShortcutReferenceEntry entry;
 

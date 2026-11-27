@@ -8,6 +8,7 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 import '../../core/utils/platform_capabilities.dart';
 import '../../features/hosts/domain/services/host_launcher.dart';
 import '../../features/settings/presentation/notifiers/settings_notifier.dart';
+import '../../features/settings/presentation/widgets/keyboard_shortcuts_settings_section.dart';
 import '../../features/templates/domain/models/template_model.dart';
 import '../../features/templates/presentation/notifiers/templates_notifier.dart';
 import '../../features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
@@ -184,6 +185,9 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
         ),
         OpenSettingsIntent: CallbackAction<OpenSettingsIntent>(
           onInvoke: (_) => _goToPath('/settings'),
+        ),
+        ShowShortcutsIntent: CallbackAction<ShowShortcutsIntent>(
+          onInvoke: (_) => showKeyboardShortcutsDialog(context),
         ),
       },
       child: AppKeymapShortcuts(
@@ -456,7 +460,7 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
         },
         onShowShortcuts: () {
           Navigator.of(dialogContext).pop();
-          GoRouter.maybeOf(context)?.go('/settings/keyboard');
+          unawaited(showKeyboardShortcutsDialog(context));
         },
       ),
     );

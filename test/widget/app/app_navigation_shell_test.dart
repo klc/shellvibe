@@ -467,7 +467,29 @@ void main() {
       await tester.tap(find.byKey(const Key('palette_keyboard_shortcuts')));
       await pumpTabTransition(tester);
 
+      // Over the current screen, not a trip to Settings.
+      expect(
+        find.byKey(const Key('keyboard_shortcuts_dialog')),
+        findsOneWidget,
+      );
       expect(find.byType(KeyboardShortcutsSettingsSection), findsOneWidget);
+      Navigator.of(
+        tester.element(find.byKey(const Key('keyboard_shortcuts_dialog'))),
+      ).pop();
+      await pumpTabTransition(tester);
+      expect(find.byKey(const Key('keyboard_shortcuts_dialog')), findsNothing);
+
+      // And straight from the keyboard.
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyH);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await pumpTabTransition(tester);
+      expect(
+        find.byKey(const Key('keyboard_shortcuts_dialog')),
+        findsOneWidget,
+      );
     });
 
     testWidgets('Command palette lists bookmarks above the other hosts', (

@@ -110,6 +110,11 @@ class OpenSettingsIntent extends Intent {
   const OpenSettingsIntent();
 }
 
+/// Shows the keyboard shortcut list over the current screen.
+class ShowShortcutsIntent extends Intent {
+  const ShowShortcutsIntent();
+}
+
 /// Grows ([step] > 0) or shrinks the terminal font by [step] points; zero
 /// puts it back to the default.
 class ZoomTerminalFontIntent extends Intent {
@@ -123,6 +128,7 @@ class ZoomTerminalFontIntent extends Intent {
 enum AppCommand {
   commandPalette('Command palette', OpenCommandPaletteIntent()),
   openSettings('Settings', OpenSettingsIntent()),
+  showShortcuts('Keyboard shortcuts', ShowShortcutsIntent()),
   closeWindow('Close window', CloseWindowIntent()),
   newLocalTab('New local tab', NewLocalTabIntent()),
   closeTab('Close tab', CloseTabIntent()),
@@ -200,6 +206,16 @@ List<SingleActivator> shortcutsFor(
       ),
     ],
     AppCommand.find => [_primary(LogicalKeyboardKey.keyF, target)],
+    // H for help. Shift on every platform: plain ⌘H hides the app on a Mac.
+    // A letter rather than ⌘/, which a Turkish Q layout types as ⇧7.
+    AppCommand.showShortcuts => [
+      SingleActivator(
+        LogicalKeyboardKey.keyH,
+        meta: apple,
+        control: !apple,
+        shift: true,
+      ),
+    ],
     // ⌘W closes the tab, so the window moves up to ⇧⌘W the way Terminal.app
     // and iTerm do it. Ctrl+Shift+W closes the tab elsewhere, so Windows
     // keeps its own Alt+F4 — bound here because a focused terminal would
@@ -433,6 +449,7 @@ List<(String, List<ShortcutReferenceEntry>)> shortcutReference({
       'App',
       [
         ?row(AppCommand.commandPalette),
+        ?row(AppCommand.showShortcuts),
         ShortcutReferenceEntry(
           'Switch module',
           moduleRangeShortcutLabel(platform: platform),
@@ -465,6 +482,13 @@ List<(String, List<ShortcutReferenceEntry>)> shortcutReference({
       'Terminal',
       [
         ?row(AppCommand.find),
+        // The find bar's own keys (terminal_search_bar.dart), not app chords.
+        ShortcutReferenceEntry(
+          'Next / previous match',
+          '${describeShortcut(const SingleActivator(LogicalKeyboardKey.enter), platform: platform)}'
+              ' / '
+              '${describeShortcut(const SingleActivator(LogicalKeyboardKey.enter, shift: true), platform: platform)}',
+        ),
         ?row(AppCommand.openSnippets),
         for (final builtin in TerminalBuiltinShortcut.values)
           ShortcutReferenceEntry(
