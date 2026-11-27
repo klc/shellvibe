@@ -147,4 +147,14 @@ void main() {
       expect(small.lineHeightFactor, kLineHeightFactorMin);
     });
   });
+
+  test('the launch update check is on by default and round-trips off', () {
+    expect(const AppSettingsModel().checkUpdatesAtLaunch, isTrue);
+    expect(AppSettingsModel.fromJson(const {}).checkUpdatesAtLaunch, isTrue);
+    final off = const AppSettingsModel().copyWith(checkUpdatesAtLaunch: false);
+    expect(
+      AppSettingsModel.fromJson(off.toJson()).checkUpdatesAtLaunch,
+      isFalse,
+    );
+  });
 }

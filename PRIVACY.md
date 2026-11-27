@@ -1,6 +1,6 @@
 # Privacy
 
-**Last updated:** 2026-11-25 · Applies to ShellVibe 1.14.0 for macOS,
+**Last updated:** 2026-11-26 · Applies to ShellVibe 1.14.0 for macOS,
 Windows, Linux, iOS and Android.
 
 ShellVibe is a terminal, SSH and SFTP client. It runs on your machine and talks
@@ -65,15 +65,21 @@ transfer.
 your machine to the host you named. There is no relay and no proxy of ours in
 between. What travels is what you typed and what the server answered.
 
-**Checking for updates — only when you ask.** Settings → About has a "check for
-updates" button. Pressing it makes one unauthenticated HTTPS request to GitHub's
-public releases API for this project. The request carries no identifier of any
-kind; GitHub sees what it sees for any anonymous visitor, namely your IP address
-and your HTTP client's user agent, under
+**Checking for updates — at launch, at most once a day, and when you ask.**
+The macOS, Windows (installer and portable) and Linux builds check whether a
+newer release is out when they start, at most once a day, and show a notice
+when one is. Settings → About turns this off ("Check at launch") and has a
+"check for updates" button for a check on demand. Each check is one
+unauthenticated HTTPS request to GitHub's public releases API for this project.
+The request carries no identifier of any kind; GitHub sees what it sees for any
+anonymous visitor, namely your IP address and your HTTP client's user agent
+(the app name and version), under
 [GitHub's privacy statement](https://docs.github.com/site-policy/privacy-policies/github-privacy-statement).
-ShellVibe never performs this check on its own, on a schedule or at launch.
-The iOS, Android and Microsoft Store builds have no such button: they are
-updated by the App Store, Google Play and the Microsoft Store.
+Because the launch check runs on its own, GitHub can tell from it that an
+instance was started that day at that address. ShellVibe keeps the time of the
+last check and a version you chose to skip on your device. The iOS, Android and
+Microsoft Store builds never check: they are updated by the App Store, Google
+Play and the Microsoft Store.
 
 **Fonts.** Every interface and terminal font ShellVibe offers ships inside the
 app. Choosing one in Settings makes no network request, and no font is ever

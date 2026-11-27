@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,11 +12,54 @@ import '../../../../core/constants/app_constants.dart';
 import '../../../../core/diagnostics/crash_log.dart';
 import '../../../../core/utils/platform_capabilities.dart';
 import '../../domain/services/update_check_service.dart';
+import '../notifiers/settings_notifier.dart';
 import '../dialogs/problem_report_dialog.dart';
 
 /// Address a security researcher is asked to use, kept in one place so
 /// `SECURITY.md` and the application never drift apart.
 const String kSecurityContact = 'security@shellvibe.dev';
+
+/// Announces [update] in a toast: where to read about it, or skip it.
+void showUpdateAvailableToast(
+  BuildContext context,
+  UpdateAvailable update, {
+  required VoidCallback onSkip,
+}) {
+  final toaster = ShadToaster.of(context);
+  toaster.show(
+    ShadToast(
+      key: const Key('update_available_toast'),
+      title: Text('ShellVibe ${update.version} is out'),
+      description: Text('You have ${AppConstants.appVersion}.'),
+      duration: const Duration(seconds: 20),
+      action: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ShellVibeButton.secondary(
+            key: const Key('update_toast_skip'),
+            label: 'Skip',
+            onPressed: () {
+              onSkip();
+              unawaited(toaster.hide());
+            },
+          ),
+          const SizedBox(width: 8),
+          ShellVibeButton(
+            key: const Key('update_toast_open'),
+            label: 'Release notes',
+            onPressed: () {
+              final url = Uri.tryParse(update.url);
+              if (url != null) {
+                unawaited(launchUrl(url, mode: LaunchMode.externalApplication));
+              }
+              unawaited(toaster.hide());
+            },
+          ),
+        ],
+      ),
+    ),
+  );
+}
 
 /// Build identity, the update check, and the third-party licence notices.
 ///
@@ -120,8 +165,7 @@ class _AboutSettingsSectionState extends ConsumerState<AboutSettingsSection> {
                   leading: Icon(LucideIcons.download, color: tokens.textMuted),
                   title: const Text('Updates'),
                   subtitle: Text(
-                    'Checked only when you ask. Nothing is sent about this '
-                    'installation.',
+                    'Nothing is sent about this installation.',
                     style: Theme.of(
                       context,
                     ).textTheme.bodySmall?.copyWith(color: tokens.textMuted),
@@ -132,6 +176,20 @@ class _AboutSettingsSectionState extends ConsumerState<AboutSettingsSection> {
                     onPressed: _checkForUpdates,
                     busy: _checking,
                   ),
+                ),
+                SwitchListTile(
+                  key: const Key('about_check_updates_at_launch'),
+                  title: const Text('Check at launch'),
+                  subtitle: const Text(
+                    'Once a day, asks GitHub whether a newer release is out '
+                    'and says so.',
+                  ),
+                  value:
+                      ref.watch(settingsProvider).value?.checkUpdatesAtLaunch ??
+                      true,
+                  onChanged: (enabled) => ref
+                      .read(settingsProvider.notifier)
+                      .setCheckUpdatesAtLaunch(enabled),
                 ),
                 if (_result != null) ...[
                   const Divider(),
