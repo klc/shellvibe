@@ -7,6 +7,23 @@ and release versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.15.0] - 2026-11-27
+
+### Added
+
+- AI Access: Settings → AI access → Agent tools turns groups of agent tools
+  off: running commands, file transfer, runbooks and snippets, and adding
+  hosts. All are on by default. A tool that is off is not offered to agents,
+  and an agent that calls it anyway is refused and told not to reach the host
+  another way.
+- AI Access: an agent can say in one sentence what a command, file transfer,
+  runbook or snippet run is for, and the approval window shows it above the
+  command as "Agent's description". It is only shown: the decision still
+  reads the command itself, which stays on screen in full.
+- Keyboard: ⇧⌘H (Ctrl+Shift+H on Windows and Linux) opens the list of
+  keyboard shortcuts over the current screen, and so does "Keyboard
+  Shortcuts" in the command palette.
+
 ### Changed
 
 - Updates: the macOS, Windows (installer and portable) and Linux builds now
@@ -15,6 +32,17 @@ and release versions follow [Semantic Versioning](https://semver.org/).
   Settings → About → "Check at launch". This changes the privacy policy, which
   said the check ran only when asked; see `PRIVACY.md`. Store builds are
   unchanged: their stores update them.
+
+### Fixed
+
+- AI Access: an approval prompt nobody answered in time no longer leaves the
+  window blank, with every key ignored, while sessions keep running behind
+  it. A request withdrawn before its prompt opened no longer closes the
+  screen you were on.
+- Terminal: a large output over SSH (`cat` of a big file) no longer piles up
+  in the app; the server is paused until the terminal catches up.
+- Linux: installing or upgrading the Arch package no longer prints
+  "directory permissions differ" warnings.
 
 ## [1.14.0] - 2026-11-25
 
@@ -1084,7 +1112,9 @@ entry describes what ShellVibe is rather than what changed.
 - iOS and Android are not released. The code builds for them and they are not
   part of this release.
 
-[Unreleased]: https://github.com/klc/shellvibe/compare/v1.13.0...HEAD
+[Unreleased]: https://github.com/klc/shellvibe/compare/v1.15.0...HEAD
+[1.15.0]: https://github.com/klc/shellvibe/compare/v1.14.0...v1.15.0
+[1.14.0]: https://github.com/klc/shellvibe/compare/v1.13.0...v1.14.0
 [1.13.0]: https://github.com/klc/shellvibe/compare/v1.12.0...v1.13.0
 [1.12.0]: https://github.com/klc/shellvibe/compare/v1.11.1...v1.12.0
 [1.11.1]: https://github.com/klc/shellvibe/compare/v1.11.0...v1.11.1
