@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:shellvibe/features/mcp/data/mcp_agent_config.dart';
+import 'package:shellvibe/features/mcp/domain/models/mcp_enums.dart';
 import 'package:shellvibe/features/mcp/presentation/notifiers/mcp_activity_notifier.dart';
 import 'package:shellvibe/features/mcp/presentation/notifiers/mcp_settings_notifier.dart';
 import 'package:shellvibe/features/mcp/presentation/widgets/mcp_access_settings_section.dart';
@@ -21,6 +22,16 @@ class _Settings extends McpSettingsNotifier {
     sessionIdleTimeoutMinutes: 30,
     auditRetentionDays: 30,
   );
+}
+
+/// Records the tool switches instead of writing them to secure storage.
+class _RecordingSettings extends _Settings {
+  final changes = <(McpToolGroup, bool)>[];
+
+  @override
+  Future<void> setToolGroupEnabled(McpToolGroup group, bool enabled) async {
+    changes.add((group, enabled));
+  }
 }
 
 class _Activity extends McpActivityNotifier {
@@ -123,5 +134,51 @@ void main() {
     await settle(() => switchIs(false));
     expect(jsonDecode(settings.readAsStringSync()), <String, dynamic>{});
     expect(tester.widget<ShadSwitch>(hookSwitch).value, isFalse);
+  });
+
+  testWidgets('Agent tools shows one switch per group and flips it', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 4000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final settings = _RecordingSettings();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          mcpSettingsProvider.overrideWith(() => settings),
+          mcpActivityProvider.overrideWith(_Activity.new),
+        ],
+        child: ShadTheme(
+          data: ShadThemeData(
+            colorScheme: const ShadSlateColorScheme.light(),
+            brightness: Brightness.light,
+          ),
+          child: MaterialApp(
+            builder: (context, child) => ShadToaster(child: child!),
+            home: const Scaffold(
+              body: SingleChildScrollView(child: McpAccessSettingsSection()),
+            ),
+          ),
+        ),
+      ),
+    );
+    for (var i = 0; i < 40; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+      await tester.pump();
+    }
+
+    for (final group in McpToolGroup.values) {
+      final tile = find.byKey(Key('mcp_tool_group_${group.name}'));
+      expect(tile, findsOneWidget);
+      expect(tester.widget<SwitchListTile>(tile).value, isTrue);
+    }
+
+    await tester.tap(find.byKey(const Key('mcp_tool_group_fileTransfer')));
+    await tester.pump();
+    expect(settings.changes, [(McpToolGroup.fileTransfer, false)]);
   });
 }

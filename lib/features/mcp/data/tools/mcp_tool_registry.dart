@@ -34,12 +34,24 @@ part 'mcp_tool_registry.g.dart';
 class McpToolRegistry {
   final Map<String, McpToolHandler> _handlersByName;
 
-  McpToolRegistry(List<McpToolHandler> handlers)
-    : _handlersByName = {for (final handler in handlers) handler.name: handler};
+  /// The groups the user switched off, read on every list and call so a
+  /// switch applies to the next request.
+  final McpToolSwitches switches;
 
-  /// The `tools/list` payload: one [McpToolDefinition] per registered tool.
-  List<McpToolDefinition> definitions() =>
-      _handlersByName.values.map((handler) => handler.definition).toList();
+  McpToolRegistry(List<McpToolHandler> handlers, {McpToolSwitches? switches})
+    : _handlersByName = {for (final handler in handlers) handler.name: handler},
+      switches = switches ?? McpToolSwitches();
+
+  /// The `tools/list` payload: one [McpToolDefinition] per tool that is on.
+  List<McpToolDefinition> definitions() => [
+    for (final handler in _handlersByName.values)
+      if (_offGroup(handler.name) == null) handler.definition,
+  ];
+
+  McpToolGroup? _offGroup(String tool) {
+    final group = McpToolGroup.of(tool);
+    return switches.disabled.contains(group) ? group : null;
+  }
 
   /// Dispatches a `tools/call` by name. An unrecognized [name] is a protocol
   /// error, not a domain one — thrown with [McpErrorCode.internal] since no
@@ -58,9 +70,29 @@ class McpToolRegistry {
         'Unknown tool "$name". Call tools/list to see the available tools.',
       );
     }
+    // An agent that listed tools before the switch still has this one.
+    final off = _offGroup(name);
+    if (off != null) {
+      throw McpToolException(
+        McpErrorCode.toolDisabled,
+        'The user turned off "${off.label}" for AI agents in ShellVibe '
+        '(Settings > AI Access). Do not reach the host another way (ssh, scp, '
+        'a script); tell the user this task needs it.',
+      );
+    }
     return handler.execute(ctx, args);
   }
 }
+
+/// Which [McpToolGroup]s are off. Filled by the AI Access settings, read by
+/// [McpToolRegistry]: a plain holder, like the session pool's limits, so the
+/// settings can change it without rebuilding the registry.
+class McpToolSwitches {
+  Set<McpToolGroup> disabled = const {};
+}
+
+@Riverpod(keepAlive: true)
+McpToolSwitches mcpToolSwitches(Ref ref) => McpToolSwitches();
 
 /// Provider for [McpToolRegistry].
 ///
@@ -85,7 +117,7 @@ McpToolRegistry mcpToolRegistry(Ref ref) {
   final runGateway = NotifierRunbookRunGateway(ref);
   final runTracker = RunbookRunTracker();
 
-  return McpToolRegistry([
+  return McpToolRegistry(switches: ref.watch(mcpToolSwitchesProvider), [
     ListHostsTool(
       hostsRepository: hostsRepository,
       hostsDao: hostsDao,

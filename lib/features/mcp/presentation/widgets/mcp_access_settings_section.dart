@@ -12,6 +12,7 @@ import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../../../core/utils/platform_capabilities.dart';
 import '../../data/mcp_agent_config.dart';
+import '../../domain/models/mcp_enums.dart';
 import '../notifiers/mcp_settings_notifier.dart';
 import 'mcp_activity_panel.dart';
 
@@ -84,6 +85,8 @@ final class McpAccessSettingsSection extends ConsumerWidget {
         // may act at all, and a panel reachable only from elsewhere is a panel
         // nobody opens.
         const McpActivityPanel(),
+        const SizedBox(height: 16),
+        _buildToolsCard(ref, settings),
         const SizedBox(height: 16),
         _buildLimitsCard(context, ref, tokens, settings),
         const SizedBox(height: 16),
@@ -161,6 +164,36 @@ final class McpAccessSettingsSection extends ConsumerWidget {
         );
       }
     }
+  }
+
+  /// One switch per [McpToolGroup], for every agent in every workspace.
+  Widget _buildToolsCard(WidgetRef ref, McpSettingsState settings) {
+    final notifier = ref.read(mcpSettingsProvider.notifier);
+    return ShadCard(
+      child: Column(
+        children: [
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: Text('Agent tools'),
+          ),
+          const Divider(),
+          for (final (index, group) in McpToolGroup.values.indexed) ...[
+            if (index > 0) const Divider(),
+            Material(
+              color: Colors.transparent,
+              child: SwitchListTile(
+                key: Key('mcp_tool_group_${group.name}'),
+                title: Text(group.label),
+                subtitle: Text(group.description),
+                value: !settings.disabledToolGroups.contains(group),
+                onChanged: (enabled) =>
+                    notifier.setToolGroupEnabled(group, enabled),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   Widget _buildLimitsCard(

@@ -11,6 +11,7 @@ import '../../../workspaces/domain/models/workspace_model.dart';
 import '../../data/mcp_providers.dart';
 import '../../data/mcp_server_controller.dart';
 import '../../data/repositories/mcp_repository_providers.dart';
+import '../../data/tools/mcp_tool_registry.dart';
 import '../../domain/models/mcp_enums.dart';
 
 part 'mcp_settings_notifier.g.dart';
@@ -38,6 +39,10 @@ class McpSettingsState {
   final int sessionIdleTimeoutMinutes;
   final int auditRetentionDays;
 
+  /// Tool groups switched off for every agent. Global, not per workspace:
+  /// stored under [_disabledToolGroupsKey], apart from the rest.
+  final Set<McpToolGroup> disabledToolGroups;
+
   const McpSettingsState({
     required this.masterEnabled,
     required this.serverRunning,
@@ -46,6 +51,7 @@ class McpSettingsState {
     required this.outputCapBytes,
     required this.sessionIdleTimeoutMinutes,
     required this.auditRetentionDays,
+    this.disabledToolGroups = const {},
   });
 
   McpSettingsState copyWith({
@@ -57,6 +63,7 @@ class McpSettingsState {
     int? outputCapBytes,
     int? sessionIdleTimeoutMinutes,
     int? auditRetentionDays,
+    Set<McpToolGroup>? disabledToolGroups,
   }) {
     return McpSettingsState(
       masterEnabled: masterEnabled ?? this.masterEnabled,
@@ -68,9 +75,14 @@ class McpSettingsState {
       sessionIdleTimeoutMinutes:
           sessionIdleTimeoutMinutes ?? this.sessionIdleTimeoutMinutes,
       auditRetentionDays: auditRetentionDays ?? this.auditRetentionDays,
+      disabledToolGroups: disabledToolGroups ?? this.disabledToolGroups,
     );
   }
 }
+
+/// Where the switched-off tool groups are stored: one key for every
+/// workspace, since the user turns a tool off for agents, not for a workspace.
+const _disabledToolGroupsKey = 'mcp_disabled_tool_groups';
 
 /// The subset of [McpSettingsState] that is actually persisted. Server
 /// liveness and the client list are not stored here — they are read fresh
@@ -222,6 +234,8 @@ class McpSettingsNotifier extends _$McpSettingsNotifier {
 
     final controller = ref.watch(mcpServerControllerProvider);
     _applyLimits(persisted);
+    final disabledToolGroups = await _loadDisabledToolGroups();
+    ref.read(mcpToolSwitchesProvider).disabled = disabledToolGroups;
 
     // The persisted switch is the user's standing instruction, not a record
     // of what happened to be running last time. Reading it without acting on
@@ -247,7 +261,45 @@ class McpSettingsNotifier extends _$McpSettingsNotifier {
       outputCapBytes: persisted.outputCapBytes,
       sessionIdleTimeoutMinutes: persisted.sessionIdleTimeoutMinutes,
       auditRetentionDays: persisted.auditRetentionDays,
+      disabledToolGroups: disabledToolGroups,
     );
+  }
+
+  /// Reads the switched-off groups. A storage that cannot be read throws, as
+  /// the per-workspace load does, so the screen shows an error and the server
+  /// stays down rather than serving tools the user turned off. A malformed
+  /// value, or a name this build does not know, counts as on.
+  Future<Set<McpToolGroup>> _loadDisabledToolGroups() async {
+    final raw = await ref
+        .read(secureStorageServiceProvider)
+        .read(key: _disabledToolGroupsKey);
+    if (raw == null || raw.isEmpty) return const {};
+    try {
+      return {
+        for (final name in jsonDecode(raw) as List)
+          ?McpToolGroup.values.asNameMap()[name],
+      };
+    } catch (_) {
+      return const {};
+    }
+  }
+
+  /// Turns [group] on or off for every agent, from its next request on.
+  Future<void> setToolGroupEnabled(McpToolGroup group, bool enabled) async {
+    final current = state.value;
+    if (current == null) return;
+    final disabled = {...current.disabledToolGroups};
+    enabled ? disabled.remove(group) : disabled.add(group);
+    await ref
+        .read(secureStorageServiceProvider)
+        .write(
+          key: _disabledToolGroupsKey,
+          value: jsonEncode([for (final g in disabled) g.name]),
+        );
+    ref.read(mcpToolSwitchesProvider).disabled = disabled;
+    if (ref.mounted) {
+      state = AsyncValue.data(current.copyWith(disabledToolGroups: disabled));
+    }
   }
 
   /// Brings the running server in line with the persisted master switch.

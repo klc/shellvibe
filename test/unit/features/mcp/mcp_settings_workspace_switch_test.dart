@@ -8,6 +8,8 @@ import 'package:shellvibe/features/mcp/data/mcp_server_controller.dart';
 import 'package:shellvibe/features/mcp/data/mcp_session_pool.dart';
 import 'package:shellvibe/features/mcp/data/repositories/mcp_audit_repository.dart';
 import 'package:shellvibe/features/mcp/data/repositories/mcp_client_repository.dart';
+import 'package:shellvibe/features/mcp/data/tools/mcp_tool_registry.dart';
+import 'package:shellvibe/features/mcp/domain/models/mcp_enums.dart';
 import 'package:shellvibe/features/mcp/presentation/notifiers/mcp_settings_notifier.dart';
 import 'package:shellvibe/features/workspaces/domain/models/workspace_model.dart';
 import 'package:shellvibe/features/workspaces/presentation/providers/workspace_provider.dart';
@@ -106,6 +108,41 @@ void main() {
     expect(rows.map((r) => (r.tool, r.clientId, r.workspaceId, r.decision)), [
       ('panic', 'client-b', 'b', 'denied'),
     ]);
+  });
+
+  test(
+    'a switched-off tool group is stored once for every workspace',
+    () async {
+      final stored = <String, String>{};
+      await boot(stored);
+      final switches = container.read(mcpToolSwitchesProvider);
+
+      await container
+          .read(mcpSettingsProvider.notifier)
+          .setToolGroupEnabled(McpToolGroup.fileTransfer, false);
+      expect(switches.disabled, {McpToolGroup.fileTransfer});
+      expect(stored['mcp_disabled_tool_groups'], '["fileTransfer"]');
+
+      // Another workspace shows and enforces the same switches.
+      await switchTo('b');
+      expect(container.read(mcpSettingsProvider).value!.disabledToolGroups, {
+        McpToolGroup.fileTransfer,
+      });
+      expect(switches.disabled, {McpToolGroup.fileTransfer});
+
+      await container
+          .read(mcpSettingsProvider.notifier)
+          .setToolGroupEnabled(McpToolGroup.fileTransfer, true);
+      expect(switches.disabled, isEmpty);
+      expect(stored['mcp_disabled_tool_groups'], '[]');
+    },
+  );
+
+  test('switched-off tool groups are applied at launch', () async {
+    await boot({'mcp_disabled_tool_groups': '["addHost","noSuchGroup"]'});
+    expect(container.read(mcpToolSwitchesProvider).disabled, {
+      McpToolGroup.addHost,
+    });
   });
 
   test('stops the server when the new workspace has AI access off', () async {
