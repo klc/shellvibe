@@ -226,6 +226,83 @@ void main() {
     await _pumpFrames(tester);
   });
 
+  // A prompt nobody answers is closed twice: by the host once the
+  // coordinator's timer drops the request, and by the dialog's own countdown a
+  // few milliseconds later, while it is still animating out. The second close
+  // took the page under it, leaving an empty navigator: a blank window that
+  // ignores every key.
+  Future<void> pumpUserPage(WidgetTester tester) async {
+    _ignoreOverflow(tester);
+    await tester.pumpWidget(_harness(coordinator));
+    await tester.pump();
+    unawaited(
+      rootNavigatorKey.currentState!.push(
+        MaterialPageRoute<void>(builder: (_) => const Text('user page')),
+      ),
+    );
+    await _pumpFrames(tester);
+  }
+
+  // Expired by wall clock by the dialog's first tick, so both closers fire.
+  const expired = Duration(microseconds: 1);
+
+  testWidgets('a host-access prompt that times out does not pop the page '
+      'under it', (tester) async {
+    await pumpUserPage(tester);
+    unawaited(
+      coordinator.requestHostAccess(_hostAccessRequest(), timeout: expired),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(
+      find.byKey(const Key('mcp_host_access_deny_suspend_button')),
+      findsOneWidget,
+    );
+
+    await tester.pump(const Duration(seconds: 1));
+    await _pumpFrames(tester);
+    expect(find.text('user page'), findsOneWidget);
+  });
+
+  testWidgets('a command prompt that times out does not pop the page under it', (
+    tester,
+  ) async {
+    await pumpUserPage(tester);
+    unawaited(
+      coordinator.requestCommandApproval(
+        const CommandApprovalRequest(
+          clientId: 'client-1',
+          clientName: 'Claude Code',
+          hostId: 'host-1',
+          hostLabel: 'prod-web-01',
+          command: 'uptime',
+          cwd: '/srv/app',
+          category: RiskCategory.unclassified,
+          canRemember: true,
+        ),
+        timeout: expired,
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(find.byKey(const Key('mcp_command_deny_button')), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 1));
+    await _pumpFrames(tester);
+    expect(find.text('user page'), findsOneWidget);
+  });
+
+  testWidgets('a request cancelled before its dialog opens does not pop the '
+      'page on screen', (tester) async {
+    await pumpUserPage(tester);
+    // Gone while the host is still bringing the window forward: there is no
+    // dialog of ours on top to close.
+    unawaited(coordinator.requestHostAccess(_hostAccessRequest()));
+    coordinator.cancelForClient('client-1');
+    await _pumpFrames(tester);
+    expect(find.text('user page'), findsOneWidget);
+  });
+
   testWidgets('deny and suspend does not pop the page under the dialog', (
     tester,
   ) async {

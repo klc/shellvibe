@@ -90,7 +90,13 @@ class _McpRunbookApprovalDialogState extends State<McpRunbookApprovalDialog> {
   }
 
   void _resolve(RunbookApprovalDecision decision) {
-    if (_resolved || !mounted) return;
+    // Already closed by the host (still animating out), a pop here would take
+    // the route under this one.
+    if (_resolved ||
+        !mounted ||
+        !(ModalRoute.of(context)?.isCurrent ?? false)) {
+      return;
+    }
     _resolved = true;
     Navigator.of(context).pop(decision);
   }
