@@ -10,6 +10,8 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
+import '../../../../app/widgets/window_chrome_frame.dart';
+import '../../../../app/window/window_chrome.dart';
 import '../../../../core/api/api_exception.dart';
 import '../../../../core/sync/backup_envelope.dart';
 import '../../../../core/sync/device_handoff.dart';
@@ -172,7 +174,10 @@ class _DeviceHandoffScreenState extends ConsumerState<DeviceHandoffScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    final screen = Scaffold(
+      // Pushed over the shell, so on desktop it draws the shell's chrome
+      // itself; otherwise the close button lands under the traffic lights.
+      backgroundColor: usesHiddenTitleBar ? Colors.transparent : null,
       appBar: AppBar(
         title: Text(widget.gives ? 'Add Another Device' : 'Add This Device'),
       ),
@@ -198,6 +203,8 @@ class _DeviceHandoffScreenState extends ConsumerState<DeviceHandoffScreen> {
         ),
       },
     );
+
+    return usesHiddenTitleBar ? WindowChromeFrame(child: screen) : screen;
   }
 
   Widget _buildCode(BuildContext context) {
