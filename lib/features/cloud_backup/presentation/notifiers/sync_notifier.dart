@@ -9,6 +9,8 @@ import 'package:uuid/uuid.dart';
 
 import '../../../../app/restored_data.dart';
 import '../../../../core/api/api_exception.dart';
+import '../../../../core/sync/account_key.dart';
+import '../../../../core/sync/backup_envelope.dart';
 import '../../../../core/sync/backup_scope_store.dart';
 import '../../../../core/sync/sync_engine.dart';
 import '../../../../core/sync/sync_journal.dart';
@@ -21,9 +23,11 @@ import '../../../vault/data/vault_key_service.dart';
 import '../../../vault/presentation/notifiers/identities_notifier.dart';
 import '../../../vault/presentation/notifiers/vault_notifier.dart';
 import '../../../settings/presentation/notifiers/backup_scope_notifier.dart';
+import '../../data/account_key_api.dart';
 import '../../data/cloud_backup_api.dart';
 import '../../data/cloud_backup_store.dart';
 import '../../data/sync_operations_api.dart';
+import '../../domain/account_key_service.dart';
 import '../../domain/sync_join_service.dart';
 import '../../domain/sync_snapshot_service.dart';
 
@@ -50,6 +54,16 @@ enum SyncBlocker {
 
   /// The stored passphrase does not open this account's sync snapshot.
   wrongPassphrase,
+
+  /// The account was set up again from somewhere else, and the key this
+  /// device holds is no longer the account's. Typing a passphrase does not
+  /// fix that; the device has to be added again.
+  accountKeyMismatch,
+
+  /// The account's sync snapshot was sealed with the passphrase, and this
+  /// device joined with the account key alone. A device that was already
+  /// syncing rewrites it once it runs a build that knows about the key.
+  groundNeedsUpdate,
 
   /// A master password keeps the vault locked, and the passphrase and sync key
   /// are sealed under the vault key. Unlocking it starts sync.
@@ -157,6 +171,11 @@ class SyncNotifier extends _$SyncNotifier {
   SyncSnapshotService? _ground;
   String? _deviceId;
   String? _passphrase;
+
+  /// Set on a device that seals with the account key. The key is read
+  /// through it each time something is sealed, together with the account's
+  /// record as it stands then.
+  AccountKeyService? _accountKeys;
   Uint8List? _syncKey;
   int _maxSizeBytes = 0;
   Timer? _debounce;
@@ -269,13 +288,28 @@ class SyncNotifier extends _$SyncNotifier {
       return const SyncState(blocker: SyncBlocker.notConfigured);
     }
 
-    final String passphrase;
+    // One or the other, and for a while both: a device that has moved to the
+    // account key keeps the passphrase until nothing it reads needs it.
+    final String? passphrase;
+    final bool usesAccountKey;
     try {
-      passphrase = (await store.readPassphrase())!;
+      usesAccountKey = await store.readAccountKey() != null;
+      passphrase = await store.readPassphrase();
     } on VaultLockedException {
       return _heldByLockedVault();
     }
     final client = ref.watch(accountProvider.notifier).apiClient;
+
+    final accountKeys = usesAccountKey
+        ? AccountKeyService(
+            store: store,
+            api: AccountKeyApi(client: client),
+            deviceId: account.session!.deviceId,
+            records: AccountKeyRecord(
+              crypto: ref.watch(encryptionEngineProvider),
+            ),
+          )
+        : null;
 
     final ground = SyncSnapshotService.over(
       sync: ref.watch(e2eeCloudSyncServiceProvider),
@@ -289,16 +323,32 @@ class SyncNotifier extends _$SyncNotifier {
 
     final Uint8List syncKey;
     try {
+      // Every start, before anything else: a device that has finished
+      // joining reads its sync key from its own keychain and would otherwise
+      // never look at the account again. After the account's encryption is
+      // reset it would go on pushing into the new log under the old key.
+      await accountKeys?.current();
+
       syncKey = await _resolveSyncKey(
         store,
         ground,
         db.syncJournal!,
         passphrase,
+        accountKeys,
       );
     } on _NoCompleteGround {
       _stop();
 
       return const SyncState(blocker: SyncBlocker.noCompleteGround);
+    } on _OlderFormatGround {
+      _stop();
+
+      return const SyncState(blocker: SyncBlocker.groundNeedsUpdate);
+    } on BackupEnvelopeException {
+      // The account's record is not this device's key.
+      _stop();
+
+      return const SyncState(blocker: SyncBlocker.accountKeyMismatch);
     } on _WrongPassphrase {
       _stop();
 
@@ -310,6 +360,7 @@ class SyncNotifier extends _$SyncNotifier {
     _deviceId = account.session!.deviceId;
     _maxSizeBytes = maxSizeBytes;
     _passphrase = passphrase;
+    _accountKeys = accountKeys;
     _syncKey = syncKey;
     _ground = ground;
 
@@ -379,7 +430,8 @@ class SyncNotifier extends _$SyncNotifier {
     CloudBackupStore store,
     SyncSnapshotService ground,
     SyncJournal journal,
-    String passphrase,
+    String? passphrase,
+    AccountKeyService? accountKeys,
   ) async {
     final stored = await store.readSyncKey();
 
@@ -387,10 +439,16 @@ class SyncNotifier extends _$SyncNotifier {
       return base64.decode(stored);
     }
 
-    final found = await ground.readGround(secret: passphrase);
+    final found = await ground.readGround(
+      secret: passphrase,
+      accountKey: await accountKeys?.current(),
+    );
 
     if (found.problem == SyncGroundProblem.cannotOpen) {
       throw const _WrongPassphrase();
+    }
+    if (found.problem == SyncGroundProblem.olderFormat) {
+      throw const _OlderFormatGround();
     }
     if (found.problem == SyncGroundProblem.allPartial) {
       throw const _NoCompleteGround();
@@ -459,6 +517,32 @@ class SyncNotifier extends _$SyncNotifier {
     ref.invalidateSelf();
   }
 
+  /// Forgets this device's place in the account's sync, keeping the account.
+  ///
+  /// For a device whose cloud backup setup is removed. Its versions, cursors
+  /// and outbox describe a log it is no longer part of -- and after the
+  /// account's encryption is reset, a log that no longer exists. Left in
+  /// place, the device would call itself joined the next time it is added:
+  /// it would never send its rows or start from the new snapshot. Cleared,
+  /// adding it again runs the join, which merges and never replaces.
+  Future<void> leaveAccount() async {
+    final db = ref.read(appDatabaseProvider);
+    final journal = db.syncJournal ?? SyncJournal(db: db, deviceId: 'local');
+    final store = CloudBackupStore(
+      storage: ref.read(secureStorageServiceProvider),
+      vaultKey: ref.read(vaultKeyServiceProvider).getDek,
+    );
+
+    // Behind any pass still running, which would otherwise move a cursor
+    // this is resetting.
+    await _serial(() async {
+      await journal.forgetAccount();
+      await store.forgetSyncKey();
+    });
+
+    ref.invalidateSelf();
+  }
+
   /// Pulls the log again from the start when this build syncs a table the
   /// build before it did not.
   ///
@@ -511,7 +595,8 @@ class SyncNotifier extends _$SyncNotifier {
         }
 
         return join.join(
-          secret: _passphrase!,
+          secret: _passphrase,
+          accountKey: await _accountKeys?.current(),
           deviceId: _deviceId!,
           maxSizeBytes: _maxSizeBytes,
           syncKey: _syncKey!,
@@ -618,10 +703,13 @@ class SyncNotifier extends _$SyncNotifier {
     if (!(_engine?.scope.coversSyncGround ?? false)) return;
 
     try {
+      final accountKey = await _accountKeys?.current();
+
       if (force) {
         await ground.write(
           db: ref.read(appDatabaseProvider),
-          passphrase: _passphrase!,
+          passphrase: _passphrase,
+          accountKey: accountKey,
           deviceId: _deviceId!,
           maxSizeBytes: _maxSizeBytes,
           syncKey: _syncKey!,
@@ -630,9 +718,23 @@ class SyncNotifier extends _$SyncNotifier {
         return;
       }
 
+      // A ground sealed with the passphrase is one a device joining by code
+      // cannot start from. This device is in sync and holds the key, so it
+      // is the one that can put that right.
+      if (accountKey != null) {
+        await ground.upgradeIfOlderFormat(
+          db: ref.read(appDatabaseProvider),
+          accountKey: accountKey,
+          deviceId: _deviceId!,
+          maxSizeBytes: _maxSizeBytes,
+          syncKey: _syncKey!,
+        );
+      }
+
       await ground.refreshIfStale(
         db: ref.read(appDatabaseProvider),
-        passphrase: _passphrase!,
+        passphrase: _passphrase,
+        accountKey: accountKey,
         deviceId: _deviceId!,
         maxSizeBytes: _maxSizeBytes,
         syncKey: _syncKey!,
@@ -832,6 +934,7 @@ class SyncNotifier extends _$SyncNotifier {
     _join = null;
     _ground = null;
     _passphrase = null;
+    _accountKeys = null;
     _syncKey = null;
     _deviceId = null;
     _joinStarted = false;
@@ -859,4 +962,10 @@ final class _NoCompleteGround implements Exception {
 /// The stored passphrase does not open the account's ground.
 final class _WrongPassphrase implements Exception {
   const _WrongPassphrase();
+}
+
+/// The account's ground predates the account key, which is all this device
+/// holds.
+final class _OlderFormatGround implements Exception {
+  const _OlderFormatGround();
 }

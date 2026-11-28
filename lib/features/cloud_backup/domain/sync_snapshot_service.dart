@@ -4,6 +4,7 @@ import 'package:cryptography/cryptography.dart';
 
 import 'package:flutter/foundation.dart';
 
+import '../../../core/sync/account_key.dart';
 import '../../../core/sync/e2ee_cloud_sync_service.dart';
 import '../../../shared/database/app_database.dart';
 import '../data/cloud_backup_api.dart';
@@ -54,6 +55,11 @@ enum SyncGroundProblem {
 
   /// The passphrase or recovery code does not open what is stored.
   cannotOpen,
+
+  /// What is stored was sealed with the passphrase, before the account had a
+  /// key, and this device holds only the key. A device that was already
+  /// syncing rewrites it as soon as it runs a build that knows about the key.
+  olderFormat,
 }
 
 /// How far the log may run past the ground before it is rewritten.
@@ -141,7 +147,8 @@ final class SyncSnapshotService {
   /// will fill in.
   Future<CloudBackupUploadResult> write({
     required AppDatabase db,
-    required String passphrase,
+    String? passphrase,
+    AccountKey? accountKey,
     required String deviceId,
     required int maxSizeBytes,
     required Uint8List syncKey,
@@ -153,6 +160,7 @@ final class SyncSnapshotService {
     final result = await backups.upload(
       db: db,
       passphrase: passphrase,
+      accountKey: accountKey,
       deviceId: deviceId,
       maxSizeBytes: maxSizeBytes,
       force: force,
@@ -183,7 +191,8 @@ final class SyncSnapshotService {
   /// Returns true when this device wrote a new one.
   Future<bool> refreshIfStale({
     required AppDatabase db,
-    required String passphrase,
+    String? passphrase,
+    AccountKey? accountKey,
     required String deviceId,
     required int maxSizeBytes,
     required Uint8List syncKey,
@@ -216,6 +225,40 @@ final class SyncSnapshotService {
     final written = await write(
       db: db,
       passphrase: passphrase,
+      accountKey: accountKey,
+      deviceId: deviceId,
+      maxSizeBytes: maxSizeBytes,
+      syncKey: syncKey,
+    );
+
+    return written.succeeded;
+  }
+
+  /// Rewrites a ground that was sealed with the passphrase, once this device
+  /// seals with the account key.
+  ///
+  /// A device that joins by scanning a code holds the key and nothing else,
+  /// so a ground from before the key existed is one it cannot start from.
+  /// Any device that is already in sync can replace it, and the first one to
+  /// notice does. A conflict means another device got there first.
+  ///
+  /// Returns true when the newest ground is one the account key opens.
+  Future<bool> upgradeIfOlderFormat({
+    required AppDatabase db,
+    required AccountKey accountKey,
+    required String deviceId,
+    required int maxSizeBytes,
+    required Uint8List syncKey,
+  }) async {
+    final revisions = await backups.revisions();
+    if (revisions.isEmpty ||
+        BackupEnvelope.opensWithAccountKey(revisions.first.schemaVersion)) {
+      return true;
+    }
+
+    final written = await write(
+      db: db,
+      accountKey: accountKey,
       deviceId: deviceId,
       maxSizeBytes: maxSizeBytes,
       syncKey: syncKey,
@@ -232,8 +275,13 @@ final class SyncSnapshotService {
   /// which fails at restore time, on the device that can least afford it.
   ///
   /// Returns null and a [SyncGroundProblem] when there is nothing usable.
+  ///
+  /// [accountKey] opens what was sealed with it; [secret] opens everything
+  /// else, when this device still has one. A device with only the key passes
+  /// over older revisions and says so, rather than calling them unopenable.
   Future<({SyncGround? ground, SyncGroundProblem? problem})> readGround({
-    required String secret,
+    String? secret,
+    AccountKey? accountKey,
   }) async {
     final revisions = await backups.revisions();
     if (revisions.isEmpty) {
@@ -241,11 +289,19 @@ final class SyncSnapshotService {
     }
 
     var sawSomethingUnopenable = false;
+    var sawOlderFormat = false;
 
     for (final revision in revisions) {
+      if (secret == null &&
+          !BackupEnvelope.opensWithAccountKey(revision.schemaVersion)) {
+        sawOlderFormat = true;
+        continue;
+      }
+
       final opened = await backups.canOpen(
         revision: revision.revision,
         secret: secret,
+        accountKey: accountKey,
       );
 
       if (opened == null) {
@@ -287,6 +343,8 @@ final class SyncSnapshotService {
       ground: null,
       problem: sawSomethingUnopenable
           ? SyncGroundProblem.cannotOpen
+          : sawOlderFormat
+          ? SyncGroundProblem.olderFormat
           : SyncGroundProblem.allPartial,
     );
   }
@@ -299,12 +357,14 @@ final class SyncSnapshotService {
   Future<BackupImportResult> apply({
     required AppDatabase db,
     required SyncGround ground,
-    required String secret,
+    String? secret,
+    AccountKey? accountKey,
   }) async {
     final result = await backups.sync.importEncryptedBackup(
       backupPackageJson: ground.ciphertext,
       db: db,
       masterPassword: secret,
+      accountKey: accountKey,
       snapshotDeviceId: ground.deviceId,
       allowed: BackupScope.syncGround,
     );

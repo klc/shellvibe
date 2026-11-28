@@ -4,6 +4,7 @@ import 'package:cryptography/cryptography.dart';
 import 'package:shellvibe/core/api/api_config.dart';
 import 'package:shellvibe/core/api/api_exception.dart';
 import 'package:shellvibe/core/api/api_transport.dart';
+import 'package:shellvibe/core/sync/backup_envelope.dart';
 
 /// The backup, sync-ground and operation-log endpoints of the server, in
 /// memory, behind a real [ApiTransport].
@@ -25,6 +26,18 @@ final class FakeSyncServer implements ApiTransport {
   /// The operation log, in the order the server stored it. An operation's
   /// position is its index plus one.
   final List<Map<String, Object?>> operations = [];
+
+  /// The account's key record, and how many times it has been written.
+  String? accountKeyRecord;
+  int accountKeyRevision = 0;
+
+  /// The server's rollout switch: whether an account without a key record
+  /// may be given one. Off, as it is in production until every platform has
+  /// a build that reads the account key.
+  bool accountKeyEnabled = false;
+
+  /// Handoff mailboxes by id.
+  final Map<String, Map<String, Object?>> handoffs = {};
 
   /// When true, every request fails as if the network were down.
   bool offline = false;
@@ -63,7 +76,7 @@ final class FakeSyncServer implements ApiTransport {
         baseRevision: revisions.length,
         uploadId: 'seed-${revisions.length + 1}',
         deviceId: deviceId,
-        schemaVersion: 4,
+        schemaVersion: BackupEnvelope.versionOf(ciphertext),
         encryptionVersion: 2,
         ciphertext: ciphertext,
       ),
@@ -131,6 +144,12 @@ final class FakeSyncServer implements ApiTransport {
     if (request.method == 'GET' && path == '/sync/operations') {
       return _pull(request.url.queryParameters);
     }
+    if (path == '/sync/account-key') {
+      return request.method == 'GET'
+          ? _ok({'data': _accountKey()})
+          : _writeAccountKey(_body(request));
+    }
+    if (path.startsWith('/sync/handoffs')) return _handoff(request, path);
 
     return _error(404, 'not_found', 'No route for ${request.method} $path.');
   }
@@ -161,6 +180,19 @@ final class FakeSyncServer implements ApiTransport {
       return _ok({'data': _withoutCiphertext(earlier.single)}, status: 201);
     }
 
+    // Once the account has a key, a build that still seals with the
+    // passphrase is refused rather than left to write over what the others
+    // can read.
+    if (accountKeyRecord != null && (body['schema_version'] as int? ?? 0) < 5) {
+      return _error(
+        422,
+        'envelope_version_retired',
+        'This account\'s backups are sealed with an account key now. Update '
+            'ShellVibe on this device.',
+        details: {'min_schema_version': 5},
+      );
+    }
+
     final headRevision = revisions.length;
     if (body['base_revision'] != headRevision) {
       return _error(
@@ -186,6 +218,71 @@ final class FakeSyncServer implements ApiTransport {
     revisions.add(stored);
 
     return _ok({'data': _withoutCiphertext(stored)}, status: 201);
+  }
+
+  Map<String, Object?> _accountKey() => {
+    'revision': accountKeyRevision,
+    'record': accountKeyRecord,
+    'enabled': accountKeyEnabled,
+    'updated_at': null,
+  };
+
+  ApiRawResponse _writeAccountKey(Map<String, Object?> body) {
+    if (body['base_revision'] != accountKeyRevision) {
+      return _error(
+        409,
+        'account_key_conflict',
+        'The account key record was written by another device.',
+        details: {'current_revision': accountKeyRevision},
+      );
+    }
+    if (accountKeyRecord == null && !accountKeyEnabled) {
+      return _error(403, 'account_key_disabled', 'Account keys are off.');
+    }
+
+    accountKeyRecord = body['record'] as String;
+    accountKeyRevision++;
+
+    return _ok({'data': _accountKey()});
+  }
+
+  ApiRawResponse _handoff(ApiRawRequest request, String path) {
+    final parts = path.split('/').skip(3).toList();
+
+    if (parts.isEmpty && request.method == 'POST') {
+      final id = 'handoff-${handoffs.length + 1}';
+      handoffs[id] = {
+        'id': id,
+        'offer': null,
+        'answer': null,
+        'expires_at': DateTime.now()
+            .toUtc()
+            .add(const Duration(minutes: 3))
+            .toIso8601String(),
+      };
+
+      return _ok({'data': handoffs[id]}, status: 201);
+    }
+
+    final mailbox = parts.isEmpty ? null : handoffs[parts.first];
+    if (mailbox == null) {
+      return _error(404, 'handoff_not_found', 'No such handoff.');
+    }
+
+    if (request.method == 'DELETE') {
+      handoffs.remove(parts.first);
+
+      return const ApiRawResponse(statusCode: 204, body: '');
+    }
+    if (request.method == 'PUT' && parts.length == 2) {
+      final slot = parts[1];
+      if (mailbox[slot] != null) {
+        return _error(409, 'handoff_slot_taken', 'Already written.');
+      }
+      mailbox[slot] = _body(request)['message'];
+    }
+
+    return _ok({'data': mailbox});
   }
 
   ApiRawResponse _pull(Map<String, String> query) {

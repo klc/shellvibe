@@ -21,6 +21,9 @@ void main() {
 
   /// Colours that are deliberately not themed, with the reason they are not.
   const exempt = <String, String>{
+    'lib/features/cloud_backup/presentation/widgets/device_handoff_screen.dart':
+        'A QR code needs a white quiet zone, and the scan frame sits on the '
+        'camera feed.',
     'lib/features/device_link/presentation/screens/pairing_qr_screen.dart':
         'QR codes need a white quiet zone to scan, in any theme',
     'lib/features/device_link/presentation/screens/scan_pair_screen.dart':

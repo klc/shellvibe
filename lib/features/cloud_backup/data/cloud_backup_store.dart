@@ -68,7 +68,44 @@ final class CloudBackupStore {
 
   /// Whether cloud backup has been configured on this device. Answers behind
   /// a locked vault, for the same reason.
-  Future<bool> isConfigured() => _hasSecret(_passphraseKey);
+  ///
+  /// Either secret counts. A device that joined with the account key never
+  /// had a passphrase, and one that has not moved to the key yet has only
+  /// that.
+  Future<bool> isConfigured() async =>
+      await _hasSecret(_accountKeyKey) || await _hasSecret(_passphraseKey);
+
+  /// The account key, or null on a device that still seals with the
+  /// passphrase.
+  Future<Uint8List?> readAccountKey() async {
+    final stored = await _readSecret(_accountKeyKey);
+
+    return stored == null ? null : base64.decode(stored);
+  }
+
+  Future<void> writeAccountKey(Uint8List accountKey) =>
+      _writeSecret(_accountKeyKey, base64.encode(accountKey));
+
+  /// Whether this device holds the account key. Answers behind a locked
+  /// vault.
+  Future<bool> hasAccountKey() => _hasSecret(_accountKeyKey);
+
+  /// Whether this device still keeps the passphrase. Answers behind a locked
+  /// vault.
+  Future<bool> hasPassphrase() => _hasSecret(_passphraseKey);
+
+  /// Drops the passphrase and the recovery code, once the account key has
+  /// taken over from them.
+  ///
+  /// The point of the account key: neither secret has to live on a device.
+  /// Called only after the key has been checked against the account's record
+  /// and everything this device may need to read opens with it.
+  Future<void> forgetPassphrase() async {
+    for (final key in const [_passphraseKey, _recoveryCodeKey]) {
+      await storage.delete(key: key);
+      await storage.delete(key: _sealed(key));
+    }
+  }
 
   /// The idempotency key of an upload that was started and never confirmed.
   ///
@@ -302,8 +339,7 @@ final class CloudBackupStore {
     value: '${at.toIso8601String()}:$clock',
   );
 
-  Future<void> clearAutoBackupMark() =>
-      storage.delete(key: _autoBackupMarkKey);
+  Future<void> clearAutoBackupMark() => storage.delete(key: _autoBackupMarkKey);
 
   /// When this device last wrote a backup that held everything.
   ///
@@ -325,7 +361,12 @@ final class CloudBackupStore {
   /// signed out: a passphrase left behind would be offered against the next
   /// account's vault, which it cannot open.
   Future<void> clear() async {
-    for (final key in const [_passphraseKey, _recoveryCodeKey, _syncKeyKey]) {
+    for (final key in const [
+      _passphraseKey,
+      _recoveryCodeKey,
+      _syncKeyKey,
+      _accountKeyKey,
+    ]) {
       await storage.delete(key: key);
       await storage.delete(key: _sealed(key));
     }
@@ -408,6 +449,7 @@ final class CloudBackupStore {
   static const String _frequencyKey = 'shellvibe_backup_frequency';
   static const String _autoBackupMarkKey = 'shellvibe_backup_auto_mark';
   static const String _syncKeyKey = 'shellvibe_sync_key';
+  static const String _accountKeyKey = 'shellvibe_sync_account_key';
 
   /// Not removed by [clear]. Forgetting the passphrase leaves the journal's
   /// state where it was, and that state still belongs to this account.
