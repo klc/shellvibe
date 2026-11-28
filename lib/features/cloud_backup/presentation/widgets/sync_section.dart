@@ -9,6 +9,7 @@ import '../../../../core/sync/backup_scope_store.dart';
 import '../../../settings/presentation/notifiers/backup_scope_notifier.dart';
 import '../../../settings/presentation/widgets/backup_scope_picker.dart';
 import '../../domain/sync_join_service.dart';
+import '../notifiers/cloud_backup_notifier.dart';
 import '../notifiers/sync_notifier.dart';
 import '../notifiers/sync_trash_notifier.dart';
 
@@ -27,6 +28,11 @@ final class SyncSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = ShellVibeTokens.resolve(context);
     final enabled = ref.watch(autoSyncEnabledProvider).value ?? false;
+    // Sync seals with the key Cloud Backup sets up, so until that exists the
+    // switch would only promise something that cannot run. Turning it off
+    // stays possible for a device that switched it on before this check.
+    final backup = ref.watch(cloudBackupProvider).value;
+    final backupReady = backup?.isReady ?? false;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -44,10 +50,18 @@ final class SyncSection extends ConsumerWidget {
               style: TextStyle(fontSize: 11, color: tokens.textSubtle),
             ),
             value: enabled,
-            onChanged: (value) =>
-                ref.read(autoSyncEnabledProvider.notifier).set(value),
+            onChanged: backupReady || enabled
+                ? (value) =>
+                      ref.read(autoSyncEnabledProvider.notifier).set(value)
+                : null,
           ),
         ),
+        // Shown before the switch is touched, not after: once it is on the
+        // status line below says the same.
+        if (!enabled && backup != null && !backupReady)
+          _SetUpBackupFirst(
+            signedOut: backup.blocker == CloudBackupBlocker.signedOut,
+          ),
         if (enabled) ...[
           const SizedBox(height: 4),
           _SyncStatus(state: ref.watch(syncProvider)),
@@ -71,6 +85,46 @@ final class SyncSection extends ConsumerWidget {
     );
   }
 }
+
+/// Why the switch is off limits, and the way to what unlocks it.
+final class _SetUpBackupFirst extends StatelessWidget {
+  const _SetUpBackupFirst({required this.signedOut});
+
+  final bool signedOut;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = ShellVibeTokens.resolve(context);
+
+    return Row(
+      key: const Key('sync_set_up_backup_first'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(LucideIcons.circleAlert, size: 14, color: tokens.warning),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            signedOut
+                ? 'Sign in under Account to sync.'
+                : _kSyncNeedsBackupMessage,
+            style: TextStyle(fontSize: 11, color: tokens.warning),
+          ),
+        ),
+        if (!signedOut)
+          ShellVibeButton.secondary(
+            buttonKey: const Key('sync_open_cloud_backup_button'),
+            label: 'Open Cloud Backup',
+            icon: LucideIcons.keyRound,
+            onPressed: () => GoRouter.maybeOf(context)?.go('/settings/backup'),
+          ),
+      ],
+    );
+  }
+}
+
+const String _kSyncNeedsBackupMessage =
+    'Sync needs your sync passphrase. Set it, or enter the one from your '
+    'other device, under Cloud Backup.';
 
 /// What automatic sync is doing right now, in one line.
 ///
@@ -170,8 +224,7 @@ final class _SyncStatus extends ConsumerWidget {
       SyncBlocker.notConfigured => (
         LucideIcons.circleAlert,
         tokens.warning,
-        'Sync needs your sync passphrase. Set it, or enter the one from '
-            'your other device, under Cloud Backup.',
+        _kSyncNeedsBackupMessage,
       ),
       // Every snapshot this account holds carries less than sync does.
       // Starting from one would leave a category missing that nothing later
