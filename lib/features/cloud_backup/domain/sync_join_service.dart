@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../../../core/sync/account_key.dart';
 import '../../../core/sync/sync_engine.dart';
 import '../../../core/sync/sync_journal.dart';
 import '../../../features/vault/data/vault_key_service.dart';
@@ -16,6 +17,11 @@ enum SyncJoinProblem {
   /// The passphrase or recovery code does not open what is stored.
   cannotOpen,
 
+  /// The snapshot was sealed with the passphrase, before the account had a
+  /// key, and this device joined with the key alone. Nothing is wrong with
+  /// either; a device already in sync has to rewrite the snapshot first.
+  olderFormat,
+
   /// The ground could not be written: too large, refused, or unreachable. The
   /// message says which.
   cannotWriteGround,
@@ -23,6 +29,12 @@ enum SyncJoinProblem {
   /// The vault is locked, so identity secrets cannot be rewrapped.
   vaultLocked,
 }
+
+/// Said wherever a device with only the account key meets an older ground.
+const String kSyncGroundOlderFormatMessage =
+    'This account\'s sync snapshot was written by an older version of '
+    'ShellVibe. Update ShellVibe on a device that is already syncing and '
+    'open it there; this device will join once that one has caught up.';
 
 /// What joining did, in the numbers the user is owed.
 @immutable
@@ -102,7 +114,8 @@ final class SyncJoinService {
   /// the alternative is a device that believes it joined while the rows it
   /// never sent sit on its disk, with nothing reporting a problem.
   Future<SyncJoinResult> join({
-    required String secret,
+    String? secret,
+    AccountKey? accountKey,
     required String deviceId,
     required int maxSizeBytes,
     required Uint8List syncKey,
@@ -118,13 +131,17 @@ final class SyncJoinService {
         applied: 0,
         repaired: 0,
         secret: secret,
+        accountKey: accountKey,
         deviceId: deviceId,
         maxSizeBytes: maxSizeBytes,
         syncKey: syncKey,
       );
     }
 
-    final found = await ground.readGround(secret: secret);
+    final found = await ground.readGround(
+      secret: secret,
+      accountKey: accountKey,
+    );
 
     if (found.problem == SyncGroundProblem.cannotOpen) {
       return const SyncJoinResult.failed(
@@ -132,6 +149,13 @@ final class SyncJoinService {
         message:
             'The passphrase does not open this account\'s sync snapshot. '
             'Use the passphrase from a device that is already syncing.',
+      );
+    }
+
+    if (found.problem == SyncGroundProblem.olderFormat) {
+      return const SyncJoinResult.failed(
+        problem: SyncJoinProblem.olderFormat,
+        message: kSyncGroundOlderFormatMessage,
       );
     }
 
@@ -149,6 +173,7 @@ final class SyncJoinService {
       // from, and there is nobody to send operations to yet.
       return _writeFirstGround(
         secret: secret,
+        accountKey: accountKey,
         deviceId: deviceId,
         maxSizeBytes: maxSizeBytes,
         syncKey: syncKey,
@@ -169,6 +194,7 @@ final class SyncJoinService {
           db: db,
           ground: found.ground!,
           secret: secret,
+          accountKey: accountKey,
         );
 
         // What the ground brought, counted from the versions the restore
@@ -211,6 +237,7 @@ final class SyncJoinService {
       seeded: seeded,
       repaired: repaired,
       secret: secret,
+      accountKey: accountKey,
       deviceId: deviceId,
       maxSizeBytes: maxSizeBytes,
       syncKey: syncKey,
@@ -222,7 +249,8 @@ final class SyncJoinService {
     required int applied,
     required int seeded,
     required int repaired,
-    required String secret,
+    String? secret,
+    AccountKey? accountKey,
     required String deviceId,
     required int maxSizeBytes,
     required Uint8List syncKey,
@@ -261,6 +289,7 @@ final class SyncJoinService {
       await ground.write(
         db: db,
         passphrase: secret,
+        accountKey: accountKey,
         deviceId: deviceId,
         maxSizeBytes: maxSizeBytes,
         syncKey: syncKey,
@@ -278,7 +307,8 @@ final class SyncJoinService {
   }
 
   Future<SyncJoinResult> _writeFirstGround({
-    required String secret,
+    String? secret,
+    AccountKey? accountKey,
     required String deviceId,
     required int maxSizeBytes,
     required Uint8List syncKey,
@@ -286,6 +316,7 @@ final class SyncJoinService {
     final written = await ground.write(
       db: db,
       passphrase: secret,
+      accountKey: accountKey,
       deviceId: deviceId,
       maxSizeBytes: maxSizeBytes,
       syncKey: syncKey,

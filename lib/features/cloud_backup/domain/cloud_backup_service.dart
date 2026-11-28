@@ -4,6 +4,7 @@ import 'package:cryptography/cryptography.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../../core/api/api_exception.dart';
+import '../../../core/sync/account_key.dart';
 import '../../../core/sync/e2ee_cloud_sync_service.dart';
 import '../../../shared/database/app_database.dart';
 import '../data/cloud_backup_api.dart';
@@ -118,9 +119,13 @@ final class CloudBackupService {
   /// [scope] narrows what the backup carries. [settings] is the app settings
   /// blob, which lives in secure storage rather than the database and is
   /// therefore read by the caller.
+  ///
+  /// Sealed with [accountKey] when the device holds one, otherwise with
+  /// [passphrase], as every device did before the account key existed.
   Future<CloudBackupUploadResult> upload({
     required AppDatabase db,
-    required String passphrase,
+    String? passphrase,
+    AccountKey? accountKey,
     required String deviceId,
     required int maxSizeBytes,
     String? recoveryCode,
@@ -137,6 +142,7 @@ final class CloudBackupService {
         db: db,
         masterPassword: passphrase,
         recoveryCode: recoveryCode,
+        accountKey: accountKey,
         scope: scope,
         settings: settings,
         syncKey: syncKey,
@@ -223,6 +229,7 @@ final class CloudBackupService {
         return await upload(
           db: db,
           passphrase: passphrase,
+          accountKey: accountKey,
           deviceId: deviceId,
           maxSizeBytes: maxSizeBytes,
           recoveryCode: recoveryCode,
@@ -245,6 +252,7 @@ final class CloudBackupService {
             ? () => upload(
                 db: db,
                 passphrase: passphrase,
+                accountKey: accountKey,
                 deviceId: deviceId,
                 maxSizeBytes: maxSizeBytes,
                 recoveryCode: recoveryCode,
@@ -278,8 +286,9 @@ final class CloudBackupService {
   Future<BackupImportResult> restore({
     required AppDatabase db,
     required int revision,
-    required String secret,
+    String? secret,
     BackupUnlockMethod unlockWith = BackupUnlockMethod.passphrase,
+    AccountKey? accountKey,
   }) async {
     final stored = await api.revision(revision);
     final ciphertext = stored.ciphertext;
@@ -308,6 +317,7 @@ final class CloudBackupService {
       db: db,
       masterPassword: secret,
       unlockWith: unlockWith,
+      accountKey: accountKey,
       // The device that wrote the revision, so the rows it restores break
       // clock ties the same way the operation that produced them would have.
       snapshotDeviceId: stored.deviceId,
@@ -326,8 +336,9 @@ final class CloudBackupService {
   /// whether the key is right.
   Future<OpenedBackup?> canOpen({
     required int revision,
-    required String secret,
+    String? secret,
     BackupUnlockMethod unlockWith = BackupUnlockMethod.passphrase,
+    AccountKey? accountKey,
   }) async {
     final stored = await api.revision(revision);
     final ciphertext = stored.ciphertext;
@@ -343,6 +354,7 @@ final class CloudBackupService {
         envelopeJson: ciphertext,
         secret: secret,
         method: unlockWith,
+        accountKey: accountKey?.bytes,
       );
     } on BackupEnvelopeException {
       return null;

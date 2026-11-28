@@ -7,6 +7,7 @@ import '../../features/vault/data/vault_key_service.dart';
 import '../../shared/database/app_database.dart';
 import '../../shared/database/tables.dart' show hostGroupMemberId;
 import '../crypto/encryption_engine.dart';
+import 'account_key.dart';
 import 'backup_envelope.dart';
 import 'backup_scope.dart';
 import 'sync_journal.dart';
@@ -235,10 +236,15 @@ class E2EECloudSyncService {
   /// than the database. It is passed in rather than read here so this service
   /// keeps its single dependency on [AppDatabase]; it is ignored unless
   /// [scope] includes [BackupCategory.settings].
+  ///
+  /// With [accountKey] the envelope is sealed under the account key and
+  /// [masterPassword] is not used: that is how a device backs up to the cloud.
+  /// A file backup has no account behind it and passes [masterPassword].
   Future<String> exportEncryptedBackup({
     required AppDatabase db,
-    required String masterPassword,
+    String? masterPassword,
     String? recoveryCode,
+    AccountKey? accountKey,
     BackupScope scope = BackupScope.full,
     Map<String, dynamic>? settings,
     Uint8List? syncKey,
@@ -356,10 +362,20 @@ class E2EECloudSyncService {
     // any payload is produced.
     final dek = await vaultKeyService.getDek();
 
+    if (accountKey != null) {
+      return _envelope.sealWithAccountKey(
+        payloadJson: jsonEncode(payloadMap),
+        dek: dek,
+        accountKey: accountKey.bytes,
+        keyRecord: accountKey.record,
+        syncKey: syncKey,
+      );
+    }
+
     return _envelope.seal(
       payloadJson: jsonEncode(payloadMap),
       dek: dek,
-      passphrase: masterPassword,
+      passphrase: masterPassword ?? '',
       recoveryCode: recoveryCode,
       syncKey: syncKey,
     );
@@ -398,8 +414,9 @@ class E2EECloudSyncService {
   Future<BackupImportResult> importEncryptedBackup({
     required String backupPackageJson,
     required AppDatabase db,
-    required String masterPassword,
+    String? masterPassword,
     BackupUnlockMethod unlockWith = BackupUnlockMethod.passphrase,
+    AccountKey? accountKey,
     String snapshotDeviceId = '',
     BackupScope allowed = BackupScope.full,
     bool recordAsChange = false,
@@ -408,6 +425,7 @@ class E2EECloudSyncService {
       envelopeJson: backupPackageJson,
       secret: masterPassword,
       method: unlockWith,
+      accountKey: accountKey?.bytes,
     );
 
     final data = jsonDecode(opened.payloadJson) as Map<String, dynamic>;

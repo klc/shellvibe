@@ -1,16 +1,25 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../app/theme/shellvibe_tokens.dart';
 import '../../../../app/widgets/shellvibe_ui.dart';
 import '../../../../core/sync/backup_envelope.dart';
 import '../../../../core/sync/backup_scope_store.dart';
+import '../../../../core/utils/platform_capabilities.dart';
 import '../../../settings/presentation/copy_secret_with_auto_clear.dart';
 import '../../../settings/presentation/widgets/backup_scope_picker.dart';
 import '../../data/cloud_backup_api.dart';
 import '../../domain/backup_frequency.dart';
 import '../notifiers/cloud_backup_notifier.dart';
+import 'device_handoff_screen.dart';
+
+/// Where the account's encryption is reset. Behind the panel's own
+/// re-confirmation -- password or a linked Google or GitHub sign-in -- which
+/// the app cannot ask for itself on an account that has no password.
+const String kResetEncryptionUrl =
+    'https://shellvibe.dev/panel/danger#reset-encryption';
 
 /// Cloud backup surface in Settings → Sync.
 ///
@@ -34,6 +43,13 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
 
   /// Which secret the unlock form is asking for.
   BackupUnlockMethod _unlockMethod = BackupUnlockMethod.passphrase;
+
+  /// A recovery code made for an account that has none, until it is saved.
+  String? _newRecoveryCode;
+
+  /// Set once the reset page has been opened, so there is a way back to
+  /// asking the server what the account holds now.
+  bool _sentToReset = false;
 
   /// The code generated for this setup, held only until the user confirms it.
   String? _pendingRecoveryCode;
@@ -136,7 +152,11 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                head == null
+                state.accountHasKey
+                    ? 'This account is already set up on another device. Add '
+                          'this one from it with a code, or enter your sync '
+                          'passphrase or recovery code.'
+                    : head == null
                     ? 'This account already has a backup.'
                     : 'This account already has a backup '
                           '(revision ${head.currentRevision}). Enter the sync '
@@ -147,6 +167,17 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
             ),
           ],
         ),
+        if (state.accountHasKey) ...[
+          const SizedBox(height: 12),
+          ShellVibeButton(
+            buttonKey: const Key('cloud_backup_handoff_receive_button'),
+            label: isMobilePlatform
+                ? 'Scan a Code From Another Device'
+                : 'Show a Code for Another Device',
+            icon: isMobilePlatform ? LucideIcons.scanLine : LucideIcons.qrCode,
+            onPressed: () => _openHandoff(context, gives: false),
+          ),
+        ],
         const SizedBox(height: 12),
         ShadInput(
           key: const Key('cloud_backup_unlock_secret_field'),
@@ -158,7 +189,10 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
                 : 'Recovery code',
           ),
         ),
-        if (_unlockMethod == BackupUnlockMethod.passphrase) ...[
+        // An account with a key carries its recovery slot in the key record,
+        // so there is nothing for this device to be told.
+        if (_unlockMethod == BackupUnlockMethod.passphrase &&
+            !state.accountHasKey) ...[
           const SizedBox(height: 8),
           ShadInput(
             key: const Key('cloud_backup_unlock_recovery_field'),
@@ -177,7 +211,9 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
           _Error(_setupError!),
         ],
         const SizedBox(height: 12),
-        Row(
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
           children: [
             ShellVibeButton(
               buttonKey: const Key('cloud_backup_unlock_button'),
@@ -202,8 +238,53 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
             ),
           ],
         ),
+        const Divider(height: 24),
+        Text(
+          'Lost the passphrase, the recovery code and every device that was '
+          'set up? Reset the account\'s encryption in the web panel and start '
+          'again. The cloud copies go; what is on your devices stays.',
+          style: TextStyle(fontSize: 11, color: tokens.textSubtle),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            ShellVibeButton.quiet(
+              buttonKey: const Key('cloud_backup_reset_link'),
+              label: 'Reset in the Web Panel',
+              icon: LucideIcons.externalLink,
+              onPressed: _openResetPage,
+            ),
+            if (_sentToReset)
+              ShellVibeButton.secondary(
+                buttonKey: const Key('cloud_backup_check_after_reset_button'),
+                label: 'I Reset It, Check Again',
+                icon: LucideIcons.refreshCw,
+                onPressed: () async {
+                  setState(() => _sentToReset = false);
+                  await ref
+                      .read(cloudBackupProvider.notifier)
+                      .checkAfterReset();
+                },
+              ),
+          ],
+        ),
       ],
     );
+  }
+
+  Future<void> _openResetPage() async {
+    final opened = await launchUrl(
+      Uri.parse(kResetEncryptionUrl),
+      mode: LaunchMode.externalApplication,
+    );
+    if (!mounted) return;
+
+    setState(() {
+      _sentToReset = true;
+      if (!opened) _setupError = 'Open $kResetEncryptionUrl in a browser.';
+    });
   }
 
   Future<void> _unlockExisting() async {
@@ -432,7 +513,9 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
             style: TextStyle(fontSize: 11, color: tokens.textSubtle),
           ),
         ],
-        if (state.recoveryCodeMissing) ...[
+        if (state.recoveryCodeMissing && state.usesAccountKey)
+          ..._buildCreateRecoveryCode(tokens, state)
+        else if (state.recoveryCodeMissing) ...[
           const SizedBox(height: 12),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -526,6 +609,13 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
               icon: LucideIcons.cloudDownload,
               onPressed: state.busy ? null : () => _openRestoreSheet(context),
             ),
+            if (state.usesAccountKey)
+              ShellVibeButton.secondary(
+                buttonKey: const Key('cloud_backup_handoff_give_button'),
+                label: 'Add Another Device',
+                icon: LucideIcons.qrCode,
+                onPressed: () => _openHandoff(context, gives: true),
+              ),
           ],
         ),
         const Divider(height: 24),
@@ -537,7 +627,9 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
           children: [
             ShellVibeButton.quiet(
               buttonKey: const Key('cloud_backup_forget_button'),
-              label: 'Forget Passphrase',
+              label: state.usesAccountKey
+                  ? 'Remove From This Device'
+                  : 'Forget Passphrase',
               icon: LucideIcons.eraser,
               onPressed: () =>
                   ref.read(cloudBackupProvider.notifier).forgetOnThisDevice(),
@@ -554,6 +646,100 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
       ],
     );
   }
+
+  /// A device that holds the account key gives the account a recovery code
+  /// by making one: shown once, typed back, and from then on a second way to
+  /// reach the key.
+  List<Widget> _buildCreateRecoveryCode(
+    ShellVibeTokens tokens,
+    CloudBackupState state,
+  ) {
+    final code = _newRecoveryCode;
+
+    return [
+      const SizedBox(height: 12),
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(LucideIcons.keyRound, size: 16, color: tokens.warning),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              code == null
+                  ? 'This account has no recovery code. Without one, a '
+                        'forgotten passphrase and no device left means the '
+                        'backup cannot be opened by anyone.'
+                  : 'Write this recovery code down now. It is shown once and '
+                        'stored nowhere.',
+              style: TextStyle(fontSize: 12, color: tokens.warning),
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 8),
+      if (code == null)
+        ShellVibeButton.secondary(
+          buttonKey: const Key('cloud_backup_new_recovery_button'),
+          label: 'Create Recovery Code',
+          icon: LucideIcons.keyRound,
+          onPressed: () => setState(
+            () => _newRecoveryCode = BackupEnvelope().generateRecoveryCode(),
+          ),
+        )
+      else ...[
+        SelectableText(
+          code,
+          key: const Key('cloud_backup_new_recovery_code'),
+          style: const TextStyle(
+            fontFamily: 'JetBrainsMono Nerd Font Mono',
+            fontSize: 13,
+            letterSpacing: 1.2,
+          ),
+        ),
+        const SizedBox(height: 8),
+        ShadInput(
+          key: const Key('cloud_backup_new_recovery_confirm_field'),
+          controller: _adoptRecoveryController,
+          placeholder: const Text('Type the recovery code back'),
+        ),
+        const SizedBox(height: 8),
+        ShellVibeButton.secondary(
+          buttonKey: const Key('cloud_backup_save_new_recovery_button'),
+          label: 'Save Recovery Code',
+          icon: LucideIcons.keyRound,
+          busy: state.busy,
+          onPressed: state.busy
+              ? null
+              : () async {
+                  // Typing it back is the only evidence the code left the
+                  // screen.
+                  if (BackupEnvelope.normalizeRecoveryCode(
+                        _adoptRecoveryController.text,
+                      ) !=
+                      BackupEnvelope.normalizeRecoveryCode(code)) {
+                    return;
+                  }
+
+                  final saved = await ref
+                      .read(cloudBackupProvider.notifier)
+                      .createRecoveryCode(code);
+                  if (!mounted || !saved) return;
+
+                  setState(() => _newRecoveryCode = null);
+                  _adoptRecoveryController.clear();
+                },
+        ),
+      ],
+    ];
+  }
+
+  Future<void> _openHandoff(BuildContext context, {required bool gives}) =>
+      Navigator.of(context, rootNavigator: true).push(
+        MaterialPageRoute<void>(
+          fullscreenDialog: true,
+          builder: (_) => DeviceHandoffScreen(gives: gives),
+        ),
+      );
 
   Future<void> _confirmDelete(BuildContext context) async {
     // Resolved before the sheet opens, for the same reason the restore sheet
@@ -618,12 +804,15 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
     final revisions =
         ref.read(cloudBackupProvider).value?.revisions ??
         const <BackupRevision>[];
+    final usesAccountKey =
+        ref.read(cloudBackupProvider).value?.usesAccountKey ?? false;
 
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       builder: (sheetContext) => _RestoreSheet(
         revisions: revisions,
+        usesAccountKey: usesAccountKey,
         onRestore: (revision, secret, method) async {
           await notifier.restore(
             revision: revision,
@@ -637,14 +826,21 @@ class _CloudBackupSectionState extends ConsumerState<CloudBackupSection> {
   }
 }
 
-/// Picks a revision, then asks for the passphrase or the recovery code.
+/// Picks a revision, then asks for the passphrase or the recovery code --
+/// unless this device holds the account key and the revision was sealed with
+/// it, in which case there is nothing to ask.
 final class _RestoreSheet extends StatefulWidget {
-  const _RestoreSheet({required this.revisions, required this.onRestore});
+  const _RestoreSheet({
+    required this.revisions,
+    required this.onRestore,
+    this.usesAccountKey = false,
+  });
 
   final List<BackupRevision> revisions;
+  final bool usesAccountKey;
   final Future<void> Function(
     int revision,
-    String secret,
+    String? secret,
     BackupUnlockMethod method,
   )
   onRestore;
@@ -664,6 +860,19 @@ class _RestoreSheetState extends State<_RestoreSheet> {
   void dispose() {
     _secretController.dispose();
     super.dispose();
+  }
+
+  /// Whether the selected revision needs a secret typed. One sealed before
+  /// the account key existed always does.
+  bool get _asksForSecret {
+    if (!widget.usesAccountKey) return true;
+
+    final selected = widget.revisions
+        .where((r) => r.revision == _selected)
+        .firstOrNull;
+
+    return selected != null &&
+        !BackupEnvelope.opensWithAccountKey(selected.schemaVersion);
   }
 
   @override
@@ -731,30 +940,32 @@ class _RestoreSheetState extends State<_RestoreSheet> {
                 ),
               ),
               const SizedBox(height: 12),
-              ShadInput(
-                key: const Key('restore_secret_field'),
-                controller: _secretController,
-                obscureText: _method == BackupUnlockMethod.passphrase,
-                placeholder: Text(
-                  _method == BackupUnlockMethod.passphrase
-                      ? 'Sync passphrase'
-                      : 'Recovery code',
+              if (_asksForSecret) ...[
+                ShadInput(
+                  key: const Key('restore_secret_field'),
+                  controller: _secretController,
+                  obscureText: _method == BackupUnlockMethod.passphrase,
+                  placeholder: Text(
+                    _method == BackupUnlockMethod.passphrase
+                        ? 'Sync passphrase'
+                        : 'Recovery code',
+                  ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              ShellVibeButton.quiet(
-                buttonKey: const Key('restore_toggle_method_button'),
-                label: _method == BackupUnlockMethod.passphrase
-                    ? 'Use the recovery code instead'
-                    : 'Use the passphrase instead',
-                onPressed: () => setState(() {
-                  _method = _method == BackupUnlockMethod.passphrase
-                      ? BackupUnlockMethod.recoveryCode
-                      : BackupUnlockMethod.passphrase;
-                  _secretController.clear();
-                }),
-              ),
-              const SizedBox(height: 12),
+                const SizedBox(height: 8),
+                ShellVibeButton.quiet(
+                  buttonKey: const Key('restore_toggle_method_button'),
+                  label: _method == BackupUnlockMethod.passphrase
+                      ? 'Use the recovery code instead'
+                      : 'Use the passphrase instead',
+                  onPressed: () => setState(() {
+                    _method = _method == BackupUnlockMethod.passphrase
+                        ? BackupUnlockMethod.recoveryCode
+                        : BackupUnlockMethod.passphrase;
+                    _secretController.clear();
+                  }),
+                ),
+                const SizedBox(height: 12),
+              ],
               ShellVibeButton(
                 buttonKey: const Key('restore_confirm_button'),
                 label: 'Restore',
@@ -766,7 +977,7 @@ class _RestoreSheetState extends State<_RestoreSheet> {
                         setState(() => _busy = true);
                         await widget.onRestore(
                           _selected!,
-                          _secretController.text,
+                          _asksForSecret ? _secretController.text : null,
                           _method,
                         );
                         if (mounted) setState(() => _busy = false);

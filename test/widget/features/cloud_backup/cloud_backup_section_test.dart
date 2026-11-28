@@ -71,6 +71,119 @@ void main() {
     await tester.pump();
   }
 
+  group('the account key', () {
+    testWidgets('a new device is offered a code before the passphrase', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        const CloudBackupState(
+          blocker: CloudBackupBlocker.needsExistingPassphrase,
+          accountHasKey: true,
+        ),
+      );
+
+      expect(
+        find.byKey(const Key('cloud_backup_handoff_receive_button')),
+        findsOneWidget,
+      );
+      // Typing still works, as the way in when no other device is at hand.
+      expect(
+        find.byKey(const Key('cloud_backup_unlock_secret_field')),
+        findsOneWidget,
+      );
+      // The recovery slot lives in the account's record now; this device has
+      // nothing to be told about it.
+      expect(
+        find.byKey(const Key('cloud_backup_unlock_recovery_field')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('a way to start over is there when nothing else is', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        const CloudBackupState(
+          blocker: CloudBackupBlocker.needsExistingPassphrase,
+          accountHasKey: true,
+        ),
+      );
+
+      expect(find.byKey(const Key('cloud_backup_reset_link')), findsOneWidget);
+      // Asking the server again only makes sense once the page was opened.
+      expect(
+        find.byKey(const Key('cloud_backup_check_after_reset_button')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('an account without a key is asked the old way', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        const CloudBackupState(
+          blocker: CloudBackupBlocker.needsExistingPassphrase,
+        ),
+      );
+
+      expect(
+        find.byKey(const Key('cloud_backup_handoff_receive_button')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const Key('cloud_backup_unlock_recovery_field')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a device that holds the key can add another', (tester) async {
+      await pump(tester, const CloudBackupState(usesAccountKey: true));
+
+      expect(
+        find.byKey(const Key('cloud_backup_handoff_give_button')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('one that still seals with the passphrase cannot', (
+      tester,
+    ) async {
+      await pump(tester, const CloudBackupState());
+
+      expect(
+        find.byKey(const Key('cloud_backup_handoff_give_button')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('a missing recovery code is made, not asked for', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        const CloudBackupState(usesAccountKey: true, recoveryCodeMissing: true),
+      );
+
+      expect(
+        find.byKey(const Key('cloud_backup_adopt_recovery_field')),
+        findsNothing,
+      );
+
+      await tester.tap(
+        find.byKey(const Key('cloud_backup_new_recovery_button')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('cloud_backup_new_recovery_code')),
+        findsOneWidget,
+      );
+    });
+  });
+
   group('blocked states', () {
     testWidgets('signed out points at Account and keeps file backup', (
       tester,
@@ -423,7 +536,7 @@ final class _StubNotifier extends CloudBackupNotifier {
   @override
   Future<void> restore({
     required int revision,
-    required String secret,
+    String? secret,
     BackupUnlockMethod unlockWith = BackupUnlockMethod.passphrase,
   }) async {
     state = AsyncValue.data(

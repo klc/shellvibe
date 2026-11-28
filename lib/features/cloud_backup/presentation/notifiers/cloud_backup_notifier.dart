@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../../../app/restored_data.dart';
 import '../../../../core/api/api_exception.dart';
+import '../../../../core/sync/account_key.dart';
 import '../../../../core/sync/backup_scope_store.dart';
 import '../../../../core/sync/e2ee_cloud_sync_service.dart';
 import '../../../../core/sync/sync_journal.dart';
@@ -16,12 +17,21 @@ import '../../../settings/presentation/notifiers/settings_notifier.dart';
 import '../../../vault/data/vault_key_service.dart';
 import '../../../vault/presentation/notifiers/identities_notifier.dart';
 import '../../../vault/presentation/notifiers/vault_notifier.dart';
+import '../../data/account_key_api.dart';
 import '../../data/cloud_backup_api.dart';
 import '../../data/cloud_backup_store.dart';
+import '../../domain/account_key_service.dart';
 import '../../domain/backup_frequency.dart';
 import '../../domain/cloud_backup_service.dart';
+import 'sync_notifier.dart';
 
 part 'cloud_backup_notifier.g.dart';
+
+/// Said on a device whose account key the account no longer has.
+const String kAccountKeyMismatchMessage =
+    'This account\'s encryption was reset or set up again on another device, '
+    'so the key on this one no longer opens it. Remove cloud backup from this '
+    'device and add it again. Nothing on this device is lost.';
 
 /// Why the cloud backup surface is not usable right now.
 enum CloudBackupBlocker {
@@ -86,6 +96,14 @@ final class CloudBackupState {
   /// When a scheduled backup last ran on this device.
   final DateTime? lastAutoBackupAt;
 
+  /// True when this device holds the account key, and so can hand it to
+  /// another device and restore without being asked for a secret.
+  final bool usesAccountKey;
+
+  /// True when the account has a key and this device does not hold it yet:
+  /// another device can hand it over, as well as the passphrase opening it.
+  final bool accountHasKey;
+
   const CloudBackupState({
     this.blocker,
     this.head,
@@ -99,6 +117,8 @@ final class CloudBackupState {
     this.lastFullBackupAt,
     this.frequency = BackupFrequency.off,
     this.lastAutoBackupAt,
+    this.usesAccountKey = false,
+    this.accountHasKey = false,
   });
 
   bool get isReady => blocker == null;
@@ -116,6 +136,8 @@ final class CloudBackupState {
     DateTime? lastFullBackupAt,
     BackupFrequency? frequency,
     DateTime? lastAutoBackupAt,
+    bool? usesAccountKey,
+    bool? accountHasKey,
     bool clearBlocker = false,
     bool clearMessage = false,
     bool clearConflict = false,
@@ -137,6 +159,8 @@ final class CloudBackupState {
     lastAutoBackupAt: clearLastAutoBackupAt
         ? null
         : (lastAutoBackupAt ?? this.lastAutoBackupAt),
+    usesAccountKey: usesAccountKey ?? this.usesAccountKey,
+    accountHasKey: accountHasKey ?? this.accountHasKey,
   );
 }
 
@@ -147,6 +171,7 @@ final class CloudBackupState {
 @Riverpod(keepAlive: true)
 class CloudBackupNotifier extends _$CloudBackupNotifier {
   CloudBackupService? _service;
+  AccountKeyService? _accountKeys;
   String? _deviceId;
   int _maxSizeBytes = 0;
   Timer? _schedule;
@@ -183,6 +208,7 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
       // -- or none, while this build is still working out the account --
       // belongs to a build that is gone.
       _service = null;
+      _accountKeys = null;
     });
     ref.watch(secureStorageServiceProvider);
 
@@ -216,14 +242,20 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
       ),
     );
 
+    final client = ref.watch(accountProvider.notifier).apiClient;
+
     _service = CloudBackupService(
-      api: CloudBackupApi(
-        client: ref.watch(accountProvider.notifier).apiClient,
-      ),
+      api: CloudBackupApi(client: client),
       sync: ref.watch(e2eeCloudSyncServiceProvider),
       readPendingUploadId: _store.readPendingUploadId,
       writePendingUploadId: _store.writePendingUploadId,
       newUploadId: const Uuid().v4,
+    );
+    _accountKeys = AccountKeyService(
+      store: _store,
+      api: AccountKeyApi(client: client),
+      deviceId: _deviceId!,
+      records: AccountKeyRecord(crypto: ref.watch(encryptionEngineProvider)),
     );
 
     final configured = await _store.isConfigured();
@@ -233,7 +265,14 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
     final autoMark = await _store.readAutoBackupMark();
 
     _startSchedule(frequency);
-    final recoveryCodeMissing = configured && !await _store.hasRecoveryCode();
+    final usesAccountKey = configured && await _store.hasAccountKey();
+
+    // A device that seals with the passphrase has to know the recovery code
+    // itself to seal it in. One that holds the account key does not: the
+    // account's record carries the recovery slot, and whether it has one is
+    // read off the server once this build has returned.
+    final recoveryCodeMissing =
+        configured && !usesAccountKey && !await _store.hasRecoveryCode();
 
     if (configured) {
       // A device that has been closed longer than the interval is due the
@@ -244,7 +283,24 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
       // `state`, which is still loading until this method returns. Called
       // inline it read "off" and returned, so a cold start never backed up
       // and the first chance was the timer, a quarter of an hour later.
-      Future(() => unawaited(maybeBackUpOnSchedule()));
+      //
+      // The account key first, so a device that can move to it does so
+      // before it seals anything: the backup that follows is then one every
+      // other device holding the key opens without a passphrase.
+      Future(() async {
+        await _settleAccountKey();
+        unawaited(maybeBackUpOnSchedule());
+      });
+
+      // The passphrase is sealed under the vault key, so behind a master
+      // password the step above could read nothing and gave up. Without this
+      // a device whose vault is locked at launch -- every launch, for a user
+      // with a master password -- would never move to the account key.
+      ref.listen(vaultProvider, (previous, next) {
+        final unlocked = next.value?.status == VaultStatus.unlocked;
+        final wasUnlocked = previous?.value?.status == VaultStatus.unlocked;
+        if (unlocked && !wasUnlocked) unawaited(_settleAccountKey());
+      });
 
       return CloudBackupState(
         lastKnownRevision: lastKnownRevision,
@@ -252,6 +308,7 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
         lastFullBackupAt: lastFullBackupAt,
         frequency: frequency,
         lastAutoBackupAt: autoMark?.at,
+        usesAccountKey: usesAccountKey,
       );
     }
 
@@ -259,9 +316,19 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
     // already have one, type it" is the server's answer, not this device's:
     // deciding it locally is what let a second device invent a new passphrase
     // and upload an empty vault over the first device's backup.
-    VaultHead? head;
+    //
+    // The key record answers first: it belongs to the account rather than to
+    // either vault, so deleting the cloud backup does not make an account
+    // that is still syncing look like a new one. An account without a record
+    // is asked the old way, and there the sync vault counts as well as the
+    // backup one, for the same reason.
+    final VaultHead head;
+    final bool accountHasKey;
     try {
-      head = await _service!.head();
+      accountHasKey = (await _accountKeys!.head()).exists;
+      head = accountHasKey
+          ? await _service!.head()
+          : (await _existingVault()).head;
     } on Object {
       // Offline. Stay on setup rather than guessing, and say nothing
       // misleading: the head is re-read the next time this builds.
@@ -274,14 +341,129 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
     }
 
     return CloudBackupState(
-      blocker: head.isEmpty
+      blocker: head.isEmpty && !accountHasKey
           ? CloudBackupBlocker.notConfigured
           : CloudBackupBlocker.needsExistingPassphrase,
       head: head,
       lastFullBackupAt: lastFullBackupAt,
       frequency: frequency,
       lastAutoBackupAt: autoMark?.at,
+      accountHasKey: accountHasKey,
     );
+  }
+
+  /// The vault a device joining an account without a key record proves its
+  /// passphrase against: the backup, or the sync ground when the backup is
+  /// empty.
+  ///
+  /// "Delete cloud backup" removes the backup vault and leaves the account
+  /// syncing. Looking at the backup alone, a device joining after that was
+  /// offered first-time setup, chose a new passphrase, and could then open
+  /// nothing the account held.
+  Future<({CloudBackupService service, VaultHead head})>
+  _existingVault() async {
+    final backup = _service!;
+    final head = await backup.head();
+    if (!head.isEmpty) return (service: backup, head: head);
+
+    final ground = CloudBackupService(
+      api: CloudBackupApi(
+        client: ref.read(accountProvider.notifier).apiClient,
+        kind: VaultKind.sync,
+      ),
+      sync: ref.read(e2eeCloudSyncServiceProvider),
+      readPendingUploadId: _store.readPendingSyncUploadId,
+      writePendingUploadId: _store.writePendingSyncUploadId,
+      newUploadId: const Uuid().v4,
+    );
+    final groundHead = await ground.head();
+
+    return groundHead.isEmpty
+        ? (service: backup, head: head)
+        : (service: ground, head: groundHead);
+  }
+
+  /// Moves this device to the account key when it can, and drops the
+  /// passphrase once nothing needs it.
+  ///
+  /// Runs on every start and after every backup, and each step is safe to
+  /// repeat: a device closed halfway through picks up at the same question.
+  /// Every failure here is a reason to try again later, never a state to
+  /// report -- the device keeps working exactly as it did before.
+  Future<void> _settleAccountKey() async {
+    final keys = _accountKeys;
+    if (keys == null) return;
+
+    try {
+      if (await _store.hasAccountKey()) {
+        // The account may have been reset, or set up again, from somewhere
+        // else. Said now rather than at the next backup, which fails anyway.
+        try {
+          await keys.current();
+        } on BackupEnvelopeException {
+          if (!ref.mounted || !identical(keys, _accountKeys)) return;
+          _publish(
+            (s) => s.copyWith(
+              message: kAccountKeyMismatchMessage,
+              messageIsError: true,
+            ),
+          );
+
+          return;
+        }
+      } else {
+        final outcome = await keys.migrate();
+        if (!ref.mounted || !identical(keys, _accountKeys)) return;
+
+        if (outcome == AccountKeyOutcome.wrongSecret) {
+          _publish(
+            (s) => s.copyWith(
+              message:
+                  'The passphrase on this device does not match the '
+                  'account. Forget it here and enter the one your other '
+                  'devices use.',
+              messageIsError: true,
+            ),
+          );
+        }
+        if (outcome != AccountKeyOutcome.ready) return;
+
+        // Sync read the passphrase when it was built. It seals with the key
+        // from here on, and rewrites the ground so a device joining by code
+        // can start from it.
+        ref.invalidate(syncProvider);
+        _publish((s) => s.copyWith(usesAccountKey: true));
+      }
+
+      final hasRecoveryCode = await keys.hasRecoveryCode();
+      if (!ref.mounted || !identical(keys, _accountKeys)) return;
+      _publish((s) => s.copyWith(recoveryCodeMissing: !hasRecoveryCode));
+
+      if (await _store.hasPassphrase() && await _groundOpensWithAccountKey()) {
+        // The key has been checked against the account's record -- `current`
+        // throws otherwise -- and the one thing this device reads on its own,
+        // the sync ground, opens with it.
+        if (await keys.current() != null) await _store.forgetPassphrase();
+      }
+    } on Object catch (e) {
+      if (kDebugMode) debugPrint('[Backup] account key not settled: $e');
+    }
+  }
+
+  /// Whether the account's sync ground is one the account key opens, or
+  /// there is none.
+  ///
+  /// The passphrase stays on this device until it is: a device that falls
+  /// behind starts over from the ground, and one sealed with the passphrase
+  /// would then be a ground it could no longer read.
+  Future<bool> _groundOpensWithAccountKey() async {
+    final revisions = await CloudBackupApi(
+      client: ref.read(accountProvider.notifier).apiClient,
+      kind: VaultKind.sync,
+    ).revisions();
+
+    return revisions.isEmpty ||
+        BackupEnvelope.opensWithAccountKey(revisions.first.schemaVersion);
   }
 
   /// Adopts a passphrase that already protects this account's backup.
@@ -302,7 +484,11 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
     state = AsyncValue.data(current.copyWith(busy: true, clearMessage: true));
 
     try {
-      final head = await service.head();
+      if ((await _accountKeys!.head()).exists) {
+        return await _unlockAccountKey(current, secret, method);
+      }
+
+      final (service: vault, :head) = await _existingVault();
 
       if (head.isEmpty) {
         state = AsyncValue.data(
@@ -317,7 +503,7 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
         return false;
       }
 
-      final opened = await service.canOpen(
+      final opened = await vault.canOpen(
         revision: head.currentRevision,
         secret: secret,
         unlockWith: method,
@@ -365,19 +551,25 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
       // learns it from the first v4 backup it opens instead.
       await _store.adoptSyncKey(opened.syncKey);
 
+      // Sync read "no passphrase" when it was built and watches nothing that
+      // changes here, so without this it stays stopped until the next launch.
+      ref.invalidate(syncProvider);
+
       state = AsyncValue.data(
         current.copyWith(
           busy: false,
           clearBlocker: true,
           head: head,
           recoveryCodeMissing: recoveryCode == null || recoveryCode.isEmpty,
-          message:
-              'Unlocked. Restore revision ${head.currentRevision} to bring '
-              'this device up to date before backing up from here.',
+          message: _unlockedMessage(await service.head()),
           messageIsError: false,
           clearConflict: true,
         ),
       );
+
+      // Not awaited: the unlock is done. This is the device moving on to the
+      // account key, if the account can have one yet.
+      unawaited(_settleAccountKey());
 
       return true;
     } on Object catch (e) {
@@ -393,6 +585,89 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
     }
   }
 
+  /// Unlocks an account that has a key: [secret] opens the account's record,
+  /// and this device keeps the key it finds there, not the secret.
+  Future<bool> _unlockAccountKey(
+    CloudBackupState current,
+    String secret,
+    BackupUnlockMethod method,
+  ) async {
+    final outcome = await _accountKeys!.unlock(secret: secret, method: method);
+
+    if (outcome != AccountKeyOutcome.ready) {
+      state = AsyncValue.data(
+        current.copyWith(
+          busy: false,
+          message: method == BackupUnlockMethod.recoveryCode
+              ? 'That recovery code does not open this account.'
+              : 'That passphrase does not open this account.',
+          messageIsError: true,
+        ),
+      );
+
+      return false;
+    }
+
+    await _joined(current);
+
+    return true;
+  }
+
+  /// Takes the account key another device handed over.
+  ///
+  /// Returns a sentence for the user when it could not be kept, null when
+  /// this device is now set up.
+  Future<String?> adoptAccountKey(Uint8List accountKey) async {
+    final keys = _accountKeys;
+    if (keys == null) return 'Sign in to finish setting up this device.';
+
+    final outcome = await keys.adopt(accountKey);
+    if (outcome != AccountKeyOutcome.ready) {
+      return 'The other device sent a key that does not belong to this '
+          'account. Nothing was changed.';
+    }
+
+    await _joined(state.value ?? const CloudBackupState());
+
+    return null;
+  }
+
+  /// The account key, for handing to another device.
+  ///
+  /// Throws `VaultLockedException` behind a locked vault, which is the point:
+  /// a device somebody else picked up cannot add a device of theirs.
+  Future<Uint8List?> accountKeyForHandoff() async =>
+      (await _accountKeys?.current())?.bytes;
+
+  /// What every way of joining an account with a key ends with.
+  Future<void> _joined(CloudBackupState current) async {
+    final head = await _service!.head();
+    final hasRecoveryCode = await _accountKeys!.hasRecoveryCode();
+
+    // Sync read "no key" when it was built and watches nothing that changes
+    // here, so without this it stays stopped until the next launch.
+    ref.invalidate(syncProvider);
+
+    state = AsyncValue.data(
+      current.copyWith(
+        busy: false,
+        clearBlocker: true,
+        head: head,
+        usesAccountKey: true,
+        accountHasKey: false,
+        recoveryCodeMissing: !hasRecoveryCode,
+        message: _unlockedMessage(head),
+        messageIsError: false,
+        clearConflict: true,
+      ),
+    );
+  }
+
+  static String _unlockedMessage(VaultHead head) => head.isEmpty
+      ? 'Unlocked.'
+      : 'Unlocked. Restore revision ${head.currentRevision} to bring this '
+            'device up to date before backing up from here.';
+
   /// Stores the sync passphrase and takes the first backup.
   ///
   /// The recovery code is passed through to the envelope and never persisted:
@@ -407,10 +682,21 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
     // Belt and braces against the bug this flow used to have: even if the UI
     // somehow offered first-time setup on a device joining an account that
     // already has a backup, refuse rather than upload over it.
+    final AccountKeyOutcome outcome;
     try {
-      final head = await service.head();
+      final head = (await _existingVault()).head;
 
-      if (!head.isEmpty) {
+      // The account key is created here when the server allows it, and the
+      // server is also where a second device setting up at the same moment
+      // is found out: one write wins, and the other is told there is a key.
+      outcome = head.isEmpty
+          ? await _accountKeys!.create(
+              passphrase: passphrase,
+              recoveryCode: recoveryCode,
+            )
+          : AccountKeyOutcome.alreadyExists;
+
+      if (outcome == AccountKeyOutcome.alreadyExists) {
         _publish(
           (s) => s.copyWith(
             blocker: CloudBackupBlocker.needsExistingPassphrase,
@@ -443,15 +729,28 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
       return;
     }
 
-    await _store.writePassphrase(passphrase);
-    await _store.writeRecoveryCode(recoveryCode);
+    // With a key, neither secret is kept: the key is what this device seals
+    // with, and the two secrets are what open it somewhere else.
+    final usesAccountKey = outcome == AccountKeyOutcome.ready;
+    if (!usesAccountKey) {
+      await _store.writePassphrase(passphrase);
+      await _store.writeRecoveryCode(recoveryCode);
+    }
 
     final current = state.value ?? const CloudBackupState();
     state = AsyncValue.data(
-      current.copyWith(clearBlocker: true, recoveryCodeMissing: false),
+      current.copyWith(
+        clearBlocker: true,
+        recoveryCodeMissing: false,
+        usesAccountKey: usesAccountKey,
+      ),
     );
 
     await backUpNow();
+
+    // After the backup, not before: both mint the sync key when there is
+    // none, and two running at once would each keep a different one.
+    ref.invalidate(syncProvider);
   }
 
   /// Reads what the server holds.
@@ -493,11 +792,15 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
     final scope = await _scopeStore.read(BackupTarget.cloud);
     final autoSyncEnabled = await _scopeStore.readAutoSyncEnabled();
 
+    final AccountKey? accountKey;
     final String? passphrase;
     final String? recoveryCode;
     final Uint8List? syncKey;
     try {
-      passphrase = await _store.readPassphrase();
+      // Read with the record as the account has it now, so what this backup
+      // carries is not a copy this device took at some earlier time.
+      accountKey = await _accountKeys?.current();
+      passphrase = accountKey == null ? await _store.readPassphrase() : null;
 
       // Every upload carries the recovery code this device knows, not just
       // the first one. Sealing it into the setup backup alone made the
@@ -520,9 +823,22 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
       );
 
       return;
+    } on BackupEnvelopeException catch (e) {
+      _publish((s) => s.copyWith(message: e.reason, messageIsError: true));
+
+      return;
+    } on ApiFailure {
+      _publish(
+        (s) => s.copyWith(
+          message: 'The server could not be reached.',
+          messageIsError: true,
+        ),
+      );
+
+      return;
     }
 
-    if (passphrase == null) {
+    if (passphrase == null && accountKey == null) {
       _publish(
         (s) => s.copyWith(
           blocker: CloudBackupBlocker.notConfigured,
@@ -533,8 +849,6 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
 
       return;
     }
-
-    final String secret = passphrase;
 
     // Where this snapshot sits in the operation log. A device that restores it
     // resumes pulling from here instead of replaying a log that reaches back
@@ -564,7 +878,8 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
     await _run((state) async {
       final result = await service.upload(
         db: ref.read(appDatabaseProvider),
-        passphrase: secret,
+        passphrase: passphrase,
+        accountKey: accountKey,
         deviceId: deviceId,
         maxSizeBytes: _maxSizeBytes,
         recoveryCode: recoveryCode,
@@ -607,12 +922,22 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
         clearConflict: true,
       );
     });
+
+    // A device still carrying the passphrase beside the key may be able to
+    // let go of it now.
+    if (accountKey != null && await _store.hasPassphrase()) {
+      unawaited(_settleAccountKey());
+    }
   }
 
   /// Downloads [revision] and restores it over the local database.
+  ///
+  /// [secret] is for a revision sealed with the passphrase, and for a device
+  /// that holds no account key. A device with the key restores what was
+  /// sealed with it without being asked anything.
   Future<void> restore({
     required int revision,
-    required String secret,
+    String? secret,
     BackupUnlockMethod unlockWith = BackupUnlockMethod.passphrase,
   }) async {
     final service = _service;
@@ -624,6 +949,7 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
         revision: revision,
         secret: secret,
         unlockWith: unlockWith,
+        accountKey: await _accountKeys?.current(),
       );
 
       await _store.writeLastKnownRevision(revision);
@@ -692,6 +1018,53 @@ class CloudBackupNotifier extends _$CloudBackupNotifier {
   Future<void> forgetOnThisDevice() async {
     await _store.clear();
     ref.invalidateSelf();
+    // Sync holds what it read when it was built, and would otherwise go on
+    // sealing with a key this device was just told to forget. Its place in
+    // the log goes too, so adding the device again joins from scratch.
+    await ref.read(syncProvider.notifier).leaveAccount();
+  }
+
+  /// Looks again after the account's encryption was reset in the web panel.
+  ///
+  /// This device is not set up -- that is why it was sent there -- so
+  /// whatever sync state it still carries belongs to the log the reset
+  /// removed.
+  Future<void> checkAfterReset() async {
+    await ref.read(syncProvider.notifier).leaveAccount();
+    ref.invalidateSelf();
+  }
+
+  /// Gives the account [recoveryCode] as its recovery code.
+  ///
+  /// For a device that holds the account key, which is all this takes: the
+  /// code becomes one more way to reach the key, and the passphrase is not
+  /// involved. The code is new, shown once and typed back by the caller --
+  /// there is nothing older to check it against.
+  Future<bool> createRecoveryCode(String recoveryCode) async {
+    final keys = _accountKeys;
+    if (keys == null) return false;
+
+    try {
+      await keys.setRecoveryCode(recoveryCode);
+      _publish(
+        (s) => s.copyWith(
+          recoveryCodeMissing: false,
+          message: 'Saved. The recovery code opens this account from now on.',
+          messageIsError: false,
+        ),
+      );
+
+      return true;
+    } on Object catch (e) {
+      _publish(
+        (s) => s.copyWith(
+          message: e is BackupEnvelopeException ? e.reason : '$e',
+          messageIsError: true,
+        ),
+      );
+
+      return false;
+    }
   }
 
   /// Teaches this device the recovery code so its backups carry one.

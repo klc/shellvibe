@@ -1,5 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../../../../app/theme/shellvibe_tokens.dart';
@@ -8,6 +9,7 @@ import '../../../../core/sync/backup_scope_store.dart';
 import '../../../settings/presentation/notifiers/backup_scope_notifier.dart';
 import '../../../settings/presentation/widgets/backup_scope_picker.dart';
 import '../../domain/sync_join_service.dart';
+import '../notifiers/cloud_backup_notifier.dart';
 import '../notifiers/sync_notifier.dart';
 import '../notifiers/sync_trash_notifier.dart';
 
@@ -26,6 +28,11 @@ final class SyncSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = ShellVibeTokens.resolve(context);
     final enabled = ref.watch(autoSyncEnabledProvider).value ?? false;
+    // Sync seals with the key Cloud Backup sets up, so until that exists the
+    // switch would only promise something that cannot run. Turning it off
+    // stays possible for a device that switched it on before this check.
+    final backup = ref.watch(cloudBackupProvider).value;
+    final backupReady = backup?.isReady ?? false;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -43,10 +50,18 @@ final class SyncSection extends ConsumerWidget {
               style: TextStyle(fontSize: 11, color: tokens.textSubtle),
             ),
             value: enabled,
-            onChanged: (value) =>
-                ref.read(autoSyncEnabledProvider.notifier).set(value),
+            onChanged: backupReady || enabled
+                ? (value) =>
+                      ref.read(autoSyncEnabledProvider.notifier).set(value)
+                : null,
           ),
         ),
+        // Shown before the switch is touched, not after: once it is on the
+        // status line below says the same.
+        if (!enabled && backup != null && !backupReady)
+          _SetUpBackupFirst(
+            signedOut: backup.blocker == CloudBackupBlocker.signedOut,
+          ),
         if (enabled) ...[
           const SizedBox(height: 4),
           _SyncStatus(state: ref.watch(syncProvider)),
@@ -70,6 +85,46 @@ final class SyncSection extends ConsumerWidget {
     );
   }
 }
+
+/// Why the switch is off limits, and the way to what unlocks it.
+final class _SetUpBackupFirst extends StatelessWidget {
+  const _SetUpBackupFirst({required this.signedOut});
+
+  final bool signedOut;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = ShellVibeTokens.resolve(context);
+
+    return Row(
+      key: const Key('sync_set_up_backup_first'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(LucideIcons.circleAlert, size: 14, color: tokens.warning),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            signedOut
+                ? 'Sign in under Account to sync.'
+                : _kSyncNeedsBackupMessage,
+            style: TextStyle(fontSize: 11, color: tokens.warning),
+          ),
+        ),
+        if (!signedOut)
+          ShellVibeButton.secondary(
+            buttonKey: const Key('sync_open_cloud_backup_button'),
+            label: 'Open Cloud Backup',
+            icon: LucideIcons.keyRound,
+            onPressed: () => GoRouter.maybeOf(context)?.go('/settings/backup'),
+          ),
+      ],
+    );
+  }
+}
+
+const String _kSyncNeedsBackupMessage =
+    'Sync needs your sync passphrase. Set it, or enter the one from your '
+    'other device, under Cloud Backup.';
 
 /// What automatic sync is doing right now, in one line.
 ///
@@ -110,6 +165,26 @@ final class _SyncStatus extends ConsumerWidget {
             tooltip: 'Sync now',
             onPressed: () => ref.read(syncProvider.notifier).syncNow(),
           ),
+        // The passphrase is set and typed under Cloud Backup, which is another
+        // page: on a phone, another screen. Naming it is not enough there.
+        if (value(state)?.blocker == SyncBlocker.notConfigured ||
+            value(state)?.blocker == SyncBlocker.wrongPassphrase ||
+            value(state)?.blocker == SyncBlocker.accountKeyMismatch)
+          ShellVibeButton.secondary(
+            buttonKey: const Key('sync_open_cloud_backup_button'),
+            label: 'Open Cloud Backup',
+            icon: LucideIcons.keyRound,
+            onPressed: () => GoRouter.maybeOf(context)?.go('/settings/backup'),
+          ),
+        // Clears on another device, so this one has to be able to look again
+        // without being restarted.
+        if (value(state)?.blocker == SyncBlocker.groundNeedsUpdate)
+          ShellVibeButton.secondary(
+            buttonKey: const Key('sync_retry_join_button'),
+            label: 'Try Again',
+            icon: LucideIcons.refreshCw,
+            onPressed: () => ref.invalidate(syncProvider),
+          ),
         if (value(state)?.blocker == SyncBlocker.accountChanged)
           ShellVibeButton.secondary(
             buttonKey: const Key('sync_join_signed_in_account_button'),
@@ -149,7 +224,7 @@ final class _SyncStatus extends ConsumerWidget {
       SyncBlocker.notConfigured => (
         LucideIcons.circleAlert,
         tokens.warning,
-        'Set a sync passphrase first.',
+        _kSyncNeedsBackupMessage,
       ),
       // Every snapshot this account holds carries less than sync does.
       // Starting from one would leave a category missing that nothing later
@@ -165,6 +240,19 @@ final class _SyncStatus extends ConsumerWidget {
         tokens.warning,
         'The passphrase on this device does not open this account\'s sync '
             'snapshot. Use the one from a device that is already syncing.',
+      ),
+      SyncBlocker.accountKeyMismatch => (
+        LucideIcons.circleAlert,
+        tokens.warning,
+        'This account\'s encryption was reset or set up again on another '
+            'device, so the key on this one no longer opens it. Under Cloud '
+            'Backup, remove it from this device and add it again. Nothing on '
+            'this device is lost.',
+      ),
+      SyncBlocker.groundNeedsUpdate => (
+        LucideIcons.cloudUpload,
+        tokens.warning,
+        kSyncGroundOlderFormatMessage,
       ),
       SyncBlocker.vaultLocked => (
         LucideIcons.lock,

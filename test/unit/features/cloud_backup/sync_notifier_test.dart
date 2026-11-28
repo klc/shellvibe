@@ -11,6 +11,7 @@ import 'package:shellvibe/core/sync/e2ee_cloud_sync_service.dart';
 import 'package:shellvibe/core/sync/sync_journal.dart';
 import 'package:shellvibe/core/sync/sync_row_codec.dart';
 import 'package:shellvibe/features/cloud_backup/data/cloud_backup_store.dart';
+import 'package:shellvibe/features/cloud_backup/presentation/notifiers/cloud_backup_notifier.dart';
 import 'package:shellvibe/features/cloud_backup/presentation/notifiers/sync_notifier.dart';
 import 'package:shellvibe/features/settings/presentation/notifiers/backup_scope_notifier.dart';
 import 'package:shellvibe/features/vault/data/vault_key_service.dart';
@@ -92,7 +93,7 @@ void main() {
 
   /// A sync ground as another device would have written it: one host, sealed
   /// with the passphrase, carrying [syncKey].
-  Future<void> seedGround(Uint8List syncKey) async {
+  Future<void> seedGround(Uint8List syncKey, {String kind = 'sync'}) async {
     final other = AppDatabase(NativeDatabase.memory());
     addTearDown(other.close);
     await other.hostsDao.insertHost(
@@ -112,7 +113,7 @@ void main() {
     await vaultKeys.getDek();
 
     await server.seedRevision(
-      'sync',
+      kind,
       await E2EECloudSyncService(
         vaultKeyService: vaultKeys,
         cryptoEngine: fastEncryptionEngine(),
@@ -485,6 +486,56 @@ void main() {
         contains('remote-host'),
       );
       expect((await journal.readState()).pulledThroughSeq, isNot(500));
+    });
+  });
+
+  group('a passphrase that arrives after sync was switched on', () {
+    test('unlocking the backup starts sync without a restart', () async {
+      // A phone: signed in, sync switched on, and only then given the
+      // passphrase, on another settings page. Sync used to stay where it was
+      // until the app was started again.
+      await store().clear();
+      await seedGround(key(7));
+      await seedGround(key(7), kind: 'backup');
+
+      await started();
+      expect(current().blocker, SyncBlocker.notConfigured);
+
+      await container.read(cloudBackupProvider.future);
+      final unlocked = await container
+          .read(cloudBackupProvider.notifier)
+          .unlockExisting(secret: passphrase);
+      expect(unlocked, isTrue);
+
+      final state = await container.read(syncProvider.future);
+      expect(state.blocker, isNull);
+      await joined(container.read(syncProvider.notifier));
+      expect(
+        (await db.select(db.hosts).get()).map((h) => h.id),
+        contains('remote-host'),
+      );
+    });
+  });
+
+  group('a passphrase set after sync was switched on', () {
+    test('first-time setup starts sync and writes the ground', () async {
+      // The account's first device, and a phone as easily as a desktop.
+      await store().clear();
+
+      await started();
+      expect(current().blocker, SyncBlocker.notConfigured);
+
+      await container.read(cloudBackupProvider.future);
+      await container
+          .read(cloudBackupProvider.notifier)
+          .configure(passphrase: passphrase, recoveryCode: 'RECOVERY-CODE');
+
+      final state = await container.read(syncProvider.future);
+      expect(state.blocker, isNull);
+      await eventually(
+        () => server.vaults['sync']!.isNotEmpty,
+        reason: 'sync never wrote the first ground',
+      );
     });
   });
 

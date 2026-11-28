@@ -33,7 +33,7 @@
 		<string>_shellvibe._tcp</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
-	<string>ShellVibe uses the camera to scan a Device Link pairing QR code.</string>
+	<string>ShellVibe uses the camera to scan a QR code shown on another of your devices: to pair with Device Link, or to add this device to your cloud backup.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>ShellVibe uses your local network to discover and connect to your paired desktop terminal.</string>
 	<key>UIApplicationSceneManifest</key>
